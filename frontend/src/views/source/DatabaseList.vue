@@ -1,0 +1,281 @@
+<template>
+  <div class="database-list">
+    <div class="page-header">
+      <h3>数据库连接配置</h3>
+      <el-button type="primary" @click="showCreateDialog">
+        <el-icon><Plus /></el-icon>
+        添加连接
+      </el-button>
+    </div>
+
+    <el-table :data="dbList" v-loading="loading" border stripe>
+      <el-table-column prop="connectionName" label="连接名称" width="180">
+        <template #default="{ row }">
+          <div class="db-name">
+            <el-icon><DataBase /></el-icon>
+            <span>{{ row.connectionName }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="dbType" label="数据库类型" width="120">
+        <template #default="{ row }">
+          <el-tag size="small" type="primary">{{ row.dbType }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="地址" width="200">
+        <template #default="{ row }">{{ row.host }}:{{ row.port }}</template>
+      </el-table-column>
+      <el-table-column prop="database" label="数据库名" width="150" />
+      <el-table-column prop="schema" label="Schema" width="120" />
+      <el-table-column prop="username" label="用户名" width="120" />
+      <el-table-column label="表数量" width="100">
+        <template #default="{ row }">
+          <el-tag v-if="row.tableCount" size="small" type="success">{{ row.tableCount }}</el-tag>
+          <span v-else class="text-gray">未扫描</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="最近扫描" width="180">
+        <template #default="{ row }">
+          <span v-if="row.lastScanTime">{{ formatTime(row.lastScanTime) }}</span>
+          <span v-else class="text-gray">未扫描</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="status" label="状态" width="100">
+        <template #default="{ row }">
+          <el-tag size="small" :type="getStatusType(row.status)">
+            {{ row.status }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="220" fixed="right">
+        <template #default="{ row }">
+          <el-button type="primary" link size="small" @click="testConnection(row)">测试连接</el-button>
+          <el-button type="success" link size="small" @click="scanSchema(row)">扫描表结构</el-button>
+          <el-button type="danger" link size="small" @click="deleteDb(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-empty v-if="dbList.length === 0" description="暂无数据库配置" />
+
+    <el-dialog v-model="createDialogVisible" title="添加数据库连接" width="600px">
+      <el-form :model="dbForm" label-width="120px">
+        <el-form-item label="连接名称" required>
+          <el-input v-model="dbForm.connectionName" placeholder="请输入连接名称" />
+        </el-form-item>
+        <el-form-item label="数据库类型" required>
+          <el-select v-model="dbForm.dbType" placeholder="选择数据库类型">
+            <el-option label="PostgreSQL" value="POSTGRESQL" />
+            <el-option label="MySQL" value="MYSQL" />
+            <el-option label="Oracle" value="ORACLE" />
+            <el-option label="SQL Server" value="SQL_SERVER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Host" required>
+          <el-input v-model="dbForm.host" placeholder="localhost / 127.0.0.1" />
+        </el-form-item>
+        <el-form-item label="Port" required>
+          <el-input-number v-model="dbForm.port" :min="1" :max="65535" />
+        </el-form-item>
+        <el-form-item label="数据库名" required>
+          <el-input v-model="dbForm.database" placeholder="postgres" />
+        </el-form-item>
+        <el-form-item label="Schema">
+          <el-input v-model="dbForm.schema" placeholder="public" />
+        </el-form-item>
+        <el-form-item label="用户名" required>
+          <el-input v-model="dbForm.username" placeholder="postgres" />
+        </el-form-item>
+        <el-form-item label="密码" required>
+          <el-input v-model="dbForm.password" type="password" placeholder="请输入密码" />
+        </el-form-item>
+        <el-form-item label="包含表">
+          <el-input v-model="dbForm.includeTables" type="textarea" placeholder="%user%, %order%" />
+        </el-form-item>
+        <el-form-item label="排除表">
+          <el-input v-model="dbForm.excludeTables" type="textarea" placeholder="flyway_%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="createDb">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, DataBase } from '@element-plus/icons-vue'
+import dayjs from 'dayjs'
+
+const route = useRoute()
+const projectId = route.params.projectId as string
+
+const loading = ref(false)
+const createDialogVisible = ref(false)
+const dbList = ref<any[]>([])
+
+const dbForm = reactive({
+  connectionName: '',
+  dbType: 'POSTGRESQL' as 'POSTGRESQL' | 'MYSQL' | 'ORACLE' | 'SQL_SERVER',
+  host: 'localhost',
+  port: 5432,
+  database: '',
+  schema: 'public',
+  username: '',
+  password: '',
+  includeTables: '',
+  excludeTables: ''
+})
+
+const formatTime = (time: string) => {
+  return dayjs(time).format('YYYY-MM-DD HH:mm')
+}
+
+const getStatusType = (status: string): string => {
+  const map: Record<string, string> = {
+    SUCCESS: 'success',
+    FAILED: 'danger',
+    UNKNOWN: 'info'
+  }
+  return map[status] || 'info'
+}
+
+const showCreateDialog = () => {
+  Object.assign(dbForm, {
+    connectionName: '',
+    dbType: 'POSTGRESQL',
+    host: 'localhost',
+    port: 5432,
+    database: '',
+    schema: 'public',
+    username: '',
+    password: '',
+    includeTables: '',
+    excludeTables: ''
+  })
+  createDialogVisible.value = true
+}
+
+const createDb = async () => {
+  if (!dbForm.connectionName || !dbForm.host || !dbForm.database || !dbForm.username) {
+    ElMessage.warning('请填写必填项')
+    return
+  }
+  try {
+    const newDb = {
+      id: Date.now().toString(),
+      ...dbForm,
+      status: 'UNKNOWN',
+      createdAt: new Date().toISOString()
+    }
+    dbList.value.unshift(newDb)
+    ElMessage.success('添加成功')
+    createDialogVisible.value = false
+  } catch (error) {
+    ElMessage.error('添加失败')
+  }
+}
+
+const testConnection = async (row: any) => {
+  try {
+    ElMessage.info('正在测试连接...')
+    setTimeout(() => {
+      row.status = 'SUCCESS'
+      ElMessage.success('连接成功')
+    }, 1000)
+  } catch (error) {
+    ElMessage.error('连接失败')
+  }
+}
+
+const scanSchema = async (row: any) => {
+  try {
+    ElMessage.info('开始扫描表结构...')
+    setTimeout(() => {
+      row.tableCount = Math.floor(Math.random() * 50) + 20
+      row.lastScanTime = new Date().toISOString()
+      ElMessage.success(`扫描完成，共发现 ${row.tableCount} 张表`)
+    }, 2000)
+  } catch (error) {
+    ElMessage.error('扫描失败')
+  }
+}
+
+const deleteDb = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(`确定删除连接 ${row.connectionName} 吗？`, '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    const index = dbList.value.findIndex(d => d.id === row.id)
+    if (index > -1) {
+      dbList.value.splice(index, 1)
+    }
+    ElMessage.success('删除成功')
+  } catch {
+    // cancelled
+  }
+}
+
+onMounted(async () => {
+  loading.value = true
+  setTimeout(() => {
+    dbList.value = [
+      {
+        id: '1',
+        connectionName: 'legacy-db',
+        dbType: 'POSTGRESQL',
+        host: 'localhost',
+        port: 5432,
+        database: 'legacy_db',
+        schema: 'public',
+        username: 'postgres',
+        tableCount: 56,
+        lastScanTime: new Date(Date.now() - 86400000).toISOString(),
+        status: 'SUCCESS'
+      }
+    ]
+    loading.value = false
+  }, 500)
+})
+</script>
+
+<style scoped>
+.database-list {
+  padding: 0;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.page-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.db-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-name .el-icon {
+  font-size: 18px;
+  color: #f5576c;
+}
+
+.text-gray {
+  color: #909399;
+}
+</style>

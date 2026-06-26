@@ -1,13 +1,12 @@
 package io.github.legacygraph.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/**
- * 人工确认表实体
- */
 @Data
 @TableName("lg_review_record")
 public class ReviewRecord {
@@ -16,17 +15,30 @@ public class ReviewRecord {
     private String id;
 
     private String projectId;
-    private String versionId;
+
     private String targetType;
+
     private String targetId;
-    private String reviewStatus;
-    private String reviewer;
-    private String reviewComment;
-    private String beforeData; // JSONB
-    private String afterData; // JSONB
+
+    private String targetName;
+
+    private String graphType;
+
+    private Double confidence;
+
+    private Integer evidenceCount;
+
+    private String priority;
+
+    private String status;
+
+    private String assignee;
+
+    private String comment;
+
+    private String reviewedBy;
+
+    private LocalDateTime reviewedAt;
 
     private LocalDateTime createdAt;
-
-    @TableLogic
-    private Integer deleted;
 }

@@ -8,33 +8,35 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("lg_fact")
-public class Fact {
+@TableName("lg_document")
+public class Document {
 
     @TableId(type = IdType.ASSIGN_UUID)
     private String id;
 
     private String projectId;
 
-    private String factType;
+    private String docName;
 
-    private String factName;
+    private String docType;
 
-    private String sourceType;
+    private String fileType;
 
-    private String sourcePath;
+    private String filePath;
 
-    private Integer sourceLine;
+    private Long fileSize;
 
-    private String contentSummary;
+    private String parseStatus;
 
-    private Double confidence;
+    private Integer factCount;
 
-    private Boolean mappedToGraph;
+    private String errorMessage;
 
-    private Integer relatedNodeCount;
+    private String uploadedBy;
 
-    private String createdBy;
+    private LocalDateTime uploadedAt;
+
+    private LocalDateTime parsedAt;
 
     private LocalDateTime createdAt;
 

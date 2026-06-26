@@ -8,33 +8,33 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("lg_fact")
-public class Fact {
+@TableName("lg_user")
+public class User {
 
     @TableId(type = IdType.ASSIGN_UUID)
     private String id;
 
-    private String projectId;
+    private String username;
 
-    private String factType;
+    private String password;
 
-    private String factName;
+    private String displayName;
 
-    private String sourceType;
+    private String email;
 
-    private String sourcePath;
+    private String phone;
 
-    private Integer sourceLine;
+    private String avatar;
 
-    private String contentSummary;
+    private String status;
 
-    private Double confidence;
+    private String roles;
 
-    private Boolean mappedToGraph;
+    private String permissions;
 
-    private Integer relatedNodeCount;
+    private LocalDateTime lastLoginTime;
 
-    private String createdBy;
+    private String lastLoginIp;
 
     private LocalDateTime createdAt;
 
