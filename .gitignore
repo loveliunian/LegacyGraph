@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.env
+venv/
+node_modules/
+
+# Logs
+*.log
