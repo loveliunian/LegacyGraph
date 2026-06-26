@@ -42,6 +42,21 @@ spring:
       write-dates-as-timestamps: false
     default-property-inclusion: non_null
 
+  # Spring AI OpenAI 配置
+  # 在 application-local.yml 中配置实际的 api-key
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:your-openai-api-key-here}
+      base-url: https://api.openai.com/v1
+      chat:
+        options:
+          model: gpt-5.5
+          temperature: 0.1
+      embedding:
+        options:
+          model: text-embedding-3-small
+          dimensions: 768
+
 # MyBatis-Plus 配置
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

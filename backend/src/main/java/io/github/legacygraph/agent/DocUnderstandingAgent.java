@@ -1,20 +1,35 @@
 package io.github.legacygraph.agent;
 
+import io.github.legacygraph.llm.LlmGateway;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 文档理解Agent
- * 从文档片段抽取业务事实: 业务域、业务流程、业务对象、业务规则、角色、状态流转
+ * DocUnderstandingAgent - 从产品文档抽取业务流程、角色、对象、规则和状态流转
+ *
+ * 职责：
+ * - 抽取业务流程
+ * - 识别参与角色
+ * - 提取业务对象
+ * - 解析业务规则
+ * - 识别状态流转
  */
 @Slf4j
+@Service
 public class DocUnderstandingAgent {
 
+    @Autowired
+    private LlmGateway llmGateway;
+
     /**
-     * 业务事实抽取结果
+     * 业务事实抽取结果 - 对应 BusinessProcessExtractionResult Schema
      */
     @Data
     public static class BusinessFactExtraction {
@@ -38,11 +53,15 @@ public class DocUnderstandingAgent {
 
     @Data
     public static class BusinessProcess {
+        private String key;
         private String name;
         private String description;
         private List<String> steps;
+        private List<String> roles;
+        private List<String> objects;
+        private List<String> rules;
         private double confidence;
-        private String evidenceText;
+        private List<EvidenceRef> evidence;
     }
 
     @Data
@@ -51,7 +70,7 @@ public class DocUnderstandingAgent {
         private String description;
         private List<String> attributes;
         private double confidence;
-        private String evidenceText;
+        private List<EvidenceRef> evidence;
     }
 
     @Data
@@ -59,7 +78,7 @@ public class DocUnderstandingAgent {
         private String name;
         private String expression;
         private double confidence;
-        private String evidenceText;
+        private List<EvidenceRef> evidence;
     }
 
     @Data
@@ -69,7 +88,7 @@ public class DocUnderstandingAgent {
         private String toStatus;
         private String trigger;
         private double confidence;
-        private String evidenceText;
+        private List<EvidenceRef> evidence;
     }
 
     @Data
@@ -79,44 +98,25 @@ public class DocUnderstandingAgent {
         private int chunkIndex;
     }
 
+    @Data
+    public static class EvidenceRef {
+        private String sourceType;
+        private String sourceUri;
+        private Integer lineStart;
+        private Integer lineEnd;
+        private String excerpt;
+    }
+
     /**
-     * 获取Prompt模板，用于LLM抽取
+     * 从文档片段抽取业务事实
      */
-    public String getPrompt(String chunkContent) {
-        return """
-                你是一个老系统业务分析专家。
-                请从以下文档片段中抽取业务事实。
+    public BusinessFactExtraction extractBusinessFacts(String projectId, String docContent, String sourcePath) {
+        Map<String, String> variables = new HashMap<>();
+        variables.put("docContent", docContent);
+        variables.put("sourcePath", sourcePath);
 
-                要求：
-                1. 只能基于给定内容抽取，不要编造。
-                2. 每个事实必须给出证据原文。
-                3. 如果不确定，confidence 不要超过 0.6。
-                4. 输出 JSON。
-
-                需要抽取：
-                - businessDomains: 业务域列表，每个包含 name, description, confidence, evidenceText
-                - businessProcesses: 业务流程列表，每个包含 name, description, steps[], confidence, evidenceText
-                - businessObjects: 业务对象列表，每个包含 name, description, attributes[], confidence, evidenceText
-                - businessRules: 业务规则列表，每个包含 name, expression, confidence, evidenceText
-                - roles: 业务角色列表
-                - statusTransitions: 状态流转，每个包含 businessObject, fromStatus, toStatus, trigger, confidence, evidenceText
-                - features: 功能点列表
-
-                文档片段：
-                %s
-
-                输出格式（严格JSON）：
-                {
-                  "businessDomains": [],
-                  "businessProcesses": [],
-                  "businessObjects": [],
-                  "businessRules": [],
-                  "roles": [],
-                  "statusTransitions": [],
-                  "features": [],
-                  "evidence": []
-                }
-                """.formatted(chunkContent);
+        return llmGateway.callWithTemplate(projectId, "doc-understanding",
+                variables, BusinessFactExtraction.class);
     }
 
     /**

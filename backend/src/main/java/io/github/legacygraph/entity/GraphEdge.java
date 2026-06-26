@@ -27,6 +27,11 @@ public class GraphEdge {
     private String status;
     private String properties; // JSONB
 
+    // LLM integration fields added per detailed design
+    private String evidenceIds; // JSONB
+    private String relationStatus; // candidate / verified / review / rejected
+    private BigDecimal verifiedScore;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

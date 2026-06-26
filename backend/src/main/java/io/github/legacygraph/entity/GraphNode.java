@@ -31,6 +31,12 @@ public class GraphNode {
     private String status;
     private String properties; // JSONB
 
+    // LLM integration fields added per detailed design
+    private String aliasNames; // JSONB
+    private String evidenceIds; // JSONB
+    private Long semanticVectorRef;
+    private BigDecimal verifiedScore;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

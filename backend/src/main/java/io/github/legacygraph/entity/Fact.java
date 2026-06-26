@@ -39,4 +39,13 @@ public class Fact {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    // LLM integration fields added per detailed design
+    private String evidenceIds; // JSONB
+    private String extractorName;
+    private String extractorVersion;
+    private Long promptRunId;
+    private Boolean piiMasked;
+    private String reviewStatus;
+    private Boolean verifiedByTest;
 }

@@ -7,6 +7,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 证据表 - 所有 LLM 输出都必须可追溯到证据
+ */
 @Data
 @TableName("lg_evidence")
 public class Evidence {
@@ -15,20 +18,17 @@ public class Evidence {
     private String id;
 
     private String projectId;
-
-    private String evidenceType;
-
-    private String sourceName;
-
-    private String location;
-
-    private String content;
-
-    private String summary;
-
-    private String relatedNodeIds;
-
-    private String createdBy;
+    private String versionId;
+    private String evidenceType;       // code/sql/doc/ui/test
+    private String sourcePath;
+    private Integer startLine;
+    private Integer endLine;
+    private String contentHash;
+    private String contentExcerpt;
+    private String metadata; // JSONB
+    private String astPath;
+    private String sqlHash;
+    private Long chunkId;
 
     private LocalDateTime createdAt;
 }
