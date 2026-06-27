@@ -1,7 +1,8 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import LoadingService from '@/utils/loading'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
@@ -9,158 +10,197 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/',
+    redirect: '/dashboard'
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/dashboard/Index.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/',
-    redirect: '/dashboard'
+    meta: { requiresAuth: true, title: 'menu.dashboard' }
   },
   {
     path: '/projects',
     name: 'Projects',
     component: () => import('@/views/project/ProjectList.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, title: 'menu.projects' }
   },
   {
     path: '/projects/:projectId',
     name: 'ProjectDetail',
     component: () => import('@/views/project/ProjectDetail.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, title: 'menu.projectDetail' },
     children: [
       {
         path: 'overview',
         name: 'ProjectOverview',
-        component: () => import('@/views/project/ProjectOverview.vue')
-      },
-      {
-        path: '',
-        redirect: to => `/projects/${to.params.projectId}/repos`
+        component: () => import('@/views/project/ProjectOverview.vue'),
+        meta: { title: 'menu.projectOverview' }
       },
       {
         path: 'repos',
         name: 'CodeRepos',
-        component: () => import('@/views/source/CodeRepoList.vue')
+        component: () => import('@/views/source/CodeRepoList.vue'),
+        meta: { title: 'menu.codeRepos' }
       },
       {
         path: 'databases',
         name: 'Databases',
-        component: () => import('@/views/source/DatabaseList.vue')
+        component: () => import('@/views/source/DatabaseList.vue'),
+        meta: { title: 'menu.databases' }
       },
       {
         path: 'documents',
         name: 'Documents',
-        component: () => import('@/views/source/DocumentList.vue')
+        component: () => import('@/views/source/DocumentList.vue'),
+        meta: { title: 'menu.documents' }
       },
       {
         path: 'scan-versions',
         name: 'ScanVersions',
-        component: () => import('@/views/scan/ScanVersionList.vue')
+        component: () => import('@/views/scan/ScanVersionList.vue'),
+        meta: { title: 'menu.scanVersions' }
       },
       {
         path: 'graph/code',
         name: 'CodeGraph',
-        component: () => import('@/views/graph/CodeGraph.vue')
+        component: () => import('@/views/graph/CodeGraph.vue'),
+        meta: { title: 'menu.codeGraph' }
       },
       {
         path: 'graph/unified',
         name: 'UnifiedGraph',
-        component: () => import('@/views/graph/UnifiedGraph.vue')
+        component: () => import('@/views/graph/UnifiedGraph.vue'),
+        meta: { title: 'menu.unifiedGraph' }
       },
       {
         path: 'reviews',
         name: 'Reviews',
-        component: () => import('@/views/review/ReviewList.vue')
+        component: () => import('@/views/review/ReviewList.vue'),
+        meta: { title: 'menu.reviews' }
       },
       {
         path: 'review-history',
         name: 'ReviewHistory',
-        component: () => import('@/views/review/ReviewHistory.vue')
+        component: () => import('@/views/review/ReviewHistory.vue'),
+        meta: { title: 'menu.reviewHistory' }
       },
       {
         path: 'facts',
         name: 'Facts',
-        component: () => import('@/views/fact/FactList.vue')
+        component: () => import('@/views/fact/FactList.vue'),
+        meta: { title: 'menu.facts' }
       },
       {
         path: 'evidence',
         name: 'Evidence',
-        component: () => import('@/views/fact/EvidenceSearch.vue')
+        component: () => import('@/views/fact/EvidenceSearch.vue'),
+        meta: { title: 'menu.evidence' }
       },
       {
         path: 'test-cases',
         name: 'TestCases',
-        component: () => import('@/views/test/TestCaseList.vue')
+        component: () => import('@/views/test/TestCaseList.vue'),
+        meta: { title: 'menu.testCases' }
       },
       {
         path: 'test-cases/new',
         name: 'TestCaseEditorNew',
-        component: () => import('@/views/test/TestCaseEditor.vue')
+        component: () => import('@/views/test/TestCaseEditor.vue'),
+        meta: { title: 'menu.testCaseEditor' }
       },
       {
         path: 'test-cases/:id/edit',
         name: 'TestCaseEditorEdit',
-        component: () => import('@/views/test/TestCaseEditor.vue')
-      },
-      {
-        path: 'test-runs/:id',
-        name: 'TestRunDetail',
-        component: () => import('@/views/test/TestRunDetail.vue')
+        component: () => import('@/views/test/TestCaseEditor.vue'),
+        meta: { title: 'menu.testCaseEditor' }
       },
       {
         path: 'test-runs',
         name: 'TestRunList',
-        component: () => import('@/views/test/TestRunList.vue')
+        component: () => import('@/views/test/TestRunList.vue'),
+        meta: { title: 'menu.testRuns' }
+      },
+      {
+        path: 'test-runs/:id',
+        name: 'TestRunDetail',
+        component: () => import('@/views/test/TestRunDetail.vue'),
+        meta: { title: 'menu.testRunDetail' }
       },
       {
         path: 'validation',
         name: 'Validation',
-        component: () => import('@/views/report/ValidationReport.vue')
+        component: () => import('@/views/report/ValidationReport.vue'),
+        meta: { title: 'menu.validationReport' }
       },
       {
         path: 'migration/risks',
         name: 'MigrationRiskList',
-        component: () => import('@/views/migration/RiskList.vue')
+        component: () => import('@/views/migration/RiskList.vue'),
+        meta: { title: 'menu.migrationRisks' }
       },
       {
         path: 'migration/risks/:riskId',
         name: 'MigrationRiskDetail',
-        component: () => import('@/views/migration/RiskDetail.vue')
+        component: () => import('@/views/migration/RiskDetail.vue'),
+        meta: { title: 'menu.riskDetail' }
       },
       {
         path: 'audit/logs',
         name: 'AuditLogList',
-        component: () => import('@/views/audit/LogList.vue')
+        component: () => import('@/views/audit/LogList.vue'),
+        meta: { title: 'menu.auditLogs' }
       },
       {
         path: 'audit/logs/:id',
         name: 'AuditLogDetail',
-        component: () => import('@/views/audit/LogDetail.vue')
+        component: () => import('@/views/audit/LogDetail.vue'),
+        meta: { title: 'menu.logDetail' }
       },
       {
         path: 'system/users',
         name: 'SystemUserList',
-        component: () => import('@/views/system/UserList.vue')
+        component: () => import('@/views/system/UserList.vue'),
+        meta: { title: 'menu.systemUsers' }
       },
       {
         path: 'system/dictionaries',
         name: 'SystemDictionaryList',
-        component: () => import('@/views/system/DictionaryList.vue')
+        component: () => import('@/views/system/DictionaryList.vue'),
+        meta: { title: 'menu.systemDictionaries' }
       },
       {
         path: 'system/settings',
         name: 'SystemSettings',
-        component: () => import('@/views/system/Settings.vue')
+        component: () => import('@/views/system/Settings.vue'),
+        meta: { title: 'menu.systemSettings' }
       }
     ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/error/404.vue'),
+    meta: { requiresAuth: false, title: 'common.error' }
+  },
+  {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('@/views/error/403.vue'),
+    meta: { requiresAuth: false, title: 'common.forbidden' }
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0 }
+    }
+  }
 })
 
 router.beforeEach(async (to, from, next) => {
@@ -173,16 +213,30 @@ router.beforeEach(async (to, from, next) => {
       return
     }
     if (!userStore.user && userStore.token) {
-      await userStore.fetchUser()
+      try {
+        await userStore.fetchUser()
+      } catch (error) {
+        next('/login')
+        return
+      }
     }
   }
 
   if (to.path === '/login' && userStore.token) {
-    next('/projects')
+    next('/dashboard')
     return
   }
 
   next()
+})
+
+router.beforeResolve(async (to, from, next) => {
+  LoadingService.show()
+  next()
+})
+
+router.afterEach(() => {
+  LoadingService.hide()
 })
 
 export default router
