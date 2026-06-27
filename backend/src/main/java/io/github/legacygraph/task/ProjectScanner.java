@@ -1,6 +1,7 @@
 package io.github.legacygraph.task;
 
 import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.entity.DbConnection;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
@@ -10,6 +11,7 @@ import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
 import io.github.legacygraph.model.ApiFact;
 import io.github.legacygraph.model.MapperSqlFact;
+import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
@@ -42,17 +44,20 @@ public class ProjectScanner {
     private final ScanVersionRepository scanVersionRepository;
     private final ScanTaskRepository scanTaskRepository;
     private final FactRepository factRepository;
+    private final DbConnectionRepository dbConnectionRepository;
     private final GraphBuilder graphBuilder;
     private final ObjectMapper objectMapper;
 
     public ProjectScanner(ScanVersionRepository scanVersionRepository,
                          ScanTaskRepository scanTaskRepository,
                          FactRepository factRepository,
+                         DbConnectionRepository dbConnectionRepository,
                          GraphBuilder graphBuilder,
                          ObjectMapper objectMapper) {
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
+        this.dbConnectionRepository = dbConnectionRepository;
         this.graphBuilder = graphBuilder;
         this.objectMapper = objectMapper;
     }
@@ -86,9 +91,32 @@ public class ProjectScanner {
             completeTask(mapperTask, "Scanned " + mapperCount + " mappers", null);
             log.info("Completed MyBatis XML scan, found {} mappers", mapperCount);
 
-            // 3. TODO: 扫描前端文件
+            // 3. TODO: 扫描前端文件 (Vue/React组件和路由)
 
-            // 4. TODO: 扫描数据库元数据
+            // 4. 扫描所有已配置数据库的元数据
+            List<DbConnection> dbConnections = dbConnectionRepository.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<DbConnection>()
+                            .eq(DbConnection::getProjectId, projectId)
+                            .eq(DbConnection::getStatus, "READY")
+            );
+
+            if (!dbConnections.isEmpty()) {
+                ScanTask dbTask = createTask(projectId, versionId, "DATABASE_SCAN", "数据库元数据扫描");
+                int totalTables = 0;
+                for (DbConnection conn : dbConnections) {
+                    try {
+                        // 创建数据源并扫描
+                        javax.sql.DataSource dataSource = createDataSource(conn);
+                        scanDatabaseMetadata(projectId, versionId, dataSource, conn.getSchemaName());
+                        // 统计表数量需要从extract结果获取，这里简化
+                        totalTables += conn.getTableCount() != null ? conn.getTableCount() : 0;
+                    } catch (Exception e) {
+                        log.warn("Failed to scan database connection {}: {}", conn.getId(), e.getMessage());
+                    }
+                }
+                completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables + " tables", null);
+                log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables);
+            }
 
             // 5. 构建图谱
             ScanTask buildTask = createTask(projectId, versionId, "GRAPH_BUILD", "图谱构建");
@@ -114,6 +142,50 @@ public class ProjectScanner {
                 scanVersionRepository.updateById(version);
             }
         }
+    }
+
+    /**
+     * 从DbConnection创建DataSource
+     */
+    private DataSource createDataSource(DbConnection conn) {
+        org.apache.tomcat.jdbc.pool.DataSource dataSource = new org.apache.tomcat.jdbc.pool.DataSource();
+        String url = buildJdbcUrl(conn);
+        dataSource.setUrl(url);
+        dataSource.setUsername(conn.getUsername());
+        dataSource.setPassword(conn.getPassword() != null ? conn.getPassword() : "");
+        dataSource.setDriverClassName(getDriverClassName(conn.getDbType()));
+        return dataSource;
+    }
+
+    /**
+     * 构建JDBC URL
+     */
+    private String buildJdbcUrl(DbConnection conn) {
+        String dbType = conn.getDbType();
+        if (dbType == null) {
+            dbType = "postgresql";
+        }
+        return switch (dbType.toLowerCase()) {
+            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s",
+                    conn.getHost(), conn.getPort(), conn.getDatabaseName());
+            case "mysql" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true",
+                    conn.getHost(), conn.getPort(), conn.getDatabaseName());
+            default -> throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
+        };
+    }
+
+    /**
+     * 获取驱动类名
+     */
+    private String getDriverClassName(String dbType) {
+        if (dbType == null) {
+            return "org.postgresql.Driver";
+        }
+        return switch (dbType.toLowerCase()) {
+            case "postgresql" -> "org.postgresql.Driver";
+            case "mysql" -> "com.mysql.cj.jdbc.Driver";
+            default -> "org.postgresql.Driver";
+        };
     }
 
     /**

@@ -6,9 +6,14 @@ import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.entity.TestCase;
+import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.repository.TestCaseRepository;
+import io.github.legacygraph.repository.TestResultRepository;
+import io.github.legacygraph.service.GraphValidatorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,18 +22,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/lg/projects/{projectId}")
 @Tag(name = "测试用例管理", description = "测试用例查询、生成、执行")
 public class TestCaseController {
 
     private final TestCaseRepository testCaseRepository;
+    private final TestResultRepository testResultRepository;
     private final io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler;
+    private final GraphValidatorService graphValidatorService;
 
     public TestCaseController(TestCaseRepository testCaseRepository,
-                              io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler) {
+                              TestResultRepository testResultRepository,
+                              io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler,
+                              GraphValidatorService graphValidatorService) {
         this.testCaseRepository = testCaseRepository;
+        this.testResultRepository = testResultRepository;
         this.testExecutionScheduler = testExecutionScheduler;
+        this.graphValidatorService = graphValidatorService;
     }
 
     @GetMapping("/test-cases")
@@ -199,13 +211,37 @@ public class TestCaseController {
      */
     @PostMapping("/tests/results/callback")
     @Operation(summary = "外部测试结果回调", description = "接收第三方CI/CD系统推送的测试结果")
+    @Transactional
     public Result<Void> testResultCallback(
             @PathVariable String projectId,
             @RequestBody TestResultCallbackRequest request) {
-        // TODO: 处理测试结果，更新图谱置信度
-        // 1. 保存测试结果
-        // 2. 调用GraphValidatorService更新置信度
-        // 3. 标记相关节点和关系置信度变化
+        // 1. 保存测试结果到数据库
+        TestResult testResult = new TestResult();
+        testResult.setProjectId(projectId);
+        testResult.setTestCaseId(request.getCaseId());
+        testResult.setExecutionId(request.getRunId());
+        testResult.setResultStatus(request.getStatus());
+        testResult.setRequestData(request.getRequestData());
+        testResult.setResponseData(request.getResponseData());
+        testResult.setErrorMessage(request.getErrorMessage());
+        testResult.setDurationMs(request.getDurationMs());
+        testResult.setExecutedAt(java.time.LocalDateTime.now());
+
+        // 获取版本ID从测试用例
+        TestCase testCase = testCaseRepository.selectById(request.getCaseId());
+        if (testCase != null) {
+            testResult.setVersionId(testCase.getVersionId());
+            testResultRepository.insert(testResult);
+
+            // 2. 更新图谱置信度
+            graphValidatorService.updateConfidenceByTestResults(testCase.getVersionId());
+
+            log.info("Test result callback processed: runId={}, caseId={}, status={}",
+                    request.getRunId(), request.getCaseId(), request.getStatus());
+        } else {
+            log.warn("Test case not found for callback: caseId={}", request.getCaseId());
+        }
+
         return Result.success();
     }
 

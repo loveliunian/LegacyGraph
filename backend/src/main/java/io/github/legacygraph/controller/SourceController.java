@@ -10,9 +10,11 @@ import io.github.legacygraph.dto.CreateDbConnectionRequest;
 import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.DbConnection;
 import io.github.legacygraph.entity.Document;
+import io.github.legacygraph.extractors.DocumentExtractor;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
+import io.github.legacygraph.repository.DocChunkRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -48,6 +50,7 @@ public class SourceController {
     private final CodeRepoRepository codeRepoRepository;
     private final DbConnectionRepository dbConnectionRepository;
     private final DocumentRepository documentRepository;
+    private final DocChunkRepository docChunkRepository;
 
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -63,13 +66,16 @@ public class SourceController {
      * @param codeRepoRepository 代码仓库数据访问层
      * @param dbConnectionRepository 数据库连接数据访问层
      * @param documentRepository 文档数据访问层
+     * @param docChunkRepository 文档片段数据访问层
      */
     public SourceController(CodeRepoRepository codeRepoRepository,
                             DbConnectionRepository dbConnectionRepository,
-                            DocumentRepository documentRepository) {
+                            DocumentRepository documentRepository,
+                            DocChunkRepository docChunkRepository) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
+        this.docChunkRepository = docChunkRepository;
     }
 
     // ==================== 代码仓库 ====================
@@ -804,15 +810,48 @@ public class SourceController {
         doc.setParseStatus("PARSING");
         documentRepository.updateById(doc);
 
-        doc.setParseStatus("PARSED");
-        doc.setFactCount((int) (Math.random() * 100 + 10));
-        doc.setParsedAt(LocalDateTime.now());
-        doc.setUpdatedAt(LocalDateTime.now());
-        documentRepository.updateById(doc);
-
         Map<String, Object> result = new HashMap<>();
-        result.put("factCount", doc.getFactCount());
-        result.put("message", "解析完成");
+        try {
+            // 使用 DocumentExtractor 真实抽取文本并切片
+            DocumentExtractor extractor = new DocumentExtractor();
+            File file = new java.io.File(doc.getFilePath());
+            String text = extractor.extractText(file);
+
+            // 切片并保存到数据库
+            List<DocumentExtractor.DocumentChunk> chunks = extractor.chunkDocument(text, doc.getDocName(), 500);
+
+            // 保存所有切片
+            for (DocumentExtractor.DocumentChunk chunk : chunks) {
+                io.github.legacygraph.entity.DocChunk docChunk = new io.github.legacygraph.entity.DocChunk();
+                docChunk.setProjectId(projectId);
+                docChunk.setVersionId(doc.getVersionId());
+                docChunk.setDocName(doc.getDocName());
+                docChunk.setDocPath(doc.getFilePath());
+                docChunk.setChunkIndex(chunk.getIndex());
+                docChunk.setTitlePath(chunk.getTitlePath());
+                docChunk.setContent(chunk.getContent());
+                docChunk.setTokenCount(chunk.getTokenCount());
+                docChunkRepository.insert(docChunk);
+            }
+
+            doc.setParseStatus("PARSED");
+            doc.setFactCount(chunks.size());
+            doc.setParsedAt(LocalDateTime.now());
+            doc.setUpdatedAt(LocalDateTime.now());
+            documentRepository.updateById(doc);
+
+            result.put("factCount", chunks.size());
+            result.put("chunkCount", chunks.size());
+            result.put("message", "解析完成，共生成 " + chunks.size() + " 个文本片段");
+            log.info("Document parsed successfully: {}, {} chunks", doc.getDocName(), chunks.size());
+        } catch (Exception e) {
+            doc.setParseStatus("PARSE_FAILED");
+            documentRepository.updateById(doc);
+            result.put("success", false);
+            result.put("message", "解析失败: " + e.getMessage());
+            log.error("Document parsing failed", e);
+        }
+
         return Result.success(result);
     }
 

@@ -81,28 +81,130 @@ public class GraphQueryService {
 
     /**
      * 获取功能图谱视图
+     * 根据模块名称查询完整的功能调用链路图谱
      */
     public Map<String, Object> getFeatureView(String versionId, String module) {
         String cypher = """
-                MATCH p = (f:Feature {nodeKey: $featureKey})-[:EXPOSED_BY|CALLS|HANDLED_BY|EXECUTES|READS|WRITES*1..10]->(n)
-                RETURN p
+                MATCH (n)
+                WHERE n.versionId = $versionId
+                  AND any(label IN labels(n) WHERE label IN ['Feature', 'ApiEndpoint', 'Service', 'Repository'])
+                  AND n.module = $module
+                MATCH p = (n)-[:EXPOSED_BY|CALLS|HANDLED_BY|EXECUTES|READS|WRITES*1..10]->(m)
+                RETURN DISTINCT p
                 """;
 
         Map<String, Object> result = new HashMap<>();
-        // TODO: 根据module找到feature，然后返回完整链路
-        // 简化版本，先返回占位
-        result.put("module", module);
-        result.put("versionId", versionId);
+        try (Session session = neo4jDriver.session()) {
+            Result queryResult = session.run(cypher, Map.of(
+                    "versionId", versionId,
+                    "module", module
+            ));
+
+            Set<String> nodeIds = new HashSet<>();
+            List<Map<String, Object>> nodes = new ArrayList<>();
+            List<Map<String, Object>> edges = new ArrayList<>();
+
+            while (queryResult.hasNext()) {
+                Record record = queryResult.next();
+                Path path = record.get("p").asPath();
+
+                for (var node : path.nodes()) {
+                    String nodeId = node.elementId();
+                    if (!nodeIds.contains(nodeId)) {
+                        nodeIds.add(nodeId);
+                        Map<String, Object> nodeMap = new HashMap<>();
+                        nodeMap.put("id", nodeId);
+                        nodeMap.put("labels", node.labels());
+                        nodeMap.put("properties", node.asMap());
+                        nodes.add(nodeMap);
+                    }
+                }
+
+                for (var rel : path.relationships()) {
+                    Map<String, Object> relMap = new HashMap<>();
+                    relMap.put("id", rel.elementId());
+                    relMap.put("type", rel.type().toString());
+                    relMap.put("startNodeId", rel.startNodeElementId());
+                    relMap.put("endNodeId", rel.endNodeElementId());
+                    relMap.put("properties", rel.asMap());
+                    edges.add(relMap);
+                }
+            }
+
+            result.put("module", module);
+            result.put("versionId", versionId);
+            result.put("nodes", nodes);
+            result.put("edges", edges);
+            result.put("nodeCount", nodes.size());
+            result.put("edgeCount", edges.size());
+        }
+
         return result;
     }
 
     /**
      * 获取业务图谱视图
+     * 根据业务域查询完整的业务对象、流程、规则图谱
      */
     public Map<String, Object> getBusinessView(String versionId, String domain) {
+        String cypher = """
+                MATCH (n)
+                WHERE n.versionId = $versionId
+                  AND any(label IN labels(n) WHERE label IN ['BusinessDomain', 'BusinessProcess', 'BusinessObject', 'BusinessRule'])
+                  AND (n.businessDomain = $domain OR n.domain = $domain)
+                OPTIONAL MATCH p = (n)-[:CONTAINS|USES|DEFINES|REFERENCES*1..8]->(m)
+                RETURN DISTINCT n, p
+                """;
+
         Map<String, Object> result = new HashMap<>();
-        result.put("domain", domain);
-        result.put("versionId", versionId);
+        try (Session session = neo4jDriver.session()) {
+            Result queryResult = session.run(cypher, Map.of(
+                    "versionId", versionId,
+                    "domain", domain
+            ));
+
+            Set<String> nodeIds = new HashSet<>();
+            List<Map<String, Object>> nodes = new ArrayList<>();
+            List<Map<String, Object>> edges = new ArrayList<>();
+
+            while (queryResult.hasNext()) {
+                Record record = queryResult.next();
+                org.neo4j.driver.Value pValue = record.get("p");
+                if (!pValue.isNull()) {
+                    Path path = pValue.asPath();
+
+                    for (var node : path.nodes()) {
+                        String nodeId = node.elementId();
+                        if (!nodeIds.contains(nodeId)) {
+                            nodeIds.add(nodeId);
+                            Map<String, Object> nodeMap = new HashMap<>();
+                            nodeMap.put("id", nodeId);
+                            nodeMap.put("labels", node.labels());
+                            nodeMap.put("properties", node.asMap());
+                            nodes.add(nodeMap);
+                        }
+                    }
+
+                    for (var rel : path.relationships()) {
+                        Map<String, Object> relMap = new HashMap<>();
+                        relMap.put("id", rel.elementId());
+                        relMap.put("type", rel.type().toString());
+                        relMap.put("startNodeId", rel.startNodeElementId());
+                        relMap.put("endNodeId", rel.endNodeElementId());
+                        relMap.put("properties", rel.asMap());
+                        edges.add(relMap);
+                    }
+                }
+            }
+
+            result.put("domain", domain);
+            result.put("versionId", versionId);
+            result.put("nodes", nodes);
+            result.put("edges", edges);
+            result.put("nodeCount", nodes.size());
+            result.put("edgeCount", edges.size());
+        }
+
         return result;
     }
 }

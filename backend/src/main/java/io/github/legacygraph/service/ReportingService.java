@@ -43,6 +43,7 @@ public class ReportingService {
     private final GraphNodeRepository nodeRepository;
     private final GraphEdgeRepository edgeRepository;
     private final TestResultRepository testResultRepository;
+    private final io.github.legacygraph.repository.TestCaseRepository testCaseRepository;
     private final MinioClient minioClient;
     private final ObjectMapper objectMapper;
 
@@ -52,12 +53,14 @@ public class ReportingService {
                            GraphNodeRepository nodeRepository,
                            GraphEdgeRepository edgeRepository,
                            TestResultRepository testResultRepository,
+                           io.github.legacygraph.repository.TestCaseRepository testCaseRepository,
                            MinioClient minioClient,
                            ObjectMapper objectMapper) {
         this.reportRepository = reportRepository;
         this.nodeRepository = nodeRepository;
         this.edgeRepository = edgeRepository;
         this.testResultRepository = testResultRepository;
+        this.testCaseRepository = testCaseRepository;
         this.minioClient = minioClient;
         this.objectMapper = objectMapper;
     }
@@ -303,10 +306,29 @@ public class ReportingService {
         report.setTotalNodes(allNodes.size());
         report.setTotalEdges(allEdges.size());
 
-        // 简单统计：有测试结果关联的节点算覆盖
-        // 完整实现需要关联测试用例和节点
-        long coveredNodes = 0;
-        long coveredEdges = 0;
+        // 统计：有通过测试结果关联到目标节点的算覆盖
+        Set<String> coveredNodeIds = new HashSet<>();
+        List<TestResult> testResults = testResultRepository.lambdaQuery()
+                .eq(TestResult::getVersionId, versionId)
+                .eq(TestResult::getResultStatus, "PASSED")
+                .list();
+
+        for (TestResult result : testResults) {
+            TestCase testCase = testCaseRepository.selectById(result.getTestCaseId());
+            if (testCase != null && testCase.getTargetNodeId() != null) {
+                coveredNodeIds.add(testCase.getTargetNodeId());
+            }
+        }
+
+        long coveredNodes = coveredNodeIds.size();
+        // 对于边：和覆盖节点相连的边也算覆盖
+        Set<String> coveredEdgeIds = new HashSet<>();
+        for (GraphEdge edge : allEdges) {
+            if (coveredNodeIds.contains(edge.getFromNodeId()) || coveredNodeIds.contains(edge.getToNodeId())) {
+                coveredEdgeIds.add(edge.getId());
+            }
+        }
+        long coveredEdges = coveredEdgeIds.size();
 
         report.setCoveredNodes(coveredNodes);
         report.setCoveredEdges(coveredEdges);
@@ -504,6 +526,42 @@ public class ReportingService {
         report.setCompletedAt(LocalDateTime.now());
 
         reportRepository.insert(report);
+
+        // Upload JSON version to MinIO
+        try {
+            // Ensure bucket exists
+            if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketName).build())) {
+                minioClient.makeBucket(io.minio.MakeBucketArgs.builder()
+                        .bucket(bucketName)
+                        .build());
+            }
+
+            // Get the report data and upload
+            Object reportData = switch (reportType) {
+                case "MIGRATION_READINESS" -> generateMigrationReport(projectId);
+                case "CONFIDENCE_TREND" -> generateConfidenceTrend(projectId, null);
+                case "TEST_COVERAGE" -> generateTestCoverageReport(projectId, null);
+                case "GRAPH_QUALITY" -> generateGraphQualityReport(projectId, null);
+                default -> null;
+            };
+
+            if (reportData != null) {
+                byte[] jsonBytes = objectMapper.writeValueAsBytes(reportData);
+                String objectName = String.format("%s/%s/%s.json", projectId, report.getId(), reportType);
+
+                minioClient.putObject(PutObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(objectName)
+                        .stream(new ByteArrayInputStream(jsonBytes), jsonBytes.length, -1L)
+                        .contentType("application/json")
+                        .build());
+
+                log.info("Report uploaded to MinIO: {}", objectName);
+            }
+        } catch (Exception e) {
+            log.error("Failed to upload report to MinIO", e);
+        }
+
         return report;
     }
 

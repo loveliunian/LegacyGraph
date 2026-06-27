@@ -2,21 +2,29 @@ package io.github.legacygraph.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import io.github.legacygraph.agent.CodeFactAgent;
+import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/lg/projects/{projectId}")
 @Tag(name = "事实与证据", description = "事实列表和证据检索")
@@ -24,10 +32,17 @@ public class FactController {
 
     private final FactRepository factRepository;
     private final EvidenceRepository evidenceRepository;
+    private final CodeFactAgent codeFactAgent;
+    private final DocUnderstandingAgent docUnderstandingAgent;
 
-    public FactController(FactRepository factRepository, EvidenceRepository evidenceRepository) {
+    public FactController(FactRepository factRepository,
+                          EvidenceRepository evidenceRepository,
+                          CodeFactAgent codeFactAgent,
+                          DocUnderstandingAgent docUnderstandingAgent) {
         this.factRepository = factRepository;
         this.evidenceRepository = evidenceRepository;
+        this.codeFactAgent = codeFactAgent;
+        this.docUnderstandingAgent = docUnderstandingAgent;
     }
 
     @GetMapping("/facts")
@@ -147,22 +162,30 @@ public class FactController {
 
     @PostMapping("/extract/facts/code")
     @Operation(summary = "从代码片段抽取事实", description = "调用LLM从代码片段中抽取业务事实")
-    public Result<Void> extractCodeFacts(
+    public Result<FactExtractionResult> extractCodeFacts(
             @PathVariable String projectId,
             @RequestBody ExtractCodeFactsRequest request) {
-        // TODO: 调用CodeFactAgent进行抽取
-        // 实际实现会异步处理，保存抽取结果到数据库
-        return Result.success();
+        FactExtractionResult result = codeFactAgent.extractFacts(
+                projectId, request.getContent(), request.getFilePath());
+        log.info("Code fact extraction completed for {}: {} facts extracted",
+                request.getFilePath(), result.getItems() != null ? result.getItems().size() : 0);
+        return Result.success(result);
     }
 
     @PostMapping("/extract/facts/doc")
     @Operation(summary = "从文档片段抽取事实", description = "调用LLM从文本文档中抽取业务事实")
-    public Result<Void> extractDocFacts(
+    public Result<DocUnderstandingAgent.BusinessFactExtraction> extractDocFacts(
             @PathVariable String projectId,
             @RequestBody ExtractDocFactsRequest request) {
-        // TODO: 调用DocUnderstandingAgent进行抽取
-        // 实际实现会异步处理，保存抽取结果到数据库
-        return Result.success();
+        DocUnderstandingAgent.BusinessFactExtraction result = docUnderstandingAgent.extractBusinessFacts(
+                projectId, request.getContent(), request.getDocId());
+        int factCount = result.getBusinessDomains().size()
+                + result.getBusinessProcesses().size()
+                + result.getBusinessObjects().size()
+                + result.getBusinessRules().size();
+        log.info("Document fact extraction completed for {}: {} facts extracted",
+                request.getDocId(), factCount);
+        return Result.success(result);
     }
 
     /**
