@@ -1,10 +1,9 @@
 package io.github.legacygraph.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -16,31 +15,64 @@ public class TestCase {
 
     private String projectId;
 
-    private String caseNo;
+    private String versionId;
+
+    private String caseCode;
 
     private String caseName;
 
     private String caseType;
 
-    private String featureName;
+    private String targetNodeId;
 
-    private String apiPath;
+    private String priority;
 
-    private String method;
+    private String preconditions;
 
-    private Integer assertionCount;
+    private String steps;
 
-    private String generateType;
+    private String expectedResult;
+
+    private String generatedBy;
+
+    private BigDecimal confidence;
 
     private String status;
 
+    private LocalDateTime createdAt;
+
+    private LocalDateTime updatedAt;
+
+    @TableLogic
+    private Integer deleted;
+
+    @TableField(exist = false)
+    private String caseNo;
+
+    @TableField(exist = false)
+    private String featureName;
+
+    @TableField(exist = false)
+    private String apiPath;
+
+    @TableField(exist = false)
+    private String method;
+
+    @TableField(exist = false)
+    private Integer assertionCount;
+
+    @TableField(exist = false)
+    private String generateType;
+
+    @TableField(exist = false)
     private String lastRunStatus;
 
+    @TableField(exist = false)
     private LocalDateTime lastRunTime;
 
+    @TableField(exist = false)
     private String relatedNodeIds;
 
+    @TableField(exist = false)
     private String createdBy;
-
-    private LocalDateTime createdAt;
 }

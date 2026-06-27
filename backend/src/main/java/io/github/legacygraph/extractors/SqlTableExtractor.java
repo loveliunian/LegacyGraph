@@ -5,11 +5,11 @@ import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.insert.Insert;
-import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.Join;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
+import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.update.Update;
-import net.sf.jsqlparser.statement.select.SubSelect;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -68,10 +68,7 @@ public class SqlTableExtractor {
      * 处理SELECT语句
      */
     private void extractSelectTables(Select select, SqlTableResult result) {
-        if (select.getSelectBody() != null) {
-            // 深度遍历提取所有表
-            findTablesInFrom(select.getSelectBody(), result);
-        }
+        findTablesInFrom(select, result);
     }
 
     /**
@@ -94,8 +91,8 @@ public class SqlTableExtractor {
      */
     private void extractUpdateTables(Update update, SqlTableResult result) {
         // UPDATE表本身是写入
-        for (Table table : update.getTables()) {
-            result.getWriteTables().add(getTableName(table));
+        if (update.getTable() != null) {
+            result.getWriteTables().add(getTableName(update.getTable()));
         }
 
         // WHERE条件中可能有JOIN读表
@@ -122,11 +119,23 @@ public class SqlTableExtractor {
         if (fromItem instanceof Table) {
             Table table = (Table) fromItem;
             result.getReadTables().add(getTableName(table));
-        } else if (fromItem instanceof SubSelect) {
-            SubSelect subSelect = (SubSelect) fromItem;
-            if (subSelect.getSelectBody() != null) {
-                findTablesInFrom(subSelect.getSelectBody(), result);
+        } else if (fromItem instanceof PlainSelect) {
+            PlainSelect plainSelect = (PlainSelect) fromItem;
+            findTablesInFrom(plainSelect.getFromItem(), result);
+            if (plainSelect.getJoins() != null) {
+                for (Join join : plainSelect.getJoins()) {
+                    findTablesInFrom(join.getRightItem(), result);
+                    if (join.getRightItem() instanceof Table) {
+                        result.getJoinTables().add(getTableName((Table) join.getRightItem()));
+                    }
+                }
             }
+        } else if (fromItem instanceof ParenthesedSelect) {
+            ParenthesedSelect parenthesedSelect = (ParenthesedSelect) fromItem;
+            findTablesInFrom(parenthesedSelect.getSelect(), result);
+        } else if (fromItem instanceof Select) {
+            Select select = (Select) fromItem;
+            findTablesInFrom(select.getSelectBody(), result);
         }
         // TODO: 处理更多FromItem类型
     }

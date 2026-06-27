@@ -173,7 +173,7 @@ public class E2eTestExecutor {
         }
 
         result.setDurationMs(System.currentTimeMillis() - startTime);
-        testResultRepository.save(result);
+        testResultRepository.insert(result);
 
         log.info("E2E test completed: {} status={}", result.getId(), result.getResultStatus());
         return result;

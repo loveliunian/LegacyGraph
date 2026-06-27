@@ -15,9 +15,10 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -80,7 +81,7 @@ public class LlmGateway {
         String maskedPrompt = piiMaskingService.mask(fullPrompt);
 
         // 5. 计算输入 hash 用于缓存
-        String inputHash = DigestUtils.sha256Hex(maskedPrompt);
+        String inputHash = sha256Hex(maskedPrompt);
 
         // 6. 检查缓存
         Long cachedId = promptRunRepository.findCachedRunIdByInputHash(inputHash);
@@ -101,11 +102,11 @@ public class LlmGateway {
         ChatResponse response;
         try {
             var chatClient = chatClientBuilder
-                    .advisors(new SimpleLoggerAdvisor())
                     .build();
 
             response = chatClient.prompt()
                     .user(maskedPrompt)
+                    .advisors(new SimpleLoggerAdvisor())
                     .call()
                     .chatResponse();
         } catch (Exception e) {
@@ -120,7 +121,7 @@ public class LlmGateway {
         int completionTokens = response.getMetadata().getUsage().getCompletionTokens();
 
         // 8. 解析输出
-        String content = response.getResult().getOutput().getContent();
+        String content = response.getResult().getOutput().getText();
         T parsedOutput;
         try {
             // 尝试清理 markdown 包装
@@ -218,5 +219,26 @@ public class LlmGateway {
         run.setStatus(status);
         run.setCreatedAt(LocalDateTime.now());
         promptRunRepository.insert(run);
+    }
+
+    /**
+     * SHA-256 hash function compatible with older DigestUtils.sha256Hex
+     */
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
     }
 }

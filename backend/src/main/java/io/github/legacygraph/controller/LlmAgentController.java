@@ -89,7 +89,7 @@ public class LlmAgentController {
                 yield Result.ok(result);
             }
             case "testcasegeneration" -> {
-                TestCaseAgent.TestGenerationResult result =
+                List<GeneratedTestCase> result =
                         testCaseAgent.generateTestCases(parseTestGenRequest(projectId, variables));
                 yield Result.ok(result);
             }

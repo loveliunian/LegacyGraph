@@ -2,8 +2,10 @@ package io.github.legacygraph.extractors;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
+import org.apache.tika.exception.TikaException;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 
@@ -30,7 +32,7 @@ public class DocumentExtractor {
     /**
      * 从文件抽取文本
      */
-    public String extractText(File file) throws IOException {
+    public String extractText(File file) throws IOException, TikaException {
         String fileName = file.getName().toLowerCase();
 
         if (fileName.endsWith(".pdf")) {
@@ -49,8 +51,8 @@ public class DocumentExtractor {
      * 抽取PDF文本
      */
     private String extractPdf(File file) throws IOException {
-        try (InputStream is = new FileInputStream(file);
-             PDDocument document = PDDocument.load(is)) {
+        byte[] bytes = Files.readAllBytes(file.toPath());
+        try (PDDocument document = Loader.loadPDF(bytes)) {
             PDFTextStripper stripper = new PDFTextStripper();
             return stripper.getText(document);
         }

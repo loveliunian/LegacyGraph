@@ -4,12 +4,12 @@ import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.repository.VectorDocumentRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import org.springframework.util.DigestUtils;
-
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,12 +37,12 @@ public class VectorizationService {
                               int chunkIndex, String content, String embeddingModelName, int dim) {
 
         // 计算 hash 用于去重
-        String contentSha256 = DigestUtils.sha256Hex(content);
-        String sourceHash = DigestUtils.sha256Hex(sourceUri + chunkIndex);
+        String contentSha256 = sha256Hex(content);
+        String sourceHash = sha256Hex(sourceUri + chunkIndex);
 
         // 执行向量化
-        EmbeddingResponse embeddingResponse = embeddingModel.embed(content);
-        List<Double> embedding = embeddingResponse.getResults().get(0).getOutput();
+        float[] embeddingFloat = embeddingModel.embed(content);
+        List<Double> embedding = floatArrayToDoubleList(embeddingFloat);
 
         // 截断/调整维度（如果需要）
         if (embedding.size() > dim) {
@@ -154,5 +154,37 @@ public class VectorizationService {
             magB += bi * bi;
         }
         return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+    }
+
+    /**
+     * SHA-256 hash function
+     */
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
+
+    /**
+     * Convert float array to List<Double>
+     */
+    private List<Double> floatArrayToDoubleList(float[] floats) {
+        List<Double> result = new ArrayList<>(floats.length);
+        for (float f : floats) {
+            result.add((double) f);
+        }
+        return result;
     }
 }

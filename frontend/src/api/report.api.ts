@@ -83,12 +83,13 @@ export const reportApi = {
 
   /**
    * 下载报告文件
+   * @param projectId 项目ID
    * @param reportId 报告ID
    * @param format 下载格式：pdf|html|markdown
    * @returns 报告文件Blob
    */
-  downloadReport: (reportId: string, format: string) => {
-    return get<Blob>(`/lg/reports/${reportId}/download?format=${format}`, {
+  downloadReport: (projectId: string, reportId: string, format: string) => {
+    return get<Blob>(`/lg/projects/${projectId}/reports/${reportId}/download?format=${format}`, {
       responseType: 'blob'
     })
   }

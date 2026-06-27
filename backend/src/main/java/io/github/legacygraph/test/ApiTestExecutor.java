@@ -113,7 +113,7 @@ public class ApiTestExecutor {
             result.setDurationMs(System.currentTimeMillis() - startTime);
         }
 
-        testResultRepository.save(result);
+        testResultRepository.insert(result);
         return result;
     }
 
@@ -187,10 +187,6 @@ public class ApiTestExecutor {
      * 执行HTTP请求
      */
     private Response executeRequest(String method, String url, Map<String, String> headers, Map<String, Object> body) {
-        RestAssured.config = RestAssured.config().jsonConfig(
-                RestAssured.config().getJsonConfig().numberReturnType(io.restassured.common.config.JsonConfig.NumberReturnType.BIG_DECIMAL)
-        );
-
         var request = given();
         if (headers != null) {
             request.headers(headers);
@@ -236,7 +232,7 @@ public class ApiTestExecutor {
 
             boolean passed = evaluateAssertion(assertion, response, assertionDef);
             assertion.setStatus(passed ? "PASSED" : "FAILED");
-            testAssertionRepository.save(assertion);
+            testAssertionRepository.insert(assertion);
 
             if (!passed) {
                 allPassed = false;
@@ -259,9 +255,9 @@ public class ApiTestExecutor {
 
             case "JSON_PATH":
                 String path = (String) assertionDef.get("expression");
-                Object expected = assertionDef.get("expected");
+                Object expectedValue = assertionDef.get("expected");
                 Object actual = response.jsonPath().get(path);
-                return objectsEqual(expected, actual);
+                return objectsEqual(expectedValue, actual);
 
             case "JSON_PATH_NOT_NULL":
                 String pathNN = (String) assertionDef.get("expression");
@@ -293,8 +289,8 @@ public class ApiTestExecutor {
                 // 数据库断言 - 验证字段值
                 String sqlField = (String) assertionDef.get("expression");
                 String columnName = (String) assertionDef.get("column");
-                Object expectedValue = assertionDef.get("expected");
-                DbAssertionExecutor.AssertionResult resultField = dbAssertionExecutor.executeFieldValue(sqlField, columnName, expectedValue);
+                Object expectedFieldValue = assertionDef.get("expected");
+                DbAssertionExecutor.AssertionResult resultField = dbAssertionExecutor.executeFieldValue(sqlField, columnName, expectedFieldValue);
                 return resultField.isPassed();
 
             default:

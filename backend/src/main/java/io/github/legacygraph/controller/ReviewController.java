@@ -8,6 +8,7 @@ import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ReviewConfirmRequest;
 import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.repository.ReviewRecordRepository;
+import io.github.legacygraph.service.GraphMergeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.util.StringUtils;

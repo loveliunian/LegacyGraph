@@ -7,7 +7,6 @@ import io.github.legacygraph.repository.VectorDocumentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -62,8 +61,8 @@ public class VectorRetrievalService {
      */
     public List<VectorDocument> semanticSearch(Long projectId, String query, int topK, String chunkType) {
         // 对查询进行向量化
-        EmbeddingResponse embeddingResponse = embeddingModel.embed(query);
-        List<Double> queryEmbedding = embeddingResponse.getResults().get(0).getOutput();
+        float[] embedding = embeddingModel.embed(query);
+        List<Double> queryEmbedding = floatArrayToDoubleList(embedding);
 
         // 使用 pgvector 余弦相似度检索
         return vectorDocumentRepository.findSimilarByEmbedding(
@@ -78,10 +77,10 @@ public class VectorRetrievalService {
      * @param threshold 相似度阈值（0.0-1.0），推荐 0.85
      * @return 相似节点列表
      */
-    public List<GraphNode> findSimilarNodes(Long projectId, String nodeName, double threshold) {
+    public List<GraphNode> findSimilarNodes(String projectId, String nodeName, double threshold) {
         // 对节点名称向量化
-        EmbeddingResponse embeddingResponse = embeddingModel.embed(nodeName);
-        List<Double> queryEmbedding = embeddingResponse.getResults().get(0).getOutput();
+        float[] embedding = embeddingModel.embed(nodeName);
+        List<Double> queryEmbedding = floatArrayToDoubleList(embedding);
 
         // 查找相似节点 - 这里我们假设节点名称已经向量化
         // 实际实现需要节点向量存储，这里简化处理
@@ -150,5 +149,16 @@ public class VectorRetrievalService {
         if (start < s.length()) {
             tokens.add(s.substring(start));
         }
+    }
+
+    /**
+     * Convert float array to List<Double>
+     */
+    private List<Double> floatArrayToDoubleList(float[] floats) {
+        List<Double> result = new ArrayList<>(floats.length);
+        for (float f : floats) {
+            result.add((double) f);
+        }
+        return result;
     }
 }

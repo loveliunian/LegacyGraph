@@ -1,10 +1,8 @@
 package io.github.legacygraph.task;
 
 import io.github.legacygraph.entity.TestCase;
-import io.github.legacygraph.entity.TestRun;
 import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.repository.TestCaseRepository;
-import io.github.legacygraph.repository.TestRunRepository;
 import io.github.legacygraph.repository.TestResultRepository;
 import io.github.legacygraph.service.GraphValidatorService;
 import io.github.legacygraph.test.ApiTestExecutor;
@@ -29,7 +27,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class TestExecutionScheduler {
 
-    private final TestRunRepository testRunRepository;
     private final TestCaseRepository testCaseRepository;
     private final TestResultRepository testResultRepository;
     private final ApiTestExecutor apiTestExecutor;
@@ -44,12 +41,10 @@ public class TestExecutionScheduler {
 
     @Autowired
     public TestExecutionScheduler(
-            TestRunRepository testRunRepository,
             TestCaseRepository testCaseRepository,
             TestResultRepository testResultRepository,
             ApiTestExecutor apiTestExecutor,
             GraphValidatorService graphValidatorService) {
-        this.testRunRepository = testRunRepository;
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
         this.apiTestExecutor = apiTestExecutor;
@@ -78,44 +73,24 @@ public class TestExecutionScheduler {
     public String submitTestRun(String projectId, String versionId, List<String> caseIds, String environment) {
         log.info("Submitting test run: projectId={}, versionId={}, caseCount={}", projectId, versionId, caseIds.size());
 
-        // 创建测试运行记录
-        TestRun testRun = new TestRun();
-        testRun.setId(UUID.randomUUID().toString());
-        testRun.setProjectId(projectId);
-        testRun.setVersionId(versionId);
-        testRun.setEnvironment(environment);
-        testRun.setStatus("SCHEDULED");
-        testRun.setTotalCases(caseIds.size());
-        testRun.setPassedCases(0);
-        testRun.setFailedCases(0);
-        testRun.setStartedAt(LocalDateTime.now());
-        testRunRepository.save(testRun);
+        String runId = UUID.randomUUID().toString();
 
         // 提交异步执行
-        executorService.submit(() -> executeTestRun(testRun.getId(), projectId, caseIds, environment));
+        executorService.submit(() -> executeTestRun(runId, projectId, versionId, caseIds, environment));
 
-        log.info("Test run submitted: runId={}", testRun.getId());
-        return testRun.getId();
+        log.info("Test run submitted: runId={}", runId);
+        return runId;
     }
 
     /**
      * 异步执行测试运行
      */
     @Async
-    public void executeTestRun(String runId, String projectId, List<String> caseIds, String environment) {
+    public void executeTestRun(String runId, String projectId, String versionId, List<String> caseIds, String environment) {
         try {
             concurrencySemaphore.acquire();
             activeTasks.incrementAndGet();
 
-            TestRun testRun = testRunRepository.selectById(runId);
-            if (testRun == null) {
-                log.error("Test run not found: {}", runId);
-                return;
-            }
-
-            // 更新状态为运行中
-            testRun.setStatus("RUNNING");
-            testRunRepository.updateById(testRun);
             log.info("Starting test run execution: {}", runId);
 
             int passed = 0;
@@ -146,25 +121,10 @@ public class TestExecutionScheduler {
                     failed++;
                 }
 
-                // 更新进度
-                synchronized (this) {
-                    TestRun current = testRunRepository.selectById(runId);
-                    current.setPassedCases(passed);
-                    current.setFailedCases(failed);
-                    testRunRepository.updateById(current);
-                }
             }
 
-            // 更新最终状态
-            TestRun finalRun = testRunRepository.selectById(runId);
-            finalRun.setPassedCases(passed);
-            finalRun.setFailedCases(failed);
-            finalRun.setStatus("COMPLETED");
-            finalRun.setFinishedAt(LocalDateTime.now());
-            testRunRepository.updateById(finalRun);
-
             // 更新图谱置信度
-            graphValidatorService.updateConfidenceByTestResults(projectId, versionId, allResults);
+            graphValidatorService.updateConfidenceByTestResults(versionId);
 
             log.info("Test run completed: {}, passed={}, failed={}", runId, passed, failed);
 
@@ -173,12 +133,7 @@ public class TestExecutionScheduler {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             log.error("Test run failed: {}", runId, e);
-            TestRun testRun = testRunRepository.selectById(runId);
-            if (testRun != null) {
-                testRun.setStatus("FAILED");
-                testRun.setFinishedAt(LocalDateTime.now());
-                testRunRepository.updateById(testRun);
-            }
+            testResultRepository.updateStatusByExecutionId(runId, "FAILED");
         } finally {
             concurrencySemaphore.release();
             activeTasks.decrementAndGet();
@@ -192,32 +147,24 @@ public class TestExecutionScheduler {
     public String rerunFailed(String projectId, String runId) {
         log.info("Rerunning failed cases for run: {}", runId);
 
-        TestRun originalRun = testRunRepository.selectById(runId);
-        if (originalRun == null) {
-            throw new IllegalArgumentException("Test run not found: " + runId);
-        }
-
         // 获取失败的用例ID
         List<String> failedCaseIds = testResultRepository.findFailedCaseIds(runId);
 
-        // 创建新的测试运行
-        TestRun newRun = new TestRun();
-        newRun.setId(UUID.randomUUID().toString());
-        newRun.setProjectId(projectId);
-        newRun.setVersionId(originalRun.getVersionId());
-        newRun.setEnvironment(originalRun.getEnvironment());
-        newRun.setStatus("SCHEDULED");
-        newRun.setTotalCases(failedCaseIds.size());
-        newRun.setPassedCases(0);
-        newRun.setFailedCases(0);
-        newRun.setStartedAt(LocalDateTime.now());
-        testRunRepository.save(newRun);
+        String newRunId = UUID.randomUUID().toString();
 
         if (!failedCaseIds.isEmpty()) {
-            executorService.submit(() -> executeTestRun(newRun.getId(), projectId, failedCaseIds, newRun.getEnvironment()));
+            // Get versionId from first test case - this is a simplified approach
+            final String finalVersionId;
+            TestCase firstCase = testCaseRepository.selectById(failedCaseIds.get(0));
+            if (firstCase != null) {
+                finalVersionId = firstCase.getVersionId();
+            } else {
+                finalVersionId = "";
+            }
+            executorService.submit(() -> executeTestRun(newRunId, projectId, finalVersionId, failedCaseIds, "test"));
         }
 
-        return newRun.getId();
+        return newRunId;
     }
 
     /**
@@ -225,13 +172,8 @@ public class TestExecutionScheduler {
      */
     @Transactional
     public void cancelTestRun(String runId) {
-        TestRun testRun = testRunRepository.selectById(runId);
-        if (testRun != null) {
-            testRun.setStatus("CANCELLED");
-            testRun.setFinishedAt(LocalDateTime.now());
-            testRunRepository.updateById(testRun);
-            log.info("Test run cancelled: {}", runId);
-        }
+        testResultRepository.updateStatusByExecutionId(runId, "CANCELLED");
+        log.info("Test run cancelled: {}", runId);
     }
 
     /**

@@ -15,7 +15,7 @@ import java.util.List;
  * 提供语义检索和相似节点发现功能
  */
 @RestController
-@RequestMapping("/lg/projects/{projectId}")
+@RequestMapping("/api/projects/{projectId}")
 @Tag(name = "向量检索", description = "语义相似度检索、相似节点发现")
 public class VectorController {
 
@@ -53,8 +53,9 @@ public class VectorController {
             @PathVariable Long projectId,
             @RequestParam String nodeName,
             @RequestParam(defaultValue = "0.85") double threshold) {
+        // Convert to String since GraphNode stores projectId as String
         List<GraphNode> results = vectorRetrievalService.findSimilarNodes(
-            projectId, nodeName, threshold
+            String.valueOf(projectId), nodeName, threshold
         );
         return Result.success(results);
     }

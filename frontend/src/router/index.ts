@@ -6,7 +6,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/login/Login.vue'),
+    component: () => import('@/views/login/LoginPage.vue'),
     meta: { requiresAuth: false }
   },
   {
@@ -208,13 +208,13 @@ router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.meta.requiresAuth !== false
 
   if (requiresAuth) {
-    if (!userStore.token) {
+    if (!userStore.accessToken) {
       next('/login')
       return
     }
-    if (!userStore.user && userStore.token) {
+    if (!userStore.userInfo && userStore.accessToken) {
       try {
-        await userStore.fetchUser()
+        await userStore.fetchCurrentUser()
       } catch (error) {
         next('/login')
         return
@@ -222,7 +222,7 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  if (to.path === '/login' && userStore.token) {
+  if (to.path === '/login' && userStore.accessToken) {
     next('/dashboard')
     return
   }

@@ -7,6 +7,7 @@ import io.github.legacygraph.dto.LoginRequest;
 import io.github.legacygraph.dto.LoginResponse;
 import io.github.legacygraph.entity.User;
 import io.github.legacygraph.repository.UserRepository;
+import io.github.legacygraph.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -31,14 +32,17 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
 
     /**
      * 构造函数注入
      * @param userRepository 用户数据访问层
+     * @param jwtUtil JWT工具
      */
-    public AuthController(UserRepository userRepository) {
+    public AuthController(UserRepository userRepository, JwtUtil jwtUtil) {
         this.userRepository = userRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
+        this.jwtUtil = jwtUtil;
     }
 
     /**
@@ -87,8 +91,8 @@ public class AuthController {
             return Result.error("用户已被禁用");
         }
 
-        String accessToken = UUID.randomUUID().toString().replace("-", "");
-        String refreshToken = UUID.randomUUID().toString().replace("-", "");
+        String accessToken = jwtUtil.generateToken(user.getId(), user.getUsername());
+        String refreshToken = jwtUtil.generateToken(user.getId(), user.getUsername());
 
         List<String> roles = user.getRoles() != null
                 ? Arrays.asList(user.getRoles().split(","))
@@ -181,16 +185,26 @@ public class AuthController {
     @Operation(summary = "刷新访问令牌", description = "使用刷新令牌获取新的访问令牌，延长登录有效期")
     @Log(value = "刷新Token", type = Log.OperationType.OTHER)
     public Result<LoginResponse> refreshToken(@RequestBody String refreshToken) {
+        if (!jwtUtil.validateToken(refreshToken)) {
+            return Result.error("Token无效或已过期");
+        }
+
+        String username = jwtUtil.getUsernameFromToken(refreshToken);
+        String userId = jwtUtil.getUserIdFromToken(refreshToken);
         User user = userRepository.selectOne(
-                new LambdaQueryWrapper<User>().eq(User::getUsername, "admin")
+                new LambdaQueryWrapper<User>().eq(User::getUsername, username)
         );
 
         if (user == null) {
             return Result.error("Token无效或已过期");
         }
 
-        String accessToken = UUID.randomUUID().toString().replace("-", "");
-        String newRefreshToken = UUID.randomUUID().toString().replace("-", "");
+        if (!"ACTIVE".equals(user.getStatus())) {
+            return Result.error("用户已被禁用");
+        }
+
+        String accessToken = jwtUtil.generateToken(user.getId(), user.getUsername());
+        String newRefreshToken = jwtUtil.generateToken(user.getId(), user.getUsername());
 
         List<String> roles = user.getRoles() != null
                 ? Arrays.asList(user.getRoles().split(","))

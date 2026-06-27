@@ -25,6 +25,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -128,7 +129,7 @@ public class ReportingService {
 
         // 计算整体置信度
         BigDecimal overallConfidence = calculateOverallConfidence(allNodes);
-        report.setOverallConfidence(overallConfidence);
+        report.setConfidenceLevel(overallConfidence);
 
         // 识别风险
         List<MigrationReadinessReport.RiskItem> risks = new ArrayList<>();
@@ -387,14 +388,16 @@ public class ReportingService {
         // 置信度分布
         List<GraphQualityReport.ConfidenceBin> bins = new ArrayList<>();
         for (double lower = 0.0; lower < 1.0; lower += 0.2) {
+            final double lowerFinal = lower;
             double upper = lower + 0.2;
+            final double upperFinal = upper;
             long count = allNodes.stream()
-                    .filter(n -> n.getConfidence().compareTo(BigDecimal.valueOf(lower)) >= 0
-                            && n.getConfidence().compareTo(BigDecimal.valueOf(upper)) < 0)
+                    .filter(n -> n.getConfidence().compareTo(BigDecimal.valueOf(lowerFinal)) >= 0
+                            && n.getConfidence().compareTo(BigDecimal.valueOf(upperFinal)) < 0)
                     .count();
             GraphQualityReport.ConfidenceBin bin = new GraphQualityReport.ConfidenceBin();
-            bin.setLowerBound(BigDecimal.valueOf(lower));
-            bin.setUpperBound(BigDecimal.valueOf(upper));
+            bin.setLowerBound(BigDecimal.valueOf(lowerFinal));
+            bin.setUpperBound(BigDecimal.valueOf(upperFinal));
             bin.setNodeCount(count);
             bins.add(bin);
         }
@@ -500,7 +503,7 @@ public class ReportingService {
         report.setGeneratedAt(LocalDateTime.now());
         report.setCompletedAt(LocalDateTime.now());
 
-        reportRepository.save(report);
+        reportRepository.insert(report);
         return report;
     }
 

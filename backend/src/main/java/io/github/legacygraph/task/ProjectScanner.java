@@ -237,7 +237,7 @@ public class ProjectScanner {
         task.setTaskStatus("RUNNING");
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
-        scanTaskRepository.save(task);
+        scanTaskRepository.insert(task);
         return task;
     }
 
@@ -272,11 +272,11 @@ public class ProjectScanner {
             fact.setStartLine(startLine);
             fact.setEndLine(endLine);
             fact.setNormalizedData(objectMapper.writeValueAsString(data));
-            fact.setConfidence(confidence);
+            fact.setConfidence(confidence != null ? confidence.doubleValue() : 0.0);
             fact.setStatus(status);
             fact.setCreatedAt(LocalDateTime.now());
             fact.setUpdatedAt(LocalDateTime.now());
-            factRepository.save(fact);
+        factRepository.insert(fact);
         } catch (Exception e) {
             log.error("Failed to save fact", e);
         }

@@ -37,4 +37,25 @@ public class Result<T> {
         result.setMessage(message);
         return result;
     }
+
+    /**
+     * Alias for success - used by some controllers
+     */
+    public static <T> Result<T> ok(T data) {
+        return success(data);
+    }
+
+    /**
+     * Alias for success with no data
+     */
+    public static <T> Result<T> ok() {
+        return success(null);
+    }
+
+    /**
+     * Bad request error
+     */
+    public static <T> Result<T> badRequest(String message) {
+        return error(message);
+    }
 }

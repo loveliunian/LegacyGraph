@@ -52,7 +52,7 @@ public class AuditLogService {
         Page<AuditLog> page = new Page<>(pageNum, pageSize);
         Page<AuditLog> result = auditLogRepository.selectPage(page, wrapper);
 
-        return PageResult.of(result.getTotal(), result.getRecords());
+        return PageResult.of(result.getRecords(), result.getTotal(), pageNum, pageSize);
     }
 
     /**

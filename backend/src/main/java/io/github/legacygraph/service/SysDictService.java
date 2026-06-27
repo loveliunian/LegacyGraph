@@ -51,7 +51,7 @@ public class SysDictService {
         Page<SysDict> page = new Page<>(pageNum, pageSize);
         Page<SysDict> result = sysDictRepository.selectPage(page, wrapper);
 
-        return PageResult.of(result.getTotal(), result.getRecords());
+        return PageResult.of(result.getRecords(), result.getTotal(), pageNum, pageSize);
     }
 
     /**

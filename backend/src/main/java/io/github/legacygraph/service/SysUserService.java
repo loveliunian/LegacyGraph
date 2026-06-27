@@ -51,7 +51,7 @@ public class SysUserService {
         // 清除密码，不返回给前端
         result.getRecords().forEach(user -> user.setPassword(null));
 
-        return PageResult.of(result.getTotal(), result.getRecords());
+        return PageResult.of(result.getRecords(), result.getTotal(), pageNum, pageSize);
     }
 
     /**

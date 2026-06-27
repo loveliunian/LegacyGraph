@@ -1,10 +1,10 @@
 -- ============================================
 -- LegacyGraph 数据库初始化脚本
--- 数据库: PostgreSQL 18+
+-- 数据库: PostgreSQL 15+
 -- ============================================
 
--- 创建数据库
-CREATE DATABASE IF NOT EXISTS legacy_graph;
+-- 说明: docker-entrypoint 通过环境变量 POSTGRES_DB=legacy_graph 已经创建了数据库
+-- 所以直接连接到已创建的数据库即可
 \c legacy_graph;
 
 -- ============================================

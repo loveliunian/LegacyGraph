@@ -1,6 +1,5 @@
 package io.github.legacygraph.repository;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import io.github.legacygraph.entity.GraphEdge;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -10,7 +9,7 @@ import org.apache.ibatis.annotations.Update;
 import java.util.List;
 
 @Mapper
-public interface GraphEdgeRepository extends BaseMapper<GraphEdge> {
+public interface GraphEdgeRepository extends LegacyBaseMapper<GraphEdge> {
 
     /**
      * 获取节点的所有邻居节点ID（包括入边和出边）

@@ -54,18 +54,21 @@ public class Neo4jSyncService {
                     .list();
 
             int nodeCount = 0;
-            try (Transaction tx = session.beginTransaction()) {
-                for (GraphNode node : nodes) {
-                    createNode(tx, node);
-                    nodeCount++;
-                    if (nodeCount % 1000 == 0) {
-                        log.info("Synced {} nodes", nodeCount);
-                        tx.commit();
-                        tx.close();
-                        tx = session.beginTransaction();
+            int nodeBatchSize = 1000;
+            int totalNodes = nodes.size();
+            int nodeBatches = (totalNodes + nodeBatchSize - 1) / nodeBatchSize;
+            for (int batch = 0; batch < nodeBatches; batch++) {
+                int start = batch * nodeBatchSize;
+                int end = Math.min((batch + 1) * nodeBatchSize, totalNodes);
+                try (Transaction tx = session.beginTransaction()) {
+                    for (int i = start; i < end; i++) {
+                        GraphNode node = nodes.get(i);
+                        createNode(tx, node);
+                        nodeCount++;
                     }
+                    tx.commit();
                 }
-                tx.commit();
+                log.info("Synced {} nodes", nodeCount);
             }
             log.info("Synced total {} nodes", nodeCount);
 
@@ -77,18 +80,21 @@ public class Neo4jSyncService {
                     .list();
 
             int edgeCount = 0;
-            try (Transaction tx = session.beginTransaction()) {
-                for (GraphEdge edge : edges) {
-                    createEdge(tx, edge);
-                    edgeCount++;
-                    if (edgeCount % 1000 == 0) {
-                        log.info("Synced {} edges", edgeCount);
-                        tx.commit();
-                        tx.close();
-                        tx = session.beginTransaction();
+            int edgeBatchSize = 1000;
+            int totalEdges = edges.size();
+            int edgeBatches = (totalEdges + edgeBatchSize - 1) / edgeBatchSize;
+            for (int batch = 0; batch < edgeBatches; batch++) {
+                int start = batch * edgeBatchSize;
+                int end = Math.min((batch + 1) * edgeBatchSize, totalEdges);
+                try (Transaction tx = session.beginTransaction()) {
+                    for (int i = start; i < end; i++) {
+                        GraphEdge edge = edges.get(i);
+                        createEdge(tx, edge);
+                        edgeCount++;
                     }
+                    tx.commit();
                 }
-                tx.commit();
+                log.info("Synced {} edges", edgeCount);
             }
             log.info("Synced total {} edges", edgeCount);
         }

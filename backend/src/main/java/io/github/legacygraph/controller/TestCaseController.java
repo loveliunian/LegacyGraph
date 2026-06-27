@@ -268,6 +268,52 @@ public class TestCaseController {
         return Result.success(testExecutionScheduler.getStats());
     }
 
+    @GetMapping("/test-runs")
+    @Operation(summary = "分页查询测试运行列表", description = "查询项目下的测试运行记录")
+    public Result<PageResult<io.github.legacygraph.entity.TestRun>> listTestRuns(
+            @PathVariable String projectId,
+            @RequestParam(required = false) String status,
+            PageQuery query) {
+
+        // TODO: 当TestRun实体和Repository就绪后替换为真实查询
+        // 当前返回空结果，保持API兼容性
+        PageResult<io.github.legacygraph.entity.TestRun> result = PageResult.of(
+                new ArrayList<>(),
+                0L,
+                query.getPageNum(),
+                query.getPageSize()
+        );
+        return Result.success(result);
+    }
+
+    @GetMapping("/test-runs/{runId}")
+    @Operation(summary = "获取测试运行详情", description = "获取测试运行的详细信息")
+    public Result<io.github.legacygraph.entity.TestRun> getTestRunDetail(
+            @PathVariable String projectId,
+            @PathVariable String runId) {
+        // TODO: 当TestRun实体和Repository就绪后替换为真实查询
+        return Result.error("测试运行不存在");
+    }
+
+    @GetMapping("/test-runs/{runId}/results")
+    @Operation(summary = "获取测试用例执行结果列表", description = "获取某次测试运行的所有用例执行结果")
+    public Result<List<io.github.legacygraph.entity.TestResult>> getCaseResults(
+            @PathVariable String projectId,
+            @PathVariable String runId) {
+
+        List<io.github.legacygraph.entity.TestResult> results = testResultRepository.findByExecutionId(runId);
+        return Result.success(results);
+    }
+
+    @GetMapping("/test-runs/{runId}/logs")
+    @Operation(summary = "获取测试运行日志", description = "获取测试运行的完整日志内容")
+    public Result<String> getResultLogs(
+            @PathVariable String projectId,
+            @PathVariable String runId) {
+        // TODO: 当日志存储就绪后返回真实日志
+        return Result.success("测试运行日志暂未存储，该功能待完善");
+    }
+
     /**
      * 启动批量测试运行请求
      */

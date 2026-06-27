@@ -15,8 +15,10 @@ public class Fact {
     private String id;
 
     private String projectId;
+    private String versionId;
 
     private String factType;
+    private String factKey;
 
     private String factName;
 
@@ -24,11 +26,16 @@ public class Fact {
 
     private String sourcePath;
 
+    private Integer startLine;
+    private Integer endLine;
+
     private Integer sourceLine;
 
     private String contentSummary;
+    private String normalizedData;
 
     private Double confidence;
+    private String status;
 
     private Boolean mappedToGraph;
 

@@ -242,11 +242,11 @@ public class GraphMergeService {
         if (textA.isBlank() || textB.isBlank()) return 0.5;
 
         // 向量化
-        EmbeddingResponse embeddingA = embeddingModel.embed(textA.trim());
-        List<Double> embeddingAList = embeddingA.getResults().get(0).getOutput();
+        float[] embeddingA = embeddingModel.embed(textA.trim());
+        List<Double> embeddingAList = floatArrayToDoubleList(embeddingA);
 
-        EmbeddingResponse embeddingB = embeddingModel.embed(textB.trim());
-        List<Double> embeddingBList = embeddingB.getResults().get(0).getOutput();
+        float[] embeddingB = embeddingModel.embed(textB.trim());
+        List<Double> embeddingBList = floatArrayToDoubleList(embeddingB);
 
         // 计算余弦相似度
         return cosineSimilarity(embeddingAList, embeddingBList);
@@ -416,5 +416,16 @@ public class GraphMergeService {
         private double neighborScore;
         private double evidenceScore;
         private double totalScore;
+    }
+
+    /**
+     * Convert float array to List<Double>
+     */
+    private List<Double> floatArrayToDoubleList(float[] floats) {
+        List<Double> result = new ArrayList<>(floats.length);
+        for (float f : floats) {
+            result.add((double) f);
+        }
+        return result;
     }
 }

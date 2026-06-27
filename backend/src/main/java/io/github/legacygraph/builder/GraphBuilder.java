@@ -378,7 +378,7 @@ public class GraphBuilder {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        graphNodeRepository.save(node);
+        graphNodeRepository.insert(node);
         return node;
     }
 
@@ -424,7 +424,7 @@ public class GraphBuilder {
         edge.setCreatedAt(LocalDateTime.now());
         edge.setUpdatedAt(LocalDateTime.now());
 
-        graphEdgeRepository.save(edge);
+        graphEdgeRepository.insert(edge);
         return edge;
     }
 

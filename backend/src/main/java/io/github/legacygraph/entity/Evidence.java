@@ -21,14 +21,18 @@ public class Evidence {
     private String versionId;
     private String evidenceType;       // code/sql/doc/ui/test
     private String sourcePath;
+    private String sourceName;
     private Integer startLine;
     private Integer endLine;
     private String contentHash;
     private String contentExcerpt;
+    private String summary;
+    private String content;
     private String metadata; // JSONB
     private String astPath;
     private String sqlHash;
     private Long chunkId;
+    private String relatedNodeIds;
 
     private LocalDateTime createdAt;
 }

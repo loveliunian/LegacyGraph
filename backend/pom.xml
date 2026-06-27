@@ -14,13 +14,13 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.6</version>
+        <version>3.5.0</version>
         <relativePath/>
     </parent>
 
     <properties>
         <java.version>21</java.version>
-        <mybatis-plus.version>3.5.5</mybatis-plus.version>
+        <mybatis-plus.version>3.5.16</mybatis-plus.version>
         <javaparser.version>3.25.8</javaparser.version>
         <jsqlparser.version>4.9</jsqlparser.version>
         <neo4j.version>5.26.0</neo4j.version>
@@ -31,7 +31,7 @@
         <jwt.version>0.12.3</jwt.version>
         <lombok.version>1.18.36</lombok.version>
         <!-- Spring AI -->
-        <spring-ai.version>2.0.0</spring-ai.version>
+        <spring-ai.version>2.0.0-M4</spring-ai.version>
     </properties>
 
     <dependencies>
@@ -55,7 +55,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
-            <version>4.0.6</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -65,7 +64,12 @@
         <!-- MyBatis-Plus -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <artifactId>mybatis-plus-spring-boot4-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
             <version>${mybatis-plus.version}</version>
         </dependency>
 
@@ -180,7 +184,6 @@
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
             <version>${rest-assured.version}</version>
-            <scope>test</scope>
         </dependency>
 
         <!-- Test -->
@@ -189,25 +192,22 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
 
-        <!-- Spring AI - Core -->
+        <!-- Spring AI -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-core</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
             <version>${spring-ai.version}</version>
         </dependency>
 
-        <!-- Spring AI - OpenAI -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
-            <version>${spring-ai.version}</version>
-        </dependency>
-
-        <!-- Spring AI - pgvector -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-pgvector-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
             <version>${spring-ai.version}</version>
         </dependency>
     </dependencies>
@@ -255,14 +255,6 @@
             <id>central</id>
             <name>Maven Central</name>
             <url>https://repo.maven.apache.org/maven2</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
-        <repository>
-            <id>spring-release</id>
-            <name>Spring Releases</name>
-            <url>https://repo.spring.io/release</url>
             <snapshots>
                 <enabled>false</enabled>
             </snapshots>

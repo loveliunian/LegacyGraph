@@ -60,7 +60,7 @@ public class BusinessGraphBuilder {
             dc.setContent(chunk.getContent());
             dc.setTokenCount(chunk.getTokenCount());
             dc.setCreatedAt(LocalDateTime.now());
-            docChunkRepository.save(dc);
+            docChunkRepository.insert(dc);
         }
         log.info("Saved {} document chunks for {}", chunks.size(), docName);
     }
@@ -339,7 +339,7 @@ public class BusinessGraphBuilder {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        graphNodeRepository.save(node);
+        graphNodeRepository.insert(node);
         return node;
     }
 
@@ -365,7 +365,7 @@ public class BusinessGraphBuilder {
         edge.setCreatedAt(LocalDateTime.now());
         edge.setUpdatedAt(LocalDateTime.now());
 
-        graphEdgeRepository.save(edge);
+        graphEdgeRepository.insert(edge);
         return edge;
     }
 }

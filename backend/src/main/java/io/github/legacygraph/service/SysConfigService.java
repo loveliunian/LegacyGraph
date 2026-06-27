@@ -46,7 +46,7 @@ public class SysConfigService {
         Page<SysConfig> page = new Page<>(pageNum, pageSize);
         Page<SysConfig> result = sysConfigRepository.selectPage(page, wrapper);
 
-        return PageResult.of(result.getTotal(), result.getRecords());
+        return PageResult.of(result.getRecords(), result.getTotal(), pageNum, pageSize);
     }
 
     /**

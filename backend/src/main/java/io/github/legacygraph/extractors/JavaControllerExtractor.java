@@ -210,7 +210,10 @@ public class JavaControllerExtractor {
             ApiFact.ApiParameter p = new ApiFact.ApiParameter();
             p.setName(param.getNameAsString());
             p.setType(param.getTypeAsString());
-            p.setRequired(!param.getType().isNullable());
+            // In newer JavaParser, check if the type is an Optional-like nullable type
+            boolean isNullable = param.getType().toString().contains("Optional")
+                    || param.getType().toString().endsWith("?");
+            p.setRequired(!isNullable);
             params.add(p);
         }
         return params;

@@ -1,6 +1,5 @@
 package io.github.legacygraph.repository;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import io.github.legacygraph.entity.LlmProvider;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
@@ -8,7 +7,7 @@ import org.apache.ibatis.annotations.Select;
 import java.util.List;
 
 @Mapper
-public interface LlmProviderRepository extends BaseMapper<LlmProvider> {
+public interface LlmProviderRepository extends LegacyBaseMapper<LlmProvider> {
 
     @Select("SELECT * FROM lg_llm_provider WHERE provider_code = #{providerCode}")
     LlmProvider findByCode(String providerCode);

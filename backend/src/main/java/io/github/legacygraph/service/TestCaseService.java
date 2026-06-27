@@ -122,7 +122,7 @@ public class TestCaseService {
             log.error("Failed to serialize test case", e);
         }
 
-        testCaseRepository.save(testCase);
+        testCaseRepository.insert(testCase);
     }
 
     /**
@@ -150,7 +150,7 @@ public class TestCaseService {
             result.setExecutionId(executionId);
             result.setResultStatus("RUNNING");
             result.setExecutedAt(LocalDateTime.now());
-            testResultRepository.save(result);
+            testResultRepository.insert(result);
         }
 
         // TODO: 异步执行测试
