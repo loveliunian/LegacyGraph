@@ -23,9 +23,11 @@ import java.util.List;
 public class ReviewController {
 
     private final ReviewRecordRepository reviewRecordRepository;
+    private final GraphMergeService graphMergeService;
 
-    public ReviewController(ReviewRecordRepository reviewRecordRepository) {
+    public ReviewController(ReviewRecordRepository reviewRecordRepository, GraphMergeService graphMergeService) {
         this.reviewRecordRepository = reviewRecordRepository;
+        this.graphMergeService = graphMergeService;
     }
 
     @GetMapping

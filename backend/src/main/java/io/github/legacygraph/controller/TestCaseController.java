@@ -23,9 +23,12 @@ import java.util.Map;
 public class TestCaseController {
 
     private final TestCaseRepository testCaseRepository;
+    private final io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler;
 
-    public TestCaseController(TestCaseRepository testCaseRepository) {
+    public TestCaseController(TestCaseRepository testCaseRepository,
+                              io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler) {
         this.testCaseRepository = testCaseRepository;
+        this.testExecutionScheduler = testExecutionScheduler;
     }
 
     @GetMapping("/test-cases")
@@ -188,5 +191,90 @@ public class TestCaseController {
                 "status", passed ? "PASSED" : "FAILED",
                 "message", passed ? "测试执行成功" : "测试执行失败"
         ));
+    }
+
+    /**
+     * 外部测试结果回调接口
+     * 第三方CI/CD系统可以通过此接口回调推送测试结果
+     */
+    @PostMapping("/tests/results/callback")
+    @Operation(summary = "外部测试结果回调", description = "接收第三方CI/CD系统推送的测试结果")
+    public Result<Void> testResultCallback(
+            @PathVariable String projectId,
+            @RequestBody TestResultCallbackRequest request) {
+        // TODO: 处理测试结果，更新图谱置信度
+        // 1. 保存测试结果
+        // 2. 调用GraphValidatorService更新置信度
+        // 3. 标记相关节点和关系置信度变化
+        return Result.success();
+    }
+
+    /**
+     * 测试结果回调请求
+     */
+    @lombok.Data
+    public static class TestResultCallbackRequest {
+        private String runId;
+        private String caseId;
+        private String status;  // PASSED/FAILED/ERROR
+        private String requestData;
+        private String responseData;
+        private String errorMessage;
+        private long durationMs;
+    }
+
+    // ==================== 批量测试执行 ====================
+
+    @PostMapping("/test-runs/start")
+    @Operation(summary = "启动批量测试执行", description = "批量执行多个测试用例，异步执行")
+    public Result<Map<String, Object>> startBatchTestRun(
+            @PathVariable String projectId,
+            @RequestBody StartBatchRunRequest request) {
+        String runId = testExecutionScheduler.submitTestRun(
+                projectId,
+                request.getVersionId(),
+                request.getCaseIds(),
+                request.getEnvironment()
+        );
+        return Result.success(Map.of(
+                "runId", runId,
+                "totalCases", request.getCaseIds().size()
+        ));
+    }
+
+    @PostMapping("/test-runs/{runId}/rerun-failed")
+    @Operation(summary = "重跑失败用例", description = "重新运行上一次测试运行中失败的用例")
+    public Result<Map<String, Object>> rerunFailed(
+            @PathVariable String projectId,
+            @PathVariable String runId) {
+        String newRunId = testExecutionScheduler.rerunFailed(projectId, runId);
+        return Result.success(Map.of(
+                "newRunId", newRunId
+        ));
+    }
+
+    @PostMapping("/test-runs/{runId}/cancel")
+    @Operation(summary = "取消测试运行", description = "取消正在执行的测试运行")
+    public Result<Void> cancelTestRun(
+            @PathVariable String projectId,
+            @PathVariable String runId) {
+        testExecutionScheduler.cancelTestRun(runId);
+        return Result.success();
+    }
+
+    @GetMapping("/test-runs/stats")
+    @Operation(summary = "获取测试执行统计", description = "获取当前调度器统计信息")
+    public Result<io.github.legacygraph.task.TestExecutionScheduler.TestExecutionStats> getStats() {
+        return Result.success(testExecutionScheduler.getStats());
+    }
+
+    /**
+     * 启动批量测试运行请求
+     */
+    @lombok.Data
+    public static class StartBatchRunRequest {
+        private String versionId;
+        private List<String> caseIds;
+        private String environment;
     }
 }

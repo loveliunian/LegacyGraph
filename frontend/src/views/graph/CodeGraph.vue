@@ -5,6 +5,20 @@
         <div class="card-header">
           <span>代码图谱查询</span>
           <el-tag type="info">Controller -> Service -> Mapper -> SQL -> Table</el-tag>
+          <div class="actions">
+            <el-dropdown @command="handleExport">
+              <el-button type="primary">
+                导出
+                <el-icon><arrow-down /></el-icon>
+              </el-button>
+              <el-dropdown-menu>
+                <el-dropdown-item command="png">PNG 图片</el-dropdown-item>
+                <el-dropdown-item command="svg">SVG 矢量</el-dropdown-item>
+                <el-dropdown-item command="json">JSON 数据</el-dropdown-item>
+                <el-dropdown-item command="csv">CSV 表格</el-dropdown-item>
+              </el-dropdown-menu>
+            </el-dropdown>
+          </div>
         </div>
       </template>
       <el-form :inline="true" :model="query" class="demo-form-inline">
@@ -71,6 +85,7 @@ import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { graphApi } from '@/api'
 import { ElMessage } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 
 interface GraphNode {
   id: string
@@ -237,6 +252,11 @@ const getEdgeType = (from: any, to: any) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
 }
 
 .graph-container {

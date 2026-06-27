@@ -9,8 +9,14 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('@/views/dashboard/Index.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/',
-    redirect: '/projects'
+    redirect: '/dashboard'
   },
   {
     path: '/projects',
@@ -24,6 +30,11 @@ const routes = [
     component: () => import('@/views/project/ProjectDetail.vue'),
     meta: { requiresAuth: true },
     children: [
+      {
+        path: 'overview',
+        name: 'ProjectOverview',
+        component: () => import('@/views/project/ProjectOverview.vue')
+      },
       {
         path: '',
         redirect: to => `/projects/${to.params.projectId}/repos`
@@ -54,6 +65,11 @@ const routes = [
         component: () => import('@/views/graph/CodeGraph.vue')
       },
       {
+        path: 'graph/unified',
+        name: 'UnifiedGraph',
+        component: () => import('@/views/graph/UnifiedGraph.vue')
+      },
+      {
         path: 'reviews',
         name: 'Reviews',
         component: () => import('@/views/review/ReviewList.vue')
@@ -79,9 +95,54 @@ const routes = [
         component: () => import('@/views/test/TestCaseList.vue')
       },
       {
+        path: 'test-cases/new',
+        name: 'TestCaseEditorNew',
+        component: () => import('@/views/test/TestCaseEditor.vue')
+      },
+      {
+        path: 'test-cases/:id/edit',
+        name: 'TestCaseEditorEdit',
+        component: () => import('@/views/test/TestCaseEditor.vue')
+      },
+      {
+        path: 'test-runs/:id',
+        name: 'TestRunDetail',
+        component: () => import('@/views/test/TestRunDetail.vue')
+      },
+      {
+        path: 'test-runs',
+        name: 'TestRunList',
+        component: () => import('@/views/test/TestRunList.vue')
+      },
+      {
         path: 'validation',
         name: 'Validation',
-        component: () => import('@/views/validation/ValidationDashboard.vue')
+        component: () => import('@/views/report/ValidationReport.vue')
+      },
+      {
+        path: 'migration/risks',
+        name: 'MigrationRiskList',
+        component: () => import('@/views/migration/RiskList.vue')
+      },
+      {
+        path: 'migration/risks/:riskId',
+        name: 'MigrationRiskDetail',
+        component: () => import('@/views/migration/RiskDetail.vue')
+      },
+      {
+        path: 'system/users',
+        name: 'SystemUserList',
+        component: () => import('@/views/system/UserList.vue')
+      },
+      {
+        path: 'system/dictionaries',
+        name: 'SystemDictionaryList',
+        component: () => import('@/views/system/DictionaryList.vue')
+      },
+      {
+        path: 'system/settings',
+        name: 'SystemSettings',
+        component: () => import('@/views/system/Settings.vue')
       }
     ]
   }

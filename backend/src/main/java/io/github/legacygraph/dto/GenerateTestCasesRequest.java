@@ -1,5 +1,6 @@
 package io.github.legacygraph.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 import java.util.List;
@@ -10,7 +11,9 @@ import java.util.List;
 @Data
 public class GenerateTestCasesRequest {
 
+    @NotBlank(message = "版本ID不能为空")
     private String versionId;
+
     private Scope scope;
 
     @Data

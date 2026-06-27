@@ -10,7 +10,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
-@RestController@RequestMapping("/lg/projects/{projectId}/scan-versions")
+@RestController
+@RequestMapping("/lg/projects/{projectId}/scan-versions")
 @Tag(name = "扫描管理", description = "创建扫描版本、启动扫描、查询进度")
 public class ScanController {
 
@@ -54,6 +55,47 @@ public class ScanController {
             scanVersionService.updateScanStatus(versionId, "RUNNING");
             // 异步启动完整扫描
             projectScanner.startFullScan(projectId, versionId, baseDir);
+            return Result.success();
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{versionId}/pause")
+    @Operation(summary = "暂停扫描", description = "暂停正在进行的扫描任务，可以后续恢复")
+    public Result<Void> pause(
+            @PathVariable String projectId,
+            @PathVariable String versionId) {
+        try {
+            scanVersionService.updateScanStatus(versionId, "PAUSED");
+            return Result.success();
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{versionId}/cancel")
+    @Operation(summary = "取消扫描", description = "取消扫描任务，标记为已取消")
+    public Result<Void> cancel(
+            @PathVariable String projectId,
+            @PathVariable String versionId) {
+        try {
+            scanVersionService.updateScanStatus(versionId, "CANCELLED");
+            return Result.success();
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{versionId}/resume")
+    @Operation(summary = "恢复暂停的扫描", description = "恢复暂停的扫描任务继续执行")
+    public Result<Void> resume(
+            @PathVariable String projectId,
+            @PathVariable String versionId,
+            @RequestParam(required = false) String baseDir) {
+        try {
+            scanVersionService.updateScanStatus(versionId, "RUNNING");
+            projectScanner.resumeFullScan(projectId, versionId, baseDir);
             return Result.success();
         } catch (Exception e) {
             return Result.error(e.getMessage());

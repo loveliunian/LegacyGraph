@@ -1,6 +1,5 @@
 package io.github.legacygraph.test;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.TestAssertion;
 import io.github.legacygraph.entity.TestCase;
@@ -13,9 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static io.restassured.RestAssured.given;
 
@@ -29,13 +29,16 @@ public class ApiTestExecutor {
 
     private final TestResultRepository testResultRepository;
     private final TestAssertionRepository testAssertionRepository;
+    private final DbAssertionExecutor dbAssertionExecutor;
     private final ObjectMapper objectMapper;
 
     public ApiTestExecutor(TestResultRepository testResultRepository,
                           TestAssertionRepository testAssertionRepository,
+                          DbAssertionExecutor dbAssertionExecutor,
                           ObjectMapper objectMapper) {
         this.testResultRepository = testResultRepository;
         this.testAssertionRepository = testAssertionRepository;
+        this.dbAssertionExecutor = dbAssertionExecutor;
         this.objectMapper = objectMapper;
     }
 
@@ -141,14 +144,22 @@ public class ApiTestExecutor {
     @SuppressWarnings("unchecked")
     private <T> Map<String, T> replaceTemplate(Map<String, T> input, Map<String, String> context) {
         Map<String, T> result = new HashMap<>();
+        Pattern pattern = Pattern.compile("\\$\\{([^}]+)\\}");
+
         for (Map.Entry<String, T> entry : input.entrySet()) {
             T value = entry.getValue();
             if (value instanceof String) {
                 String str = (String) value;
-                for (Map.Entry<String, String> ctx : context.entrySet()) {
-                    str = str.replace("${" + ctx.getKey() + "}", ctx.getValue());
+                Matcher matcher = pattern.matcher(str);
+                StringBuffer sb = new StringBuffer();
+                while (matcher.find()) {
+                    String varName = matcher.group(1);
+                    if (context.containsKey(varName)) {
+                        matcher.appendReplacement(sb, context.get(varName));
+                    }
                 }
-                result.put(entry.getKey(), (T) str);
+                matcher.appendTail(sb);
+                result.put(entry.getKey(), (T) sb.toString());
             } else if (value instanceof Map) {
                 result.put(entry.getKey(), (T) replaceTemplate((Map<String, Object>) value, context));
             } else {
@@ -258,9 +269,33 @@ public class ApiTestExecutor {
                 return actualNN != null;
 
             case "DB_EXISTS":
-                // 数据库断言需要JDBC查询
-                // TODO: 实现数据库断言
-                return true;
+                // 数据库断言 - 执行查询验证数据存在
+                String sql = (String) assertionDef.get("expression");
+                DbAssertionExecutor.AssertionResult result = dbAssertionExecutor.executeExists(sql);
+                return result.isPassed();
+
+            case "DB_NOT_EXISTS":
+                // 数据库断言 - 验证数据不存在
+                String sqlNe = (String) assertionDef.get("expression");
+                DbAssertionExecutor.AssertionResult resultNe = dbAssertionExecutor.executeNotExists(sqlNe);
+                return resultNe.isPassed();
+
+            case "DB_COUNT":
+                // 数据库断言 - 验证行数
+                String sqlCount = (String) assertionDef.get("expression");
+                long expectedCount = ((Number) assertionDef.get("expected")).longValue();
+                double tolerance = assertionDef.get("tolerance") != null ?
+                        ((Number) assertionDef.get("tolerance")).doubleValue() : 0.0;
+                DbAssertionExecutor.AssertionResult resultCount = dbAssertionExecutor.executeCount(sqlCount, expectedCount, tolerance);
+                return resultCount.isPassed();
+
+            case "DB_FIELD_VALUE":
+                // 数据库断言 - 验证字段值
+                String sqlField = (String) assertionDef.get("expression");
+                String columnName = (String) assertionDef.get("column");
+                Object expectedValue = assertionDef.get("expected");
+                DbAssertionExecutor.AssertionResult resultField = dbAssertionExecutor.executeFieldValue(sqlField, columnName, expectedValue);
+                return resultField.isPassed();
 
             default:
                 log.warn("Unknown assertion type: {}", type);

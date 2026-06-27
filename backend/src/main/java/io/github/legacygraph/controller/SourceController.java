@@ -15,16 +15,18 @@ import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -37,9 +39,15 @@ public class SourceController {
     private final DbConnectionRepository dbConnectionRepository;
     private final DocumentRepository documentRepository;
 
+    private static final long MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList(
+            ".docx", ".pdf", ".md", ".txt", ".json", ".xml", ".yaml", ".yml",
+            ".java", ".py", ".js", ".ts", ".go", ".rs", ".cpp", ".c", ".h"
+    );
+
     public SourceController(CodeRepoRepository codeRepoRepository,
-                           DbConnectionRepository dbConnectionRepository,
-                           DocumentRepository documentRepository) {
+                            DbConnectionRepository dbConnectionRepository,
+                            DocumentRepository documentRepository) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
@@ -84,7 +92,7 @@ public class SourceController {
     @Operation(summary = "创建代码仓库")
     public Result<String> createRepo(
             @PathVariable String projectId,
-            @RequestBody CreateCodeRepoRequest request) {
+            @Valid @RequestBody CreateCodeRepoRequest request) {
         CodeRepo repo = new CodeRepo();
         repo.setProjectId(projectId);
         repo.setRepoName(request.getRepoName());
@@ -109,7 +117,7 @@ public class SourceController {
     public Result<Void> updateRepo(
             @PathVariable String projectId,
             @PathVariable String id,
-            @RequestBody CreateCodeRepoRequest request) {
+            @Valid @RequestBody CreateCodeRepoRequest request) {
         CodeRepo repo = codeRepoRepository.selectById(id);
         if (repo == null || !repo.getProjectId().equals(projectId)) {
             return Result.error("代码仓库不存在");
@@ -218,7 +226,7 @@ public class SourceController {
     @Operation(summary = "创建数据库连接")
     public Result<String> createDatabase(
             @PathVariable String projectId,
-            @RequestBody CreateDbConnectionRequest request) {
+            @Valid @RequestBody CreateDbConnectionRequest request) {
         DbConnection db = new DbConnection();
         db.setProjectId(projectId);
         db.setConnectionName(request.getConnectionName());
@@ -246,7 +254,7 @@ public class SourceController {
     public Result<Void> updateDatabase(
             @PathVariable String projectId,
             @PathVariable String id,
-            @RequestBody CreateDbConnectionRequest request) {
+            @Valid @RequestBody CreateDbConnectionRequest request) {
         DbConnection db = dbConnectionRepository.selectById(id);
         if (db == null || !db.getProjectId().equals(projectId)) {
             return Result.error("数据库连接不存在");
@@ -362,24 +370,33 @@ public class SourceController {
             @PathVariable String projectId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "docType", required = false) String docType) throws IOException {
+
+        if (file.isEmpty()) {
+            return Result.code(400, "文件不能为空");
+        }
+
+        if (file.getSize() > MAX_FILE_SIZE) {
+            return Result.code(400, "文件大小不能超过100MB");
+        }
+
+        String originalFileName = file.getOriginalFilename();
+        if (originalFileName == null) {
+            return Result.code(400, "文件名不能为空");
+        }
+
+        String fileExtension = getFileExtension(originalFileName).toLowerCase();
+        if (!ALLOWED_EXTENSIONS.contains(fileExtension)) {
+            return Result.code(400, "不支持的文件类型，仅支持: " + String.join(", ", ALLOWED_EXTENSIONS));
+        }
+
         String uploadDir = System.getProperty("java.io.tmpdir") + "/legacygraph/uploads/" + projectId;
         Files.createDirectories(Paths.get(uploadDir));
 
-        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+        String fileName = UUID.randomUUID() + "_" + originalFileName;
         Path filePath = Paths.get(uploadDir, fileName);
         Files.copy(file.getInputStream(), filePath);
 
-        String originalFileName = file.getOriginalFilename();
-        String fileType = "UNKNOWN";
-        if (originalFileName != null) {
-            if (originalFileName.endsWith(".docx")) {
-                fileType = "DOCX";
-            } else if (originalFileName.endsWith(".pdf")) {
-                fileType = "PDF";
-            } else if (originalFileName.endsWith(".md")) {
-                fileType = "MD";
-            }
-        }
+        String fileType = getFileType(fileExtension);
 
         Document doc = new Document();
         doc.setProjectId(projectId);
@@ -396,6 +413,24 @@ public class SourceController {
 
         documentRepository.insert(doc);
         return Result.success(doc.getId());
+    }
+
+    private String getFileExtension(String fileName) {
+        int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex == -1) {
+            return "";
+        }
+        return fileName.substring(lastDotIndex);
+    }
+
+    private String getFileType(String extension) {
+        return switch (extension) {
+            case ".docx" -> "DOCX";
+            case ".pdf" -> "PDF";
+            case ".md" -> "MD";
+            case ".txt" -> "TXT";
+            default -> "OTHER";
+        };
     }
 
     @PostMapping("/documents/{id}/parse")

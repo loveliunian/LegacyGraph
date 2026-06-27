@@ -1,6 +1,7 @@
 package io.github.legacygraph.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.LoginRequest;
 import io.github.legacygraph.dto.LoginResponse;
@@ -8,6 +9,8 @@ import io.github.legacygraph.entity.User;
 import io.github.legacygraph.repository.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -21,14 +24,17 @@ import java.util.UUID;
 public class AuthController {
 
     private final UserRepository userRepository;
+    private final BCryptPasswordEncoder passwordEncoder;
 
     public AuthController(UserRepository userRepository) {
         this.userRepository = userRepository;
+        this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
     @PostMapping("/login")
     @Operation(summary = "用户登录")
-    public Result<LoginResponse> login(@RequestBody LoginRequest request) {
+    @Log(value = "用户登录", type = Log.OperationType.LOGIN)
+    public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(User::getUsername, request.getUsername());
         User user = userRepository.selectOne(wrapper);
@@ -38,7 +44,7 @@ public class AuthController {
                 user = new User();
                 user.setId(UUID.randomUUID().toString());
                 user.setUsername("admin");
-                user.setPassword("admin123");
+                user.setPassword(passwordEncoder.encode("admin123"));
                 user.setDisplayName("管理员");
                 user.setEmail("admin@legacygraph.io");
                 user.setStatus("ACTIVE");
@@ -52,7 +58,7 @@ public class AuthController {
             }
         }
 
-        if (!user.getPassword().equals(request.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             return Result.error("用户名或密码错误");
         }
 
@@ -95,12 +101,14 @@ public class AuthController {
 
     @PostMapping("/logout")
     @Operation(summary = "用户登出")
+    @Log(value = "用户登出", type = Log.OperationType.LOGOUT)
     public Result<Void> logout(@RequestHeader(value = "Authorization", required = false) String token) {
         return Result.success();
     }
 
     @GetMapping("/me")
     @Operation(summary = "获取当前用户信息")
+    @Log(value = "获取当前用户信息", type = Log.OperationType.QUERY)
     public Result<LoginResponse.UserInfo> getCurrentUser(
             @RequestHeader(value = "Authorization", required = false) String token) {
         User user = userRepository.selectOne(
@@ -133,6 +141,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     @Operation(summary = "刷新Token")
+    @Log(value = "刷新Token", type = Log.OperationType.OTHER)
     public Result<LoginResponse> refreshToken(@RequestBody String refreshToken) {
         User user = userRepository.selectOne(
                 new LambdaQueryWrapper<User>().eq(User::getUsername, "admin")

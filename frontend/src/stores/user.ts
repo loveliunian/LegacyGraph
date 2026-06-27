@@ -4,8 +4,8 @@ import type { User } from '@/types'
 import { authApi } from '@/api'
 
 export const useUserStore = defineStore('user', () => {
-  const accessToken = ref<string>(localStorage.getItem('accessToken') || '')
-  const refreshToken = ref<string>(localStorage.getItem('refreshToken') || '')
+  const accessToken = ref<string>('')
+  const refreshToken = ref<string>('')
   const userInfo = ref<User | null>(null)
   const permissions = ref<string[]>([])
 
@@ -14,8 +14,6 @@ export const useUserStore = defineStore('user', () => {
   const setTokens = (access: string, refresh: string) => {
     accessToken.value = access
     refreshToken.value = refresh
-    localStorage.setItem('accessToken', access)
-    localStorage.setItem('refreshToken', refresh)
   }
 
   const setUserInfo = (user: User) => {
@@ -28,8 +26,6 @@ export const useUserStore = defineStore('user', () => {
     refreshToken.value = ''
     userInfo.value = null
     permissions.value = []
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
   }
 
   const login = async (username: string, password: string) => {
@@ -73,5 +69,11 @@ export const useUserStore = defineStore('user', () => {
     logout,
     fetchCurrentUser,
     hasPermission
+  }
+}, {
+  persist: {
+    key: 'legacy-graph-user',
+    storage: localStorage,
+    paths: ['accessToken', 'refreshToken']
   }
 })

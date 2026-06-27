@@ -1,3 +1,13 @@
+// 导出拆分后的模块（推荐使用）
+export * from './auth.api'
+export * from './source.api'
+export * from './fact.api'
+export * from './test-run.api'
+export * from './system.api'
+export * from './report.api'
+export * from './vector.api'
+
+// 保留原有导出向后兼容
 import axios from 'axios'
 
 const request = axios.create({
@@ -57,27 +67,72 @@ export const scanApi = {
 
 // 图谱查询
 export const graphApi = {
-  getApiChain: (versionId: string, api: string) => {
-    return request.get('/lg/graph/api-chain', { params: { versionId, api } })
+  getApiChain: (projectId: string, versionId: string, api: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/api-chain`, { params: { versionId, api } })
   },
-  getTableImpact: (versionId: string, tableName: string) => {
-    return request.get('/lg/graph/table-impact', { params: { versionId, tableName } })
+  getTableImpact: (projectId: string, versionId: string, tableName: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/table-impact`, { params: { versionId, tableName } })
   },
-  getFeatureView: (versionId: string, module: string) => {
-    return request.get('/lg/graph/feature-view', { params: { versionId, module } })
+  getFeatureView: (projectId: string, versionId: string, module: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/feature-view`, { params: { versionId, module } })
   },
-  getBusinessView: (versionId: string, domain: string) => {
-    return request.get('/lg/graph/business-view', { params: { versionId, domain } })
+  getBusinessView: (projectId: string, versionId: string, domain: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/business-view`, { params: { versionId, domain } })
+  },
+  // 获取合并候选对
+  getMergeCandidates: (projectId: string, nodeType: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/merge/candidates`, { params: { nodeType } })
+  },
+  // LLM决策是否合并
+  decideMerge: (projectId: string, candidate: { nodeAId: string, nodeBId: string }) => {
+    return request.post(`/lg/projects/${projectId}/graph/merge/decide`, candidate)
+  },
+  // 执行合并
+  executeMerge: (projectId: string, targetNodeId: string, mergeNodeId: string) => {
+    return request.post(`/lg/projects/${projectId}/graph/merge/execute`, null, {
+      params: { targetNodeId, mergeNodeId }
+    })
   }
 }
 
-// 人工确认
+// 人工审核
 export const reviewApi = {
-  listPending: (versionId: string, minConfidence: number, pageNum: number, pageSize: number) => {
-    return request.get('/lg/reviews/pending', { params: { versionId, minConfidence, pageNum, pageSize } })
+  listPending: (projectId: string, params: {
+    targetType?: string,
+    graphType?: string,
+    minConfidence?: number,
+    pageNum: number,
+    pageSize: number
+  }) => {
+    return request.get(`/lg/projects/${projectId}/reviews`, { params })
   },
-  confirm: (data: { targetType: string, targetId: string, reviewStatus: string, comment?: string }) => {
-    return request.post('/lg/reviews/confirm', data)
+  listHistory: (projectId: string, params: {
+    status?: string,
+    reviewedBy?: string,
+    pageNum: number,
+    pageSize: number
+  }) => {
+    return request.get(`/lg/projects/${projectId}/reviews/history`, { params })
+  },
+  getDetail: (projectId: string, id: string) => {
+    return request.get(`/lg/projects/${projectId}/reviews/${id}`)
+  },
+  confirmReview: (projectId: string, data: {
+    targetId: string,
+    targetType: string,
+    comment?: string
+  }) => {
+    return request.post(`/lg/projects/${projectId}/reviews/confirm`, data)
+  },
+  rejectReview: (projectId: string, data: {
+    targetId: string,
+    targetType: string,
+    comment?: string
+  }) => {
+    return request.post(`/lg/projects/${projectId}/reviews/reject`, data)
+  },
+  batchConfirm: (projectId: string, ids: string[], comment?: string) => {
+    return request.post(`/lg/projects/${projectId}/reviews/batch-confirm`, ids, { params: { comment } })
   }
 }
 

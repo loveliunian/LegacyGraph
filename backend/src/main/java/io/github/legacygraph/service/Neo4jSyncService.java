@@ -175,4 +175,72 @@ public class Neo4jSyncService {
             }
         }
     }
+
+    /**
+     * 同步单个节点删除 - 关系数据库删除后，同步Neo4j删除
+     */
+    public void syncDeleteNode(String projectId, String versionId, String nodeId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher = "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId AND n.id = $nodeId DETACH DELETE n";
+            session.run(cypher, Map.of("projectId", projectId, "versionId", versionId, "nodeId", nodeId));
+            log.info("Synced node deletion: nodeId={}", nodeId);
+        }
+    }
+
+    /**
+     * 批量同步节点删除
+     */
+    public void syncDeleteNodes(String projectId, String versionId, List<String> nodeIds) {
+        try (Session session = neo4jDriver.session()) {
+            try (Transaction tx = session.beginTransaction()) {
+                for (String nodeId : nodeIds) {
+                    String cypher = "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId AND n.id = $nodeId DETACH DELETE n";
+                    tx.run(cypher, Map.of("projectId", projectId, "versionId", versionId, "nodeId", nodeId));
+                }
+                tx.commit();
+            }
+            log.info("Synced batch node deletion: {} nodes", nodeIds.size());
+        }
+    }
+
+    /**
+     * 增量同步新增节点 - 图谱合并后使用
+     */
+    public void incrementalSyncNodes(String projectId, String versionId, List<GraphNode> nodes) {
+        if (nodes.isEmpty()) return;
+
+        try (Session session = neo4jDriver.session()) {
+            int count = 0;
+            try (Transaction tx = session.beginTransaction()) {
+                for (GraphNode node : nodes) {
+                    // 如果节点已经删除，跳过
+                    if (node.getDeleted() != null && node.getDeleted() == 1) {
+                        continue;
+                    }
+                    createNode(tx, node);
+                    count++;
+                    if (count % 1000 == 0) {
+                        tx.commit();
+                        tx.close();
+                    }
+                }
+                if (count > 0) {
+                    tx.commit();
+                }
+            }
+            log.info("Incremental sync completed: {} new nodes", count);
+        }
+    }
+
+    /**
+     * 创建索引提高查询性能
+     */
+    public void createIndexes() {
+        try (Session session = neo4jDriver.session()) {
+            // 为常见查询字段创建索引
+            session.run("CREATE INDEX project_version_idx IF NOT EXISTS FOR (n) ON (n.projectId, n.versionId)");
+            session.run("CREATE INDEX node_id_idx IF NOT EXISTS FOR (n) ON (n.id)");
+            log.info("Created Neo4j indexes for projectId, versionId, id");
+        }
+    }
 }

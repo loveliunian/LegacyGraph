@@ -142,4 +142,45 @@ public class FactController {
         }
         return Result.success(List.of());
     }
+
+    // ==================== 事实抽取接口 ====================
+
+    @PostMapping("/extract/facts/code")
+    @Operation(summary = "从代码片段抽取事实", description = "调用LLM从代码片段中抽取业务事实")
+    public Result<Void> extractCodeFacts(
+            @PathVariable String projectId,
+            @RequestBody ExtractCodeFactsRequest request) {
+        // TODO: 调用CodeFactAgent进行抽取
+        // 实际实现会异步处理，保存抽取结果到数据库
+        return Result.success();
+    }
+
+    @PostMapping("/extract/facts/doc")
+    @Operation(summary = "从文档片段抽取事实", description = "调用LLM从文本文档中抽取业务事实")
+    public Result<Void> extractDocFacts(
+            @PathVariable String projectId,
+            @RequestBody ExtractDocFactsRequest request) {
+        // TODO: 调用DocUnderstandingAgent进行抽取
+        // 实际实现会异步处理，保存抽取结果到数据库
+        return Result.success();
+    }
+
+    /**
+     * 代码事实抽取请求
+     */
+    @lombok.Data
+    public static class ExtractCodeFactsRequest {
+        private String repoId;
+        private String filePath;
+        private String content;
+    }
+
+    /**
+     * 文档事实抽取请求
+     */
+    @lombok.Data
+    public static class ExtractDocFactsRequest {
+        private String docId;
+        private String content;
+    }
 }

@@ -281,4 +281,33 @@ public class ProjectScanner {
             log.error("Failed to save fact", e);
         }
     }
+
+    /**
+     * 恢复暂停的完整扫描
+     */
+    @Async
+    @Transactional
+    public void resumeFullScan(String projectId, String versionId, String baseDir) {
+        log.info("Resuming full scan: projectId={}, versionId={}, baseDir={}", projectId, versionId, baseDir);
+
+        ScanVersion version = scanVersionRepository.getById(versionId);
+        if (version != null) {
+            version.setScanStatus("RUNNING");
+            scanVersionRepository.updateById(version);
+        }
+
+        try {
+            // 当前简化实现：重新执行完整扫描
+            // 生产环境可以实现断点续传，保存扫描进度
+            startFullScan(projectId, versionId, baseDir);
+        } catch (Exception e) {
+            log.error("Resume scan failed: versionId={}", versionId, e);
+            if (version != null) {
+                version.setScanStatus("FAILED");
+                version.setErrorMessage(e.getMessage());
+                version.setFinishedAt(LocalDateTime.now());
+                scanVersionRepository.updateById(version);
+            }
+        }
+    }
 }
