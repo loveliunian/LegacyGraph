@@ -11,7 +11,11 @@
     "test": "vitest",
     "test:watch": "vitest watch",
     "test:coverage": "vitest --coverage",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "vue": "^3.4.21",
@@ -48,6 +52,7 @@
     "@vue/test-utils": "^2.4.5",
     "jsdom": "^24.0.0",
     "@vitest/coverage-v8": "^1.4.0",
-    "pinia-plugin-persistedstate": "^3.2.1"
+    "pinia-plugin-persistedstate": "^3.2.1",
+    "@playwright/test": "^1.42.1"
   }
 }

@@ -15,7 +15,7 @@ interface PerformanceOptions {
 }
 
 const metrics = ref<Partial<PerformanceMetrics>>({})
-let observer: PerformanceObserver | null = null
+let observers: PerformanceObserver[] = []
 
 export function usePerformance(options: PerformanceOptions = {}) {
   const { reportCallback, enableConsole = true } = options
@@ -75,16 +75,19 @@ export function usePerformance(options: PerformanceOptions = {}) {
   }
 
   const getFP = () => {
-    if ('performance' in window) {
-      const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming
-      if (navigation) {
-        reportMetrics({
-          fp: (performance as any).timeOrigin
-            ? performance.now() + performance.timeOrigin
-            : (performance as any).timing.responseEnd
+    if ('PerformanceObserver' in window) {
+      const fpObserver = new PerformanceObserver((entryList) => {
+        const entries = entryList.getEntries()
+        entries.forEach((entry) => {
+          if (entry.name === 'first-paint') {
+            reportMetrics({ fp: entry.startTime })
+          }
         })
-      }
+      })
+      fpObserver.observe({ entryTypes: ['paint'] })
+      return fpObserver
     }
+    return null
   }
 
   const getFCP = () => {
@@ -113,16 +116,22 @@ export function usePerformance(options: PerformanceOptions = {}) {
   }
 
   const disconnect = () => {
-    observer?.disconnect()
+    observers.forEach(obs => obs.disconnect())
+    observers = []
   }
 
   onMounted(() => {
-    getFP()
-    getFCP()
+    const fpObserver = getFP()
+    fpObserver && observers.push(fpObserver)
+    const fcpObserver = getFCP()
+    fcpObserver && observers.push(fcpObserver)
     getTTFB()
-    observeLCP()
-    observeFID()
-    observeCLS()
+    const lcpObserver = observeLCP()
+    lcpObserver && observers.push(lcpObserver)
+    const fidObserver = observeFID()
+    fidObserver && observers.push(fidObserver)
+    const clsObserver = observeCLS()
+    clsObserver && observers.push(clsObserver)
   })
 
   onUnmounted(() => {

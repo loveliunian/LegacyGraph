@@ -2,6 +2,8 @@ package io.github.legacygraph.aspect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.annotation.Log;
+import io.github.legacygraph.entity.AuditLog;
+import io.github.legacygraph.repository.AuditLogRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -14,6 +16,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.UUID;
 
@@ -27,6 +30,11 @@ import java.util.UUID;
 public class LogAspect {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AuditLogRepository auditLogRepository;
+
+    public LogAspect(AuditLogRepository auditLogRepository) {
+        this.auditLogRepository = auditLogRepository;
+    }
 
     /**
      * 切入点：所有标注 @Log 注解的方法
@@ -126,8 +134,16 @@ public class LogAspect {
             
             // 记录异常
             if (throwable != null) {
-                log.error("[{}] [异常] {}#{}, 异常={}, 消息={}", 
+                log.error("[{}] [异常] {}#{}, 异常={}, 消息={}",
                     traceId, className, methodName, throwable.getClass().getSimpleName(), throwable.getMessage(), throwable);
+            }
+
+            // 保存日志到数据库
+            try {
+                saveAuditLog(traceId, operation, className + "#" + methodName,
+                        requestUri, httpMethod, ip, joinPoint, result, throwable, duration, logAnnotation);
+            } catch (Exception e) {
+                log.warn("[{}] 保存审计日志到数据库失败", traceId, e);
             }
         }
     }
@@ -189,5 +205,77 @@ public class LogAspect {
             ip = ip.split(",")[0].trim();
         }
         return ip;
+    }
+
+    /**
+     * 保存审计日志到数据库
+     */
+    private void saveAuditLog(String traceId, String operation, String method,
+            String requestUri, String requestMethod, String clientIp,
+            ProceedingJoinPoint joinPoint, Object result, Throwable throwable,
+            long durationMs, Log logAnnotation) {
+
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        Method methodObj = signature.getMethod();
+        Object[] args = joinPoint.getArgs();
+        String[] paramNames = signature.getParameterNames();
+
+        AuditLog auditLog = new AuditLog();
+        auditLog.setTraceId(traceId);
+        auditLog.setOperation(operation);
+        auditLog.setMethod(method);
+        auditLog.setRequestUri(requestUri);
+        auditLog.setRequestMethod(requestMethod);
+        auditLog.setClientIp(clientIp);
+        auditLog.setDurationMs(durationMs);
+        auditLog.setStatus(throwable == null ? "SUCCESS" : "FAILED");
+        auditLog.setCreatedAt(LocalDateTime.now());
+
+        // 记录请求参数（过滤敏感信息）
+        if (logAnnotation.logParams()) {
+            StringBuilder paramsBuilder = new StringBuilder();
+            for (int i = 0; i < args.length && i < paramNames.length; i++) {
+                if (args[i] != null && !isSensitiveParam(paramNames[i])) {
+                    String paramValue = toJsonString(args[i]);
+                    if (paramValue.length() > 1000) {
+                        paramValue = paramValue.substring(0, 1000) + "...(truncated)";
+                    }
+                    paramsBuilder.append(paramNames[i]).append("=").append(paramValue).append(", ");
+                }
+            }
+            String params = paramsBuilder.length() > 0
+                ? paramsBuilder.substring(0, paramsBuilder.length() - 2)
+                : "";
+            auditLog.setRequestParams(params);
+        }
+
+        // 记录返回结果
+        if (logAnnotation.logResult() && result != null) {
+            String resultStr = toJsonString(result);
+            if (resultStr.length() > 2000) {
+                resultStr = resultStr.substring(0, 2000) + "...(truncated)";
+            }
+            auditLog.setResponseResult(resultStr);
+        }
+
+        // 记录异常堆栈
+        if (throwable != null) {
+            StringBuilder stack = new StringBuilder();
+            stack.append(throwable.getClass().getSimpleName()).append(": ").append(throwable.getMessage()).append("\n");
+            for (StackTraceElement frame : throwable.getStackTrace()) {
+                stack.append("    at ").append(frame.toString()).append("\n");
+                if (stack.length() > 4000) {
+                    stack.append("...(truncated)");
+                    break;
+                }
+            }
+            auditLog.setErrorStack(stack.toString());
+        }
+
+        // TODO: 获取当前登录用户信息
+        // auditLog.setOperatorId(currentUser.getId());
+        // auditLog.setOperatorName(currentUser.getDisplayName());
+
+        auditLogRepository.insert(auditLog);
     }
 }

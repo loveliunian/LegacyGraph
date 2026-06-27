@@ -1,7 +1,7 @@
 version: '3.8'
 
-# LegacyGraph 本地开发环境 Docker Compose 配置
-# 包含所有依赖服务: PostgreSQL, Neo4j, Redis, MinIO
+# LegacyGraph 完整部署 Docker Compose 配置
+# 包含所有服务: PostgreSQL, Neo4j, Redis, MinIO, backend, frontend
 
 services:
   # PostgreSQL 18 + pgvector 向量扩展
@@ -64,6 +64,52 @@ services:
       - "9001:9001"
     volumes:
       - minio-data:/data
+    networks:
+      - legacygraph-network
+    restart: unless-stopped
+
+  # 后端 Spring Boot 应用
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: legacygraph-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/legacy_graph
+      SPRING_DATASOURCE_USERNAME: legacy_graph
+      SPRING_DATASOURCE_PASSWORD: legacy_graph
+      SPRING_NEO4J_URI: bolt://neo4j:7687
+      SPRING_NEO4J_AUTHENTICATION_USERNAME: neo4j
+      SPRING_NEO4J_AUTHENTICATION_PASSWORD: password
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      # 需要配置 OpenAI API Key 才能使用 LLM 功能
+      # SPRING_AI_OPENAI_API_KEY: your-openai-api-key
+      # MINIO_ENDPOINT: http://minio:9000
+      # MINIO_ACCESS_KEY: minio
+      # MINIO_SECRET_KEY: minio123456
+    depends_on:
+      - postgres
+      - neo4j
+      - redis
+      - minio
+    networks:
+      - legacygraph-network
+    restart: unless-stopped
+
+  # 前端 Nginx 静态服务
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: legacygraph-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
     networks:
       - legacygraph-network
     restart: unless-stopped
