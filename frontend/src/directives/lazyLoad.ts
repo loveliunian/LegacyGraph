@@ -1,100 +1,202 @@
-import type { App, Directive } from 'vue'
+import type { Directive, DirectiveBinding } from 'vue'
+import { ElMessage } from 'element-plus'
 
-interface LazyLoadOptions {
+interface LazyLoadElement extends HTMLElement {
+  _lazyObserver?: IntersectionObserver
+  _lazyLoaded?: boolean
+  _lazySrc?: string
+  _lazyError?: boolean
+}
+
+export interface LazyLoadOptions {
   loading?: string
   error?: string
   threshold?: number
+  rootMargin?: string
+  preload?: boolean
 }
 
-const defaultOptions: LazyLoadOptions = {
-  loading: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"%3E%3Ccircle cx="20" cy="20" r="18" fill="%23f0f2f5"/%3E%3C/svg%3E',
-  error: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"%3E%3Ccircle cx="20" cy="20" r="18" fill="%23fef0f0"/%3E%3Ctext x="20" y="23" text-anchor="middle" fill="%23f56c6c" font-size="14"%3E!%3C/text%3E%3C/svg%3E',
-  threshold: 0.1
+const defaultOptions: Required<LazyLoadOptions> = {
+  loading: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23f5f7fa"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" font-size="14" fill="%23909399"%3E加载中...%3C/text%3E%3C/svg%3E',
+  error: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23fef0f0"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" font-size="14" fill="%23f56c6c"%3E加载失败%3C/text%3E%3C/svg%3E',
+  threshold: 0.1,
+  rootMargin: '50px',
+  preload: true
 }
 
-function createLazyLoadDirective(options: LazyLoadOptions = {}): Directive {
-  const { loading, error, threshold } = { ...defaultOptions, ...options }
+let globalOptions: Required<LazyLoadOptions> = { ...defaultOptions }
 
-  const observerMap = new WeakMap<HTMLElement, IntersectionObserver>()
+export function setLazyLoadOptions(options: LazyLoadOptions) {
+  globalOptions = { ...globalOptions, ...options }
+}
 
-  return {
-    mounted(el: HTMLImageElement, binding) {
-      const src = binding.value
+export const vLazyLoad: Directive<LazyLoadElement, string> = {
+  mounted(el, binding) {
+    const src = binding.value
+    if (!src) return
 
-      if (!src) return
+    const options = globalOptions
+    el._lazySrc = src
+    el._lazyLoaded = false
+    el._lazyError = false
 
-      el.setAttribute('data-src', src)
-      el.setAttribute('src', loading!)
-      el.classList.add('lazy-image')
+    if (el.tagName === 'IMG') {
+      const imgEl = el as HTMLImageElement
+      imgEl.src = options.loading
+      imgEl.classList.add('lazy-loading')
+      imgEl.style.transition = 'opacity 0.3s ease'
+      imgEl.style.opacity = '0.7'
+    } else {
+      el.style.backgroundImage = `url(${options.loading})`
+      el.style.backgroundSize = 'cover'
+      el.style.backgroundPosition = 'center'
+    }
 
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              const img = entry.target as HTMLImageElement
-              const dataSrc = img.getAttribute('data-src')
+    if (options.preload && isElementInViewport(el)) {
+      loadImage(el, src, options)
+      return
+    }
 
-              if (dataSrc) {
-                const tempImg = new Image()
-                tempImg.src = dataSrc
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !el._lazyLoaded && !el._lazyError) {
+            loadImage(el, src, options)
+            observer.unobserve(el)
+          }
+        })
+      },
+      {
+        threshold: options.threshold,
+        rootMargin: options.rootMargin
+      }
+    )
 
-                tempImg.onload = () => {
-                  img.src = dataSrc
-                  img.classList.add('lazy-loaded')
-                  img.classList.remove('lazy-loading')
+    observer.observe(el)
+    el._lazyObserver = observer
+  },
+
+  updated(el, binding) {
+    const newSrc = binding.value
+    const oldSrc = binding.oldValue
+
+    if (newSrc !== oldSrc && newSrc !== el._lazySrc) {
+      el._lazyLoaded = false
+      el._lazyError = false
+      el._lazySrc = newSrc
+
+      if (el._lazyObserver) {
+        el._lazyObserver.disconnect()
+      }
+
+      if (newSrc) {
+        const options = globalOptions
+
+        if (el.tagName === 'IMG') {
+          const imgEl = el as HTMLImageElement
+          imgEl.src = options.loading
+          imgEl.classList.add('lazy-loading')
+          imgEl.style.opacity = '0.7'
+        } else {
+          el.style.backgroundImage = `url(${options.loading})`
+        }
+
+        if (isElementInViewport(el)) {
+          loadImage(el, newSrc, options)
+        } else {
+          const observer = new IntersectionObserver(
+            (entries) => {
+              entries.forEach((entry) => {
+                if (entry.isIntersecting && !el._lazyLoaded && !el._lazyError) {
+                  loadImage(el, newSrc, options)
+                  observer.unobserve(el)
                 }
-
-                tempImg.onerror = () => {
-                  img.src = error!
-                  img.classList.add('lazy-error')
-                  img.classList.remove('lazy-loading')
-                }
-              }
-
-              observer.unobserve(img)
+              })
+            },
+            {
+              threshold: options.threshold,
+              rootMargin: options.rootMargin
             }
-          })
-        },
-        { threshold }
-      )
+          )
 
-      observer.observe(el)
-      observerMap.set(el, observer)
-    },
-
-    updated(el: HTMLImageElement, binding) {
-      const src = binding.value
-      const oldSrc = binding.oldValue
-
-      if (src && src !== oldSrc) {
-        el.setAttribute('data-src', src)
-        el.classList.remove('lazy-loaded', 'lazy-error')
-        el.src = loading!
-
-        const observer = observerMap.get(el)
-        if (observer) {
-          observer.unobserve(el)
           observer.observe(el)
+          el._lazyObserver = observer
         }
       }
-    },
+    }
+  },
 
-    unmounted(el) {
-      const observer = observerMap.get(el)
-      if (observer) {
-        observer.unobserve(el)
-        observer.disconnect()
-        observerMap.delete(el)
-      }
+  unmounted(el) {
+    if (el._lazyObserver) {
+      el._lazyObserver.disconnect()
+      el._lazyObserver = undefined
     }
   }
 }
 
-export default {
-  install(app: App, options?: LazyLoadOptions) {
-    const directive = createLazyLoadDirective(options)
-    app.directive('lazy', directive)
-  }
+function isElementInViewport(el: HTMLElement): boolean {
+  const rect = el.getBoundingClientRect()
+  return (
+    rect.top < window.innerHeight + 100 &&
+    rect.bottom > -100 &&
+    rect.left < window.innerWidth + 100 &&
+    rect.right > -100
+  )
 }
 
-export { createLazyLoadDirective }
+function loadImage(el: LazyLoadElement, src: string, options: Required<LazyLoadOptions>) {
+  if (el._lazyLoaded || el._lazyError) return
+
+  const tempImg = new Image()
+
+  tempImg.onload = () => {
+    if (el.tagName === 'IMG') {
+      const imgEl = el as HTMLImageElement
+      imgEl.src = src
+      imgEl.classList.remove('lazy-loading')
+      imgEl.classList.add('lazy-loaded')
+      imgEl.style.opacity = '1'
+    } else {
+      el.style.backgroundImage = `url(${src})`
+      el.classList.add('lazy-loaded')
+    }
+    el._lazyLoaded = true
+  }
+
+  tempImg.onerror = () => {
+    el._lazyError = true
+    if (el.tagName === 'IMG') {
+      const imgEl = el as HTMLImageElement
+      imgEl.src = options.error
+      imgEl.classList.remove('lazy-loading')
+      imgEl.classList.add('lazy-error')
+      imgEl.style.opacity = '1'
+    } else {
+      el.style.backgroundImage = `url(${options.error})`
+      el.classList.add('lazy-error')
+    }
+    console.warn(`图片加载失败: ${src}`)
+  }
+
+  tempImg.src = src
+}
+
+export function preloadImages(sources: string[]): Promise<void[]> {
+  return Promise.all(
+    sources.map(
+      (src) =>
+        new Promise<void>((resolve) => {
+          const img = new Image()
+          img.onload = () => resolve()
+          img.onerror = () => resolve()
+          img.src = src
+        })
+    )
+  )
+}
+
+export function clearLazyLoadCache() {
+  console.log('LazyLoad cache cleared')
+}
+
+export default vLazyLoad

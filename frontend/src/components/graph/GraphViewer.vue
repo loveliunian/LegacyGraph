@@ -1,0 +1,334 @@
+<template>
+  <div class="graph-container">
+    <VueFlow
+      ref="vueFlowRef"
+      v-model:nodes="graphNodes"
+      v-model:edges="graphEdges"
+      :fit-view-on-init="true"
+      :min-zoom="0.1"
+      :max-zoom="4"
+      :default-edge-options="{ type: 'smoothstep', animated: false }"
+      :node-types="nodeTypes"
+      class="vue-flow-container"
+      @node-click="handleNodeClick"
+      @edge-click="handleEdgeClick"
+      @node-drag-stop="handleNodeDragStop"
+      @connect="handleConnect"
+      @zoom="handleZoom"
+    >
+      <MiniMap
+        :node-color="nodeColor"
+        node-stroke-color="#fff"
+        node-border-radius="4"
+        position="bottom-right"
+      />
+      <Controls position="bottom-left" />
+      <Background :gap="16" :size="1" color="#e5e7eb" />
+      <Panel position="top-left" class="graph-panel">
+        <div class="panel-title">
+          <el-icon><Connection /></el-icon>
+          <span>关系图谱</span>
+        </div>
+        <div class="panel-stats">
+          <el-tag size="small" type="info">节点: {{ graphNodes.length }}</el-tag>
+          <el-tag size="small" type="success">关系: {{ graphEdges.length }}</el-tag>
+        </div>
+      </Panel>
+      <Panel position="top-right" class="graph-panel">
+        <el-space wrap>
+          <el-button size="small" @click="fitView">
+            <el-icon><ZoomOut /></el-icon>
+            适应视图
+          </el-button>
+          <el-button size="small" @click="centerView">
+            <el-icon><FullScreen /></el-icon>
+            居中
+          </el-button>
+          <el-button size="small" @click="toggleLayout">
+            <el-icon><Grid /></el-icon>
+            {{ currentLayout }}布局
+          </el-button>
+          <el-button size="small" @click="exportGraph">
+            <el-icon><Download /></el-icon>
+            导出
+          </el-button>
+        </el-space>
+      </Panel>
+    </VueFlow>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import {
+  VueFlow,
+  useVueFlow,
+  MiniMap,
+  Controls,
+  Background,
+  Panel,
+  MarkerType,
+  Node,
+  Edge
+} from '@vue-flow/core'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import { Connection, ZoomOut, FullScreen, Grid, Download } from '@element-plus/icons-vue'
+import CustomNode from './CustomNode.vue'
+
+interface GraphNodeData {
+  label: string
+  type: string
+  confidence: number
+  status: string
+  evidenceCount: number
+}
+
+interface Props {
+  nodes: Node<GraphNodeData>[]
+  edges: Edge[]
+  height?: string
+  editable?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  height: '600px',
+  editable: true
+})
+
+const emit = defineEmits<{
+  nodeClick: [node: Node<GraphNodeData>]
+  edgeClick: [edge: Edge]
+  nodeDrag: [node: Node<GraphNodeData>]
+  connect: [connection: { source: string; target: string }]
+}>()
+
+const vueFlowRef = ref()
+const { fitView, zoomIn, zoomOut, setCenter } = useVueFlow()
+
+const nodeTypes = {
+  custom: CustomNode
+}
+
+const currentLayout = ref('力导向')
+
+const graphNodes = ref<Node<GraphNodeData>[]>([])
+const graphEdges = ref<Edge[]>([])
+
+watch(
+  () => props.nodes,
+  (newNodes) => {
+    graphNodes.value = newNodes.map((node, index) => ({
+      id: node.id,
+      type: 'custom',
+      position: node.position || { x: (index % 5) * 200, y: Math.floor(index / 5) * 150 },
+      data: node.data || {
+        label: node.label || '未命名',
+        type: node.type || 'default',
+        confidence: node.confidence || 1,
+        status: node.status || 'approved',
+        evidenceCount: node.evidenceCount || 0
+      },
+      style: {
+        width: 180,
+        cursor: 'pointer'
+      }
+    }))
+  },
+  { immediate: true }
+)
+
+watch(
+  () => props.edges,
+  (newEdges) => {
+    graphEdges.value = newEdges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      label: edge.label || '',
+      type: 'smoothstep',
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: getEdgeColor(edge.data?.confidence || 0.8)
+      },
+      style: {
+        stroke: getEdgeColor(edge.data?.confidence || 0.8),
+        strokeWidth: 2 + (edge.data?.confidence || 0.8)
+      },
+      data: edge.data
+    }))
+  },
+  { immediate: true }
+)
+
+function getEdgeColor(confidence: number): string {
+  if (confidence >= 0.9) return '#67c23a'
+  if (confidence >= 0.7) return '#409eff'
+  if (confidence >= 0.5) return '#e6a23c'
+  return '#f56c6c'
+}
+
+function nodeColor(node: Node<GraphNodeData>): string {
+  const confidence = node.data?.confidence || 0.8
+  if (confidence >= 0.9) return '#67c23a'
+  if (confidence >= 0.7) return '#409eff'
+  if (confidence >= 0.5) return '#e6a23c'
+  return '#f56c6c'
+}
+
+function handleNodeClick(event: MouseEvent, node: Node<GraphNodeData>) {
+  emit('nodeClick', node)
+}
+
+function handleEdgeClick(event: MouseEvent, edge: Edge) {
+  emit('edgeClick', edge)
+}
+
+function handleNodeDragStop(event: MouseEvent, node: Node<GraphNodeData>) {
+  emit('nodeDrag', node)
+}
+
+function handleConnect(params: { source: string; target: string }) {
+  emit('connect', params)
+}
+
+function handleZoom(transform: { x: number; y: number; zoom: number }) {
+  console.log('Zoom:', transform.zoom)
+}
+
+function centerView() {
+  if (graphNodes.value.length > 0) {
+    const centerX = graphNodes.value.reduce((sum, node) => sum + node.position.x, 0) / graphNodes.value.length
+    const centerY = graphNodes.value.reduce((sum, node) => sum + node.position.y, 0) / graphNodes.value.length
+    setCenter(centerX + 90, centerY + 30, 1)
+  }
+}
+
+function toggleLayout() {
+  const layouts = ['力导向', '环形', '网格', '分层']
+  const currentIndex = layouts.indexOf(currentLayout.value)
+  currentLayout.value = layouts[(currentIndex + 1) % layouts.length]
+  applyLayout(currentLayout.value)
+}
+
+function applyLayout(layout: string) {
+  const nodeCount = graphNodes.value.length
+  if (nodeCount === 0) return
+
+  const centerX = 400
+  const centerY = 300
+
+  switch (layout) {
+    case '环形':
+      graphNodes.value.forEach((node, index) => {
+        const angle = (2 * Math.PI * index) / nodeCount
+        node.position = {
+          x: centerX + 250 * Math.cos(angle) - 90,
+          y: centerY + 200 * Math.sin(angle) - 30
+        }
+      })
+      break
+    case '网格':
+      const cols = Math.ceil(Math.sqrt(nodeCount))
+      graphNodes.value.forEach((node, index) => {
+        node.position = {
+          x: (index % cols) * 220,
+          y: Math.floor(index / cols) * 160
+        }
+      })
+      break
+    case '分层':
+      const rows = Math.ceil(nodeCount / 4)
+      graphNodes.value.forEach((node, index) => {
+        node.position = {
+          x: (index % 4) * 220,
+          y: Math.floor(index / 4) * 160
+        }
+      })
+      break
+    case '力导向':
+    default:
+      graphNodes.value.forEach((node, index) => {
+        node.position = {
+          x: 100 + Math.random() * 600,
+          y: 100 + Math.random() * 400
+        }
+      })
+  }
+}
+
+function exportGraph() {
+  const exportData = {
+    nodes: graphNodes.value,
+    edges: graphEdges.value,
+    exportTime: new Date().toISOString()
+  }
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `graph-export-${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+onMounted(() => {
+  setTimeout(() => {
+    fitView()
+  }, 100)
+})
+</script>
+
+<style scoped>
+.graph-container {
+  width: 100%;
+  height: v-bind(height);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.vue-flow-container {
+  width: 100%;
+  height: 100%;
+}
+
+.graph-panel {
+  background: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+
+.panel-stats {
+  display: flex;
+  gap: 8px;
+}
+
+:deep(.vue-flow__node) {
+  transition: all 0.2s ease;
+}
+
+:deep(.vue-flow__node:hover) {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+:deep(.vue-flow__edge) {
+  transition: all 0.2s ease;
+}
+
+:deep(.vue-flow__edge:hover) {
+  filter: brightness(1.2);
+}
+</style>
