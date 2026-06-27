@@ -11,6 +11,9 @@ import io.github.legacygraph.service.SysConfigService;
 import io.github.legacygraph.service.SysDictService;
 import io.github.legacygraph.service.SysUserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
@@ -20,17 +23,28 @@ import java.util.Map;
 
 /**
  * 系统管理控制器
- * 包含用户管理、字典管理、系统配置
+ * 提供系统级别的管理功能，包括：
+ * <ul>
+ *   <li>用户管理：用户的增删改查、状态变更</li>
+ *   <li>字典管理：字典类型和字典项的维护</li>
+ *   <li>系统配置：系统参数配置的维护</li>
+ * </ul>
  */
 @RestController
 @RequestMapping("/lg/system")
-@Tag(name = "系统管理", description = "用户管理、字典管理、系统配置")
+@Tag(name = "系统管理", description = "用户管理、字典管理、系统配置等系统级管理功能")
 public class SystemController {
 
     private final SysUserService sysUserService;
     private final SysDictService sysDictService;
     private final SysConfigService sysConfigService;
 
+    /**
+     * 构造函数注入
+     * @param sysUserService 用户服务
+     * @param sysDictService 字典服务
+     * @param sysConfigService 系统配置服务
+     */
     public SystemController(SysUserService sysUserService, SysDictService sysDictService, SysConfigService sysConfigService) {
         this.sysUserService = sysUserService;
         this.sysDictService = sysDictService;
@@ -39,22 +53,42 @@ public class SystemController {
 
     // ==================== 用户管理 ====================
 
+    /**
+     * 分页查询用户列表
+     * 支持按关键词搜索和按状态筛选
+     * @param pageNum 页码，默认1
+     * @param pageSize 每页大小，默认20
+     * @param keyword 搜索关键词，可选，模糊匹配用户名或昵称
+     * @param status 用户状态筛选，可选
+     * @return 分页后的用户列表
+     */
     @GetMapping("/users/list")
-    @Operation(summary = "分页查询用户列表")
+    @Operation(summary = "分页查询用户列表", description = "支持关键词搜索和状态筛选，分页查询系统用户")
     @Log(value = "查询用户列表", type = Log.OperationType.QUERY)
     public Result<PageResult<SysUser>> listUsers(
+            @Parameter(description = "页码，默认1", example = "1")
             @RequestParam(defaultValue = "1") int pageNum,
+            @Parameter(description = "每页大小，默认20", example = "20")
             @RequestParam(defaultValue = "20") int pageSize,
+            @Parameter(description = "搜索关键词，可选，模糊匹配用户名或昵称")
             @RequestParam(required = false) String keyword,
+            @Parameter(description = "用户状态筛选，可选", example = "ACTIVE")
             @RequestParam(required = false) String status) {
         PageResult<SysUser> result = sysUserService.list(pageNum, pageSize, keyword, status);
         return Result.success(result);
     }
 
+    /**
+     * 获取用户详情
+     * @param id 用户ID
+     * @return 用户详细信息
+     */
     @GetMapping("/users/{id}")
-    @Operation(summary = "获取用户详情")
+    @Operation(summary = "获取用户详情", description = "根据用户ID获取用户的详细信息")
     @Log(value = "查看用户详情", type = Log.OperationType.QUERY)
-    public Result<SysUser> getUser(@PathVariable String id) {
+    public Result<SysUser> getUser(
+            @Parameter(description = "用户ID", required = true)
+            @PathVariable String id) {
         SysUser user = sysUserService.getById(id);
         return Result.success(user);
     }

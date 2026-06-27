@@ -58,6 +58,25 @@
   </div>
 </template>
 
+/**
+ * @description 知识图谱可视化查看器组件
+ * 基于VueFlow实现交互式知识图谱可视化
+ * 支持：
+ * - 多种布局切换（力导向、环形、网格、分层）
+ * - 节点点击、拖拽、连线交互
+ * - 小地图导航、缩放控制
+ * - 根据置信度自动着色（置信度越高颜色越绿）
+ * - 导出图谱为JSON文件
+ *
+ * @example
+ * <GraphViewer
+ *   :nodes="graphNodes"
+ *   :edges="graphEdges"
+ *   height="700px"
+ *   :editable="true"
+ *   @node-click="handleNodeClick"
+ * />
+ */
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import {
@@ -76,18 +95,33 @@ import '@vue-flow/core/dist/theme-default.css'
 import { Connection, ZoomOut, FullScreen, Grid, Download } from '@element-plus/icons-vue'
 import CustomNode from './CustomNode.vue'
 
+/**
+ * 图谱节点数据结构
+ */
 interface GraphNodeData {
+  /** 节点显示标签 */
   label: string
+  /** 节点类型 */
   type: string
+  /** LLM置信度 0-1 */
   confidence: number
+  /** 审核状态 */
   status: string
+  /** 关联证据数量 */
   evidenceCount: number
 }
 
+/**
+ * 组件属性定义
+ */
 interface Props {
+  /** 图谱节点列表 */
   nodes: Node<GraphNodeData>[]
+  /** 图谱边列表 */
   edges: Edge[]
+  /** 组件高度，默认600px */
   height?: string
+  /** 是否可编辑（允许拖拽和连线），默认true */
   editable?: boolean
 }
 

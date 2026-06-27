@@ -7,6 +7,9 @@ import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.service.GraphMergeService;
 import io.github.legacygraph.service.GraphQueryService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -14,15 +17,32 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 知识图谱查询控制器
+ * 提供知识图谱的各种查询功能：
+ * <ul>
+ *   <li>接口调用链查询：从入口API逐层向下追踪完整调用关系</li>
+ *   <li>表影响范围分析：查询哪些业务模块依赖某个数据库表</li>
+ *   <li>功能视图查询：按模块展示功能模块间的依赖关系</li>
+ *   <li>业务视图查询：按业务域展示业务关系</li>
+ *   <li>图谱合并：对重复节点进行合并去重</li>
+ * </ul>
+ */
 @RestController
 @RequestMapping("/lg/projects/{projectId}")
-@Tag(name = "图谱查询", description = "查询调用链、影响范围、业务视图、功能视图")
+@Tag(name = "图谱查询", description = "接口调用链、表影响范围、功能/业务视图查询，以及图谱合并")
 public class GraphQueryController {
 
     private final GraphQueryService graphQueryService;
     private final GraphMergeService graphMergeService;
     private final GraphNodeRepository nodeRepository;
 
+    /**
+     * 构造函数注入
+     * @param graphQueryService 图谱查询服务
+     * @param graphMergeService 图谱合并服务
+     * @param nodeRepository 图节点数据访问层
+     */
     public GraphQueryController(GraphQueryService graphQueryService,
                                 GraphMergeService graphMergeService,
                                 GraphNodeRepository nodeRepository) {
@@ -31,12 +51,23 @@ public class GraphQueryController {
         this.nodeRepository = nodeRepository;
     }
 
+    /**
+     * 查询接口完整调用链
+     * 从指定的入口API出发，向下追踪完整的方法调用链路
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     * @param api API接口路径或方法签名
+     * @return 调用链节点列表，包含层级关系
+     */
     @GetMapping("/graph/api-chain")
-    @Operation(summary = "查询接口完整调用链")
+    @Operation(summary = "查询接口完整调用链", description = "从入口API出发，逐层向下追踪完整的方法调用链路")
     public Result<List<Map<String, Object>>> getApiChain(
+            @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
-            String versionId,
-            String api) {
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam String versionId,
+            @Parameter(description = "API接口路径或方法签名", required = true)
+            @RequestParam String api) {
         try {
             List<Map<String, Object>> result = graphQueryService.getApiCallChain(versionId, api);
             return Result.success(result);
@@ -45,12 +76,23 @@ public class GraphQueryController {
         }
     }
 
+    /**
+     * 查询表影响范围
+     * 分析哪些应用、哪些API接口依赖指定的数据库表，用于评估变更影响
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     * @param tableName 数据库表名
+     * @return 影响范围，包含依赖该表的所有API和应用模块
+     */
     @GetMapping("/graph/table-impact")
-    @Operation(summary = "查询表影响范围")
+    @Operation(summary = "查询表影响范围", description = "分析哪些API和模块依赖指定的数据库表，用于评估变更影响")
     public Result<List<Map<String, Object>>> getTableImpact(
+            @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
-            String versionId,
-            String tableName) {
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam String versionId,
+            @Parameter(description = "数据库表名", required = true)
+            @RequestParam String tableName) {
         try {
             List<Map<String, Object>> result = graphQueryService.getTableImpact(versionId, tableName);
             return Result.success(result);
@@ -59,12 +101,23 @@ public class GraphQueryController {
         }
     }
 
+    /**
+     * 查询功能图谱视图
+     * 按功能模块展示知识图谱，输出该模块下的所有节点和边关系
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     * @param module 模块名称
+     * @return 功能视图数据，包含节点和边
+     */
     @GetMapping("/graph/feature-view")
-    @Operation(summary = "查询功能图谱视图")
+    @Operation(summary = "查询功能图谱视图", description = "按功能模块展示知识图谱，输出该模块下的所有节点和边关系")
     public Result<Map<String, Object>> getFeatureView(
+            @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
-            String versionId,
-            String module) {
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam String versionId,
+            @Parameter(description = "模块名称", required = true)
+            @RequestParam String module) {
         try {
             Map<String, Object> result = graphQueryService.getFeatureView(versionId, module);
             return Result.success(result);
@@ -73,12 +126,23 @@ public class GraphQueryController {
         }
     }
 
+    /**
+     * 查询业务图谱视图
+     * 按业务域展示知识图谱，输出该业务域下的所有业务节点和关系
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     * @param domain 业务域名称
+     * @return 业务视图数据，包含节点和边
+     */
     @GetMapping("/graph/business-view")
-    @Operation(summary = "查询业务图谱视图")
+    @Operation(summary = "查询业务图谱视图", description = "按业务域展示知识图谱，输出该业务域下的所有业务节点和关系")
     public Result<Map<String, Object>> getBusinessView(
+            @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
-            String versionId,
-            String domain) {
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam String versionId,
+            @Parameter(description = "业务域名称", required = true)
+            @RequestParam String domain) {
         try {
             Map<String, Object> result = graphQueryService.getBusinessView(versionId, domain);
             return Result.success(result);
