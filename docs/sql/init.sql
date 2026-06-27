@@ -511,3 +511,104 @@ CREATE INDEX idx_migration_risk_severity ON migration_risk(severity);
 CREATE INDEX idx_migration_risk_status ON migration_risk(status);
 
 COMMENT ON TABLE migration_risk IS '迁移风险表';
+
+-- ============================================
+-- 23. 用户表 (业务认证)
+-- ============================================
+CREATE TABLE lg_user (
+    id              UUID PRIMARY KEY,
+    username        VARCHAR(64) NOT NULL UNIQUE,
+    password        VARCHAR(256) NOT NULL,
+    display_name    VARCHAR(128),
+    email           VARCHAR(128),
+    phone           VARCHAR(32),
+    avatar          TEXT,
+    status          VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    roles           VARCHAR(256),
+    permissions     VARCHAR(512),
+    last_login_time TIMESTAMP,
+    last_login_ip   VARCHAR(64),
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE lg_user IS '用户表';
+
+-- ============================================
+-- 24. 代码仓库表
+-- ============================================
+CREATE TABLE lg_code_repo (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    repo_url        TEXT NOT NULL,
+    branch_name     VARCHAR(128),
+    local_path      TEXT,
+    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_code_repo_project ON lg_code_repo(project_id);
+
+COMMENT ON TABLE lg_code_repo IS '代码仓库表';
+
+-- ============================================
+-- 25. 数据库连接表
+-- ============================================
+CREATE TABLE lg_db_connection (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    connection_name VARCHAR(128) NOT NULL,
+    db_type         VARCHAR(32) NOT NULL,
+    host            VARCHAR(128) NOT NULL,
+    port            INT NOT NULL,
+    database_name   VARCHAR(128) NOT NULL,
+    username        VARCHAR(128),
+    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_db_connection_project ON lg_db_connection(project_id);
+
+COMMENT ON TABLE lg_db_connection IS '数据库连接表';
+
+-- ============================================
+-- 26. 文档表
+-- ============================================
+CREATE TABLE lg_document (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    doc_name        VARCHAR(512) NOT NULL,
+    doc_type        VARCHAR(64),
+    file_url        TEXT,
+    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_document_project ON lg_document(project_id);
+
+COMMENT ON TABLE lg_document IS '上传文档表';
+
+-- ============================================
+-- 27. 测试运行表
+-- ============================================
+CREATE TABLE lg_test_run (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    version_id      UUID NOT NULL REFERENCES lg_scan_version(id),
+    environment     VARCHAR(32),
+    status          VARCHAR(32) NOT NULL DEFAULT 'RUNNING',
+    started_at      TIMESTAMP,
+    finished_at     TIMESTAMP,
+    total_cases     INT,
+    passed_cases    INT,
+    failed_cases    INT,
+    deleted         INT DEFAULT 0
+);
+
+CREATE INDEX idx_lg_test_run_project ON lg_test_run(project_id);
+CREATE INDEX idx_lg_test_run_status ON lg_test_run(status);
+
+COMMENT ON TABLE lg_test_run IS '测试运行表';

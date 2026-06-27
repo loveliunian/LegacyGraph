@@ -19,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,6 +39,7 @@ import java.util.UUID;
  * 管理项目的三类数据源：代码仓库、数据库连接、文档资料
  * 这些资料将被用于知识图谱抽取和分析
  */
+@Slf4j
 @RestController
 @RequestMapping("/lg/projects/{projectId}/sources")
 @Tag(name = "资料接入", description = "代码仓库、数据库连接、文档资料的接入与管理")
@@ -251,8 +253,27 @@ public class SourceController {
         }
 
         Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "连接测试成功");
+        ProcessBuilder pb = new ProcessBuilder("git", "ls-remote", "--exit-code", repo.getGitUrl());
+        if (repo.getUsername() != null && !repo.getUsername().isEmpty()) {
+            // 认证信息由git credential helper处理，这里简化
+        }
+        try {
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                result.put("success", true);
+                result.put("message", "连接测试成功");
+                log.info("Git repository connection test succeeded: {}", repo.getGitUrl());
+            } else {
+                result.put("success", false);
+                result.put("message", "连接测试失败，exit code: " + exitCode);
+                log.warn("Git repository connection test failed with exit code: {}", exitCode);
+            }
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "连接测试失败: " + e.getMessage());
+            log.error("Git repository connection test failed", e);
+        }
         return Result.success(result);
     }
 
@@ -283,9 +304,43 @@ public class SourceController {
         repo.setUpdatedAt(LocalDateTime.now());
         codeRepoRepository.updateById(repo);
 
-        repo.setStatus("READY");
-        repo.setLastPullStatus("SUCCESS");
-        repo.setLastPullTime(LocalDateTime.now());
+        try {
+            String baseDir = System.getProperty("user.home") + "/.legacygraph/repos/" + projectId;
+            Files.createDirectories(Path.of(baseDir));
+            String localPath = baseDir + "/" + id;
+            repo.setLocalPath(localPath);
+
+            ProcessBuilder pb;
+            if (Files.exists(Path.of(localPath, ".git"))) {
+                // Already cloned, do pull
+                pb = new ProcessBuilder("git", "pull")
+                        .directory(new java.io.File(localPath));
+            } else {
+                // Fresh clone
+                pb = new ProcessBuilder("git", "clone", "-b", repo.getBranchName(), repo.getGitUrl(), localPath);
+            }
+
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+
+            if (exitCode == 0) {
+                repo.setStatus("READY");
+                repo.setLastPullStatus("SUCCESS");
+                repo.setLastPullTime(LocalDateTime.now());
+                log.info("Git repository pull succeeded: {}", repo.getGitUrl());
+            } else {
+                repo.setStatus("PULL_FAILED");
+                repo.setLastPullStatus("FAILED");
+                repo.setLastPullTime(LocalDateTime.now());
+                log.warn("Git repository pull failed with exit code: {}", exitCode);
+            }
+        } catch (Exception e) {
+            repo.setStatus("PULL_FAILED");
+            repo.setLastPullStatus("FAILED");
+            repo.setLastPullTime(LocalDateTime.now());
+            log.error("Git repository pull failed", e);
+        }
+
         repo.setUpdatedAt(LocalDateTime.now());
         codeRepoRepository.updateById(repo);
 
@@ -479,8 +534,18 @@ public class SourceController {
         }
 
         Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "连接测试成功");
+        try {
+            // 尝试建立真实连接
+            String url = buildJdbcUrl(db);
+            java.sql.DriverManager.getConnection(url, db.getUsername(), db.getPassword()).close();
+            result.put("success", true);
+            result.put("message", "连接测试成功");
+            log.info("Database connection test succeeded: {}", db.getConnectionName());
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "连接失败: " + e.getMessage());
+            log.warn("Database connection test failed: {}", e.getMessage());
+        }
         return Result.success(result);
     }
 
@@ -510,16 +575,56 @@ public class SourceController {
         db.setStatus("SCANNING");
         dbConnectionRepository.updateById(db);
 
-        db.setStatus("READY");
-        db.setTableCount((int) (Math.random() * 50 + 10));
-        db.setLastScanTime(LocalDateTime.now());
-        db.setUpdatedAt(LocalDateTime.now());
-        dbConnectionRepository.updateById(db);
-
         Map<String, Object> result = new HashMap<>();
-        result.put("tableCount", db.getTableCount());
-        result.put("message", "扫描完成");
+        try {
+            String url = buildJdbcUrl(db);
+            int tableCount = 0;
+
+            // 连接并扫描表信息
+            try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, db.getUsername(), db.getPassword())) {
+                java.sql.DatabaseMetaData metaData = conn.getMetaData();
+                String[] types = {"TABLE"};
+                java.sql.ResultSet rs = metaData.getTables(null, db.getSchemaName(), "%", types);
+                while (rs.next()) {
+                    tableCount++;
+                }
+                rs.close();
+            }
+
+            db.setStatus("READY");
+            db.setTableCount(tableCount);
+            db.setLastScanTime(LocalDateTime.now());
+            db.setUpdatedAt(LocalDateTime.now());
+            dbConnectionRepository.updateById(db);
+
+            result.put("tableCount", tableCount);
+            result.put("message", "扫描完成，共发现 " + tableCount + " 张表");
+            log.info("Database schema scan completed: {}, found {} tables", db.getConnectionName(), tableCount);
+        } catch (Exception e) {
+            db.setStatus("SCAN_FAILED");
+            dbConnectionRepository.updateById(db);
+            result.put("success", false);
+            result.put("message", "扫描失败: " + e.getMessage());
+            log.error("Database schema scan failed", e);
+        }
         return Result.success(result);
+    }
+
+    /**
+     * 构建JDBC URL
+     */
+    private String buildJdbcUrl(DbConnection db) {
+        String dbType = db.getDbType();
+        if (dbType == null) {
+            dbType = "postgresql";
+        }
+        return switch (dbType.toLowerCase()) {
+            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s",
+                    db.getHost(), db.getPort(), db.getDatabaseName());
+            case "mysql" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true",
+                    db.getHost(), db.getPort(), db.getDatabaseName());
+            default -> throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
+        };
     }
 
     // ==================== 文档资料 ====================
