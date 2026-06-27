@@ -38,51 +38,6 @@
   </div>
 </template>
 
-/**
- * @description 知识图谱自定义节点组件
- * 自定义VueFlow节点渲染，支持不同类型节点显示不同图标，根据置信度着色
- * 显示内容包括：节点名称、类型标签、置信度进度条、证据数量
- */
-<template>
-  <div
-    class="custom-node"
-    :class="[`node-${node.data?.type || 'default'}`, { 'node-selected': selected, 'node-pending': node.data?.status === 'pending' }]"
-    :style="{ borderColor: nodeColor }"
-  >
-    <div class="node-header" :style="{ backgroundColor: nodeColor + '20' }">
-      <div class="node-icon" :style="{ color: nodeColor }">
-        <el-icon :size="18">
-          <component :is="nodeIcon" />
-        </el-icon>
-      </div>
-      <div class="node-title" :title="node.data?.label">{{ node.data?.label || '未命名' }}</div>
-    </div>
-    <div class="node-body">
-      <div class="node-type">
-        <el-tag size="small" :type="getTagType(node.data?.type)" effect="plain">
-          {{ getTypeLabel(node.data?.type) }}
-        </el-tag>
-      </div>
-      <div class="node-confidence">
-        <span class="confidence-label">置信度</span>
-        <el-progress
-          :percentage="(node.data?.confidence || 0) * 100"
-          :color="nodeColor"
-          :stroke-width="6"
-          :show-text="false"
-        />
-        <span class="confidence-value">{{ ((node.data?.confidence || 0) * 100).toFixed(0) }}%</span>
-      </div>
-      <div class="node-evidence" v-if="node.data?.evidenceCount">
-        <el-icon size="12" color="#909399"><Document /></el-icon>
-        <span>{{ node.data.evidenceCount }} 条证据</span>
-      </div>
-    </div>
-    <Handle type="source" position="bottom" :style="{ background: nodeColor }" />
-    <Handle type="target" position="top" :style="{ background: nodeColor }" />
-  </div>
-</template>
-
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Node } from '@vue-flow/core'
@@ -91,8 +46,8 @@ import {
   Document,
   Files,
   Operation,
-  DataBase,
-  Code,
+  Coin,
+  Platform,
   Menu,
   Link,
   QuestionFilled
@@ -124,11 +79,11 @@ const nodeIcon = computed(() => {
     feature_module: Files,
     feature: Link,
     api: Operation,
-    controller: Code,
-    service: Code,
-    mapper: Code,
-    sql: DataBase,
-    table: DataBase,
+    controller: Platform,
+    service: Platform,
+    mapper: Platform,
+    sql: Coin,
+    table: Coin,
     column: Document
   }
   return iconMap[type] || QuestionFilled

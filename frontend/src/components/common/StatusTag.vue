@@ -25,8 +25,6 @@ const defaultMap: Record<string, { text: string; type: any }> = {
   IGNORED: { text: '已忽略', type: 'info' },
   // 测试状态
   PASSED: { text: '通过', type: 'success' },
-  PASSED: { text: '通过', type: 'success' },
-  FAILED: { text: '失败', type: 'danger' },
   ERROR: { text: '错误', type: 'danger' },
   SKIPPED: { text: '跳过', type: 'info' },
   RUNNING: { text: '执行中', type: 'primary' },

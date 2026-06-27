@@ -14,8 +14,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import io.github.legacygraph.util.JwtUtil;
+
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -25,10 +26,12 @@ public class ReviewController {
 
     private final ReviewRecordRepository reviewRecordRepository;
     private final GraphMergeService graphMergeService;
+    private final JwtUtil jwtUtil;
 
-    public ReviewController(ReviewRecordRepository reviewRecordRepository, GraphMergeService graphMergeService) {
+    public ReviewController(ReviewRecordRepository reviewRecordRepository, GraphMergeService graphMergeService, JwtUtil jwtUtil) {
         this.reviewRecordRepository = reviewRecordRepository;
         this.graphMergeService = graphMergeService;
+        this.jwtUtil = jwtUtil;
     }
 
     @GetMapping
@@ -60,25 +63,6 @@ public class ReviewController {
                 new Page<>(query.getPageNum(), query.getPageSize()),
                 wrapper
         );
-
-        if (page.getRecords().isEmpty()) {
-            List<ReviewRecord> mockData = new ArrayList<>();
-            for (int i = 0; i < 5; i++) {
-                ReviewRecord record = new ReviewRecord();
-                record.setId("record-" + i);
-                record.setProjectId(projectId);
-                record.setTargetType(i % 2 == 0 ? "NODE" : "EDGE");
-                record.setTargetName("OrderService.processOrder - Call to PaymentService#" + i);
-                record.setGraphType("CODE");
-                record.setConfidence(0.65 + Math.random() * 0.2);
-                record.setEvidenceCount((int) (Math.random() * 5) + 1);
-                record.setPriority(i < 2 ? "HIGH" : i < 4 ? "MEDIUM" : "LOW");
-                record.setStatus("PENDING");
-                record.setCreatedAt(LocalDateTime.now().minusMinutes(i * 30));
-                mockData.add(record);
-            }
-            return Result.success(PageResult.of(mockData, (long) mockData.size(), 1, 20));
-        }
 
         PageResult<ReviewRecord> result = PageResult.of(
                 page.getRecords(),
@@ -114,29 +98,6 @@ public class ReviewController {
                 wrapper
         );
 
-        if (page.getRecords().isEmpty()) {
-            List<ReviewRecord> mockData = new ArrayList<>();
-            String[] statuses = {"APPROVED", "REJECTED", "CONFIRMED", "IGNORED"};
-            String[] reviewers = {"admin", "developer1", "developer2"};
-            for (int i = 0; i < 8; i++) {
-                ReviewRecord record = new ReviewRecord();
-                record.setId("history-" + i);
-                record.setProjectId(projectId);
-                record.setTargetType(i % 2 == 0 ? "NODE" : "EDGE");
-                record.setTargetName("GraphNode#" + i + " - 已审核");
-                record.setGraphType("CODE");
-                record.setConfidence(0.7 + Math.random() * 0.25);
-                record.setEvidenceCount((int) (Math.random() * 5) + 1);
-                record.setStatus(statuses[i % statuses.length]);
-                record.setReviewedBy(reviewers[i % reviewers.length]);
-                record.setComment(i % 3 == 0 ? "确认无误" : i % 3 == 1 ? "需要进一步验证" : "标记为忽略");
-                record.setReviewedAt(LocalDateTime.now().minusDays(i));
-                record.setCreatedAt(LocalDateTime.now().minusDays(i + 1));
-                mockData.add(record);
-            }
-            return Result.success(PageResult.of(mockData, (long) mockData.size(), 1, 20));
-        }
-
         PageResult<ReviewRecord> result = PageResult.of(
                 page.getRecords(),
                 page.getTotal(),
@@ -160,10 +121,20 @@ public class ReviewController {
     @Operation(summary = "确认审核通过")
     public Result<Void> confirmReview(
             @PathVariable String projectId,
-            @RequestBody ReviewConfirmRequest request) {
+            @RequestBody ReviewConfirmRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
 
         if (request.getTargetId() == null) {
             return Result.error("目标ID不能为空");
+        }
+
+        // 从 token 获取当前审核人
+        String reviewedBy = "admin";
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            String token = authorization.substring(7);
+            if (jwtUtil.validateToken(token)) {
+                reviewedBy = jwtUtil.getUsernameFromToken(token);
+            }
         }
 
         LambdaQueryWrapper<ReviewRecord> wrapper = new LambdaQueryWrapper<>();
@@ -184,7 +155,7 @@ public class ReviewController {
 
         record.setStatus("CONFIRMED");
         record.setComment(request.getComment());
-        record.setReviewedBy("admin");
+        record.setReviewedBy(reviewedBy);
         record.setReviewedAt(LocalDateTime.now());
 
         if (record.getCreatedAt() == null) {
@@ -200,10 +171,20 @@ public class ReviewController {
     @Operation(summary = "驳回审核")
     public Result<Void> rejectReview(
             @PathVariable String projectId,
-            @RequestBody ReviewConfirmRequest request) {
+            @RequestBody ReviewConfirmRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
 
         if (request.getTargetId() == null) {
             return Result.error("目标ID不能为空");
+        }
+
+        // 从 token 获取当前审核人
+        String reviewedBy = "admin";
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            String token = authorization.substring(7);
+            if (jwtUtil.validateToken(token)) {
+                reviewedBy = jwtUtil.getUsernameFromToken(token);
+            }
         }
 
         LambdaQueryWrapper<ReviewRecord> wrapper = new LambdaQueryWrapper<>();
@@ -224,7 +205,7 @@ public class ReviewController {
 
         record.setStatus("REJECTED");
         record.setComment(request.getComment());
-        record.setReviewedBy("admin");
+        record.setReviewedBy(reviewedBy);
         record.setReviewedAt(LocalDateTime.now());
 
         if (record.getCreatedAt() == null) {
@@ -241,14 +222,26 @@ public class ReviewController {
     public Result<Void> batchConfirm(
             @PathVariable String projectId,
             @RequestBody List<String> ids,
-            @RequestParam(required = false) String comment) {
+            @RequestParam(required = false) String comment,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+
+        // 从 token 获取当前审核人
+        String reviewedBy = "admin";
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            String token = authorization.substring(7);
+            if (jwtUtil.validateToken(token)) {
+                reviewedBy = jwtUtil.getUsernameFromToken(token);
+            }
+        }
 
         for (String id : ids) {
             ReviewRecord record = reviewRecordRepository.selectById(id);
             if (record != null && record.getProjectId().equals(projectId)) {
                 record.setStatus("CONFIRMED");
-                record.setComment(comment);
-                record.setReviewedBy("admin");
+                if (comment != null) {
+                    record.setComment(comment);
+                }
+                record.setReviewedBy(reviewedBy);
                 record.setReviewedAt(LocalDateTime.now());
                 reviewRecordRepository.updateById(record);
             }

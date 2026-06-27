@@ -1,11 +1,12 @@
-// 导出拆分后的模块（推荐使用）
-export * from './auth.api'
-export * from './source.api'
-export * from './fact.api'
-export * from './test-run.api'
-export * from './system.api'
-export * from './report.api'
-export * from './vector.api'
+// 导出拆分后的 API 模块（推荐使用）
+// 避免星号导出把不同模块中的同名类型（如 User）合并到同一个 barrel。
+export { authApi } from './auth.api'
+export { sourceApi } from './source.api'
+export { factApi } from './fact.api'
+export { testRunApi } from './test-run.api'
+export { systemApi } from './system.api'
+export { reportApi } from './report.api'
+export { vectorApi } from './vector.api'
 
 // 保留原有导出向后兼容
 import axios from 'axios'

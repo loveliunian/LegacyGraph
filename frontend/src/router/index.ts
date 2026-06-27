@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import LoadingService from '@/utils/loading'
+import * as LoadingService from '@/utils/loading'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -231,12 +231,12 @@ router.beforeEach(async (to, from, next) => {
 })
 
 router.beforeResolve(async (to, from, next) => {
-  LoadingService.show()
+  LoadingService.showLoading()
   next()
 })
 
 router.afterEach(() => {
-  LoadingService.hide()
+  LoadingService.hideLoading()
 })
 
 export default router

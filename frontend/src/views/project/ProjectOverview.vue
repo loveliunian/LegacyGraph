@@ -18,7 +18,7 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon db">
-              <el-icon><DataBase /></el-icon>
+        <el-icon><Coin /></el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ overview?.sourceStatus?.databases?.configured || 0 }}</div>
@@ -237,7 +237,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   FolderOpened,
-  DataBase,
+  Coin,
   Document,
   Connection,
   Check,

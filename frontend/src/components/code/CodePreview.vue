@@ -4,7 +4,7 @@
       <div class="file-info">
         <el-icon><Document /></el-icon>
         <span class="file-name">{{ fileName || '代码预览' }}</span>
-        <el-tag v-if="lineCount > 0" size="small" type="info">{{ lineCount }} 行</span>
+        <el-tag v-if="lineCount > 0" size="small" type="info">{{ lineCount }} 行</el-tag>
         <el-tag size="small" type="warning">{{ language.toUpperCase() }}</el-tag>
       </div>
       <div class="preview-actions">
@@ -91,6 +91,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
 import {

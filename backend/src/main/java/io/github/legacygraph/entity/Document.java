@@ -16,6 +16,8 @@ public class Document {
 
     private String projectId;
 
+    private String versionId;
+
     private String docName;
 
     private String docType;

@@ -3,7 +3,7 @@
     <div class="code-viewer__header" v-if="showHeader">
       <span class="code-viewer__language">{{ language }}</span>
       <el-button link size="small" @click="copyCode">
-        <el-icon><copy /></el-icon>
+        <el-icon><CopyDocument /></el-icon>
         复制
       </el-button>
     </div>
@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Copy } from '@element-plus/icons-vue'
+import { CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 interface Props {

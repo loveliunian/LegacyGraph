@@ -6,7 +6,7 @@
       <p class="error-desc">抱歉，您没有权限访问此页面</p>
       <div class="error-actions">
         <el-button type="primary" @click="goHome">
-          <el-icon><Home /></el-icon>
+          <el-icon><House /></el-icon>
           {{ $t('common.backToHome') }}
         </el-button>
         <el-button @click="goBack">
@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { Home, ArrowLeft } from '@element-plus/icons-vue'
+import { House, ArrowLeft } from '@element-plus/icons-vue'
 
 const router = useRouter()
 

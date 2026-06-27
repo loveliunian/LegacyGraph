@@ -19,6 +19,14 @@ public interface TestResultRepository extends LegacyBaseMapper<TestResult> {
             """)
     List<String> findFailedCaseIds(@Param("executionId") String executionId);
 
+    @Select("""
+            SELECT *
+            FROM lg_test_result
+            WHERE execution_id = #{executionId}
+            ORDER BY executed_at DESC
+            """)
+    List<TestResult> findByExecutionId(@Param("executionId") String executionId);
+
     @Update("""
             UPDATE lg_test_result
             SET result_status = #{status}

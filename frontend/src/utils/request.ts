@@ -41,12 +41,17 @@ const request = axios.create({
 request.interceptors.request.use(
   (config: AxiosRequestConfig) => {
     const userStore = useUserStore()
+    // Ensure headers object exists
+    if (!config.headers) {
+      config.headers = {}
+    }
     if (userStore.accessToken) {
-      config.headers = config.headers || {}
       config.headers['Authorization'] = `Bearer ${userStore.accessToken}`
+      console.debug('[Request] Added Authorization token')
+    } else {
+      console.debug('[Request] No access token available')
     }
     const traceId = generateTraceId()
-    config.headers = config.headers || {}
     config.headers['X-Trace-Id'] = traceId
     config._traceId = traceId
 

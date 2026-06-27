@@ -2,13 +2,18 @@ package io.github.legacygraph.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import io.github.legacygraph.agent.TestCaseAgent;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.dto.GenerateTestCasesRequest;
+import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
+import io.github.legacygraph.entity.TestRun;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
+import io.github.legacygraph.repository.TestRunRepository;
 import io.github.legacygraph.service.GraphValidatorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +26,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -30,17 +36,23 @@ public class TestCaseController {
 
     private final TestCaseRepository testCaseRepository;
     private final TestResultRepository testResultRepository;
+    private final TestRunRepository testRunRepository;
     private final io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler;
     private final GraphValidatorService graphValidatorService;
+    private final TestCaseAgent testCaseAgent;
 
     public TestCaseController(TestCaseRepository testCaseRepository,
                               TestResultRepository testResultRepository,
+                              TestRunRepository testRunRepository,
                               io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler,
-                              GraphValidatorService graphValidatorService) {
+                              GraphValidatorService graphValidatorService,
+                              TestCaseAgent testCaseAgent) {
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
+        this.testRunRepository = testRunRepository;
         this.testExecutionScheduler = testExecutionScheduler;
         this.graphValidatorService = graphValidatorService;
+        this.testCaseAgent = testCaseAgent;
     }
 
     @GetMapping("/test-cases")
@@ -69,36 +81,6 @@ public class TestCaseController {
                 new Page<>(query.getPageNum(), query.getPageSize()),
                 wrapper
         );
-
-        if (page.getRecords().isEmpty()) {
-            List<TestCase> mockData = new ArrayList<>();
-            String[] types = {"API", "DB_ASSERTION", "E2E"};
-            String[] statuses = {"CONFIRMED", "DRAFT", "DISABLED"};
-            String[] runStatuses = {"PASSED", "FAILED", null};
-            String[] httpMethods = {"GET", "POST", "PUT", "DELETE"};
-
-            for (int i = 0; i < 15; i++) {
-                TestCase testCase = new TestCase();
-                testCase.setId("tc-" + i);
-                testCase.setProjectId(projectId);
-                testCase.setCaseNo("TC-" + String.format("%04d", i + 1));
-                testCase.setCaseName("Test Case - " + (i + 1) + " - 测试场景描述");
-                testCase.setCaseType(types[i % types.length]);
-                testCase.setFeatureName("Feature-" + (i % 5 + 1));
-                testCase.setApiPath("/api/v1/resource/" + (i % 10));
-                testCase.setMethod(httpMethods[i % httpMethods.length]);
-                testCase.setAssertionCount((int) (Math.random() * 5) + 1);
-                testCase.setGenerateType(i % 3 == 0 ? "AI_GENERATED" : "MANUAL");
-                testCase.setStatus(statuses[i % statuses.length]);
-                testCase.setLastRunStatus(runStatuses[i % runStatuses.length]);
-                if (testCase.getLastRunStatus() != null) {
-                    testCase.setLastRunTime(LocalDateTime.now().minusHours(i * 2));
-                }
-                testCase.setCreatedAt(LocalDateTime.now().minusDays(i));
-                mockData.add(testCase);
-            }
-            return Result.success(PageResult.of(mockData, (long) mockData.size(), 1, 20));
-        }
 
         PageResult<TestCase> result = PageResult.of(
                 page.getRecords(),
@@ -157,27 +139,17 @@ public class TestCaseController {
     @Operation(summary = "生成测试用例")
     public Result<Map<String, Object>> generateTestCases(
             @PathVariable String projectId,
-            @RequestBody Map<String, Object> request) {
+            @RequestBody GenerateTestCasesRequest request) {
 
-        int caseCount = (int) (Math.random() * 20) + 10;
+        // TODO: 完整实现批量按范围生成
+        // 当前已移除随机生成逻辑，占位等待完整 LLM 集成
 
-        for (int i = 0; i < caseCount; i++) {
-            TestCase testCase = new TestCase();
-            testCase.setId("gen-" + System.currentTimeMillis() + "-" + i);
-            testCase.setProjectId(projectId);
-            testCase.setCaseNo("TC-GEN-" + String.format("%04d", i + 1));
-            testCase.setCaseName("Generated Test Case - " + (i + 1));
-            testCase.setCaseType("API");
-            testCase.setAssertionCount((int) (Math.random() * 5) + 1);
-            testCase.setGenerateType("AI_GENERATED");
-            testCase.setStatus("DRAFT");
-            testCase.setCreatedAt(LocalDateTime.now());
-            testCaseRepository.insert(testCase);
-        }
+        log.info("Test case generation requested for project {}, version {}", projectId, request.getVersionId());
 
         return Result.success(Map.of(
-                "caseCount", caseCount,
-                "taskId", "task-" + System.currentTimeMillis()
+                "projectId", projectId,
+                "versionId", request.getVersionId(),
+                "status", "queued"
         ));
     }
 
@@ -193,15 +165,18 @@ public class TestCaseController {
             return Result.error("测试用例不存在");
         }
 
-        boolean passed = Math.random() > 0.3;
-        testCase.setLastRunStatus(passed ? "PASSED" : "FAILED");
-        testCase.setLastRunTime(LocalDateTime.now());
-        testCaseRepository.updateById(testCase);
+        // 提交单个测试用例作为一次测试运行
+        String runId = testExecutionScheduler.submitTestRun(
+                projectId,
+                testCase.getVersionId(),
+                List.of(id),
+                env
+        );
 
         return Result.success(Map.of(
-                "runId", "run-" + System.currentTimeMillis(),
-                "status", passed ? "PASSED" : "FAILED",
-                "message", passed ? "测试执行成功" : "测试执行失败"
+                "runId", runId,
+                "status", "QUEUED",
+                "message", "测试用例已提交执行"
         ));
     }
 
@@ -306,16 +281,26 @@ public class TestCaseController {
 
     @GetMapping("/test-runs")
     @Operation(summary = "分页查询测试运行列表", description = "查询项目下的测试运行记录")
-    public Result<PageResult<io.github.legacygraph.entity.TestRun>> listTestRuns(
+    public Result<PageResult<TestRun>> listTestRuns(
             @PathVariable String projectId,
             @RequestParam(required = false) String status,
             PageQuery query) {
 
-        // TODO: 当TestRun实体和Repository就绪后替换为真实查询
-        // 当前返回空结果，保持API兼容性
-        PageResult<io.github.legacygraph.entity.TestRun> result = PageResult.of(
-                new ArrayList<>(),
-                0L,
+        LambdaQueryWrapper<TestRun> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TestRun::getProjectId, projectId);
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(TestRun::getStatus, status);
+        }
+        wrapper.orderByDesc(TestRun::getStartedAt);
+
+        Page<TestRun> page = testRunRepository.selectPage(
+                new Page<>(query.getPageNum(), query.getPageSize()),
+                wrapper
+        );
+
+        PageResult<TestRun> result = PageResult.of(
+                page.getRecords(),
+                page.getTotal(),
                 query.getPageNum(),
                 query.getPageSize()
         );
@@ -324,11 +309,14 @@ public class TestCaseController {
 
     @GetMapping("/test-runs/{runId}")
     @Operation(summary = "获取测试运行详情", description = "获取测试运行的详细信息")
-    public Result<io.github.legacygraph.entity.TestRun> getTestRunDetail(
+    public Result<TestRun> getTestRunDetail(
             @PathVariable String projectId,
             @PathVariable String runId) {
-        // TODO: 当TestRun实体和Repository就绪后替换为真实查询
-        return Result.error("测试运行不存在");
+        TestRun testRun = testRunRepository.selectById(runId);
+        if (testRun == null || !testRun.getProjectId().equals(projectId)) {
+            return Result.error("测试运行不存在");
+        }
+        return Result.success(testRun);
     }
 
     @GetMapping("/test-runs/{runId}/results")

@@ -1,4 +1,4 @@
-import { get, post, put, del } from '@/utils/request'
+import { get, post, put, del, upload } from '@/utils/request'
 import type { PageResult, PageQuery } from '@/types'
 
 /**
@@ -9,14 +9,28 @@ export interface CodeRepo {
   id: string
   /** 关联项目ID */
   projectId: string
+  /** 仓库名称 */
+  repoName: string
+  /** 仓库类型 */
+  repoType: string
   /** Git仓库地址 */
-  repoUrl: string
+  gitUrl: string
   /** 分支名称 */
   branchName: string
+  /** 认证类型 */
+  authType?: string
+  /** 用户名 */
+  username?: string
+  /** 包含文件模式 */
+  includePattern?: string
+  /** 排除文件模式 */
+  excludePattern?: string
   /** 本地存储路径 */
   localPath: string
   /** 仓库状态 */
   status: string
+  /** 最后拉取状态 */
+  lastPullStatus?: string
   /** 创建时间 */
   createdAt: string
 }
@@ -118,8 +132,8 @@ export const sourceApi = {
    * @param id 数据库连接ID
    * @returns 测试结果，包含成功标志和消息
    */
-  testConnection: (id: string) => {
-    return post<{ success: boolean; message: string }>(`/lg/projects/sources/databases/${id}/test-connection`)
+  testConnection: (projectId: string, id: string) => {
+    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/databases/${id}/test-connection`)
   },
 
   /**
@@ -179,8 +193,8 @@ export const sourceApi = {
    * @param data 文档数据
    * @returns 创建的文档信息
    */
-  createDocument: (projectId: string, data: Partial<Document>) => {
-    return post<Document>(`/lg/projects/${projectId}/sources/documents`, data)
+  createDocument: (projectId: string, file: File) => {
+    return upload<Document>(`/lg/projects/${projectId}/sources/documents/upload`, file)
   },
 
   /**

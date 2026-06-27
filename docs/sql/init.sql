@@ -1,11 +1,19 @@
 -- ============================================
 -- LegacyGraph 数据库初始化脚本
 -- 数据库: PostgreSQL 15+
+-- 说明: 此脚本与当前实体字段完全一致 (2026-06-27 更新)
 -- ============================================
 
 -- 说明: docker-entrypoint 通过环境变量 POSTGRES_DB=legacy_graph 已经创建了数据库
 -- 所以直接连接到已创建的数据库即可
 \c legacy_graph;
+
+-- ============================================
+-- 启用 pgvector 扩展
+-- ============================================
+CREATE EXTENSION IF NOT EXISTS vector;
+
+COMMENT ON EXTENSION vector IS 'pgvector 向量扩展，用于文档和代码片段的向量检索';
 
 -- ============================================
 -- 1. 项目表
@@ -28,7 +36,90 @@ CREATE TABLE lg_project (
 COMMENT ON TABLE lg_project IS '项目表';
 
 -- ============================================
--- 2. 扫描版本表
+-- 2. 代码仓库表
+-- ============================================
+CREATE TABLE lg_code_repo (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    repo_name       VARCHAR(256) NOT NULL,
+    repo_type       VARCHAR(32) NOT NULL DEFAULT 'GIT',
+    git_url         TEXT NOT NULL,
+    branch_name     VARCHAR(128),
+    auth_type       VARCHAR(32) DEFAULT 'NONE',
+    username        VARCHAR(128),
+    include_pattern TEXT,
+    exclude_pattern TEXT,
+    local_path      TEXT,
+    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
+    last_pull_status VARCHAR(32),
+    last_pull_time  TIMESTAMP,
+    last_scan_time  TIMESTAMP,
+    created_by       VARCHAR(128),
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_code_repo_project ON lg_code_repo(project_id);
+
+COMMENT ON TABLE lg_code_repo IS '代码仓库表';
+
+-- ============================================
+-- 3. 数据库连接表
+-- ============================================
+CREATE TABLE lg_db_connection (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    connection_name VARCHAR(128) NOT NULL,
+    db_type         VARCHAR(32) NOT NULL,
+    host            VARCHAR(128) NOT NULL,
+    port            INT NOT NULL,
+    database_name   VARCHAR(128) NOT NULL,
+    schema_name      VARCHAR(128),
+    username        VARCHAR(128),
+    password        VARCHAR(256),
+    readonly        BOOLEAN DEFAULT FALSE,
+    include_tables   TEXT,
+    exclude_tables   TEXT,
+    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
+    table_count      INT,
+    last_scan_time   TIMESTAMP,
+    created_by       VARCHAR(128),
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_db_connection_project ON lg_db_connection(project_id);
+
+COMMENT ON TABLE lg_db_connection IS '数据库连接表';
+
+-- ============================================
+-- 4. 上传文档表
+-- ============================================
+CREATE TABLE lg_document (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    version_id       UUID,
+    doc_name        VARCHAR(512) NOT NULL,
+    doc_type         VARCHAR(64),
+    file_type        VARCHAR(32),
+    file_path        TEXT,
+    file_size        BIGINT,
+    parse_status     VARCHAR(32) DEFAULT 'PENDING',
+    fact_count       INT DEFAULT 0,
+    error_message    TEXT,
+    uploaded_by      VARCHAR(128),
+    uploaded_at      TIMESTAMP,
+    parsed_at        TIMESTAMP,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_document_project ON lg_document(project_id);
+
+COMMENT ON TABLE lg_document IS '上传文档表';
+
+-- ============================================
+-- 5. 扫描版本表
 -- ============================================
 CREATE TABLE lg_scan_version (
     id              UUID PRIMARY KEY,
@@ -49,8 +140,10 @@ CREATE TABLE lg_scan_version (
 
 COMMENT ON TABLE lg_scan_version IS '项目扫描版本表';
 
+CREATE INDEX idx_lg_scan_version_project ON lg_scan_version(project_id);
+
 -- ============================================
--- 3. 扫描任务表
+-- 6. 扫描任务表
 -- ============================================
 CREATE TABLE lg_scan_task (
     id              UUID PRIMARY KEY,
@@ -75,7 +168,7 @@ CREATE INDEX idx_lg_scan_task_status ON lg_scan_task(task_status);
 COMMENT ON TABLE lg_scan_task IS '扫描任务表';
 
 -- ============================================
--- 4. 原始事实表
+-- 7. 原始事实表
 -- ============================================
 CREATE TABLE lg_fact (
     id              UUID PRIMARY KEY,
@@ -105,7 +198,7 @@ CREATE INDEX idx_lg_fact_data_gin ON lg_fact USING GIN(normalized_data);
 COMMENT ON TABLE lg_fact IS '原始事实表';
 
 -- ============================================
--- 5. 图谱节点表
+-- 8. 图谱节点表
 -- ============================================
 CREATE TABLE lg_graph_node (
     id              UUID PRIMARY KEY,
@@ -135,7 +228,7 @@ CREATE INDEX idx_lg_graph_node_properties ON lg_graph_node USING GIN(properties)
 COMMENT ON TABLE lg_graph_node IS '图谱节点表';
 
 -- ============================================
--- 6. 图谱关系表
+-- 9. 图谱关系表
 -- ============================================
 CREATE TABLE lg_graph_edge (
     id              UUID PRIMARY KEY,
@@ -161,7 +254,7 @@ CREATE INDEX idx_lg_graph_edge_type ON lg_graph_edge(edge_type);
 COMMENT ON TABLE lg_graph_edge IS '图谱关系表';
 
 -- ============================================
--- 7. 证据表
+-- 10. 证据表
 -- ============================================
 CREATE TABLE lg_evidence (
     id              UUID PRIMARY KEY,
@@ -182,7 +275,7 @@ CREATE INDEX idx_lg_evidence_project_version ON lg_evidence(project_id, version_
 COMMENT ON TABLE lg_evidence IS '证据表';
 
 -- ============================================
--- 8. 节点证据关联表
+-- 11. 节点证据关联表
 -- ============================================
 CREATE TABLE lg_node_evidence (
     id              UUID PRIMARY KEY,
@@ -196,7 +289,7 @@ CREATE TABLE lg_node_evidence (
 COMMENT ON TABLE lg_node_evidence IS '节点证据关联表';
 
 -- ============================================
--- 9. 关系证据关联表
+-- 12. 关系证据关联表
 -- ============================================
 CREATE TABLE lg_edge_evidence (
     id              UUID PRIMARY KEY,
@@ -210,7 +303,7 @@ CREATE TABLE lg_edge_evidence (
 COMMENT ON TABLE lg_edge_evidence IS '关系证据关联表';
 
 -- ============================================
--- 10. 文档片段表
+-- 13. 文档片段表
 -- ============================================
 CREATE TABLE lg_doc_chunk (
     id              UUID PRIMARY KEY,
@@ -232,7 +325,23 @@ CREATE INDEX idx_lg_doc_chunk_project_version ON lg_doc_chunk(project_id, versio
 COMMENT ON TABLE lg_doc_chunk IS '文档片段表';
 
 -- ============================================
--- 11. 测试用例表
+-- 14. 向量文档表
+-- ============================================
+CREATE TABLE vector_document (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    content         TEXT NOT NULL,
+    embedding       vector(1536),
+    metadata        JSONB,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ON vector_document USING hnsw (embedding vector_cosine_ops);
+
+COMMENT ON TABLE vector_document IS '向量文档表（用于 pgvector 向量检索）';
+
+-- ============================================
+-- 15. 测试用例表
 -- ============================================
 CREATE TABLE lg_test_case (
     id              UUID PRIMARY KEY,
@@ -249,6 +358,7 @@ CREATE TABLE lg_test_case (
     generated_by     VARCHAR(64) NOT NULL,
     confidence      NUMERIC(5,4) NOT NULL DEFAULT 0.8000,
     status          VARCHAR(32) NOT NULL DEFAULT 'GENERATED',
+    deleted         INTEGER NOT NULL DEFAULT 0,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(project_id, version_id, case_code)
@@ -259,7 +369,7 @@ CREATE INDEX idx_lg_test_case_target ON lg_test_case(target_node_id);
 COMMENT ON TABLE lg_test_case IS '测试用例表';
 
 -- ============================================
--- 12. 测试断言表
+-- 16. 测试断言表
 -- ============================================
 CREATE TABLE lg_test_assertion (
     id              UUID PRIMARY KEY,
@@ -277,7 +387,7 @@ CREATE TABLE lg_test_assertion (
 COMMENT ON TABLE lg_test_assertion IS '测试断言表';
 
 -- ============================================
--- 13. 测试结果表
+-- 17. 测试结果表
 -- ============================================
 CREATE TABLE lg_test_result (
     id              UUID PRIMARY KEY,
@@ -301,7 +411,30 @@ CREATE INDEX idx_lg_test_result_execution ON lg_test_result(execution_id);
 COMMENT ON TABLE lg_test_result IS '测试结果表';
 
 -- ============================================
--- 14. 人工确认表
+-- 18. 测试运行表
+-- ============================================
+CREATE TABLE lg_test_run (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    version_id      UUID NOT NULL REFERENCES lg_scan_version(id),
+    environment     VARCHAR(32),
+    status          VARCHAR(32) NOT NULL DEFAULT 'RUNNING',
+    started_at      TIMESTAMP,
+    finished_at     TIMESTAMP,
+    total_cases     INT,
+    passed_cases    INT,
+    failed_cases    INT,
+    deleted         INT DEFAULT 0,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_test_run_project ON lg_test_run(project_id);
+CREATE INDEX idx_lg_test_run_status ON lg_test_run(status);
+
+COMMENT ON TABLE lg_test_run IS '测试运行表';
+
+-- ============================================
+-- 19. 人工确认记录表
 -- ============================================
 CREATE TABLE lg_review_record (
     id              UUID PRIMARY KEY,
@@ -309,9 +442,16 @@ CREATE TABLE lg_review_record (
     version_id      UUID NOT NULL REFERENCES lg_scan_version(id),
     target_type     VARCHAR(64) NOT NULL,
     target_id       UUID NOT NULL,
-    review_status   VARCHAR(32) NOT NULL,
-    reviewer        VARCHAR(128) NOT NULL,
-    review_comment  TEXT,
+    target_name     VARCHAR(256),
+    graph_type       VARCHAR(64),
+    confidence      NUMERIC(5,4),
+    evidence_count  INT,
+    priority        VARCHAR(32),
+    status          VARCHAR(32),
+    assignee        VARCHAR(128),
+    comment         TEXT,
+    reviewed_by     VARCHAR(128),
+    reviewed_at     TIMESTAMP,
     before_data     JSONB,
     after_data      JSONB,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -320,14 +460,112 @@ CREATE TABLE lg_review_record (
 COMMENT ON TABLE lg_review_record IS '人工确认记录表';
 
 -- ============================================
--- 创建扩展（如果需要向量检索）
+-- 20. 迁移风险表
 -- ============================================
-CREATE EXTENSION IF NOT EXISTS vector;
+CREATE TABLE migration_risk (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    version_id      UUID NOT NULL REFERENCES lg_scan_version(id),
+    risk_type       VARCHAR(64) NOT NULL,
+    risk_name       VARCHAR(256) NOT NULL,
+    description     TEXT,
+    affected_nodes  JSONB,
+    severity        VARCHAR(32) NOT NULL DEFAULT 'MEDIUM',
+    status          VARCHAR(32) NOT NULL DEFAULT 'OPEN',
+    mitigation      TEXT,
+    estimated_effort INT,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
-COMMENT ON EXTENSION vector IS 'pgvector 向量扩展，用于文档和代码片段的向量检索';
+CREATE INDEX idx_migration_risk_project ON migration_risk(project_id);
+CREATE INDEX idx_migration_risk_severity ON migration_risk(severity);
+CREATE INDEX idx_migration_risk_status ON migration_risk(status);
+
+COMMENT ON TABLE migration_risk IS '迁移风险表';
 
 -- ============================================
--- 15. 系统操作日志表 (审计日志)
+-- 21. LLM 配置表
+-- ============================================
+CREATE TABLE llm_provider (
+    id              UUID PRIMARY KEY,
+    provider_name   VARCHAR(128) NOT NULL,
+    provider_type   VARCHAR(64) NOT NULL,
+    base_url        TEXT,
+    api_key         TEXT,
+    model_name      VARCHAR(128),
+    timeout         INT DEFAULT 60000,
+    max_tokens      INT DEFAULT 4096,
+    temperature     NUMERIC(4,2) DEFAULT 0.7,
+    is_default      BOOLEAN DEFAULT FALSE,
+    status          VARCHAR(32) DEFAULT 'ACTIVE',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE llm_provider IS 'LLM 提供者配置表';
+
+-- ============================================
+-- 22. 提示词模板表
+-- ============================================
+CREATE TABLE prompt_template (
+    id              UUID PRIMARY KEY,
+    template_name   VARCHAR(128) NOT NULL,
+    template_code   VARCHAR(64) NOT NULL UNIQUE,
+    prompt_content  TEXT NOT NULL,
+    provider_id     UUID REFERENCES llm_provider(id),
+    version         INT NOT NULL DEFAULT 1,
+    is_system       BOOLEAN DEFAULT FALSE,
+    status          VARCHAR(32) DEFAULT 'ACTIVE',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE prompt_template IS '提示词模板表';
+
+-- ============================================
+-- 23. LLM 调用记录表
+-- ============================================
+CREATE TABLE prompt_run (
+    id              UUID PRIMARY KEY,
+    project_id      UUID REFERENCES lg_project(id),
+    template_id     UUID REFERENCES prompt_template(id),
+    provider_id     UUID REFERENCES llm_provider(id),
+    prompt_hash    VARCHAR(128),
+    input_tokens    INT,
+    output_tokens   INT,
+    latency_ms      BIGINT,
+    status          VARCHAR(32),
+    error_message   TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_prompt_run_project ON prompt_run(project_id);
+CREATE INDEX idx_prompt_run_created ON prompt_run(created_at);
+
+COMMENT ON TABLE prompt_run IS 'LLM 调用记录表';
+
+-- ============================================
+-- 24. 报告表
+-- ============================================
+CREATE TABLE report (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    version_id      UUID NOT NULL REFERENCES lg_scan_version(id),
+    report_type     VARCHAR(64) NOT NULL,
+    report_name     VARCHAR(256) NOT NULL,
+    report_data     JSONB,
+    file_url        TEXT,
+    generated_by     VARCHAR(128),
+    status          VARCHAR(32) NOT NULL DEFAULT 'GENERATING',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at     TIMESTAMP
+);
+
+COMMENT ON TABLE report IS '分析报告表';
+
+-- ============================================
+-- 25. 系统操作日志表 (审计日志)
 -- ============================================
 CREATE TABLE sys_operation_log (
     id              BIGSERIAL PRIMARY KEY,
@@ -355,7 +593,7 @@ CREATE INDEX idx_sys_operation_log_created ON sys_operation_log(created_at);
 COMMENT ON TABLE sys_operation_log IS '系统操作日志表 (审计日志)';
 
 -- ============================================
--- 16. 系统用户表
+-- 26. 系统用户表
 -- ============================================
 CREATE TABLE sys_user (
     id              UUID PRIMARY KEY,
@@ -386,7 +624,7 @@ VALUES (
 );
 
 -- ============================================
--- 17. 系统角色表
+-- 27. 系统角色表
 -- ============================================
 CREATE TABLE sys_role (
     id              UUID PRIMARY KEY,
@@ -409,7 +647,7 @@ VALUES
     ('00000000-0000-0000-0000-000000000003', 'REVIEWER', '审核人员', '可以审核图谱事实', 3);
 
 -- ============================================
--- 18. 用户角色关联表
+-- 28. 用户角色关联表
 -- ============================================
 CREATE TABLE sys_user_role (
     id              UUID PRIMARY KEY,
@@ -426,7 +664,7 @@ INSERT INTO sys_user_role (id, user_id, role_id)
 VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001');
 
 -- ============================================
--- 19. 字典类型表
+-- 29. 字典类型表
 -- ============================================
 CREATE TABLE sys_dict (
     id              UUID PRIMARY KEY,
@@ -442,7 +680,7 @@ CREATE TABLE sys_dict (
 COMMENT ON TABLE sys_dict IS '字典类型表';
 
 -- ============================================
--- 20. 字典项表
+-- 30. 字典项表
 -- ============================================
 CREATE TABLE sys_dict_item (
     id              UUID PRIMARY KEY,
@@ -462,7 +700,7 @@ CREATE INDEX idx_sys_dict_item_dict ON sys_dict_item(dict_id);
 COMMENT ON TABLE sys_dict_item IS '字典项表';
 
 -- ============================================
--- 21. 系统配置表
+-- 31. 系统配置表
 -- ============================================
 CREATE TABLE sys_config (
     id              UUID PRIMARY KEY,
@@ -488,127 +726,5 @@ VALUES
     ('00000000-0000-0000-0000-000000000004', 'llm.max_tokens', 'LLM 最大令牌数', '4096', 'NUMBER', TRUE);
 
 -- ============================================
--- 22. 迁移风险表
+-- 结束
 -- ============================================
-CREATE TABLE migration_risk (
-    id              UUID PRIMARY KEY,
-    project_id      UUID NOT NULL REFERENCES lg_project(id),
-    version_id      UUID NOT NULL REFERENCES lg_scan_version(id),
-    risk_type       VARCHAR(64) NOT NULL,
-    risk_name       VARCHAR(256) NOT NULL,
-    description     TEXT,
-    affected_nodes  JSONB,
-    severity        VARCHAR(32) NOT NULL DEFAULT 'MEDIUM',
-    status          VARCHAR(32) NOT NULL DEFAULT 'OPEN',
-    mitigation      TEXT,
-    estimated_effort INT,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_migration_risk_project ON migration_risk(project_id);
-CREATE INDEX idx_migration_risk_severity ON migration_risk(severity);
-CREATE INDEX idx_migration_risk_status ON migration_risk(status);
-
-COMMENT ON TABLE migration_risk IS '迁移风险表';
-
--- ============================================
--- 23. 用户表 (业务认证)
--- ============================================
-CREATE TABLE lg_user (
-    id              UUID PRIMARY KEY,
-    username        VARCHAR(64) NOT NULL UNIQUE,
-    password        VARCHAR(256) NOT NULL,
-    display_name    VARCHAR(128),
-    email           VARCHAR(128),
-    phone           VARCHAR(32),
-    avatar          TEXT,
-    status          VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-    roles           VARCHAR(256),
-    permissions     VARCHAR(512),
-    last_login_time TIMESTAMP,
-    last_login_ip   VARCHAR(64),
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE lg_user IS '用户表';
-
--- ============================================
--- 24. 代码仓库表
--- ============================================
-CREATE TABLE lg_code_repo (
-    id              UUID PRIMARY KEY,
-    project_id      UUID NOT NULL REFERENCES lg_project(id),
-    repo_url        TEXT NOT NULL,
-    branch_name     VARCHAR(128),
-    local_path      TEXT,
-    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_lg_code_repo_project ON lg_code_repo(project_id);
-
-COMMENT ON TABLE lg_code_repo IS '代码仓库表';
-
--- ============================================
--- 25. 数据库连接表
--- ============================================
-CREATE TABLE lg_db_connection (
-    id              UUID PRIMARY KEY,
-    project_id      UUID NOT NULL REFERENCES lg_project(id),
-    connection_name VARCHAR(128) NOT NULL,
-    db_type         VARCHAR(32) NOT NULL,
-    host            VARCHAR(128) NOT NULL,
-    port            INT NOT NULL,
-    database_name   VARCHAR(128) NOT NULL,
-    username        VARCHAR(128),
-    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_lg_db_connection_project ON lg_db_connection(project_id);
-
-COMMENT ON TABLE lg_db_connection IS '数据库连接表';
-
--- ============================================
--- 26. 文档表
--- ============================================
-CREATE TABLE lg_document (
-    id              UUID PRIMARY KEY,
-    project_id      UUID NOT NULL REFERENCES lg_project(id),
-    doc_name        VARCHAR(512) NOT NULL,
-    doc_type        VARCHAR(64),
-    file_url        TEXT,
-    status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_lg_document_project ON lg_document(project_id);
-
-COMMENT ON TABLE lg_document IS '上传文档表';
-
--- ============================================
--- 27. 测试运行表
--- ============================================
-CREATE TABLE lg_test_run (
-    id              UUID PRIMARY KEY,
-    project_id      UUID NOT NULL REFERENCES lg_project(id),
-    version_id      UUID NOT NULL REFERENCES lg_scan_version(id),
-    environment     VARCHAR(32),
-    status          VARCHAR(32) NOT NULL DEFAULT 'RUNNING',
-    started_at      TIMESTAMP,
-    finished_at     TIMESTAMP,
-    total_cases     INT,
-    passed_cases    INT,
-    failed_cases    INT,
-    deleted         INT DEFAULT 0
-);
-
-CREATE INDEX idx_lg_test_run_project ON lg_test_run(project_id);
-CREATE INDEX idx_lg_test_run_status ON lg_test_run(status);
-
-COMMENT ON TABLE lg_test_run IS '测试运行表';

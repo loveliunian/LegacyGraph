@@ -1,4 +1,4 @@
-# LegacyGraph - 遗留系统 AI 知识图谱分析平台
+# LegacyGraph - 系统 AI 知识图谱分析平台
 
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Vue 3](https://img.shields.io/badge/Vue-3-blue.svg)](https://v3.vuejs.org/)
@@ -6,7 +6,7 @@
 
 ## 项目简介
 
-**LegacyGraph** 是一个企业级遗留系统分析与知识图谱平台，旨在通过大语言模型（LLM）、图数据库和向量检索技术，帮助开发团队理解、管理和现代化改造复杂的遗留系统。
+**LegacyGraph** 是一个企业级系统分析与知识图谱平台，旨在通过大语言模型（LLM）、图数据库和向量检索技术，帮助开发团队理解、管理和现代化改造复杂的遗留系统。
 
 LegacyGraph 能够自动扫描你的代码库和数据库，构建包含业务域、模块、API、服务、表结构的完整知识图谱，并通过 AI 分析帮助团队更快理解系统，降低迁移风险。
 

@@ -129,7 +129,7 @@
               <div class="risk-name">{{ risk.riskName }}</div>
               <div class="risk-desc">{{ risk.description }}</div>
               <div class="risk-suggestion" v-if="risk.suggestion">
-                <el-icon><Lightbulb /></el-icon>
+                <el-icon><Opportunity /></el-icon>
                 <span>建议: {{ risk.suggestion }}</span>
               </div>
               <div class="risk-meta">
@@ -238,7 +238,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Connection, Link, CircleCheck, Warning, Lightbulb, Star } from '@element-plus/icons-vue'
+import { Download, Connection, Link, CircleCheck, Warning, Opportunity, Star } from '@element-plus/icons-vue'
 
 const selectedVersion = ref('v1.0')
 

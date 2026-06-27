@@ -814,7 +814,7 @@ public class SourceController {
         try {
             // 使用 DocumentExtractor 真实抽取文本并切片
             DocumentExtractor extractor = new DocumentExtractor();
-            File file = new java.io.File(doc.getFilePath());
+            java.io.File file = new java.io.File(doc.getFilePath());
             String text = extractor.extractText(file);
 
             // 切片并保存到数据库

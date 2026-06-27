@@ -22,26 +22,33 @@ spring:
       connection-timeout: 30000
 
   # Redis 配置
-  redis:
-    host: localhost
-    port: 6379
-    password:
-    database: 0
-    lettuce:
-      pool:
-        max-active: 8
-        max-wait: -1ms
-        max-idle: 8
-        min-idle: 0
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
 
   # Jackson 配置
-  spring:
-    jackson:
-      date-format: yyyy-MM-dd HH:mm:ss
-      time-zone: GMT+8
-      serialization:
-        writeDatesAsTimestamps: false
-      default-property-inclusion: non_null
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    serialization:
+      writeDatesAsTimestamps: false
+    default-property-inclusion: non_null
+
+  # Neo4j 配置
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: password
 
   # Spring AI OpenAI 配置
   # 在 application-local.yml 中配置实际的 api-key
@@ -72,12 +79,6 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
-
-# Neo4j 配置
-neo4j:
-  uri: bolt://localhost:7687
-  username: neo4j
-  password: password
 
 # MinIO 配置
 minio:

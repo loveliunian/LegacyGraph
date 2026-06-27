@@ -7,10 +7,10 @@
       </span>
       <el-button-group size="small">
         <el-tooltip content="展开全部" placement="top">
-          <el-button :icon="Fullscreen" @click="expandAll" />
+          <el-button :icon="FullScreen" @click="expandAll" />
         </el-tooltip>
         <el-tooltip content="收起全部" placement="top">
-          <el-button :icon="Shrink" @click="collapseAll" />
+          <el-button :icon="ScaleToOriginal" @click="collapseAll" />
         </el-tooltip>
       </el-button-group>
     </div>
@@ -293,10 +293,11 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   Connection,
-  Fullscreen,
-  Shrink,
+  FullScreen,
+  ScaleToOriginal,
   Search,
   ArrowRight,
   TrendCharts,

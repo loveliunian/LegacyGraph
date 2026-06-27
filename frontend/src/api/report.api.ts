@@ -1,5 +1,5 @@
 import { get, post } from '@/utils/request'
-import type { MigrationReadinessReport } from '@/types/report'
+import type { MigrationReadinessReport } from '@/types'
 
 /**
  * 报告实体

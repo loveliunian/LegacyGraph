@@ -3,7 +3,7 @@
     <el-card class="login-card" shadow="hover">
       <div class="login-header">
         <h1>LegacyGraph</h1>
-        <p>老项目 AI 图谱理解平台</p>
+        <p>AI 图谱理解平台</p>
       </div>
       
       <el-form

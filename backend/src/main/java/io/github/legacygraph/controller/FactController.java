@@ -8,21 +8,22 @@ import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.FactExtractionResult;
+import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.Fact;
+import io.github.legacygraph.entity.NodeEvidence;
+import io.github.legacygraph.repository.NodeEvidenceRepository;
+import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -32,15 +33,21 @@ public class FactController {
 
     private final FactRepository factRepository;
     private final EvidenceRepository evidenceRepository;
+    private final NodeEvidenceRepository nodeEvidenceRepository;
+    private final GraphNodeRepository graphNodeRepository;
     private final CodeFactAgent codeFactAgent;
     private final DocUnderstandingAgent docUnderstandingAgent;
 
     public FactController(FactRepository factRepository,
                           EvidenceRepository evidenceRepository,
+                          NodeEvidenceRepository nodeEvidenceRepository,
+                          GraphNodeRepository graphNodeRepository,
                           CodeFactAgent codeFactAgent,
                           DocUnderstandingAgent docUnderstandingAgent) {
         this.factRepository = factRepository;
         this.evidenceRepository = evidenceRepository;
+        this.nodeEvidenceRepository = nodeEvidenceRepository;
+        this.graphNodeRepository = graphNodeRepository;
         this.codeFactAgent = codeFactAgent;
         this.docUnderstandingAgent = docUnderstandingAgent;
     }
@@ -92,13 +99,31 @@ public class FactController {
     }
 
     @GetMapping("/facts/{id}/related-nodes")
-    @Operation(summary = "获取事实关联的节点")
-    public Result<List<String>> getRelatedNodes(@PathVariable String projectId, @PathVariable String id) {
+    @Operation(summary = "获取事实关联的图谱节点")
+    public Result<List<GraphNode>> getRelatedNodes(@PathVariable String projectId, @PathVariable String id) {
         Fact fact = factRepository.selectById(id);
         if (fact == null || !fact.getProjectId().equals(projectId)) {
             return Result.error("事实不存在");
         }
-        return Result.success(List.of());
+
+        // 事实抽取自图谱节点，通过 node-evidences 关系找到关联节点
+        // 每个证据关联一个节点，每个事实关联多个证据
+        LambdaQueryWrapper<NodeEvidence> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(NodeEvidence::getEvidenceId, id);
+        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.selectList(wrapper);
+
+        List<String> nodeIds = nodeEvidences.stream()
+                .map(NodeEvidence::getNodeId)
+                .filter(n -> n != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (nodeIds.isEmpty()) {
+            return Result.success(List.of());
+        }
+
+        List<GraphNode> nodes = graphNodeRepository.selectByIds(nodeIds);
+        return Result.success(nodes);
     }
 
     @GetMapping("/evidence")

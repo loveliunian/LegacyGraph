@@ -8,6 +8,7 @@ import io.github.legacygraph.dto.report.TestCoverageReport;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.Report;
+import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.repository.GraphEdgeRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
@@ -527,37 +528,26 @@ public class ReportingService {
 
         reportRepository.insert(report);
 
-        // Upload JSON version to MinIO
+        // Upload report metadata to MinIO. Do not regenerate report data here:
+        // generation methods call saveReport(), so regenerating would recurse.
         try {
-            // Ensure bucket exists
             if (!minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketName).build())) {
                 minioClient.makeBucket(io.minio.MakeBucketArgs.builder()
                         .bucket(bucketName)
                         .build());
             }
 
-            // Get the report data and upload
-            Object reportData = switch (reportType) {
-                case "MIGRATION_READINESS" -> generateMigrationReport(projectId);
-                case "CONFIDENCE_TREND" -> generateConfidenceTrend(projectId, null);
-                case "TEST_COVERAGE" -> generateTestCoverageReport(projectId, null);
-                case "GRAPH_QUALITY" -> generateGraphQualityReport(projectId, null);
-                default -> null;
-            };
+            byte[] jsonBytes = objectMapper.writeValueAsBytes(report);
+            String objectName = String.format("%s/%s/%s-metadata.json", projectId, report.getId(), reportType);
 
-            if (reportData != null) {
-                byte[] jsonBytes = objectMapper.writeValueAsBytes(reportData);
-                String objectName = String.format("%s/%s/%s.json", projectId, report.getId(), reportType);
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(objectName)
+                    .stream(new ByteArrayInputStream(jsonBytes), jsonBytes.length, -1L)
+                    .contentType("application/json")
+                    .build());
 
-                minioClient.putObject(PutObjectArgs.builder()
-                        .bucket(bucketName)
-                        .object(objectName)
-                        .stream(new ByteArrayInputStream(jsonBytes), jsonBytes.length, -1L)
-                        .contentType("application/json")
-                        .build());
-
-                log.info("Report uploaded to MinIO: {}", objectName);
-            }
+            log.info("Report metadata uploaded to MinIO: {}", objectName);
         } catch (Exception e) {
             log.error("Failed to upload report to MinIO", e);
         }

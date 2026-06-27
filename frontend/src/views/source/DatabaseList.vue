@@ -12,7 +12,7 @@
       <el-table-column prop="connectionName" label="连接名称" width="180">
         <template #default="{ row }">
           <div class="db-name">
-            <el-icon><DataBase /></el-icon>
+        <el-icon><Coin /></el-icon>
             <span>{{ row.connectionName }}</span>
           </div>
         </template>
@@ -108,7 +108,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, DataBase } from '@element-plus/icons-vue'
+import { Plus, Coin } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
 const route = useRoute()

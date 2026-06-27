@@ -242,7 +242,7 @@
               <span>拖拽移动节点位置</span>
             </div>
             <div class="help-item">
-              <el-icon color="#f56c6c"><Move /></el-icon>
+              <el-icon color="#f56c6c"><Rank /></el-icon>
               <span>拖拽空白平移视图</span>
             </div>
           </div>
@@ -295,12 +295,12 @@ import {
   Pointer,
   ZoomIn,
   Aim,
-  Move,
+  Rank,
   CircleClose,
   Files,
   Operation,
-  DataBase,
-  Code,
+  Coin,
+  Platform,
   Menu,
   Link,
   QuestionFilled
@@ -413,11 +413,11 @@ function getNodeIcon(type?: string): any {
     feature_module: Files,
     feature: Link,
     api: Operation,
-    controller: Code,
-    service: Code,
-    mapper: Code,
-    sql: DataBase,
-    table: DataBase,
+    controller: Platform,
+    service: Platform,
+    mapper: Platform,
+    sql: Coin,
+    table: Coin,
     column: Document
   }
   return iconMap[type || ''] || QuestionFilled

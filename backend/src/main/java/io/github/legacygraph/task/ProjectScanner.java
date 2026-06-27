@@ -1,15 +1,19 @@
 package io.github.legacygraph.task;
 
+import io.github.legacygraph.builder.FrontendGraphBuilder;
 import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.entity.DbConnection;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.extractors.DatabaseMetadataExtractor;
+import io.github.legacygraph.extractors.FrontendApiExtractor;
 import io.github.legacygraph.extractors.JavaControllerExtractor;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
+import io.github.legacygraph.extractors.VueRouteExtractor;
 import io.github.legacygraph.model.ApiFact;
+import io.github.legacygraph.model.FrontendPageFact;
 import io.github.legacygraph.model.MapperSqlFact;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.FactRepository;
@@ -18,6 +22,7 @@ import io.github.legacygraph.repository.ScanVersionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +51,7 @@ public class ProjectScanner {
     private final FactRepository factRepository;
     private final DbConnectionRepository dbConnectionRepository;
     private final GraphBuilder graphBuilder;
+    private final FrontendGraphBuilder frontendGraphBuilder;
     private final ObjectMapper objectMapper;
 
     public ProjectScanner(ScanVersionRepository scanVersionRepository,
@@ -53,12 +59,14 @@ public class ProjectScanner {
                          FactRepository factRepository,
                          DbConnectionRepository dbConnectionRepository,
                          GraphBuilder graphBuilder,
+                         FrontendGraphBuilder frontendGraphBuilder,
                          ObjectMapper objectMapper) {
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.graphBuilder = graphBuilder;
+        this.frontendGraphBuilder = frontendGraphBuilder;
         this.objectMapper = objectMapper;
     }
 
@@ -91,7 +99,11 @@ public class ProjectScanner {
             completeTask(mapperTask, "Scanned " + mapperCount + " mappers", null);
             log.info("Completed MyBatis XML scan, found {} mappers", mapperCount);
 
-            // 3. TODO: 扫描前端文件 (Vue/React组件和路由)
+            // 3. 扫描前端文件 (Vue路由和API调用)
+            ScanTask frontendTask = createTask(projectId, versionId, "FRONTEND_SCAN", "前端文件扫描");
+            int frontendCount = scanFrontendFiles(projectId, versionId, baseDir, frontendTask);
+            completeTask(frontendTask, "Scanned " + frontendCount + " frontend pages/APIs", null);
+            log.info("Completed frontend file scan, found {} pages/APIs", frontendCount);
 
             // 4. 扫描所有已配置数据库的元数据
             List<DbConnection> dbConnections = dbConnectionRepository.selectList(
@@ -148,7 +160,7 @@ public class ProjectScanner {
      * 从DbConnection创建DataSource
      */
     private DataSource createDataSource(DbConnection conn) {
-        org.apache.tomcat.jdbc.pool.DataSource dataSource = new org.apache.tomcat.jdbc.pool.DataSource();
+        DriverManagerDataSource dataSource = new DriverManagerDataSource();
         String url = buildJdbcUrl(conn);
         dataSource.setUrl(url);
         dataSource.setUsername(conn.getUsername());
@@ -278,6 +290,59 @@ public class ProjectScanner {
     }
 
     /**
+     * 扫描前端文件 (Vue路由和API调用)
+     */
+    private int scanFrontendFiles(String projectId, String versionId, String baseDir, ScanTask task) {
+        VueRouteExtractor vueExtractor = new VueRouteExtractor();
+        FrontendApiExtractor apiExtractor = new FrontendApiExtractor();
+        int totalCount = 0;
+
+        try {
+            List<Path> vueFiles = Files.walk(Paths.get(baseDir))
+                    .filter(Files::isRegularFile)
+                    .filter(p -> isVueFile(p))
+                    .collect(Collectors.toList());
+
+            for (Path vueFile : vueFiles) {
+                try {
+                    // 提取路由信息
+                    List<FrontendPageFact> pages = vueExtractor.extractFromFile(vueFile);
+                    if (!pages.isEmpty()) {
+                        for (FrontendPageFact page : pages) {
+                            saveFact(projectId, versionId, "FRONTEND_PAGE", page.getRoutePath(),
+                                    page.getPageName(), vueFile.toString(), page.getStartLine(), page.getEndLine(),
+                                    page, BigDecimal.ONE, "EXTRACTED");
+                            totalCount++;
+                        }
+                        // 构建图谱节点
+                        frontendGraphBuilder.buildFrontendGraph(projectId, versionId, pages, vueFile.toString());
+                    }
+
+                    // 提取API调用信息
+                    List<ApiFact> apiCalls = apiExtractor.extractFromFile(vueFile);
+                    if (!apiCalls.isEmpty()) {
+                        for (ApiFact api : apiCalls) {
+                            saveFact(projectId, versionId, "FRONTEND_API", api.getFullPath(),
+                                    api.getMethodName() + " " + api.getPath(), vueFile.toString(),
+                                    api.getStartLine(), api.getEndLine(), api, BigDecimal.ONE, "EXTRACTED");
+                            totalCount++;
+                        }
+                        // 构建前端API与后端API的关联
+                        frontendGraphBuilder.buildFrontendApiGraph(projectId, versionId, apiCalls);
+                    }
+                } catch (IOException e) {
+                    log.warn("Failed to parse Vue file: {}", vueFile, e);
+                }
+            }
+
+        } catch (IOException e) {
+            log.error("Failed to walk directory for frontend scan", e);
+        }
+
+        return totalCount;
+    }
+
+    /**
      * 判断是否是Controller文件
      */
     private boolean isControllerFile(Path path) {
@@ -294,6 +359,14 @@ public class ProjectScanner {
         return fileName.endsWith("Mapper.xml") ||
                fileName.contains("Mapper") && fileName.endsWith(".xml") ||
                fileName.contains("mapper") && fileName.endsWith(".xml");
+    }
+
+    /**
+     * 判断是否是Vue文件
+     */
+    private boolean isVueFile(Path path) {
+        String fileName = path.getFileName().toString();
+        return fileName.endsWith(".vue") || fileName.endsWith(".jsx") || fileName.endsWith(".tsx");
     }
 
     /**

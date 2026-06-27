@@ -15,81 +15,48 @@
       @node-drag-stop="handleNodeDragStop"
       @connect="handleConnect"
       @zoom="handleZoom"
-    >
-      <MiniMap
-        :node-color="nodeColor"
-        node-stroke-color="#fff"
-        node-border-radius="4"
-        position="bottom-right"
-      />
-      <Controls position="bottom-left" />
-      <Background :gap="16" :size="1" color="#e5e7eb" />
-      <Panel position="top-left" class="graph-panel">
-        <div class="panel-title">
-          <el-icon><Connection /></el-icon>
-          <span>关系图谱</span>
-        </div>
-        <div class="panel-stats">
-          <el-tag size="small" type="info">节点: {{ graphNodes.length }}</el-tag>
-          <el-tag size="small" type="success">关系: {{ graphEdges.length }}</el-tag>
-        </div>
-      </Panel>
-      <Panel position="top-right" class="graph-panel">
-        <el-space wrap>
-          <el-button size="small" @click="fitView">
-            <el-icon><ZoomOut /></el-icon>
-            适应视图
-          </el-button>
-          <el-button size="small" @click="centerView">
-            <el-icon><FullScreen /></el-icon>
-            居中
-          </el-button>
-          <el-button size="small" @click="toggleLayout">
-            <el-icon><Grid /></el-icon>
-            {{ currentLayout }}布局
-          </el-button>
-          <el-button size="small" @click="exportGraph">
-            <el-icon><Download /></el-icon>
-            导出
-          </el-button>
-        </el-space>
-      </Panel>
-    </VueFlow>
+    />
+    <div class="graph-panel graph-panel-left">
+      <div class="panel-title">
+        <el-icon><Connection /></el-icon>
+        <span>关系图谱</span>
+      </div>
+      <div class="panel-stats">
+        <el-tag size="small" type="info">节点: {{ graphNodes.length }}</el-tag>
+        <el-tag size="small" type="success">关系: {{ graphEdges.length }}</el-tag>
+      </div>
+    </div>
+    <div class="graph-panel graph-panel-right">
+      <el-space wrap>
+        <el-button size="small" @click="fitView">
+          <el-icon><ZoomOut /></el-icon>
+          适应视图
+        </el-button>
+        <el-button size="small" @click="centerView">
+          <el-icon><FullScreen /></el-icon>
+          居中
+        </el-button>
+        <el-button size="small" @click="toggleLayout">
+          <el-icon><Grid /></el-icon>
+          {{ currentLayout }}布局
+        </el-button>
+        <el-button size="small" @click="exportGraph">
+          <el-icon><Download /></el-icon>
+          导出
+        </el-button>
+      </el-space>
+    </div>
   </div>
 </template>
 
-/**
- * @description 知识图谱可视化查看器组件
- * 基于VueFlow实现交互式知识图谱可视化
- * 支持：
- * - 多种布局切换（力导向、环形、网格、分层）
- * - 节点点击、拖拽、连线交互
- * - 小地图导航、缩放控制
- * - 根据置信度自动着色（置信度越高颜色越绿）
- * - 导出图谱为JSON文件
- *
- * @example
- * <GraphViewer
- *   :nodes="graphNodes"
- *   :edges="graphEdges"
- *   height="700px"
- *   :editable="true"
- *   @node-click="handleNodeClick"
- * />
- */
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import {
   VueFlow,
   useVueFlow,
-  MiniMap,
-  Controls,
-  Background,
-  Panel,
-  MarkerType,
-  Node,
-  Edge
+  MarkerType
 } from '@vue-flow/core'
+import type { Node, Edge } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { Connection, ZoomOut, FullScreen, Grid, Download } from '@element-plus/icons-vue'
@@ -321,6 +288,7 @@ onMounted(() => {
   border-radius: 8px;
   overflow: hidden;
   background: #fafafa;
+  position: relative;
 }
 
 .vue-flow-container {
@@ -329,10 +297,22 @@ onMounted(() => {
 }
 
 .graph-panel {
+  position: absolute;
+  z-index: 10;
   background: white;
   padding: 12px 16px;
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.graph-panel-left {
+  top: 12px;
+  left: 12px;
+}
+
+.graph-panel-right {
+  top: 12px;
+  right: 12px;
 }
 
 .panel-title {

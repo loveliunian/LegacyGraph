@@ -1,7 +1,7 @@
 <template>
   <el-dropdown @command="handleLocaleChange" trigger="click">
     <span class="lang-switcher">
-      <el-icon :size="18"><Translation /></el-icon>
+      <el-icon :size="18"><Switch /></el-icon>
       <span class="current-lang">{{ currentLangLabel }}</span>
     </span>
     <template #dropdown>
@@ -21,7 +21,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Translation } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Switch } from '@element-plus/icons-vue'
 import i18n, { setLocale, getLocale, locales, type LocaleType } from '@/locales'
 
 const currentLocale = computed(() => getLocale())

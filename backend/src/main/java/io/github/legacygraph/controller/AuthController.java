@@ -139,20 +139,34 @@ public class AuthController {
 
     /**
      * 获取当前登录用户信息
-     * @param token 访问令牌（可选）
+     * @param authorization 访问令牌（可选）
      * @return 当前用户信息
      */
     @GetMapping("/me")
     @Operation(summary = "获取当前用户信息", description = "获取当前登录用户的基本信息，包括角色和权限")
     @Log(value = "获取当前用户信息", type = Log.OperationType.QUERY)
     public Result<LoginResponse.UserInfo> getCurrentUser(
-            @RequestHeader(value = "Authorization", required = false) String token) {
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        // 从 token 中获取用户信息
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return Result.error("用户未登录");
+        }
+        String token = authorization.substring(7);
+        if (!jwtUtil.validateToken(token)) {
+            return Result.error("Token无效或已过期");
+        }
+
+        String username = jwtUtil.getUsernameFromToken(token);
         User user = userRepository.selectOne(
-                new LambdaQueryWrapper<User>().eq(User::getUsername, "admin")
+                new LambdaQueryWrapper<User>().eq(User::getUsername, username)
         );
 
         if (user == null) {
             return Result.error("用户未登录");
+        }
+
+        if (!"ACTIVE".equals(user.getStatus())) {
+            return Result.error("用户已被禁用");
         }
 
         List<String> roles = user.getRoles() != null
