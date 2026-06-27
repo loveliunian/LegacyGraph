@@ -1,293 +1,347 @@
 <template>
   <div class="code-diff-container">
     <div class="diff-header" v-if="showHeader">
-      <div class="file-info">
+      <div class="diff-file-info">
         <el-icon><Document /></el-icon>
         <span class="file-name">{{ fileName || '代码对比' }}</span>
-        <el-tag v-if="changeType" size="small" :type="getChangeTypeTag(changeType)">
-          {{ getChangeTypeText(changeType) }}
-        </el-tag>
+        <el-tag v-if="stats.total > 0" size="small" type="success">+{{ stats.additions }}</el-tag>
+        <el-tag v-if="stats.total > 0" size="small" type="danger">-{{ stats.deletions }}</el-tag>
       </div>
       <div class="diff-actions">
-        <el-radio-group v-model="viewMode" size="small">
-          <el-radio-button value="split">分栏对比</el-radio-button>
-          <el-radio-button value="unified">合并对比</el-radio-button>
+        <el-button-group size="small">
+          <el-tooltip :content="$t('common.expandAll')" placement="top">
+            <el-button :icon="Expand" @click="expandAll" />
+          </el-tooltip>
+          <el-tooltip :content="$t('common.collapse')" placement="top">
+            <el-button :icon="Fold" @click="collapseAll" />
+          </el-tooltip>
+          <el-tooltip :content="$t('common.copy')" placement="top">
+            <el-button :icon="CopyDocument" @click="copyNewCode" />
+          </el-tooltip>
+        </el-button-group>
+        <el-radio-group v-model="viewMode" size="small" @change="handleViewModeChange">
+          <el-radio-button value="split">{{ $t('graph.codeGraph') }}</el-radio-button>
+          <el-radio-button value="unified">{{ $t('graph.unifiedGraph') }}</el-radio-button>
         </el-radio-group>
-        <el-button size="small" @click="toggleLineNumbers">
-          <el-tooltip content="显示/隐藏行号" placement="top">
-            <Sort />
-          </el-tooltip>
-        </el-button>
-        <el-button size="small" @click="copyContent">
-          <el-tooltip content="复制" placement="top">
-            <CopyDocument />
-          </el-tooltip>
-        </el-button>
       </div>
     </div>
 
-    <div class="diff-stats" v-if="showStats && diffStats">
-      <span class="stat-item additions">+ {{ diffStats.additions }}</span>
-      <span class="stat-item deletions">- {{ diffStats.deletions }}</span>
-      <span class="stat-item unchanged">  {{ diffStats.unchanged }} 行未变</span>
-    </div>
+    <div class="diff-content" :class="{ 'split-view': viewMode === 'split' }">
+      <div v-if="loading" class="loading-overlay">
+        <el-skeleton :rows="15" animated />
+      </div>
+      <div v-else-if="!oldCode && !newCode" class="empty-state">
+        <el-empty :description="$t('common.noData')" />
+      </div>
+      <div v-else class="diff-view">
+        <template v-if="viewMode === 'split'">
+          <div class="diff-column old-code">
+            <div class="column-header">
+              <el-icon><Clock /></el-icon>
+              <span>{{ oldVersion || $t('migration.riskType') === 8 }}</span>
+            </div>
+            <div class="code-lines">
+              <div
+                v-for="line in oldLines"
+                :key="`old-${line.oldLine}`"
+                class="code-line"
+                :class="getLineClass(line.type, 'old')"
+              >
+                <span class="line-number">{{ line.oldLine || '' }}</span>
+                <span class="line-symbol">{{ getLineSymbol(line.type) }}</span>
+                <span class="line-content" v-html="highlightLine(line.content, language, line.type)"></span>
+              </div>
+            </div>
+          </div>
+          <div class="diff-column new-code">
+            <div class="column-header">
+              <el-icon><Promotion /></el-icon>
+              <span>{{ newVersion || $t('migration.mitigated') }}</span>
+            </div>
+            <div class="code-lines">
+              <div
+                v-for="line in newLines"
+                :key="`new-${line.newLine}`"
+                class="code-line"
+                :class="getLineClass(line.type, 'new')"
+              >
+                <span class="line-number">{{ line.newLine || '' }}</span>
+                <span class="line-symbol">{{ getLineSymbol(line.type) }}</span>
+                <span class="line-content" v-html="highlightLine(line.content, language, line.type)"></span>
+              </div>
+            </div>
+          </div>
+        </template>
 
-    <div class="diff-content" ref="diffContainer">
-      <div v-if="loading" class="loading-skeleton">
-        <el-skeleton :rows="20" animated />
-      </div>
-      <div v-else-if="error" class="error-message">
-        <el-empty description="加载失败" image-size="80">
-          <el-button type="primary" @click="$emit('retry')">重试</el-button>
-        </el-empty>
-      </div>
-      <div v-else-if="!oldContent && !newContent" class="empty-message">
-        <el-empty description="暂无代码可对比" image-size="80" />
-      </div>
-      <div v-else class="code-diff-wrapper">
-        <table class="diff-table" :class="{ 'split-view': viewMode === 'split' }">
-          <thead v-if="viewMode === 'split'">
-            <tr>
-              <th class="line-num-col line-num-old">行号</th>
-              <th class="code-col code-old">旧版本</th>
-              <th class="line-num-col line-num-new">行号</th>
-              <th class="code-col code-new">新版本</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(line, index) in diffLines"
+        <template v-else>
+          <div class="code-lines unified">
+            <div
+              v-for="(line, index) in unifiedLines"
               :key="index"
-              class="diff-line"
-              :class="getLineClass(line)"
-              @mouseenter="hoverLine = index"
-              @mouseleave="hoverLine = -1"
+              class="code-line"
+              :class="getLineClass(line.type, 'unified')"
             >
-              <template v-if="viewMode === 'split'">
-                <td class="line-num line-num-old" v-if="line.oldLineNum">
-                  <span>{{ line.oldLineNum }}</span>
-                </td>
-                <td class="line-num line-num-empty" v-else></td>
-                <td class="code-cell code-old">
-                  <pre><code v-html="highlightSyntax(line.oldContent)"></code></pre>
-                </td>
-                <td class="line-num line-num-new" v-if="line.newLineNum">
-                  <span>{{ line.newLineNum }}</span>
-                </td>
-                <td class="line-num line-num-empty" v-else></td>
-                <td class="code-cell code-new">
-                  <pre><code v-html="highlightSyntax(line.newContent)"></code></pre>
-                </td>
-              </template>
-              <template v-else>
-                <td class="line-num line-num-unified">
-                  <span class="old-num">{{ line.oldLineNum }}</span>
-                  <span class="new-num">{{ line.newLineNum }}</span>
-                </td>
-                <td class="marker-cell">
-                  <span class="marker" :class="line.type">{{ getMarker(line.type) }}</span>
-                </td>
-                <td class="code-cell">
-                  <pre><code v-html="highlightSyntax(line.content)"></code></pre>
-                </td>
-              </template>
-            </tr>
-          </tbody>
-        </table>
+              <span class="line-number old-num">{{ line.oldLine || '' }}</span>
+              <span class="line-number new-num">{{ line.newLine || '' }}</span>
+              <span class="line-symbol">{{ getLineSymbol(line.type) }}</span>
+              <span class="line-content" v-html="highlightLine(line.content, language, line.type)"></span>
+            </div>
+          </div>
+        </template>
       </div>
+    </div>
+
+    <div class="diff-legend" v-if="showLegend">
+      <div class="legend-item">
+        <span class="legend-color added"></span>
+        <span>{{ $t('migration.codeRefactoring') }}</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color removed"></span>
+        <span>{{ $t('migration.dataMigration') }}</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color modified"></span>
+        <span>{{ $t('migration.compatibility') }}</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color unchanged"></span>
+        <span>{{ $t('migration.accepted') }}</span>
+      </div>
+    </div>
+
+    <div v-if="showStats && stats.total > 0" class="diff-stats">
+      <el-statistic title="总变更行数" :value="stats.total" size="small" />
+      <el-statistic title="新增行数" :value="stats.additions" size="small" class="success">
+        <template #prefix><el-icon><Top /></el-icon></template>
+      </el-statistic>
+      <el-statistic title="删除行数" :value="stats.deletions" size="small" class="danger">
+        <template #prefix><el-icon><Bottom /></el-icon></template>
+      </el-statistic>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
-
-interface DiffStats {
-  additions: number
-  deletions: number
-  unchanged: number
-}
+import * as Diff from 'diff'
+import {
+  Document,
+  Expand,
+  Fold,
+  CopyDocument,
+  Clock,
+  Promotion,
+  Top,
+  Bottom
+} from '@element-plus/icons-vue'
 
 interface DiffLine {
-  oldLineNum?: number
-  newLineNum?: number
-  oldContent?: string
-  newContent?: string
-  content?: string
-  type: 'add' | 'remove' | 'unchanged' | 'context' | 'hunk'
+  oldLine: number | null
+  newLine: number | null
+  content: string
+  type: 'added' | 'removed' | 'unchanged' | 'empty'
 }
 
 const props = withDefaults(defineProps<{
-  oldContent: string
-  newContent: string
+  oldCode: string
+  newCode: string
   fileName?: string
   language?: string
-  changeType?: 'add' | 'remove' | 'modify' | 'rename'
+  oldVersion?: string
+  newVersion?: string
   showHeader?: boolean
+  showLegend?: boolean
   showStats?: boolean
-  showLineNumbers?: boolean
   loading?: boolean
-  error?: boolean
+  contextSize?: number
 }>(), {
+  oldCode: '',
+  newCode: '',
+  fileName: '',
+  language: 'javascript',
+  oldVersion: 'Original',
+  newVersion: 'Modified',
   showHeader: true,
+  showLegend: true,
   showStats: true,
-  showLineNumbers: true,
   loading: false,
-  error: false
+  contextSize: 3
 })
 
 const emit = defineEmits<{
-  retry: []
+  viewModeChange: [mode: 'split' | 'unified']
+  lineClick: [line: DiffLine]
 }>()
 
 const viewMode = ref<'split' | 'unified'>('split')
-const showLineNumbers = ref(props.showLineNumbers)
-const hoverLine = ref(-1)
-const diffContainer = ref<HTMLElement>()
+const expanded = ref(true)
+const oldLineNumber = ref(1)
+const newLineNumber = ref(1)
 
-const highlightSyntax = (content: string) => {
-  if (!content) return ''
-  const lang = props.language || 'java'
-  try {
-    return hljs.highlight(content, { language: lang }).value
-  } catch {
-    return content
-  }
-}
-
-const diffStats = computed<DiffStats>(() => {
-  const oldLines = props.oldContent?.split('\n') || []
-  const newLines = props.newContent?.split('\n') || []
-  let additions = 0
-  let deletions = 0
-  const unchanged = Math.min(oldLines.length, newLines.length)
-
-  newLines.forEach((line, i) => {
-    if (!oldLines.includes(line)) additions++
-  })
-
-  oldLines.forEach((line, i) => {
-    if (!newLines.includes(line)) deletions++
-  })
-
-  return { additions, deletions, unchanged }
+const diffResult = computed(() => {
+  return Diff.diffLines(props.oldCode || '', props.newCode || '')
 })
 
-const diffLines = computed<DiffLine[]>(() => {
-  const oldLines = props.oldContent?.split('\n') || []
-  const newLines = props.newContent?.split('\n') || []
+const stats = computed(() => {
+  let additions = 0
+  let deletions = 0
+
+  diffResult.value.forEach((part: any) => {
+    if (part.added) additions += part.count || 0
+    if (part.removed) deletions += part.count || 0
+  })
+
+  return { additions, deletions, total: additions + deletions }
+})
+
+const unifiedLines = computed((): DiffLine[] => {
   const lines: DiffLine[] = []
+  let oldLine = 1
+  let newLine = 1
 
-  const maxLen = Math.max(oldLines.length, newLines.length)
-
-  for (let i = 0; i < maxLen; i++) {
-    const oldLine = oldLines[i]
-    const newLine = newLines[i]
-
-    if (oldLine === undefined && newLine !== undefined) {
-      lines.push({
-        newLineNum: i + 1,
-        oldContent: '',
-        newContent: newLine,
-        content: newLine,
-        type: 'add'
-      })
-    } else if (newLine === undefined && oldLine !== undefined) {
-      lines.push({
-        oldLineNum: i + 1,
-        oldContent: oldLine,
-        newContent: '',
-        content: oldLine,
-        type: 'remove'
-      })
-    } else if (oldLine !== newLine) {
-      lines.push({
-        oldLineNum: i + 1,
-        oldContent: oldLine,
-        content: oldLine,
-        type: 'remove'
-      })
-      lines.push({
-        newLineNum: i + 1,
-        newContent: newLine,
-        content: newLine,
-        type: 'add'
-      })
-    } else {
-      lines.push({
-        oldLineNum: i + 1,
-        newLineNum: i + 1,
-        oldContent: oldLine,
-        newContent: newLine,
-        content: oldLine,
-        type: 'unchanged'
-      })
+  diffResult.value.forEach((part: any) => {
+    const partLines = part.value.split('\n')
+    if (partLines[partLines.length - 1] === '') {
+      partLines.pop()
     }
-  }
+
+    partLines.forEach((line: string) => {
+      if (part.added) {
+        lines.push({ oldLine: null, newLine: newLine++, content: line, type: 'added' })
+      } else if (part.removed) {
+        lines.push({ oldLine: oldLine++, newLine: null, content: line, type: 'removed' })
+      } else {
+        lines.push({ oldLine: oldLine++, newLine: newLine++, content: line, type: 'unchanged' })
+      }
+    })
+  })
 
   return lines
 })
 
-function getLineClass(line: DiffLine) {
-  return {
-    'line-add': line.type === 'add',
-    'line-remove': line.type === 'remove',
-    'line-unchanged': line.type === 'unchanged',
-    'line-hover': hoverLine === diffLines.value.indexOf(line)
+const oldLines = computed((): DiffLine[] => {
+  const lines: DiffLine[] = []
+  let oldLine = 1
+  let newLine = 1
+
+  diffResult.value.forEach((part: any) => {
+    const partLines = part.value.split('\n')
+    if (partLines[partLines.length - 1] === '') {
+      partLines.pop()
+    }
+
+    partLines.forEach((line: string) => {
+      if (part.added) {
+        newLine++
+      } else if (part.removed) {
+        lines.push({ oldLine: oldLine++, newLine: null, content: line, type: 'removed' })
+      } else {
+        lines.push({ oldLine: oldLine++, newLine: newLine++, content: line, type: 'unchanged' })
+      }
+    })
+  })
+
+  return lines
+})
+
+const newLines = computed((): DiffLine[] => {
+  const lines: DiffLine[] = []
+  let oldLine = 1
+  let newLine = 1
+
+  diffResult.value.forEach((part: any) => {
+    const partLines = part.value.split('\n')
+    if (partLines[partLines.length - 1] === '') {
+      partLines.pop()
+    }
+
+    partLines.forEach((line: string) => {
+      if (part.added) {
+        lines.push({ oldLine: null, newLine: newLine++, content: line, type: 'added' })
+      } else if (part.removed) {
+        oldLine++
+      } else {
+        lines.push({ oldLine: oldLine++, newLine: newLine++, content: line, type: 'unchanged' })
+      }
+    })
+  })
+
+  return lines
+})
+
+function getLineClass(type: string, view: string): string {
+  switch (type) {
+    case 'added':
+      return `line-added ${view}`
+    case 'removed':
+      return `line-removed ${view}`
+    case 'empty':
+      return `line-empty ${view}`
+    default:
+      return `line-unchanged ${view}`
   }
 }
 
-function getMarker(type: string) {
-  const markers: Record<string, string> = {
-    add: '+',
-    remove: '-',
-    unchanged: ' ',
-    context: ' '
+function getLineSymbol(type: string): string {
+  switch (type) {
+    case 'added':
+      return '+'
+    case 'removed':
+      return '-'
+    default:
+      return ' '
   }
-  return markers[type] || ' '
 }
 
-function getChangeTypeTag(type: string) {
-  const types: Record<string, string> = {
-    add: 'success',
-    remove: 'danger',
-    modify: 'warning',
-    rename: 'info'
+function highlightLine(content: string, language: string, type: string): string {
+  try {
+    const highlighted = hljs.highlight(content || ' ', { language }).value
+    return highlighted
+  } catch {
+    return escapeHtml(content || ' ')
   }
-  return types[type] || 'info'
 }
 
-function getChangeTypeText(type: string) {
-  const texts: Record<string, string> = {
-    add: '新增',
-    remove: '删除',
-    modify: '修改',
-    rename: '重命名'
-  }
-  return texts[type] || type
+function escapeHtml(text: string): string {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
 }
 
-function toggleLineNumbers() {
-  showLineNumbers.value = !showLineNumbers.value
-}
-
-function copyContent() {
-  const content = props.newContent || props.oldContent
-  navigator.clipboard.writeText(content).then(() => {
-    ElMessage.success('已复制到剪贴板')
-  }).catch(() => {
-    ElMessage.error('复制失败')
+function copyOldCode() {
+  navigator.clipboard.writeText(props.oldCode).then(() => {
+    ElMessage.success('已复制旧代码')
   })
 }
 
-onMounted(() => {
-  hljs.highlightAll()
-})
+function copyNewCode() {
+  navigator.clipboard.writeText(props.newCode).then(() => {
+    ElMessage.success('已复制新代码')
+  })
+}
 
-watch([() => props.oldContent, () => props.newContent], () => {
-  setTimeout(() => hljs.highlightAll(), 100)
+function expandAll() {
+  expanded.value = true
+  ElMessage.info('已展开所有区域')
+}
+
+function collapseAll() {
+  expanded.value = false
+  ElMessage.info('已折叠未变更区域')
+}
+
+function handleViewModeChange(mode: 'split' | 'unified') {
+  emit('viewModeChange', mode)
+}
+
+defineExpose({
+  copyOldCode,
+  copyNewCode,
+  expandAll,
+  collapseAll
 })
 </script>
 
@@ -296,8 +350,9 @@ watch([() => props.oldContent, () => props.newContent], () => {
   width: 100%;
   background: #fff;
   border: 1px solid #ebeef5;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 
 .diff-header {
@@ -305,14 +360,17 @@ watch([() => props.oldContent, () => props.newContent], () => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #f8f9fa;
+  background: #f5f7fa;
   border-bottom: 1px solid #ebeef5;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.file-info {
+.diff-file-info {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: #606266;
 }
 
 .file-name {
@@ -322,169 +380,240 @@ watch([() => props.oldContent, () => props.newContent], () => {
 
 .diff-actions {
   display: flex;
+  gap: 12px;
   align-items: center;
-  gap: 8px;
-}
-
-.diff-stats {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 8px 16px;
-  background: #fdfdfd;
-  border-bottom: 1px solid #ebeef5;
-  font-size: 13px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-item.additions {
-  color: #67c23a;
-  font-weight: 600;
-}
-
-.stat-item.deletions {
-  color: #f56c6c;
-  font-weight: 600;
-}
-
-.stat-item.unchanged {
-  color: #909399;
 }
 
 .diff-content {
-  overflow-x: auto;
-  overflow-y: auto;
+  min-height: 200px;
   max-height: 600px;
+  overflow: auto;
 }
 
-.loading-skeleton {
-  padding: 20px;
+.diff-content.split-view .diff-view {
+  display: flex;
 }
 
-.error-message,
-.empty-message {
-  padding: 40px;
+.diff-column {
+  flex: 1;
+  min-width: 0;
+  min-height: 100%;
 }
 
-.code-diff-wrapper {
-  min-width: 100%;
+.diff-column:first-child {
+  border-right: 1px solid #ebeef5;
 }
 
-.diff-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+.column-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid #ebeef5;
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.old-code .column-header {
+  background: #fef0f0;
+  border-bottom-color: #fbc4c4;
+}
+
+.new-code .column-header {
+  background: #f0f9eb;
+  border-bottom-color: #c2e7b0;
+}
+
+.code-lines {
   font-size: 13px;
   line-height: 1.6;
 }
 
-.diff-table.split-view .line-num-col {
-  width: 60px;
+.code-lines.unified {
+  display: block;
 }
 
-.diff-table.split-view .code-col {
-  width: 45%;
+.code-line {
+  display: flex;
+  align-items: stretch;
+  min-height: 24px;
+  border-bottom: 1px solid #f5f7fa;
+  transition: background-color 0.2s;
 }
 
-th {
-  background: #f5f7fa;
-  padding: 8px 12px;
-  text-align: left;
-  font-weight: 500;
-  color: #606266;
-  border-bottom: 1px solid #ebeef5;
+.code-line:hover {
+  background-color: #f5f7fa;
 }
 
-.line-num-col {
-  background: #f8f9fa;
-  border-right: 1px solid #ebeef5;
-  user-select: none;
-}
-
-.line-num {
+.line-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 50px;
+  padding: 0 8px;
+  background: #fafafa;
   color: #909399;
   font-size: 12px;
-  text-align: right;
-  padding: 4px 12px;
-  min-width: 50px;
   border-right: 1px solid #ebeef5;
+  user-select: none;
+  flex-shrink: 0;
 }
 
-.line-num-empty {
+.code-lines.unified .line-number {
+  width: 45px;
+}
+
+.code-lines.unified .line-number.old-num {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+
+.code-lines.unified .line-number.new-num {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+
+.line-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  padding: 0 4px;
+  font-weight: bold;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.line-content {
+  flex: 1;
+  padding: 0 8px;
+  white-space: pre;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.line-added {
+  background: #f0f9eb;
+}
+
+.line-added .line-symbol {
+  color: #67c23a;
+  background: #e6f7e6;
+}
+
+.line-removed {
+  background: #fef0f0;
+}
+
+.line-removed .line-symbol {
+  color: #f56c6c;
+  background: #fde2e2;
+}
+
+.line-unchanged .line-symbol {
+  color: #c0c4cc;
+}
+
+.line-empty {
   background: #fafafa;
 }
 
-.line-num-unified {
+.line-empty .line-content {
+  color: #c0c4cc;
+}
+
+.loading-overlay {
+  padding: 20px;
+}
+
+.empty-state {
+  padding: 60px 20px;
+}
+
+.diff-legend {
   display: flex;
-  flex-direction: column;
+  gap: 20px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-top: 1px solid #ebeef5;
+}
+
+.legend-item {
+  display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
+  font-size: 12px;
+  color: #606266;
 }
 
-.marker-cell {
-  width: 20px;
-  padding: 4px 8px;
-  text-align: center;
-  font-weight: bold;
-  background: #f8f9fa;
-  border-right: 1px solid #ebeef5;
-}
-
-.marker {
-  display: inline-block;
+.legend-color {
   width: 16px;
-  text-align: center;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid #ebeef5;
 }
 
-.code-cell {
-  padding: 2px 12px;
-  white-space: pre;
-  vertical-align: top;
+.legend-color.added {
+  background: #f0f9eb;
 }
 
-.diff-line {
-  transition: background 0.2s;
+.legend-color.removed {
+  background: #fef0f0;
 }
 
-.diff-line:hover {
+.legend-color.modified {
+  background: #fdf6ec;
+}
+
+.legend-color.unchanged {
+  background: #ffffff;
+}
+
+.diff-stats {
+  display: flex;
+  gap: 30px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-top: 1px solid #ebeef5;
+}
+
+.diff-stats .el-statistic {
+  flex: none;
+}
+
+.diff-stats .success :deep(.el-statistic__content) {
+  color: #67c23a;
+}
+
+.diff-stats .danger :deep(.el-statistic__content) {
+  color: #f56c6c;
+}
+
+:deep(.hljs) {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
   background: #f5f7fa;
 }
 
-.line-add {
-  background: #f0f9eb;
+::-webkit-scrollbar-thumb {
+  background: #dcdfe6;
+  border-radius: 4px;
 }
 
-.line-add .code-cell {
-  background: #f0f9eb;
-}
-
-.line-remove {
-  background: #fef0f0;
-}
-
-.line-remove .code-cell {
-  background: #fef0f0;
-}
-
-.line-unchanged {
-  background: #fff;
-}
-
-.line-hover {
-  background: #ecf5ff !important;
-}
-
-pre {
-  margin: 0;
-  padding: 0;
-}
-
-code {
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+::-webkit-scrollbar-thumb:hover {
+  background: #c0c4cc;
 }
 </style>

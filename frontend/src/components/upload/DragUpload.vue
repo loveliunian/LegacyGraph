@@ -1,12 +1,5 @@
 <template>
-  <div
-    class="drag-upload-container"
-    :class="{ 'drag-over': isDragOver, 'disabled': disabled }"
-    @dragenter="handleDragEnter"
-    @dragover.prevent="handleDragOver"
-    @dragleave="handleDragLeave"
-    @drop.prevent="handleDrop"
-  >
+  <div class="drag-upload-container" :class="{ 'drag-over': isDragOver, 'disabled': disabled }">
     <input
       ref="fileInputRef"
       type="file"
@@ -16,41 +9,94 @@
       @change="handleFileInputChange"
     />
 
-    <div class="upload-content" v-if="!uploading">
+    <div class="upload-content" v-if="uploadedFiles.length === 0 && !uploading">
       <el-icon class="upload-icon" :size="48"><UploadFilled /></el-icon>
       <div class="upload-text">
         <span class="primary-text">将文件拖到此处</span>
-        <span class="secondary-text">或 <el-button type="primary" link @click="openFileSelector">点击上传</el-button></span>
+        <span class="secondary-text">
+          或 <el-button type="primary" link @click="openFileSelector">点击上传</el-button>
+        </span>
       </div>
       <div class="upload-hint" v-if="showHint">
         <el-tag size="small" type="info">支持格式: {{ hint }}</el-tag>
         <el-tag size="small" type="info" v-if="maxSize > 0">单文件最大: {{ formatFileSize(maxSize) }}</el-tag>
+        <el-tag size="small" type="success" v-if="enableChunk">支持分片上传</el-tag>
       </div>
     </div>
 
-    <div class="uploading-content" v-else>
+    <div class="uploading-content" v-else-if="uploading">
+      <el-icon class="uploading-icon" :size="32"><Loading /></el-icon>
+      <div class="uploading-text">{{ uploadingText }}</div>
       <el-progress
         :percentage="uploadProgress"
         :status="uploadProgress === 100 ? 'success' : undefined"
         :stroke-width="8"
+        style="width: 80%; margin: 16px auto"
       />
-      <div class="uploading-text">{{ uploadingText }}</div>
+      <div class="uploading-stats" v-if="currentFile">
+        <span class="filename">{{ currentFile.name }}</span>
+        <span class="speed">{{ formatFileSize(currentSpeed) }}/s</span>
+        <span class="remaining">预计剩余 {{ estimatedTime }}s</span>
+      </div>
+      <el-button size="small" type="danger" plain @click="cancelUpload" v-if="uploadProgress < 100">
+        取消上传
+      </el-button>
+    </div>
+
+    <div class="file-list" v-else-if="uploadedFiles.length > 0">
+      <div class="file-item" v-for="(file, index) in uploadedFiles" :key="index">
+        <div class="file-info">
+          <el-icon class="file-icon" :size="24"><Document /></el-icon>
+          <div class="file-details">
+            <span class="file-name">{{ file.name }}</span>
+            <span class="file-size">{{ formatFileSize(file.size) }}</span>
+          </div>
+        </div>
+        <div class="file-actions">
+          <el-tooltip content="预览" placement="top">
+            <el-button :icon="View" size="small" circle @click="previewFile(file)" />
+          </el-tooltip>
+          <el-tooltip content="下载" placement="top">
+            <el-button :icon="Download" size="small" circle @click="downloadFile(file)" />
+          </el-tooltip>
+          <el-tooltip content="删除" placement="top">
+            <el-button :icon="Close" size="small" circle type="danger" @click="removeFile(index)" />
+          </el-tooltip>
+        </div>
+      </div>
+      <div class="list-actions">
+        <el-button size="small" @click="openFileSelector">
+          <el-icon><Plus /></el-icon> 添加文件
+        </el-button>
+        <el-button size="small" type="primary" @click="submitUpload">
+          <el-icon><Upload /></el-icon> 批量上传
+        </el-button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { UploadFilled } from '@element-plus/icons-vue'
+import {
+  UploadFilled,
+  Loading,
+  Document,
+  View,
+  Download,
+  Close,
+  Plus,
+  Upload
+} from '@element-plus/icons-vue'
+import SparkMD5 from 'spark-md5'
 
-interface FileChunk {
+interface ChunkUpload {
   file: File
-  chunk: Blob
-  index: number
-  total: number
-  md5: string
-  start: number
-  end: number
+  fileHash: string
+  chunkSize: number
+  chunks: Blob[]
+  currentChunk: number
+  uploadedChunks: Set<number>
 }
 
 const props = withDefaults(defineProps<{
@@ -63,6 +109,8 @@ const props = withDefaults(defineProps<{
   hint?: string
   chunkSize?: number
   enableChunk?: boolean
+  chunkThreshold?: number
+  uploadUrl?: string
 }>(), {
   accept: '*',
   multiple: true,
@@ -72,7 +120,9 @@ const props = withDefaults(defineProps<{
   showHint: true,
   hint: '所有格式',
   chunkSize: 5 * 1024 * 1024,
-  enableChunk: true
+  enableChunk: true,
+  chunkThreshold: 10 * 1024 * 1024,
+  uploadUrl: '/api/upload'
 })
 
 const emit = defineEmits<{
@@ -81,6 +131,7 @@ const emit = defineEmits<{
   success: [files: File[]]
   error: [message: string]
   progress: [progress: number]
+  chunkProgress: [file: File, chunkIndex: number, totalChunks: number]
 }>()
 
 const fileInputRef = ref<HTMLInputElement>()
@@ -88,11 +139,18 @@ const isDragOver = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
 const uploadedFiles = ref<File[]>([])
+const currentFile = ref<File | null>(null)
+const currentSpeed = ref(0)
+const estimatedTime = ref(0)
+const abortController = ref<AbortController | null>(null)
+const chunkUpload = ref<ChunkUpload | null>(null)
+const startTime = ref(0)
+const totalUploaded = ref(0)
 
 const uploadingText = computed(() => {
-  if (uploadProgress === 100) return '上传完成'
-  if (uploadProgress > 0) return `正在上传... ${uploadProgress}%`
-  return '正在处理文件...'
+  if (uploadProgress.value === 100) return '上传完成'
+  if (uploadProgress.value > 0) return `正在上传... ${uploadProgress.value}%`
+  return '处理文件中...'
 })
 
 function openFileSelector() {
@@ -107,6 +165,7 @@ function handleDragEnter(e: DragEvent) {
 
 function handleDragOver(e: DragEvent) {
   if (props.disabled) return
+  e.preventDefault()
   e.dataTransfer!.dropEffect = 'copy'
 }
 
@@ -139,17 +198,17 @@ function handleFileInputChange(e: Event) {
 async function processFiles(files: File[]) {
   if (uploading.value) return
 
-  const validFiles: File[] = []
   const errors: string[] = []
 
-  if (files.length > props.maxCount) {
+  if (files.length + uploadedFiles.value.length > props.maxCount) {
     errors.push(`最多只能上传 ${props.maxCount} 个文件`)
   }
 
-  files.forEach(file => {
+  const validFiles: File[] = []
+  for (const file of files) {
     if (props.maxSize > 0 && file.size > props.maxSize) {
       errors.push(`文件 ${file.name} 超过大小限制`)
-      return
+      continue
     }
 
     if (props.accept !== '*') {
@@ -164,12 +223,12 @@ async function processFiles(files: File[]) {
       })
       if (!matched) {
         errors.push(`文件 ${file.name} 格式不支持`)
-        return
+        continue
       }
     }
 
     validFiles.push(file)
-  })
+  }
 
   if (errors.length > 0) {
     emit('error', errors.join('\n'))
@@ -179,85 +238,247 @@ async function processFiles(files: File[]) {
 
   if (validFiles.length === 0) return
 
+  uploadedFiles.value = [...uploadedFiles.value, ...validFiles]
+  emit('change', uploadedFiles.value)
+}
+
+async function calculateFileHash(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const hash = SparkMD5.hashBinary(e.target?.result as string)
+        resolve(hash)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsBinaryString(file)
+  })
+}
+
+function createChunks(file: File): Blob[] {
+  const chunks: Blob[] = []
+  const totalChunks = Math.ceil(file.size / props.chunkSize)
+
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * props.chunkSize
+    const end = Math.min(start + props.chunkSize, file.size)
+    chunks.push(file.slice(start, end))
+  }
+
+  return chunks
+}
+
+async function uploadChunk(chunk: Blob, chunkIndex: number, totalChunks: number, fileHash: string): Promise<void> {
+  const formData = new FormData()
+  formData.append('chunk', chunk)
+  formData.append('chunkIndex', chunkIndex.toString())
+  formData.append('totalChunks', totalChunks.toString())
+  formData.append('fileHash', fileHash)
+
+  abortController.value = new AbortController()
+
+  try {
+    const response = await fetch(props.uploadUrl, {
+      method: 'POST',
+      body: formData,
+      signal: abortController.value.signal
+    })
+
+    if (!response.ok) {
+      throw new Error(`分片 ${chunkIndex + 1}/${totalChunks} 上传失败`)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name !== 'AbortError') {
+      throw error
+    }
+  }
+}
+
+async function submitChunkUpload(file: File): Promise<void> {
+  uploading.value = true
+  uploadProgress.value = 0
+  currentFile.value = file
+  startTime.value = Date.now()
+  totalUploaded.value = 0
+
+  try {
+    const fileHash = await calculateFileHash(file)
+    const chunks = createChunks(file)
+    const totalChunks = chunks.length
+
+    chunkUpload.value = {
+      file,
+      fileHash,
+      chunkSize: props.chunkSize,
+      chunks,
+      currentChunk: 0,
+      uploadedChunks: new Set()
+    }
+
+    for (let i = 0; i < totalChunks; i++) {
+      if (!uploading.value) break
+
+      await uploadChunk(chunks[i], i, totalChunks, fileHash)
+      chunkUpload.value.uploadedChunks.add(i)
+
+      const progress = ((i + 1) / totalChunks) * 100
+      uploadProgress.value = Math.round(progress)
+      emit('progress', uploadProgress.value)
+      emit('chunkProgress', file, i, totalChunks)
+
+      const elapsed = (Date.now() - startTime.value) / 1000
+      const uploadedBytes = (i + 1) * props.chunkSize
+      currentSpeed.value = uploadedBytes / elapsed
+      estimatedTime.value = Math.round(((totalChunks - i - 1) * props.chunkSize) / currentSpeed.value)
+    }
+
+    if (uploadProgress.value === 100) {
+      ElMessage.success(`${file.name} 上传成功`)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '上传失败'
+    emit('error', message)
+    ElMessage.error(message)
+    throw error
+  } finally {
+    uploading.value = false
+    currentFile.value = null
+    abortController.value = null
+  }
+}
+
+async function submitUpload() {
+  if (uploadedFiles.value.length === 0) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
+
   uploading.value = true
   uploadProgress.value = 0
 
   try {
-    if (props.enableChunk && validFiles.some(f => f.size > props.chunkSize)) {
-      await processChunkUpload(validFiles)
-    } else {
-      await simulateUpload(validFiles)
+    for (const file of uploadedFiles.value) {
+      if (props.enableChunk && file.size >= props.chunkThreshold) {
+        await submitChunkUpload(file)
+      } else {
+        await submitSingleUpload(file)
+      }
     }
 
-    uploadedFiles.value = [...uploadedFiles.value, ...validFiles]
-    emit('change', validFiles)
-    emit('success', validFiles)
-    ElMessage.success(`成功上传 ${validFiles.length} 个文件`)
+    emit('success', uploadedFiles.value)
   } catch (error) {
-    emit('error', error instanceof Error ? error.message : '上传失败')
-    ElMessage.error('上传失败，请重试')
+    console.error('上传失败:', error)
   } finally {
     uploading.value = false
   }
 }
 
-async function simulateUpload(files: File[]) {
-  const totalSize = files.reduce((sum, f) => sum + f.size, 0)
-  let uploadedSize = 0
+async function submitSingleUpload(file: File): Promise<void> {
+  currentFile.value = file
+  startTime.value = Date.now()
 
-  for (const file of files) {
-    const chunkSize = Math.floor(file.size / 10) || file.size
-    for (let i = 0; i < 10; i++) {
-      await new Promise(resolve => setTimeout(resolve, 50))
-      uploadedSize += chunkSize
-      uploadProgress.value = Math.min(100, Math.floor((uploadedSize / totalSize) * 100))
-      emit('progress', uploadProgress.value)
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    abortController.value = new AbortController()
+
+    const xhr = new XMLHttpRequest()
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const progress = Math.round((e.loaded / e.total) * 100)
+        uploadProgress.value = progress
+        emit('progress', progress)
+
+        const elapsed = (Date.now() - startTime.value) / 1000
+        currentSpeed.value = e.loaded / elapsed
+        estimatedTime.value = Math.round((e.total - e.loaded) / currentSpeed.value)
+      }
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve()
+        } else {
+          reject(new Error(`上传失败: ${xhr.statusText}`))
+        }
+      }
+      xhr.onerror = () => reject(new Error('网络错误'))
+      xhr.abort = () => reject(new Error('上传已取消'))
+      xhr.open('POST', props.uploadUrl)
+      xhr.send(formData)
+    })
+
+    ElMessage.success(`${file.name} 上传成功`)
+  } catch (error) {
+    if (error instanceof Error && error.message !== '上传已取消') {
+      emit('error', error.message)
+      ElMessage.error(error.message)
+      throw error
     }
+  } finally {
+    currentFile.value = null
+    abortController.value = null
   }
-
-  uploadProgress.value = 100
-  emit('progress', 100)
-  await new Promise(resolve => setTimeout(resolve, 300))
 }
 
-async function processChunkUpload(files: File[]) {
-  for (const file of files) {
-    if (file.size <= props.chunkSize) continue
-
-    const totalChunks = Math.ceil(file.size / props.chunkSize)
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * props.chunkSize
-      const end = Math.min(start + props.chunkSize, file.size)
-      const chunk = file.slice(start, end)
-
-      await new Promise(resolve => setTimeout(resolve, 50))
-
-      const progress = Math.floor(((i + 1) / totalChunks) * 100)
-      emit('progress', progress)
-    }
+function cancelUpload() {
+  if (abortController.value) {
+    abortController.value.abort()
   }
+  uploading.value = false
+  uploadProgress.value = 0
+  ElMessage.info('已取消上传')
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
+function removeFile(index: number) {
+  uploadedFiles.value.splice(index, 1)
+  emit('change', uploadedFiles.value)
 }
 
 function clearFiles() {
   uploadedFiles.value = []
 }
 
-function removeFile(index: number) {
-  uploadedFiles.value.splice(index, 1)
+function downloadFile(file: File) {
+  const url = URL.createObjectURL(file)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = file.name
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function previewFile(file: File) {
+  if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+    const url = URL.createObjectURL(file)
+    window.open(url, '_blank')
+    URL.revokeObjectURL(url)
+  } else {
+    ElMessage.info('该文件类型暂不支持预览')
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
 }
 
 defineExpose({
   clearFiles,
   removeFile,
-  openFileSelector
+  openFileSelector,
+  submitUpload,
+  cancelUpload
 })
 </script>
 
@@ -342,9 +563,100 @@ defineExpose({
   padding: 20px;
 }
 
+.uploading-icon {
+  color: #409eff;
+  animation: rotate 1s linear infinite;
+  margin-bottom: 16px;
+}
+
 .uploading-text {
-  margin-top: 16px;
+  margin-bottom: 16px;
   color: #606266;
   font-size: 14px;
+}
+
+.uploading-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.filename {
+  font-weight: 500;
+  color: #606266;
+}
+
+.file-list {
+  text-align: left;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  border: 1px solid #ebeef5;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-icon {
+  color: #409eff;
+  flex-shrink: 0;
+}
+
+.file-details {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.file-details .file-name {
+  display: block;
+  font-size: 14px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-details .file-size {
+  font-size: 12px;
+  color: #909399;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.list-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

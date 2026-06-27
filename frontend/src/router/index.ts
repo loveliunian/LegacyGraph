@@ -130,6 +130,16 @@ const routes = [
         component: () => import('@/views/migration/RiskDetail.vue')
       },
       {
+        path: 'audit/logs',
+        name: 'AuditLogList',
+        component: () => import('@/views/audit/LogList.vue')
+      },
+      {
+        path: 'audit/logs/:id',
+        name: 'AuditLogDetail',
+        component: () => import('@/views/audit/LogDetail.vue')
+      },
+      {
         path: 'system/users',
         name: 'SystemUserList',
         component: () => import('@/views/system/UserList.vue')
