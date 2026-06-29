@@ -75,6 +75,18 @@
       </el-table-column>
     </el-table>
 
+    <div class="pagination-wrapper" v-if="total > 0">
+      <el-pagination
+        v-model:current-page="pageNum"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @current-change="handlePageChange"
+        @size-change="() => loadTaskList(1)"
+      />
+    </div>
+
     <el-empty v-if="taskList.length === 0" description="暂无扫描任务" />
 
     <el-dialog v-model="logDialogVisible" title="任务日志" width="900px" append-to-body>
@@ -107,6 +119,9 @@ const projectId = route.params.projectId as string
 
 const loading = ref(false)
 const taskList = ref<any[]>([])
+const pageNum = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 const logDialogVisible = ref(false)
 const logs = ref<any[]>([])
 
@@ -208,11 +223,16 @@ onMounted(() => {
   loadTaskList()
 })
 
-async function loadTaskList() {
+async function loadTaskList(page?: number) {
+  if (page) pageNum.value = page
   loading.value = true
   try {
-    const res = await get(`/lg/projects/${projectId}/scan-versions`)
+    const res = await get(`/lg/projects/${projectId}/scan-versions`, {
+      pageNum: pageNum.value,
+      pageSize: pageSize.value
+    })
     const list = Array.isArray(res) ? res : (res.list || [])
+    total.value = res.total || list.length
     taskList.value = list.map((v: any) => ({
       id: v.id,
       versionId: v.id,
@@ -238,6 +258,10 @@ async function loadTaskList() {
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = (page: number) => {
+  loadTaskList(page)
 }
 </script>
 
@@ -301,5 +325,11 @@ async function loadTaskList() {
   font-size: 11px;
   color: #909399;
   text-align: right;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

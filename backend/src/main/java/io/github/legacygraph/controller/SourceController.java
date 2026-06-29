@@ -25,6 +25,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -312,6 +315,12 @@ public class SourceController {
         String gitUrl = body.get("gitUrl");
         if (gitUrl == null || gitUrl.isBlank()) {
             return Result.error("Git地址不能为空");
+        }
+
+        // 校验 gitUrl 合法性，防止命令注入
+        if (!isValidGitUrl(gitUrl)) {
+            log.warn("Invalid Git URL rejected: {}", gitUrl);
+            return Result.error("Git地址格式不合法");
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -889,6 +898,57 @@ public class SourceController {
     }
 
     /**
+     * 解析文档文件的绝对路径。
+     * 优先使用 file_path 字段；若为空则尝试从 CodeRepo.localPath + docName 重建。
+     * 用于兼容旧数据（auto-discovery 时未保存 file_path）。
+     */
+    private Path resolveFilePath(Document doc) {
+        // 优先使用已存储的 file_path
+        if (doc.getFilePath() != null && !doc.getFilePath().isBlank()) {
+            return Paths.get(doc.getFilePath());
+        }
+
+        // 回退：从 CodeRepo 的 localPath 重建
+        List<CodeRepo> repos = codeRepoRepository.selectList(
+                new LambdaQueryWrapper<CodeRepo>()
+                        .eq(CodeRepo::getProjectId, doc.getProjectId())
+                        .isNotNull(CodeRepo::getLocalPath)
+        );
+        for (CodeRepo repo : repos) {
+            Path candidate = Paths.get(repo.getLocalPath(), doc.getDocName());
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 根据文件类型获取 MediaType
+     */
+    private MediaType getMediaType(String fileType) {
+        if (fileType == null) return null;
+        return switch (fileType.toUpperCase()) {
+            case "PDF" -> MediaType.APPLICATION_PDF;
+            case "MD", "TXT" -> new MediaType("text", "plain", java.nio.charset.StandardCharsets.UTF_8);
+            case "DOCX" -> MediaType.parseMediaType(
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+            default -> MediaType.APPLICATION_OCTET_STREAM;
+        };
+    }
+
+    /**
+     * 判断文件类型是否支持浏览器内嵌预览
+     */
+    private boolean isInlinePreviewable(String fileType) {
+        if (fileType == null) return false;
+        return switch (fileType.toUpperCase()) {
+            case "PDF", "TXT", "MD" -> true;
+            default -> false;
+        };
+    }
+
+    /**
      * 解析文档
      * 对已上传的文档进行解析，抽取知识事实
      * @param projectId 项目ID
@@ -960,6 +1020,67 @@ public class SourceController {
     }
 
     /**
+     * 下载/预览文档
+     * 以字节流返回原始文件内容，浏览器根据 Content-Type 自动决定是预览还是下载。
+     * window.open() 无 Authorization header，需在 SecurityConfig 中 permitAll。
+     * @param projectId 项目ID
+     * @param id 文档ID
+     * @return 文件字节流响应
+     */
+    @GetMapping("/documents/{id}/download")
+    @Operation(summary = "下载/预览文档", description = "以字节流返回文档原始文件，浏览器自动处理预览或下载")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "文件内容"),
+            @ApiResponse(responseCode = "404", description = "文档或文件不存在")
+    })
+    public ResponseEntity<byte[]> downloadDocument(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "文档ID", required = true)
+            @PathVariable String id) {
+        Document doc = documentRepository.selectById(id);
+        if (doc == null || !doc.getProjectId().equals(projectId)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Path filePath = resolveFilePath(doc);
+        if (filePath == null || !Files.exists(filePath)) {
+            log.warn("Document file not found: docId={}, docName={}, filePath={}",
+                    id, doc.getDocName(), filePath);
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            byte[] content = Files.readAllBytes(filePath);
+
+            // fileType 可能为空（自动发现的文档），从文件路径扩展名推导
+            String fileType = doc.getFileType();
+            if (fileType == null || fileType.isBlank()) {
+                String ext = getFileExtension(doc.getDocName()).toLowerCase();
+                fileType = getFileType(ext);
+            }
+
+            // 根据文件类型确定 Content-Type
+            MediaType mediaType = getMediaType(fileType);
+            String contentType = mediaType != null ? mediaType.toString()
+                    : "application/octet-stream";
+
+            // inline 让浏览器尝试预览（PDF/图片等），attachment 强制下载
+            String disposition = isInlinePreviewable(fileType)
+                    ? "inline" : "attachment";
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            disposition + "; filename=\"" + doc.getDocName() + "\"")
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .body(content);
+        } catch (IOException e) {
+            log.error("Failed to read document file: {}", filePath, e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
      * 删除文档
      * @param projectId 项目ID
      * @param id 文档ID
@@ -982,5 +1103,17 @@ public class SourceController {
         }
         documentRepository.deleteById(id);
         return Result.success();
+    }
+
+    // ==================== 工具方法 ====================
+
+    /**
+     * 校验 Git URL 合法性，防止命令注入
+     * 支持的格式：https://、http://、git@、ssh://、git://
+     */
+    private boolean isValidGitUrl(String url) {
+        if (url == null) return false;
+        // 只允许合法 Git URL 字符，排除可能用于命令注入的特殊字符（; | & ` $ ! ' " ( ) < > 空格 换行等）
+        return url.matches("^(https?://|git@|ssh://|git://)[a-zA-Z0-9._~:/@%+#=-]+$");
     }
 }

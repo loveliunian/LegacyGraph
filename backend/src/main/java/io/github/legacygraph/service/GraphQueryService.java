@@ -1,5 +1,8 @@
 package io.github.legacygraph.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
@@ -272,16 +275,17 @@ public class GraphQueryService {
     }
 
     /**
-     * 获取项目扫描版本列表，包含进度、任务统计和节点/边统计
+     * 获取项目扫描版本列表（分页），包含进度、任务统计和节点/边统计
      */
-    public List<Map<String, Object>> getScanVersions(String projectId) {
-        List<ScanVersion> versions = scanVersionRepository.lambdaQuery()
+    public PageResult<Map<String, Object>> getScanVersions(String projectId, int pageNum, int pageSize) {
+        Page<ScanVersion> page = new Page<>(pageNum, pageSize);
+        Page<ScanVersion> versionPage = scanVersionRepository.lambdaQuery()
                 .eq(ScanVersion::getProjectId, projectId)
                 .orderByDesc(ScanVersion::getCreatedAt)
-                .list();
+                .page(page);
 
         List<Map<String, Object>> result = new ArrayList<>();
-        for (ScanVersion v : versions) {
+        for (ScanVersion v : versionPage.getRecords()) {
             Map<String, Object> map = new HashMap<>();
             map.put("id", v.getId());
             map.put("versionNo", v.getVersionNo());
@@ -355,7 +359,8 @@ public class GraphQueryService {
 
             result.add(map);
         }
-        return result;
+
+        return PageResult.of(result, versionPage.getTotal(), pageNum, pageSize);
     }
 
     /**

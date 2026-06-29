@@ -67,6 +67,18 @@
       </el-table-column>
     </el-table>
 
+    <div class="pagination-wrapper" v-if="total > 0">
+      <el-pagination
+        v-model:current-page="pageNum"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @current-change="handlePageChange"
+        @size-change="() => loadDocList(1)"
+      />
+    </div>
+
     <el-empty v-if="docList.length === 0" description="暂无文档资料" />
   </div>
 </template>
@@ -84,8 +96,11 @@ const projectId = route.params.projectId as string
 
 const loading = ref(false)
 const docList = ref<any[]>([])
+const pageNum = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 
-const uploadUrl = `/api/projects/${projectId}/sources/docs/upload`
+const uploadUrl = `/api/lg/projects/${projectId}/sources/documents/upload`
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`
 }
@@ -158,7 +173,7 @@ const beforeUpload = (file: File) => {
 
 const handleUploadSuccess = (response: any) => {
   ElMessage.success('上传成功')
-  docList.value.unshift(response.data)
+  loadDocList(1)
 }
 
 const handleUploadError = () => {
@@ -167,8 +182,7 @@ const handleUploadError = () => {
 
 const preview = (row: any) => {
   if (row.id) {
-    // 尝试在新标签页打开文档下载/预览
-    const url = `/api/projects/${projectId}/sources/docs/download/${row.id}`
+    const url = `/api/lg/projects/${projectId}/sources/documents/${row.id}/download`
     window.open(url, '_blank')
   } else {
     ElMessage.warning('无法预览：缺少文档ID')
@@ -211,16 +225,22 @@ const deleteDoc = async (row: any) => {
   }
 }
 
-const loadDocList = async () => {
+const loadDocList = async (page?: number) => {
+  if (page) pageNum.value = page
   loading.value = true
   try {
-    const result = await sourceApi.listDocuments(projectId, { pageNum: 1, pageSize: 100 })
+    const result = await sourceApi.listDocuments(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
     docList.value = result.list
+    total.value = result.total
   } catch (error) {
     ElMessage.error('获取文档列表失败')
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = (page: number) => {
+  loadDocList(page)
 }
 
 onMounted(async () => {
@@ -279,5 +299,11 @@ onMounted(async () => {
 
 .text-gray {
   color: #909399;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

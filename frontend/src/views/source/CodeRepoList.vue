@@ -57,6 +57,18 @@
       </el-table-column>
     </el-table>
 
+    <div class="pagination-wrapper" v-if="total > 0">
+      <el-pagination
+        v-model:current-page="pageNum"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @current-change="handlePageChange"
+        @size-change="() => loadRepoList(1)"
+      />
+    </div>
+
     <el-empty v-if="repoList.length === 0" description="暂无仓库配置" />
 
     <!-- 新增/编辑对话框 -->
@@ -136,6 +148,10 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const repoList = ref<any[]>([])
+
+const pageNum = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 
 const testingUrl = ref(false)
 
@@ -311,16 +327,22 @@ const deleteRepo = async (row: any) => {
   }
 }
 
-const loadRepoList = async () => {
+const loadRepoList = async (page?: number) => {
+  if (page) pageNum.value = page
   loading.value = true
   try {
-    const result = await sourceApi.listCodeRepo(projectId, { pageNum: 1, pageSize: 100 })
+    const result = await sourceApi.listCodeRepo(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
     repoList.value = result.list
+    total.value = result.total
   } catch (error) {
     ElMessage.error('获取仓库列表失败')
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = (page: number) => {
+  loadRepoList(page)
 }
 
 onMounted(async () => {
@@ -371,5 +393,11 @@ onMounted(async () => {
 
 .text-gray {
   color: #909399;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

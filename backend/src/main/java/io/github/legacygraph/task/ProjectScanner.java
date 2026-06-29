@@ -243,14 +243,19 @@ public class ProjectScanner {
                     if (dbConfig != null && !dbConfig.isEmpty()) {
                         String jdbcUrl = dbConfig.get("url");
                         if (jdbcUrl != null && discoveredUrls.add(jdbcUrl)) {
+                            String dbType = dbConfig.getOrDefault("dbType", "POSTGRESQL").toUpperCase();
+                            String schema = dbType.equals("MYSQL") || dbType.equals("MARIADB")
+                                    ? "" : dbConfig.getOrDefault("schema", "public");
+
                             DbConnection conn = new DbConnection();
                             conn.setProjectId(projectId);
                             conn.setConnectionName(autoDbName(dbConfig, configFile));
-                            conn.setDbType(dbConfig.getOrDefault("dbType", "POSTGRESQL").toUpperCase());
+                            conn.setDbType(dbType);
                             conn.setHost(dbConfig.getOrDefault("host", "localhost"));
-                            conn.setPort(Integer.parseInt(dbConfig.getOrDefault("port", "5432")));
+                            conn.setPort(Integer.parseInt(dbConfig.getOrDefault("port",
+                                    dbType.equals("MYSQL") || dbType.equals("MARIADB") ? "3306" : "5432")));
                             conn.setDatabaseName(dbConfig.getOrDefault("database", "unknown"));
-                            conn.setSchemaName(dbConfig.getOrDefault("schema", "public"));
+                            conn.setSchemaName(schema);
                             conn.setUsername(dbConfig.getOrDefault("username", ""));
                             conn.setPassword(dbConfig.getOrDefault("password", ""));
                             conn.setStatus("READY");
@@ -279,26 +284,54 @@ public class ProjectScanner {
         Map<String, String> result = new HashMap<>();
 
         if (fileName.endsWith(".yml") || fileName.endsWith(".yaml")) {
-            // 解析 YAML 中的 spring.datasource
             parseYamlDatasource(content, result);
         } else {
-            // 解析 properties 中的 spring.datasource
             parsePropertiesDatasource(content, result);
         }
 
-        // 如果没找到 spring.datasource，尝试从 JDBC URL 正则匹配
+        // 如果没找到 spring.datasource，尝试从 JDBC URL 正则匹配（跳过注释行）
         if (!result.containsKey("url")) {
-            Matcher m = JDBC_URL_PATTERN.matcher(content);
-            if (m.find()) {
-                result.put("url", m.group(0));
-                result.put("dbType", m.group(1));
-                result.put("host", m.group(2));
-                result.put("port", m.group(3) != null ? m.group(3) : defaultPort(m.group(1)));
-                result.put("database", m.group(4));
+            for (String line : content.split("\n")) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
+                Matcher m = JDBC_URL_PATTERN.matcher(trimmed);
+                if (m.find()) {
+                    result.put("url", resolvePlaceholder(trimmed.substring(m.start()).trim()));
+                    result.put("dbType", m.group(1));
+                    result.put("host", m.group(2));
+                    result.put("port", m.group(3) != null ? m.group(3) : defaultPort(m.group(1)));
+                    result.put("database", m.group(4));
+                    break; // 取第一个非注释的 URL
+                }
             }
         }
 
+        // 解析所有值中的 ${VAR:default} 占位符
+        result.replaceAll((k, v) -> resolvePlaceholder(v));
+
         return result;
+    }
+
+    /**
+     * 解析 ${ENV_VAR:default_value} 格式的占位符。
+     * 优先用系统环境变量，否则取冒号后的默认值；无默认值则保留原字符串。
+     */
+    private String resolvePlaceholder(String value) {
+        if (value == null) return null;
+        // 匹配 ${ENV_VAR:default} 或 ${ENV_VAR}
+        Matcher m = Pattern.compile("\\$\\{([^}:]+)(?::([^}]*))?\\}").matcher(value);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String envVar = m.group(1);
+            String defaultValue = m.group(2);
+            String resolved = System.getenv(envVar);
+            if (resolved == null) resolved = System.getProperty(envVar);
+            if (resolved == null) resolved = defaultValue;
+            if (resolved == null) resolved = m.group(0); // keep original
+            m.appendReplacement(sb, Matcher.quoteReplacement(resolved));
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private void parseYamlDatasource(String content, Map<String, String> result) {
@@ -307,7 +340,6 @@ public class ProjectScanner {
             Map<String, Object> root = yaml.load(content);
             if (root == null) return;
 
-            // spring.datasource.url
             Object spring = root.get("spring");
             if (spring instanceof Map) {
                 @SuppressWarnings("unchecked")
@@ -316,20 +348,48 @@ public class ProjectScanner {
                 if (ds instanceof Map) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> dsMap = (Map<String, Object>) ds;
-                    if (dsMap.get("url") instanceof String url) {
-                        result.put("url", url);
-                        parseJdbcUrl(url, result);
-                    }
+                    // 标准 spring.datasource.{url,username,password,driver-class-name}
+                    if (dsMap.get("url") instanceof String url) extractUrlAndParse(result, url);
                     if (dsMap.get("username") instanceof String u) result.put("username", u);
                     if (dsMap.get("password") instanceof String p) result.put("password", p);
-                    if (dsMap.get("driver-class-name") instanceof String d) {
-                        result.put("dbType", driverToDbType(d));
+                    if (dsMap.get("driver-class-name") instanceof String d) result.put("dbType", driverToDbType(d));
+
+                    // Druid 嵌套: spring.datasource.druid.master.{url,username,password}
+                    Object druid = dsMap.get("druid");
+                    if (druid instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> druidMap = (Map<String, Object>) druid;
+                        Object master = druidMap.get("master");
+                        if (master instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> masterMap = (Map<String, Object>) master;
+                            if (masterMap.get("url") instanceof String mu) extractUrlAndParse(result, mu);
+                            if (masterMap.get("username") instanceof String mu) result.putIfAbsent("username", mu);
+                            if (masterMap.get("password") instanceof String mp) result.putIfAbsent("password", mp);
+                            if (masterMap.get("driver-class-name") instanceof String md) result.putIfAbsent("dbType", driverToDbType(md));
+                        }
+                    }
+
+                    // Hikari 嵌套: spring.datasource.hikari.{url,username,password}
+                    Object hikari = dsMap.get("hikari");
+                    if (hikari instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> hikariMap = (Map<String, Object>) hikari;
+                        if (hikariMap.get("url") instanceof String hu) extractUrlAndParse(result, hu);
+                        if (hikariMap.get("username") instanceof String hu) result.putIfAbsent("username", hu);
+                        if (hikariMap.get("password") instanceof String hp) result.putIfAbsent("password", hp);
                     }
                 }
             }
         } catch (Exception e) {
             log.debug("YAML parse failed: {}", e.getMessage());
         }
+    }
+
+    /** 从 URL 字符串中提取并解析 JDBC 信息 */
+    private void extractUrlAndParse(Map<String, String> result, String url) {
+        result.put("url", url);
+        parseJdbcUrl(url, result);
     }
 
     private void parsePropertiesDatasource(String content, Map<String, String> result) {
@@ -535,7 +595,14 @@ public class ProjectScanner {
                     Document doc = new Document();
                     doc.setProjectId(projectId);
                     doc.setDocName(relativePath);
+                    doc.setFilePath(docFile.toAbsolutePath().toString());
                     doc.setDocType(detectDocType(docFile.getFileName().toString()));
+                    doc.setFileType(detectFileType(docFile.getFileName().toString()));
+                    try {
+                        doc.setFileSize(Files.size(docFile));
+                    } catch (IOException ignored) {
+                        // fileSize is optional, leave as null
+                    }
                     doc.setParseStatus("DISCOVERED");
                     doc.setUploadedBy("auto-discovery");
                     doc.setCreatedAt(LocalDateTime.now());
@@ -562,6 +629,15 @@ public class ProjectScanner {
         if (lower.endsWith(".rst")) return "RST";
         if (lower.endsWith(".adoc")) return "ASCIIDOC";
         return "GENERAL";
+    }
+
+    private String detectFileType(String fileName) {
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".md")) return "MD";
+        if (lower.endsWith(".pdf")) return "PDF";
+        if (lower.endsWith(".docx")) return "DOCX";
+        if (lower.endsWith(".txt")) return "TXT";
+        return "OTHER";
     }
 
     // ==================== 数据源 ====================

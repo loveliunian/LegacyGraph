@@ -352,8 +352,8 @@ export const testApi = {
    * @param data 生成参数，包含版本ID和生成范围
    * @returns 生成的测试用例列表
    */
-  generate: (data: { versionId: string, scope: { nodeTypes: string[], priority: string[] } }) => {
-    return request.post('/lg/test-cases/generate', data)
+  generate: (projectId: string, data: { versionId: string, scope: { nodeTypes: string[], priority: string[] } }) => {
+    return request.post(`/lg/projects/${projectId}/test-cases/generate`, data)
   },
 
   /**
@@ -362,8 +362,8 @@ export const testApi = {
    * @param data 启动参数，包含版本ID、测试用例ID列表和执行环境
    * @returns 启动结果
    */
-  startRun: (data: { versionId: string, caseIds: string[], environment: string }) => {
-    return request.post('/lg/test-runs/start', data)
+  startRun: (projectId: string, data: { versionId: string, caseIds: string[], environment: string }) => {
+    return request.post(`/lg/projects/${projectId}/test-runs/start`, data)
   }
 }
 

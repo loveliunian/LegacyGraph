@@ -292,7 +292,7 @@ const showGenerateDialog = () => {
 const generateCases = async () => {
   generating.value = true
   try {
-    await testApi.generate({
+    await testApi.generate(projectId!, {
       versionId: projectId!,
       scope: {
         nodeTypes: generateForm.value.types,

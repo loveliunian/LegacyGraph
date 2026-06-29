@@ -38,7 +38,6 @@ public class GraphNode {
     private String evidenceIds; // JSONB
     @TableField(exist = false)
     private Long semanticVectorRef;
-    @TableField(exist = false)
     private BigDecimal verifiedScore;
 
     private LocalDateTime createdAt;

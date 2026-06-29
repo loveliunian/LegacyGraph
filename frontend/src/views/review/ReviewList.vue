@@ -85,9 +85,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { reviewApi } from '@/api'
 import { validationApi } from '@/api'
+
+const route = useRoute()
+const projectId = route.params.projectId as string
 
 interface PendingItem {
   id: string
@@ -116,7 +120,7 @@ const loadData = async () => {
   loading.value = true
   try {
     // 调用 reviewApi 获取待审核列表
-    const data: any = await reviewApi.listPending(query.versionId, {
+    const data: any = await reviewApi.listPending(projectId, {
       targetType: undefined,
       graphType: undefined,
       minConfidence: query.minConfidence,
@@ -188,9 +192,7 @@ const doReject = async () => {
 }
 
 onMounted(() => {
-  if (query.versionId) {
-    loadData()
-  }
+  loadData()
 })
 </script>
 

@@ -312,7 +312,7 @@ const generateTestCases = () => {
 onMounted(async () => {
   try {
     const res = await get(`/lg/projects/${projectId}/overview`)
-    overview.value = res.sourceStatus
+    overview.value = res
     graphStats.value = res.graphStats
     recentScans.value = res.recentScanVersions || []
     recentReviews.value = res.recentReviews || []

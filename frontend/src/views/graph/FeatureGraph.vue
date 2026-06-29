@@ -412,7 +412,7 @@ const generateTests = async () => {
   const label = selectedNode.value.label || selectedNode.value.id
   try {
     // 调用后端 AI 生成测试用例
-    await testApi.generate({
+    await testApi.generate(projectId.value, {
       versionId: currentVersion.value || projectId.value,
       scope: { nodeTypes: ['ApiEndpoint', 'Feature'], priority: ['high'] }
     })
@@ -426,7 +426,7 @@ const generateTests = async () => {
 
 const generateAllTests = async () => {
   try {
-    await testApi.generate({
+    await testApi.generate(projectId.value, {
       versionId: currentVersion.value || projectId.value,
       scope: { nodeTypes: ['ApiEndpoint', 'Feature'], priority: ['high'] }
     })

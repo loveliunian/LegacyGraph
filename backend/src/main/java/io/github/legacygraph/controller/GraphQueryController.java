@@ -1,5 +1,7 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.common.PageQuery;
+import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphNode;
@@ -213,18 +215,21 @@ public class GraphQueryController {
     }
 
     /**
-     * 获取项目扫描版本列表
+     * 获取项目扫描版本列表（分页）
      * 查询项目的所有扫描版本，用于选择展示哪个版本的图谱
      * @param projectId 项目ID
-     * @return 扫描版本列表，包含节点和边数量统计
+     * @param query 分页参数
+     * @return 分页后的扫描版本列表，包含节点和边数量统计
      */
     @GetMapping("/scan-versions")
-    @Operation(summary = "获取扫描版本列表", description = "查询项目的所有扫描版本，包含统计信息")
-    public Result<List<Map<String, Object>>> getScanVersions(
+    @Operation(summary = "获取扫描版本列表", description = "分页查询项目的扫描版本，包含统计信息")
+    public Result<PageResult<Map<String, Object>>> getScanVersions(
             @Parameter(description = "项目ID", required = true)
-            @PathVariable String projectId) {
+            @PathVariable String projectId,
+            PageQuery query) {
         try {
-            List<Map<String, Object>> result = graphQueryService.getScanVersions(projectId);
+            PageResult<Map<String, Object>> result = graphQueryService.getScanVersions(
+                    projectId, query.getPageNum(), query.getPageSize());
             return Result.success(result);
         } catch (Exception e) {
             return Result.error(e.getMessage());

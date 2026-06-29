@@ -9,11 +9,13 @@ import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.FactExtractionResult;
+import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.entity.ScanVersion;
+import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -40,6 +43,7 @@ public class FactController {
     private final NodeEvidenceRepository nodeEvidenceRepository;
     private final GraphNodeRepository graphNodeRepository;
     private final ScanVersionRepository scanVersionRepository;
+    private final CodeRepoRepository codeRepoRepository;
     private final BusinessGraphBuilder businessGraphBuilder;
     private final CodeFactAgent codeFactAgent;
     private final DocUnderstandingAgent docUnderstandingAgent;
@@ -49,6 +53,7 @@ public class FactController {
                           NodeEvidenceRepository nodeEvidenceRepository,
                           GraphNodeRepository graphNodeRepository,
                           ScanVersionRepository scanVersionRepository,
+                          CodeRepoRepository codeRepoRepository,
                           BusinessGraphBuilder businessGraphBuilder,
                           CodeFactAgent codeFactAgent,
                           DocUnderstandingAgent docUnderstandingAgent) {
@@ -57,6 +62,7 @@ public class FactController {
         this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.graphNodeRepository = graphNodeRepository;
         this.scanVersionRepository = scanVersionRepository;
+        this.codeRepoRepository = codeRepoRepository;
         this.businessGraphBuilder = businessGraphBuilder;
         this.codeFactAgent = codeFactAgent;
         this.docUnderstandingAgent = docUnderstandingAgent;
@@ -95,6 +101,10 @@ public class FactController {
                 query.getPageNum(),
                 query.getPageSize()
         );
+
+        // 将 sourcePath 从绝对路径转为相对路径（去掉项目仓库根路径）
+        stripBasePath(projectId, result.getList());
+
         return Result.success(result);
     }
 
@@ -105,6 +115,7 @@ public class FactController {
         if (fact == null || !fact.getProjectId().equals(projectId)) {
             return Result.error("事实不存在");
         }
+        stripBasePath(projectId, List.of(fact));
         return Result.success(fact);
     }
 
@@ -185,6 +196,10 @@ public class FactController {
                 query.getPageNum(),
                 query.getPageSize()
         );
+
+        // 丰富证据数据：location、summary、relatedNodeCount
+        enrichEvidenceList(projectId, result.getList());
+
         return Result.success(result);
     }
 
@@ -195,6 +210,7 @@ public class FactController {
         if (evidence == null || !evidence.getProjectId().equals(projectId)) {
             return Result.error("证据不存在");
         }
+        enrichEvidenceList(projectId, List.of(evidence));
         return Result.success(evidence);
     }
 
@@ -256,6 +272,97 @@ public class FactController {
         return Result.success(result);
     }
 
+    /**
+     * 将事实列表的 sourcePath 从绝对路径转为相对路径（去掉项目仓库根路径前缀）
+     */
+    private void stripBasePath(String projectId, List<Fact> facts) {
+        if (facts.isEmpty()) return;
+
+        // 查询项目下所有代码仓库的本地路径
+        List<CodeRepo> repos = codeRepoRepository.selectList(
+                new LambdaQueryWrapper<CodeRepo>()
+                        .eq(CodeRepo::getProjectId, projectId)
+                        .isNotNull(CodeRepo::getLocalPath)
+        );
+
+        for (Fact fact : facts) {
+            String path = fact.getSourcePath();
+            if (path == null) continue;
+            for (CodeRepo repo : repos) {
+                String localPath = repo.getLocalPath();
+                if (localPath != null && path.startsWith(localPath)) {
+                    // 去掉 localPath + "/"
+                    fact.setSourcePath(path.substring(localPath.length() + 1));
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * 丰富证据列表的计算字段：location、summary、relatedNodeCount、relatedNodeIdList
+     */
+    private void enrichEvidenceList(String projectId, List<Evidence> list) {
+        if (list.isEmpty()) return;
+
+        // 查询项目仓库路径（用于 sourcePath → location 转换）
+        List<CodeRepo> repos = codeRepoRepository.selectList(
+                new LambdaQueryWrapper<CodeRepo>()
+                        .eq(CodeRepo::getProjectId, projectId)
+                        .isNotNull(CodeRepo::getLocalPath)
+        );
+
+        // 批量查询 NodeEvidence 关联表（避免 N+1）
+        List<String> evidenceIds = list.stream().map(Evidence::getId).toList();
+        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.lambdaQuery()
+                .in(NodeEvidence::getEvidenceId, evidenceIds)
+                .list();
+        Map<String, List<NodeEvidence>> byEvidenceId = nodeEvidences.stream()
+                .collect(Collectors.groupingBy(NodeEvidence::getEvidenceId));
+
+        for (Evidence ev : list) {
+            // location: 去掉仓库根路径后的相对路径
+            String path = ev.getSourcePath();
+            if (path != null) {
+                ev.setLocation(path);
+                for (CodeRepo repo : repos) {
+                    String localPath = repo.getLocalPath();
+                    if (localPath != null && path.startsWith(localPath)) {
+                        ev.setLocation(path.substring(localPath.length() + 1));
+                        break;
+                    }
+                }
+            }
+
+            // summary: 如果为空则用 sourceName + 行号生成
+            if (ev.getSummary() == null || ev.getSummary().isBlank()) {
+                StringBuilder sb = new StringBuilder(ev.getSourceName() != null ? ev.getSourceName() : "");
+                if (ev.getStartLine() != null) {
+                    sb.append(" L").append(ev.getStartLine());
+                    if (ev.getEndLine() != null && !ev.getEndLine().equals(ev.getStartLine())) {
+                        sb.append("-L").append(ev.getEndLine());
+                    }
+                }
+                ev.setSummary(sb.toString());
+            }
+
+            // relatedNodeCount + relatedNodeIdList
+            if (ev.getRelatedNodeIds() != null && !ev.getRelatedNodeIds().isBlank()) {
+                String[] ids = ev.getRelatedNodeIds().split(",");
+                ev.setRelatedNodeCount(ids.length);
+                ev.setRelatedNodeIdList(Arrays.asList(ids));
+            } else {
+                List<NodeEvidence> nes = byEvidenceId.getOrDefault(ev.getId(), List.of());
+                List<String> nodeIds = nes.stream()
+                        .map(NodeEvidence::getNodeId)
+                        .filter(n -> n != null)
+                        .distinct()
+                        .toList();
+                ev.setRelatedNodeCount(nodeIds.size());
+                ev.setRelatedNodeIdList(nodeIds);
+            }
+        }
+    }
     /**
      * 解析项目最新的扫描版本 ID（按创建时间倒序取第一条）
      */

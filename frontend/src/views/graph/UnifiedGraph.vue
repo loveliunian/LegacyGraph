@@ -344,7 +344,7 @@ const currentViewer = computed(() => {
 const currentVersion = ref<string>('')
 const minConfidence = ref(0.5)
 const selectedNodeTypes = ref<string[]>([])
-const selectedReviewStatus = ref<string[]>(['approved', 'pending'])
+const selectedReviewStatus = ref<string[]>(['CONFIRMED', 'PENDING_CONFIRM', 'approved', 'pending'])
 const selectedNode = ref<Node | null>(null)
 const evidenceDrawerVisible = ref(false)
 const nodeEvidence = ref<Evidence[]>([])
@@ -687,14 +687,13 @@ function emitFocusNode(nodeId: string) {
   window.dispatchEvent(event)
 }
 
-onMounted(() => {
-  // TODO: 当前不自动加载图谱数据，等待用户选择 version 后通过 @change 触发 loadGraph
-  // 后端 GET /lg/projects/{projectId}/graph/unified?versionId=xxx&minConfidence=0
-  // 返回 { nodes, edges, nodeCount, edgeCount }（Map 类型，非 PageResult）
-  // 缺少 versionId 无法查询，因此 onMounted 仅加载版本列表，清空已有数据
-  allNodes.value = []
-  allEdges.value = []
-  loadVersions()
+onMounted(async () => {
+  await loadVersions()
+  // 自动选择第一个版本并加载图谱
+  if (versions.value.length > 0) {
+    currentVersion.value = versions.value[0].id
+    await loadGraph(currentVersion.value)
+  }
 })
 </script>
 

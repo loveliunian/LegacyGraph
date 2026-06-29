@@ -56,6 +56,18 @@
       </el-table-column>
     </el-table>
 
+    <div class="pagination-wrapper" v-if="total > 0">
+      <el-pagination
+        v-model:current-page="pageNum"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @current-change="handlePageChange"
+        @size-change="() => loadDbList(1)"
+      />
+    </div>
+
     <el-empty v-if="dbList.length === 0" description="暂无数据库配置" />
 
     <el-dialog v-model="createDialogVisible" title="添加数据库连接" width="600px">
@@ -118,6 +130,10 @@ const projectId = route.params.projectId as string
 const loading = ref(false)
 const createDialogVisible = ref(false)
 const dbList = ref<any[]>([])
+
+const pageNum = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 
 const dbForm = reactive({
   connectionName: '',
@@ -237,16 +253,22 @@ const deleteDb = async (row: any) => {
   }
 }
 
-const loadDbList = async () => {
+const loadDbList = async (page?: number) => {
+  if (page) pageNum.value = page
   loading.value = true
   try {
-    const res = await sourceApi.listDbConnections(projectId, { pageNum: 1, pageSize: 100 })
+    const res = await sourceApi.listDbConnections(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
     dbList.value = res.list
+    total.value = res.total
   } catch (error) {
     ElMessage.error('获取数据库连接列表失败')
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = (page: number) => {
+  loadDbList(page)
 }
 
 onMounted(async () => {
@@ -286,5 +308,11 @@ onMounted(async () => {
 
 .text-gray {
   color: #909399;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

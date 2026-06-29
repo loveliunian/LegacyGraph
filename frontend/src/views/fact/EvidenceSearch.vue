@@ -76,8 +76,8 @@
         </div>
 
         <div class="content-section" style="margin-top: 20px;">
-          <h4>关联节点 ({{ selectedEvidence.relatedNodeIds?.length || 0 }})</h4>
-          <el-tag v-for="node in selectedEvidence.relatedNodeIds" :key="node" size="small" style="margin-right: 8px; margin-bottom: 8px;">
+          <h4>关联节点 ({{ selectedEvidence.relatedNodeCount || 0 }})</h4>
+          <el-tag v-for="node in selectedEvidence.relatedNodeIdList" :key="node" size="small" style="margin-right: 8px; margin-bottom: 8px;">
             {{ node }}
           </el-tag>
         </div>
