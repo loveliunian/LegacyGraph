@@ -20,7 +20,6 @@ spring:
       port: ${SPRING_DATA_REDIS_PORT:6379}
       password: ${SPRING_DATA_REDIS_PASSWORD:}
 
-# OpenAI 配置 - 需要通过环境变量传入
   ai:
     openai:
       api-key: ${SPRING_AI_OPENAI_API_KEY:}
