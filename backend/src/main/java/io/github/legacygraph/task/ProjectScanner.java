@@ -373,7 +373,7 @@ public class ProjectScanner {
 
             for (Path javaFile : javaFiles) {
                 try {
-                    List<ServiceCallExtractor.CallRelation> calls = extractor.extractFromFile(javaFile);
+                    List<ServiceCallExtractor.CallRelation> calls = extractor.extractFromFile(javaFile.toFile());
                     if (!calls.isEmpty()) {
                         // 保存事实并构建图谱调用关系边
                         for (ServiceCallExtractor.CallRelation call : calls) {

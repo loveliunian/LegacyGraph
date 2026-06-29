@@ -61,14 +61,12 @@ public class LlmGateway {
         promptRunRepository.insert(run);
 
         try {
-            // 调用OpenAI
-            OpenAiChatOptions options = OpenAiChatOptions.builder()
-                    .temperature(0.1)
-                    .build();
-
+            // 调用OpenAI — Spring AI 2.0 API
             ChatClient chatClient = ChatClient.create(openAiChatModel);
-            String response = chatClient.prompt(prompt)
-                    .options(options)
+            String response = chatClient.prompt()
+                    .user(prompt)
+                    .options(OpenAiChatOptions.builder()
+                            .temperature(0.1))
                     .call()
                     .content();
 

@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -27,11 +28,16 @@ import java.util.*;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ReportExportService {
 
     private final ObjectMapper objectMapper;
     private final ReportingService reportingService;
+
+    public ReportExportService(ObjectMapper objectMapper,
+                               @Lazy ReportingService reportingService) {
+        this.objectMapper = objectMapper;
+        this.reportingService = reportingService;
+    }
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 

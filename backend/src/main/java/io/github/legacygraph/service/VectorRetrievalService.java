@@ -46,6 +46,7 @@ public class VectorRetrievalService {
                 Long projectIdLong = doc.getProjectId();
                 vectorizationService.embedAndStore(
                     projectIdLong,
+                    null,
                     doc.getChunkType(),
                     doc.getSourceUri(),
                     doc.getChunkIndex() != null ? doc.getChunkIndex() : 0,

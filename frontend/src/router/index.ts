@@ -14,190 +14,196 @@ const routes: RouteRecordRaw[] = [
     redirect: '/dashboard'
   },
   {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('@/views/dashboard/Index.vue'),
-    meta: { requiresAuth: true, title: 'menu.dashboard' }
-  },
-  {
-    path: '/projects',
-    name: 'Projects',
-    component: () => import('@/views/project/ProjectList.vue'),
-    meta: { requiresAuth: true, title: 'menu.projects' }
-  },
-  {
-    path: '/projects/:projectId',
-    name: 'ProjectDetail',
-    component: () => import('@/views/project/ProjectDetail.vue'),
-    meta: { requiresAuth: true, title: 'menu.projectDetail' },
+    path: '/',
+    component: () => import('@/components/AppLayout.vue'),
     children: [
       {
-        path: 'overview',
-        name: 'ProjectOverview',
-        component: () => import('@/views/project/ProjectOverview.vue'),
-        meta: { title: 'menu.projectOverview' }
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: () => import('@/views/dashboard/Index.vue'),
+        meta: { requiresAuth: true, title: 'menu.dashboard' }
       },
       {
-        path: 'repos',
-        name: 'CodeRepos',
-        component: () => import('@/views/source/CodeRepoList.vue'),
-        meta: { title: 'menu.codeRepos' }
+        path: 'projects',
+        name: 'Projects',
+        component: () => import('@/views/project/ProjectList.vue'),
+        meta: { requiresAuth: true, title: 'menu.projects' }
       },
       {
-        path: 'databases',
-        name: 'Databases',
-        component: () => import('@/views/source/DatabaseList.vue'),
-        meta: { title: 'menu.databases' }
-      },
-      {
-        path: 'documents',
-        name: 'Documents',
-        component: () => import('@/views/source/DocumentList.vue'),
-        meta: { title: 'menu.documents' }
-      },
-      {
-        path: 'scan-versions',
-        name: 'ScanVersions',
-        component: () => import('@/views/scan/ScanVersionList.vue'),
-        meta: { title: 'menu.scanVersions' }
-      },
-      {
-        path: 'graph/code',
-        name: 'CodeGraph',
-        component: () => import('@/views/graph/CodeGraph.vue'),
-        meta: { title: 'menu.codeGraph' }
-      },
-      {
-        path: 'graph/unified',
-        name: 'UnifiedGraph',
-        component: () => import('@/views/graph/UnifiedGraph.vue'),
-        meta: { title: 'menu.unifiedGraph' }
-      },
-      {
-        path: 'graph/business',
-        name: 'BusinessGraph',
-        component: () => import('@/views/graph/BusinessGraph.vue'),
-        meta: { title: 'menu.businessGraph' }
-      },
-      {
-        path: 'graph/feature',
-        name: 'FeatureGraph',
-        component: () => import('@/views/graph/FeatureGraph.vue'),
-        meta: { title: 'menu.featureGraph' }
-      },
-      {
-        path: 'graph/lineage',
-        name: 'DataLineageGraph',
-        component: () => import('@/views/graph/DataLineageGraph.vue'),
-        meta: { title: 'menu.dataLineage', badge: '建设中' }
-      },
-      {
-        path: 'graph/runtime',
-        name: 'RuntimeGraph',
-        component: () => import('@/views/graph/RuntimeGraph.vue'),
-        meta: { title: 'menu.runtimeGraph', badge: '建设中' }
-      },
-      {
-        path: 'reviews',
-        name: 'Reviews',
-        component: () => import('@/views/review/ReviewList.vue'),
-        meta: { title: 'menu.reviews' }
-      },
-      {
-        path: 'review-history',
-        name: 'ReviewHistory',
-        component: () => import('@/views/review/ReviewHistory.vue'),
-        meta: { title: 'menu.reviewHistory' }
-      },
-      {
-        path: 'facts',
-        name: 'Facts',
-        component: () => import('@/views/fact/FactList.vue'),
-        meta: { title: 'menu.facts' }
-      },
-      {
-        path: 'evidence',
-        name: 'Evidence',
-        component: () => import('@/views/fact/EvidenceSearch.vue'),
-        meta: { title: 'menu.evidence' }
-      },
-      {
-        path: 'test-cases',
-        name: 'TestCases',
-        component: () => import('@/views/test/TestCaseList.vue'),
-        meta: { title: 'menu.testCases' }
-      },
-      {
-        path: 'test-cases/new',
-        name: 'TestCaseEditorNew',
-        component: () => import('@/views/test/TestCaseEditor.vue'),
-        meta: { title: 'menu.testCaseEditor' }
-      },
-      {
-        path: 'test-cases/:id/edit',
-        name: 'TestCaseEditorEdit',
-        component: () => import('@/views/test/TestCaseEditor.vue'),
-        meta: { title: 'menu.testCaseEditor' }
-      },
-      {
-        path: 'test-runs',
-        name: 'TestRunList',
-        component: () => import('@/views/test/TestRunList.vue'),
-        meta: { title: 'menu.testRuns' }
-      },
-      {
-        path: 'test-runs/:id',
-        name: 'TestRunDetail',
-        component: () => import('@/views/test/TestRunDetail.vue'),
-        meta: { title: 'menu.testRunDetail' }
-      },
-      {
-        path: 'validation',
-        name: 'Validation',
-        component: () => import('@/views/report/ValidationReport.vue'),
-        meta: { title: 'menu.validationReport' }
-      },
-      {
-        path: 'migration/risks',
-        name: 'MigrationRiskList',
-        component: () => import('@/views/migration/RiskList.vue'),
-        meta: { title: 'menu.migrationRisks' }
-      },
-      {
-        path: 'migration/risks/:riskId',
-        name: 'MigrationRiskDetail',
-        component: () => import('@/views/migration/RiskDetail.vue'),
-        meta: { title: 'menu.riskDetail' }
-      },
-      {
-        path: 'audit/logs',
-        name: 'AuditLogList',
-        component: () => import('@/views/audit/LogList.vue'),
-        meta: { title: 'menu.auditLogs' }
-      },
-      {
-        path: 'audit/logs/:id',
-        name: 'AuditLogDetail',
-        component: () => import('@/views/audit/LogDetail.vue'),
-        meta: { title: 'menu.logDetail' }
-      },
-      {
-        path: 'system/users',
-        name: 'SystemUserList',
-        component: () => import('@/views/system/UserList.vue'),
-        meta: { title: 'menu.systemUsers' }
-      },
-      {
-        path: 'system/dictionaries',
-        name: 'SystemDictionaryList',
-        component: () => import('@/views/system/DictionaryList.vue'),
-        meta: { title: 'menu.systemDictionaries' }
-      },
-      {
-        path: 'system/settings',
-        name: 'SystemSettings',
-        component: () => import('@/views/system/Settings.vue'),
-        meta: { title: 'menu.systemSettings' }
+        path: 'projects/:projectId',
+        name: 'ProjectDetail',
+        component: () => import('@/views/project/ProjectDetail.vue'),
+        meta: { requiresAuth: true, title: 'menu.projectDetail' },
+        children: [
+          {
+            path: 'overview',
+            name: 'ProjectOverview',
+            component: () => import('@/views/project/ProjectOverview.vue'),
+            meta: { title: 'menu.projectOverview' }
+          },
+          {
+            path: 'repos',
+            name: 'CodeRepos',
+            component: () => import('@/views/source/CodeRepoList.vue'),
+            meta: { title: 'menu.codeRepos' }
+          },
+          {
+            path: 'databases',
+            name: 'Databases',
+            component: () => import('@/views/source/DatabaseList.vue'),
+            meta: { title: 'menu.databases' }
+          },
+          {
+            path: 'documents',
+            name: 'Documents',
+            component: () => import('@/views/source/DocumentList.vue'),
+            meta: { title: 'menu.documents' }
+          },
+          {
+            path: 'scan-versions',
+            name: 'ScanVersions',
+            component: () => import('@/views/scan/ScanVersionList.vue'),
+            meta: { title: 'menu.scanVersions' }
+          },
+          {
+            path: 'graph/code',
+            name: 'CodeGraph',
+            component: () => import('@/views/graph/CodeGraph.vue'),
+            meta: { title: 'menu.codeGraph' }
+          },
+          {
+            path: 'graph/unified',
+            name: 'UnifiedGraph',
+            component: () => import('@/views/graph/UnifiedGraph.vue'),
+            meta: { title: 'menu.unifiedGraph' }
+          },
+          {
+            path: 'graph/business',
+            name: 'BusinessGraph',
+            component: () => import('@/views/graph/BusinessGraph.vue'),
+            meta: { title: 'menu.businessGraph' }
+          },
+          {
+            path: 'graph/feature',
+            name: 'FeatureGraph',
+            component: () => import('@/views/graph/FeatureGraph.vue'),
+            meta: { title: 'menu.featureGraph' }
+          },
+          {
+            path: 'graph/lineage',
+            name: 'DataLineageGraph',
+            component: () => import('@/views/graph/DataLineageGraph.vue'),
+            meta: { title: 'menu.dataLineage', badge: '建设中' }
+          },
+          {
+            path: 'graph/runtime',
+            name: 'RuntimeGraph',
+            component: () => import('@/views/graph/RuntimeGraph.vue'),
+            meta: { title: 'menu.runtimeGraph', badge: '建设中' }
+          },
+          {
+            path: 'reviews',
+            name: 'Reviews',
+            component: () => import('@/views/review/ReviewList.vue'),
+            meta: { title: 'menu.reviews' }
+          },
+          {
+            path: 'review-history',
+            name: 'ReviewHistory',
+            component: () => import('@/views/review/ReviewHistory.vue'),
+            meta: { title: 'menu.reviewHistory' }
+          },
+          {
+            path: 'facts',
+            name: 'Facts',
+            component: () => import('@/views/fact/FactList.vue'),
+            meta: { title: 'menu.facts' }
+          },
+          {
+            path: 'evidence',
+            name: 'Evidence',
+            component: () => import('@/views/fact/EvidenceSearch.vue'),
+            meta: { title: 'menu.evidence' }
+          },
+          {
+            path: 'test-cases',
+            name: 'TestCases',
+            component: () => import('@/views/test/TestCaseList.vue'),
+            meta: { title: 'menu.testCases' }
+          },
+          {
+            path: 'test-cases/new',
+            name: 'TestCaseEditorNew',
+            component: () => import('@/views/test/TestCaseEditor.vue'),
+            meta: { title: 'menu.testCaseEditor' }
+          },
+          {
+            path: 'test-cases/:id/edit',
+            name: 'TestCaseEditorEdit',
+            component: () => import('@/views/test/TestCaseEditor.vue'),
+            meta: { title: 'menu.testCaseEditor' }
+          },
+          {
+            path: 'test-runs',
+            name: 'TestRunList',
+            component: () => import('@/views/test/TestRunList.vue'),
+            meta: { title: 'menu.testRuns' }
+          },
+          {
+            path: 'test-runs/:id',
+            name: 'TestRunDetail',
+            component: () => import('@/views/test/TestRunDetail.vue'),
+            meta: { title: 'menu.testRunDetail' }
+          },
+          {
+            path: 'validation',
+            name: 'Validation',
+            component: () => import('@/views/report/ValidationReport.vue'),
+            meta: { title: 'menu.validationReport' }
+          },
+          {
+            path: 'migration/risks',
+            name: 'MigrationRiskList',
+            component: () => import('@/views/migration/RiskList.vue'),
+            meta: { title: 'menu.migrationRisks' }
+          },
+          {
+            path: 'migration/risks/:riskId',
+            name: 'MigrationRiskDetail',
+            component: () => import('@/views/migration/RiskDetail.vue'),
+            meta: { title: 'menu.riskDetail' }
+          },
+          {
+            path: 'audit/logs',
+            name: 'AuditLogList',
+            component: () => import('@/views/audit/LogList.vue'),
+            meta: { title: 'menu.auditLogs' }
+          },
+          {
+            path: 'audit/logs/:id',
+            name: 'AuditLogDetail',
+            component: () => import('@/views/audit/LogDetail.vue'),
+            meta: { title: 'menu.logDetail' }
+          },
+          {
+            path: 'system/users',
+            name: 'SystemUserList',
+            component: () => import('@/views/system/UserList.vue'),
+            meta: { title: 'menu.systemUsers' }
+          },
+          {
+            path: 'system/dictionaries',
+            name: 'SystemDictionaryList',
+            component: () => import('@/views/system/DictionaryList.vue'),
+            meta: { title: 'menu.systemDictionaries' }
+          },
+          {
+            path: 'system/settings',
+            name: 'SystemSettings',
+            component: () => import('@/views/system/Settings.vue'),
+            meta: { title: 'menu.systemSettings' }
+          }
+        ]
       }
     ]
   },

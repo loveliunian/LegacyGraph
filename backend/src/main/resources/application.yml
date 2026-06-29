@@ -2,6 +2,7 @@ server:
   port: 8080
   servlet:
     context-path: /api
+    engine: jetty
 
 spring:
   application:
@@ -39,8 +40,6 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
-    serialization:
-      writeDatesAsTimestamps: false
     default-property-inclusion: non_null
 
   # Neo4j 配置

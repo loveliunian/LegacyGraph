@@ -100,20 +100,6 @@
               <el-tag v-if="runningTasksCount > 0" type="warning" size="small">
                 {{ runningTasksCount }} 个任务运行中
               </el-tag>
-              <el-dropdown @command="handleUserCommand">
-                <span class="user-dropdown">
-                  <el-avatar :size="24" :icon="UserFilled" />
-                  <span>{{ userInfo?.displayName || userInfo?.username }}</span>
-                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="profile">个人信息</el-dropdown-item>
-                    <el-dropdown-item command="settings">系统设置</el-dropdown-item>
-                    <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
             </el-space>
           </div>
         </el-header>
@@ -128,8 +114,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute } from 'vue-router'
 import {
   DataBoard,
   FolderOpened,
@@ -138,23 +123,17 @@ import {
   Document,
   DocumentChecked,
   VideoPlay,
-  Tickets,
-  UserFilled,
-  ArrowDown
+  Tickets
 } from '@element-plus/icons-vue'
-import { useUserStore } from '@/stores/user'
 import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'
 
 const route = useRoute()
-const router = useRouter()
-const userStore = useUserStore()
 const projectStore = useProjectStore()
 const taskStore = useTaskStore()
 
 const projectId = computed(() => route.params.projectId as string)
 
-const userInfo = computed(() => userStore.userInfo)
 const currentProject = computed(() => projectStore.currentProject)
 const runningTasksCount = computed(() => taskStore.runningTasks.length)
 
@@ -166,31 +145,6 @@ onMounted(async () => {
     await projectStore.fetchCurrentProject()
   }
 })
-
-const handleUserCommand = async (command: string) => {
-  switch (command) {
-    case 'logout':
-      try {
-        await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        })
-        await userStore.logout()
-        router.push('/login')
-        ElMessage.success('已退出登录')
-      } catch {
-        // cancelled
-      }
-      break
-    case 'profile':
-      ElMessage.info('个人信息功能开发中')
-      break
-    case 'settings':
-      ElMessage.info('系统设置功能开发中')
-      break
-  }
-}
 </script>
 
 <style scoped>
@@ -240,20 +194,6 @@ const handleUserCommand = async (command: string) => {
 .header-right {
   display: flex;
   align-items: center;
-}
-
-.user-dropdown {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background 0.3s;
-}
-
-.user-dropdown:hover {
-  background: #f5f7fa;
 }
 
 .page-content {

@@ -54,6 +54,9 @@ class ReportingServiceTest {
     @Mock
     private ObjectMapper objectMapper;
 
+    @Mock
+    private ReportExportService reportExportService;
+
     private ReportingService reportingService;
 
     private List<GraphNode> mockNodes;
@@ -68,7 +71,8 @@ class ReportingServiceTest {
                 testResultRepository,
                 testCaseRepository,
                 minioClient,
-                objectMapper
+                objectMapper,
+                reportExportService
         );
 
         GraphNode node1 = new GraphNode();
