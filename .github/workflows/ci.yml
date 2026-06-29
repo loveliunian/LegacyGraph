@@ -1,0 +1,117 @@
+# LegacyGraph CI Pipeline
+# 后端测试 + 前端类型检查/构建/单测
+
+name: LegacyGraph CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: legacy_graph
+          POSTGRES_USER: legacy_graph
+          POSTGRES_PASSWORD: legacy_graph
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/password
+        ports:
+          - 7687:7687
+        options: >-
+          --health-cmd "cypher-shell -u neo4j -p password 'RETURN 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minio
+          MINIO_ROOT_PASSWORD: minio123456
+        ports:
+          - 9000:9000
+          - 9001:9001
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Compile Backend
+        working-directory: ./backend
+        run: mvn compile -q
+
+      - name: Run Backend Tests
+        working-directory: ./backend
+        run: mvn test -q
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/legacy_graph
+          SPRING_DATASOURCE_USERNAME: legacy_graph
+          SPRING_DATASOURCE_PASSWORD: legacy_graph
+          SPRING_NEO4J_URI: bolt://localhost:7687
+          SPRING_NEO4J_AUTHENTICATION_USERNAME: neo4j
+          SPRING_NEO4J_AUTHENTICATION_PASSWORD: password
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: 6379
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio123456
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Type Check
+        working-directory: ./frontend
+        run: npx vue-tsc --noEmit
+
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Run Unit Tests
+        working-directory: ./frontend
+        run: npm run test -- --run
+        env:
+          CI: true

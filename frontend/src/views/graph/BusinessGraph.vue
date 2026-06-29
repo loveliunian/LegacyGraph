@@ -120,8 +120,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, Share, MagicStick } from '@element-plus/icons-vue'
-import { Graph, Extension, registerFontAwesomeIcons } from '@antv/g6'
-import { icons } from '@antv/g6-plugin-icons/dist/font-awesome-4-7'
+import { Graph } from '@antv/g6'
 import { graphApi } from '@/api'
 import type { GraphData, Node } from '@antv/g6'
 
@@ -211,9 +210,8 @@ onMounted(async () => {
   await nextTick()
   if (!graphContainer.value) return
 
-  // Register icons
-  registerFontAwesomeIcons(icons)
-
+  // No icons import needed - relies on Element Plus icons
+  loading.value = true
   // Create G6 graph
   const container = graphContainer.value
   const width = container.clientWidth

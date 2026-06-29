@@ -110,7 +110,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Grid, Menu } from '@element-plus/icons-vue'
-import { Graph, Extension } from '@antv/g6'
+import { Graph } from '@antv/g6'
 import { graphApi } from '@/api'
 import type { GraphData, Node } from '@antv/g6'
 

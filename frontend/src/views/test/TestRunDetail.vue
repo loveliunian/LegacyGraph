@@ -71,14 +71,15 @@ import { useRouter, useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { testRunApi } from '@/api'
 import type { TestRun, TestResult } from '@/types'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const route = useRoute()
 const projectStore = useProjectStore()
 
 const loading = ref(true)
-const run = ref<TestRun | null>(null)
-const caseResults = ref<TestResult[]>([])
+const run = ref<any>(null)
+const caseResults = ref<any[]>([])
 const resultDialogVisible = ref(false)
 const resultDialogData = ref({
   requestData: '',
@@ -133,7 +134,7 @@ function showResult(row: TestResult) {
 }
 
 async function rerunAll() {
-  const projectId = projectStore.currentProjectId
+  const projectId = projectStore.currentProjectId as string
   const runId = route.params.id as string
   try {
     await testRunApi.rerunFailed(projectId, runId)
@@ -146,7 +147,7 @@ async function rerunAll() {
 }
 
 async function loadData() {
-  const projectId = projectStore.currentProjectId
+  const projectId = projectStore.currentProjectId as string
   const runId = route.params.id as string
   loading.value = true
   try {

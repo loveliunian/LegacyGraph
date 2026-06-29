@@ -97,7 +97,7 @@ const route = useRoute()
 const projectStore = useProjectStore()
 
 const loading = ref(false)
-const list = ref<TestRun[]>([])
+const list = ref<any[]>([])
 const total = ref(0)
 const pagination = ref({
   pageNum: 1,
@@ -129,7 +129,7 @@ function hasFailed(row: TestRun) {
 }
 
 async function loadData() {
-  const projectId = projectStore.currentProjectId
+  const projectId = projectStore.currentProjectId as string
   loading.value = true
   try {
     const result = await testRunApi.listTestRuns(projectId, {
@@ -165,12 +165,12 @@ function handleCurrentChange(page: number) {
 }
 
 function goToDetail(runId: string) {
-  const projectId = projectStore.currentProjectId
+  const projectId = projectStore.currentProjectId as string
   router.push(`/projects/${projectId}/test-runs/${runId}`)
 }
 
 async function rerunFailed(runId: string) {
-  const projectId = projectStore.currentProjectId
+  const projectId = projectStore.currentProjectId as string
   try {
     await testRunApi.rerunFailed(projectId, runId)
     ElMessage.success('已重新触发失败用例执行')
