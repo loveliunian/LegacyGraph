@@ -46,10 +46,10 @@ spring:
 
   # Neo4j 配置
   neo4j:
-    uri: bolt://localhost:7687
+    uri: bolt://47.95.208.205:7687
     authentication:
       username: neo4j
-      password: password
+      password: Liucl157
 
   # Spring AI OpenAI 配置
   # 在 application-local.yml 中配置实际的 api-key

@@ -4,7 +4,8 @@
       ref="vueFlowRef"
       v-model:nodes="visibleNodes"
       v-model:edges="visibleEdges"
-      :fit-view-on-init="nodes.length < 1000"
+      :fit-view-on-init="false"
+      :default-viewport="{ x: 0, y: 0, zoom: 0.3 }"
       :min-zoom="0.05"
       :max-zoom="4"
       :default-edge-options="{ type: 'smoothstep', animated: false }"
@@ -134,17 +135,10 @@ const shouldUseAggregation = computed(() => props.nodes.length > props.aggregati
 const shouldUseWorker = computed(() => props.workerEnabled && props.nodes.length > 200)
 
 watch(
-  () => props.nodes,
-  (newNodes) => {
+  () => [props.nodes, props.edges] as const,
+  ([newNodes, newEdges]) => {
     processNodes(newNodes)
-  },
-  { immediate: true }
-)
-
-watch(
-  () => props.edges,
-  (newEdges) => {
-    processEdges(newEdges)
+    processEdgesSafe(newNodes, newEdges)
   },
   { immediate: true }
 )
@@ -194,6 +188,11 @@ function processEdges(edges: Edge[]) {
     },
     data: edge.data
   }))
+}
+
+function processEdgesSafe(nodes: Node[], edges: Edge[]) {
+  const nodeIds = new Set(nodes.map(n => n.id))
+  processEdges(edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)))
 }
 
 function applyNodeAggregation(nodes: Node<GraphNodeData>[]) {

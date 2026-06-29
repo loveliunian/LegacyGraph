@@ -44,7 +44,7 @@
             </div>
             <el-checkbox-group v-model="selectedNodeTypes">
               <div class="filter-item" v-for="type in nodeTypes" :key="type.value">
-                <el-checkbox :label="type.value">
+                <el-checkbox :value="type.value">
                   <span class="color-dot" :style="{ backgroundColor: type.color }"></span>
                   <span>{{ type.label }}</span>
                 </el-checkbox>
@@ -80,19 +80,19 @@
             </div>
             <el-checkbox-group v-model="selectedReviewStatus">
               <div class="filter-item">
-                <el-checkbox label="approved">
+                <el-checkbox value="approved">
                   <span class="status-dot success"></span>
                   <span>已通过</span>
                 </el-checkbox>
               </div>
               <div class="filter-item">
-                <el-checkbox label="pending">
+                <el-checkbox value="pending">
                   <span class="status-dot warning"></span>
                   <span>待审核</span>
                 </el-checkbox>
               </div>
               <div class="filter-item">
-                <el-checkbox label="rejected">
+                <el-checkbox value="rejected">
                   <span class="status-dot danger"></span>
                   <span>已拒绝</span>
                 </el-checkbox>

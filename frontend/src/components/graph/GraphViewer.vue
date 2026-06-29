@@ -4,7 +4,8 @@
       ref="vueFlowRef"
       v-model:nodes="graphNodes"
       v-model:edges="graphEdges"
-      :fit-view-on-init="true"
+      :fit-view-on-init="false"
+      :default-viewport="{ x: 0, y: 0, zoom: 0.5 }"
       :min-zoom="0.1"
       :max-zoom="4"
       :default-edge-options="{ type: 'smoothstep', animated: false }"
@@ -117,9 +118,9 @@ const graphNodes = ref<any[]>([])
 const graphEdges = ref<any[]>([])
 
 watch(
-  () => props.nodes,
-  (newNodes) => {
-    graphNodes.value = newNodes.map((node, index) => ({
+  () => [props.nodes, props.edges] as const,
+  ([newNodes, newEdges]) => {
+    graphNodes.value = newNodes.map((node) => ({
       id: node.id,
       type: 'custom',
       data: (node.data || {}) as any,
@@ -128,29 +129,26 @@ watch(
         cursor: 'pointer'
       }
     }))
-  },
-  { immediate: true }
-)
-
-watch(
-  () => props.edges,
-  (newEdges) => {
-    graphEdges.value = newEdges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.label || '',
-      type: 'smoothstep',
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: getEdgeColor(edge.data?.confidence || 0.8)
-      },
-      style: {
-        stroke: getEdgeColor(edge.data?.confidence || 0.8),
-        strokeWidth: 2 + (edge.data?.confidence || 0.8)
-      },
-      data: edge.data
-    }))
+    // 只保留 source/target 都存在的边
+    const nodeIds = new Set(graphNodes.value.map(n => n.id))
+    graphEdges.value = newEdges
+      .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        label: edge.label || '',
+        type: 'smoothstep',
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: getEdgeColor(edge.data?.confidence || 0.8)
+        },
+        style: {
+          stroke: getEdgeColor(edge.data?.confidence || 0.8),
+          strokeWidth: 2 + (edge.data?.confidence || 0.8)
+        },
+        data: edge.data
+      }))
   },
   { immediate: true }
 )
