@@ -249,7 +249,7 @@ Dockerfile、Nginx、Docker Compose、健康检查配置存在，理论上具备
 |---|---|---|---|
 | P2-3 | 迁移风险详情连通图谱节点定位 | 点击"在图谱中查看"定位对应节点；风险列表中"查看节点"可跳转图谱页面 | ✅ 已完成 |
 | P2-4 | Docker 全栈部署验证 | `docker-compose up --build` 后前后端、PostgreSQL、Neo4j、Redis、MinIO 健康检查通过 | ⏳ 待完成 |
-| P2-5 | 完整 CI 门禁 | 后端测试、前端类型检查/构建/单测/E2E 至少有一条自动化流水线 | ⏳ 待完成 |
+| P2-5 | 完整 CI 门禁 | GitHub Actions: 后端测试 + 前端类型检查/构建/单测 | ✅ 已完成（`.github/workflows/ci.yml`） |
 | P2-6 | 废弃旧 `ReportingService.exportReport`，统一使用 `ReportExportService` | 旧方法加 @Deprecated 并委托到 ReportExportService，支持 MD/PDF/Excel | ✅ 已完成 |
 
 ---
