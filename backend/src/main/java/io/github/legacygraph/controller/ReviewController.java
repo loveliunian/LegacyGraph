@@ -8,7 +8,6 @@ import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ReviewConfirmRequest;
 import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.repository.ReviewRecordRepository;
-import io.github.legacygraph.service.GraphMergeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.util.StringUtils;
@@ -25,12 +24,10 @@ import java.util.List;
 public class ReviewController {
 
     private final ReviewRecordRepository reviewRecordRepository;
-    private final GraphMergeService graphMergeService;
     private final JwtUtil jwtUtil;
 
-    public ReviewController(ReviewRecordRepository reviewRecordRepository, GraphMergeService graphMergeService, JwtUtil jwtUtil) {
+    public ReviewController(ReviewRecordRepository reviewRecordRepository, JwtUtil jwtUtil) {
         this.reviewRecordRepository = reviewRecordRepository;
-        this.graphMergeService = graphMergeService;
         this.jwtUtil = jwtUtil;
     }
 

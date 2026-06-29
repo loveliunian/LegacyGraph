@@ -1,13 +1,14 @@
 package io.github.legacygraph.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.LoginRequest;
-import io.github.legacygraph.entity.User;
-import io.github.legacygraph.repository.UserRepository;
+import io.github.legacygraph.entity.SysUser;
+import io.github.legacygraph.repository.SysUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,20 +27,20 @@ class AuthControllerTest {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private UserRepository userRepository;
+    private SysUserRepository userRepository;
 
     @BeforeEach
     void setUp() {
-        userRepository.delete(null);
+        userRepository.delete(new QueryWrapper<>());
     }
 
     @Test
     void testLogin_Success() throws Exception {
-        User user = new User();
+        SysUser user = new SysUser();
         user.setId("test-user-1");
         user.setUsername("testuser");
         user.setPassword("password123");
-        user.setDisplayName("Test User");
+        user.setNickname("Test User");
         user.setEmail("test@example.com");
         user.setStatus("ACTIVE");
         user.setRoles("USER");
@@ -73,11 +74,11 @@ class AuthControllerTest {
 
     @Test
     void testLogin_WrongPassword() throws Exception {
-        User user = new User();
+        SysUser user = new SysUser();
         user.setId("test-user-2");
         user.setUsername("testuser2");
         user.setPassword("correctpassword");
-        user.setDisplayName("Test User 2");
+        user.setNickname("Test User 2");
         user.setStatus("ACTIVE");
         userRepository.insert(user);
 
@@ -94,11 +95,11 @@ class AuthControllerTest {
 
     @Test
     void testLogin_InactiveUser() throws Exception {
-        User user = new User();
+        SysUser user = new SysUser();
         user.setId("test-user-3");
         user.setUsername("inactiveuser");
         user.setPassword("password");
-        user.setDisplayName("Inactive User");
+        user.setNickname("Inactive User");
         user.setStatus("INACTIVE");
         userRepository.insert(user);
 
@@ -132,6 +133,6 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.user.username").value("admin"))
-                .andExpect(jsonPath("$.data.user.displayName").value("管理员"));
+                .andExpect(jsonPath("$.data.user.nickname").value("管理员"));
     }
 }

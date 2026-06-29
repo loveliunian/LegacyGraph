@@ -31,7 +31,7 @@
         <jwt.version>0.12.3</jwt.version>
         <lombok.version>1.18.36</lombok.version>
         <!-- Spring AI -->
-        <spring-ai.version>1.0.0</spring-ai.version>
+        <spring-ai.version>1.0.9</spring-ai.version>
     </properties>
 
     <dependencies>
@@ -202,13 +202,13 @@
         <!-- Spring AI -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
             <version>${spring-ai.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-pgvector-store-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
             <version>${spring-ai.version}</version>
         </dependency>
 
@@ -282,6 +282,7 @@
                 <enabled>true</enabled>
             </snapshots>
         </repository>
+
     </repositories>
 
 </project>

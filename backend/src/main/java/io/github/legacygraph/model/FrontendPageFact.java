@@ -10,6 +10,9 @@ import java.util.List;
 @Data
 public class FrontendPageFact {
 
+    private String pageName;
+    private Integer startLine;
+    private Integer endLine;
     private String routePath;
     private String routeName;
     private String componentPath;

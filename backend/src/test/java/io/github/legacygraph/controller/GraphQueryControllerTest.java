@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.repository.GraphNodeRepository;
@@ -7,7 +8,7 @@ import io.github.legacygraph.service.GraphMergeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,7 +34,7 @@ class GraphQueryControllerTest {
 
     @BeforeEach
     void setUp() {
-        nodeRepository.delete(null);
+        nodeRepository.delete(new QueryWrapper<>());
     }
 
     @Test

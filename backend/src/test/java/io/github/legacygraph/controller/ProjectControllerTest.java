@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.CreateProjectRequest;
 import io.github.legacygraph.entity.Project;
@@ -7,7 +8,7 @@ import io.github.legacygraph.repository.ProjectRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -30,7 +31,7 @@ class ProjectControllerTest {
 
     @BeforeEach
     void setUp() {
-        projectRepository.delete(null);
+        projectRepository.delete(new QueryWrapper<>());
     }
 
     @Test
@@ -38,10 +39,10 @@ class ProjectControllerTest {
         for (int i = 1; i <= 3; i++) {
             Project project = new Project();
             project.setId("proj-" + i);
-            project.setName("Test Project " + i);
-            project.setGitRepo("https://github.com/test/repo" + i);
+            project.setProjectName("Test Project " + i);
+            project.setRepoUrl("https://github.com/test/repo" + i);
             project.setStatus("ACTIVE");
-            project.setCreatedBy("admin");
+            project.setOwner("admin");
             projectRepository.insert(project);
         }
 
@@ -57,8 +58,8 @@ class ProjectControllerTest {
     @Test
     void testCreateProject_Success() throws Exception {
         CreateProjectRequest request = new CreateProjectRequest();
-        request.setName("New Project");
-        request.setGitRepo("https://github.com/test/new-project");
+        request.setProjectName("New Project");
+        request.setRepoUrl("https://github.com/test/new-project");
         request.setDescription("Test description");
 
         mockMvc.perform(post("/lg/projects")
@@ -67,13 +68,13 @@ class ProjectControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").exists())
-                .andExpect(jsonPath("$.data.name").value("New Project"));
+                .andExpect(jsonPath("$.data.projectName").value("New Project"));
     }
 
     @Test
     void testCreateProject_MissingName() throws Exception {
         CreateProjectRequest request = new CreateProjectRequest();
-        request.setGitRepo("https://github.com/test/new-project");
+        request.setRepoUrl("https://github.com/test/new-project");
 
         mockMvc.perform(post("/lg/projects")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -86,10 +87,10 @@ class ProjectControllerTest {
     void testDeleteProject_Success() throws Exception {
         Project project = new Project();
         project.setId("proj-to-delete");
-        project.setName("To Delete");
-        project.setGitRepo("https://github.com/test/delete");
+        project.setProjectName("To Delete");
+        project.setRepoUrl("https://github.com/test/delete");
         project.setStatus("ACTIVE");
-        project.setCreatedBy("admin");
+        project.setOwner("admin");
         projectRepository.insert(project);
 
         mockMvc.perform(delete("/lg/projects/proj-to-delete"))

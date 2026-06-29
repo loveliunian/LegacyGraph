@@ -1,16 +1,18 @@
 package io.github.legacygraph.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.repository.GraphNodeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -31,7 +33,7 @@ class LlmAgentControllerTest {
 
     @BeforeEach
     void setUp() {
-        nodeRepository.delete(null);
+        nodeRepository.delete(new QueryWrapper<>());
     }
 
     @Test
@@ -197,10 +199,13 @@ class LlmAgentControllerTest {
         io.github.legacygraph.agent.ReviewAgent.ReviewRequest request =
                 new io.github.legacygraph.agent.ReviewAgent.ReviewRequest();
         request.setProjectId("project-1");
-        request.setFactId("fact-1");
-        request.setFactContent("Test fact content");
+        request.setTargetType("NODE");
+        request.setTargetDescription("Test fact content");
+        request.setSupportingEvidence(List.of("Evidence 1"));
+        request.setConflictingEvidence(List.of());
+        request.setCurrentConfidence(0.8);
 
-        mockMvc.perform(post("/api/agents/review/suggest")
+        mockMvc.perform(post("/lg/agents/review/suggest")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())

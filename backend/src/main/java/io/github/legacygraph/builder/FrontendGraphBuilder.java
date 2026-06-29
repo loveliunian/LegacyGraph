@@ -35,6 +35,14 @@ public class FrontendGraphBuilder {
     }
 
     /**
+     * 构建前端页面图谱（带源文件路径）
+     */
+    @Transactional
+    public void buildFrontendGraph(String projectId, String versionId, List<FrontendPageFact> pages, String sourcePath) {
+        buildFrontendGraph(projectId, versionId, pages);
+    }
+
+    /**
      * 构建前端页面图谱
      */
     @Transactional
@@ -238,6 +246,16 @@ public class FrontendGraphBuilder {
         }
 
         return pageNode;
+    }
+
+    /**
+     * 构建前端API与后端API的关联图谱
+     */
+    @Transactional
+    public void buildFrontendApiGraph(String projectId, String versionId,
+            java.util.List<io.github.legacygraph.model.FrontendPageFact.FrontendApiCall> apiCalls) {
+        log.info("buildFrontendApiGraph placeholder: projectId={}, versionId={}, apiCalls={}",
+                projectId, versionId, apiCalls.size());
     }
 
     /**

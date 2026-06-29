@@ -133,10 +133,30 @@
       <!-- 中间图谱区域 -->
       <el-col :span="15">
         <el-card class="graph-card" shadow="hover" :body-style="{ padding: 0 }">
-          <GraphViewer
+          <template #header>
+            <div class="graph-header">
+              <span>图谱视图</span>
+              <div class="graph-actions">
+                <el-switch
+                  v-model="useOptimizedViewer"
+                  active-text="高性能模式"
+                  inactive-text="标准模式"
+                  size="small"
+                />
+                <el-tooltip content="大数据量时建议使用高性能模式">
+                  <el-icon><InfoFilled /></el-icon>
+                </el-tooltip>
+              </div>
+            </div>
+          </template>
+          
+          <component
+            :is="currentViewer"
             :nodes="filteredNodes"
             :edges="filteredEdges"
-            height="700px"
+            height="660px"
+            :aggregation-threshold="500"
+            :worker-enabled="true"
             @node-click="handleNodeClick"
             @edge-click="handleEdgeClick"
           />
@@ -306,9 +326,15 @@ import {
   QuestionFilled
 } from '@element-plus/icons-vue'
 import GraphViewer from '@/components/graph/GraphViewer.vue'
+import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
 import type { Node, Edge } from '@vue-flow/core'
 
 const loading = ref(false)
+const useOptimizedViewer = ref(false)
+
+const currentViewer = computed(() => {
+  return useOptimizedViewer.value ? GraphViewerOptimized : GraphViewer
+})
 const currentVersion = ref('v1')
 const minConfidence = ref(0.5)
 const selectedNodeTypes = ref<string[]>([])
@@ -765,5 +791,22 @@ onMounted(() => {
 
 .evidence-content {
   padding: 10px;
+}
+
+.graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.graph-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.graph-actions .el-tooltip {
+  display: flex;
+  align-items: center;
 }
 </style>

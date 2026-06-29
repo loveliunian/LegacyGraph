@@ -52,7 +52,10 @@ class ProjectServiceTest {
         when(projectRepository.selectPage(any(Page.class), any(LambdaQueryWrapper.class)))
                 .thenReturn(mockPage);
 
-        PageResult<Project> result = projectService.listProjects(new PageQuery(1, 10));
+        PageQuery pageQuery = new PageQuery();
+        pageQuery.setPageNum(1);
+        pageQuery.setPageSize(10);
+        PageResult<Project> result = projectService.listProjects(pageQuery);
 
         assertNotNull(result);
         assertEquals(0, result.getTotal());
@@ -73,7 +76,10 @@ class ProjectServiceTest {
         when(projectRepository.selectPage(any(Page.class), any(LambdaQueryWrapper.class)))
                 .thenReturn(mockPage);
 
-        PageResult<Project> result = projectService.listProjects(new PageQuery(1, 10));
+        PageQuery pageQuery = new PageQuery();
+        pageQuery.setPageNum(1);
+        pageQuery.setPageSize(10);
+        PageResult<Project> result = projectService.listProjects(pageQuery);
 
         assertNotNull(result);
         assertEquals(1, result.getTotal());

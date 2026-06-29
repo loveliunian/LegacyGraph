@@ -319,12 +319,12 @@ public class ProjectScanner {
                     }
 
                     // 提取API调用信息
-                    List<ApiFact> apiCalls = apiExtractor.extractFromFile(vueFile);
+                    List<io.github.legacygraph.model.FrontendPageFact.FrontendApiCall> apiCalls = apiExtractor.extractFromFile(vueFile);
                     if (!apiCalls.isEmpty()) {
-                        for (ApiFact api : apiCalls) {
-                            saveFact(projectId, versionId, "FRONTEND_API", api.getFullPath(),
-                                    api.getMethodName() + " " + api.getPath(), vueFile.toString(),
-                                    api.getStartLine(), api.getEndLine(), api, BigDecimal.ONE, "EXTRACTED");
+                        for (io.github.legacygraph.model.FrontendPageFact.FrontendApiCall api : apiCalls) {
+                            saveFact(projectId, versionId, "FRONTEND_API", api.getUrl(),
+                                    api.getMethod() + " " + api.getUrl(), vueFile.toString(),
+                                    api.getLineNumber(), api.getLineNumber(), api, BigDecimal.ONE, "EXTRACTED");
                             totalCount++;
                         }
                         // 构建前端API与后端API的关联

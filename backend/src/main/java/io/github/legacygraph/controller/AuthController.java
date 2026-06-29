@@ -5,8 +5,8 @@ import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.LoginRequest;
 import io.github.legacygraph.dto.LoginResponse;
-import io.github.legacygraph.entity.User;
-import io.github.legacygraph.repository.UserRepository;
+import io.github.legacygraph.entity.SysUser;
+import io.github.legacygraph.repository.SysUserRepository;
 import io.github.legacygraph.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -30,7 +30,7 @@ import java.util.UUID;
 @Tag(name = "用户认证", description = "登录、登出、获取用户信息、刷新令牌等认证相关操作")
 public class AuthController {
 
-    private final UserRepository userRepository;
+    private final SysUserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
@@ -39,7 +39,7 @@ public class AuthController {
      * @param userRepository 用户数据访问层
      * @param jwtUtil JWT工具
      */
-    public AuthController(UserRepository userRepository, JwtUtil jwtUtil) {
+    public AuthController(SysUserRepository userRepository, JwtUtil jwtUtil) {
         this.userRepository = userRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.jwtUtil = jwtUtil;
@@ -60,21 +60,19 @@ public class AuthController {
     })
     @Log(value = "用户登录", type = Log.OperationType.LOGIN)
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(User::getUsername, request.getUsername());
-        User user = userRepository.selectOne(wrapper);
+        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysUser::getUsername, request.getUsername());
+        SysUser user = userRepository.selectOne(wrapper);
 
         if (user == null) {
             if ("admin".equals(request.getUsername())) {
-                user = new User();
+                user = new SysUser();
                 user.setId(UUID.randomUUID().toString());
                 user.setUsername("admin");
                 user.setPassword(passwordEncoder.encode("admin123"));
-                user.setDisplayName("管理员");
+                user.setNickname("管理员");
                 user.setEmail("admin@legacygraph.io");
                 user.setStatus("ACTIVE");
-                user.setRoles("ADMIN,USER");
-                user.setPermissions("*");
                 user.setCreatedAt(LocalDateTime.now());
                 user.setUpdatedAt(LocalDateTime.now());
                 userRepository.insert(user);
@@ -97,21 +95,18 @@ public class AuthController {
         List<String> roles = user.getRoles() != null
                 ? Arrays.asList(user.getRoles().split(","))
                 : List.of("USER");
-        List<String> permissions = user.getPermissions() != null
-                ? Arrays.asList(user.getPermissions().split(","))
-                : List.of("read", "write");
 
         LoginResponse.UserInfo userInfo = new LoginResponse.UserInfo(
                 user.getId(),
                 user.getUsername(),
-                user.getDisplayName(),
+                user.getNickname(),
                 user.getEmail(),
                 user.getAvatar(),
                 roles,
-                permissions
+                List.of("*")
         );
 
-        user.setLastLoginTime(LocalDateTime.now());
+        user.setLastLoginAt(LocalDateTime.now());
         userRepository.updateById(user);
 
         LoginResponse response = new LoginResponse(
@@ -157,8 +152,8 @@ public class AuthController {
         }
 
         String username = jwtUtil.getUsernameFromToken(token);
-        User user = userRepository.selectOne(
-                new LambdaQueryWrapper<User>().eq(User::getUsername, username)
+        SysUser user = userRepository.selectOne(
+                new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username)
         );
 
         if (user == null) {
@@ -179,7 +174,7 @@ public class AuthController {
         LoginResponse.UserInfo userInfo = new LoginResponse.UserInfo(
                 user.getId(),
                 user.getUsername(),
-                user.getDisplayName(),
+                user.getNickname(),
                 user.getEmail(),
                 user.getAvatar(),
                 roles,
@@ -205,8 +200,8 @@ public class AuthController {
 
         String username = jwtUtil.getUsernameFromToken(refreshToken);
         String userId = jwtUtil.getUserIdFromToken(refreshToken);
-        User user = userRepository.selectOne(
-                new LambdaQueryWrapper<User>().eq(User::getUsername, username)
+        SysUser user = userRepository.selectOne(
+                new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username)
         );
 
         if (user == null) {
@@ -230,7 +225,7 @@ public class AuthController {
         LoginResponse.UserInfo userInfo = new LoginResponse.UserInfo(
                 user.getId(),
                 user.getUsername(),
-                user.getDisplayName(),
+                user.getNickname(),
                 user.getEmail(),
                 user.getAvatar(),
                 roles,

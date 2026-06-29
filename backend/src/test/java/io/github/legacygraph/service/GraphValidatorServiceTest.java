@@ -1,6 +1,7 @@
 package io.github.legacygraph.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.TestCase;
@@ -80,10 +81,10 @@ class GraphValidatorServiceTest {
 
     @Test
     void testUpdateConfidenceByTestResults_EmptyResults() {
-        LambdaQueryWrapper<TestResult> wrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(wrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(wrapper);
-        when(testResultRepository.list(wrapper)).thenReturn(Collections.emptyList());
+        LambdaQueryChainWrapper<TestResult> chain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(chain);
+        when(chain.eq(any(), any())).thenReturn(chain);
+        when(chain.list()).thenReturn(Collections.emptyList());
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
@@ -94,17 +95,17 @@ class GraphValidatorServiceTest {
 
     @Test
     void testUpdateConfidenceByTestResults_WithPassedResult() {
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQuery<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(passedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().and(any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.list(edgeWrapper)).thenReturn(List.of(testEdge));
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.and(any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
@@ -117,17 +118,17 @@ class GraphValidatorServiceTest {
     void testUpdateConfidenceByTestResults_PassedResultIncreasesToOverZeroEight() {
         testEdge.setConfidence(new BigDecimal("0.7800"));
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(passedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().and(any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.list(edgeWrapper)).thenReturn(List.of(testEdge));
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.and(any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
@@ -140,17 +141,17 @@ class GraphValidatorServiceTest {
     void testUpdateConfidenceByTestResults_CapsAtOne() {
         testEdge.setConfidence(BigDecimal.ONE);
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(passedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().and(any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.list(edgeWrapper)).thenReturn(List.of(testEdge));
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.and(any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
@@ -163,10 +164,10 @@ class GraphValidatorServiceTest {
     void testUpdateConfidenceByTestResults_FailedApiResultWith404() {
         failedResult.setResponseData("{\"status\": 404, \"error\": \"Not Found\"}");
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(failedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(failedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
         when(graphNodeRepository.getById("node-1")).thenReturn(testNode);
 
@@ -180,17 +181,17 @@ class GraphValidatorServiceTest {
     void testUpdateConfidenceByTestResults_FailedApiResultNot404() {
         failedResult.setResponseData("{\"status\": 500, \"error\": \"Server Error\"}");
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(failedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(failedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().in(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.list(edgeWrapper)).thenReturn(List.of(testEdge));
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.in(any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
@@ -204,17 +205,17 @@ class GraphValidatorServiceTest {
     void testUpdateConfidenceByTestResults_FailedDbAssertion() {
         testCase.setCaseType("DB_ASSERTION");
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(failedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(failedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().in(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.list(edgeWrapper)).thenReturn(List.of(testEdge));
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.in(any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
@@ -227,17 +228,17 @@ class GraphValidatorServiceTest {
     void testUpdateConfidenceByTestResults_FailedPermissionAssertion() {
         testCase.setCaseType("PERMISSION");
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(failedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(failedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.list(edgeWrapper)).thenReturn(List.of(testEdge));
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
@@ -299,21 +300,21 @@ class GraphValidatorServiceTest {
 
     @Test
     void testGetValidationReport_EmptyVersion() {
-        LambdaQueryWrapper<GraphNode> nodeWrapper = new LambdaQueryWrapper<>();
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeWrapper);
-        when(graphNodeRepository.lambdaQuery().eq(any(), any())).thenReturn(nodeWrapper);
-        when(graphNodeRepository.count(nodeWrapper)).thenReturn(0L);
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
+        when(nodeChain.count()).thenReturn(0L);
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.count(edgeWrapper)).thenReturn(0L);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.count()).thenReturn(0L);
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.count(resultWrapper)).thenReturn(0L);
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.eq(any(), any()).eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.count()).thenReturn(0L);
 
         GraphValidatorService.ValidationReport report = graphValidatorService.getValidationReport("version-1");
 
@@ -332,52 +333,52 @@ class GraphValidatorServiceTest {
 
     @Test
     void testGetValidationReport_WithData() {
-        LambdaQueryWrapper<GraphNode> nodeWrapper = new LambdaQueryWrapper<>();
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeWrapper);
-        when(graphNodeRepository.lambdaQuery().eq(any(), any())).thenReturn(nodeWrapper);
-        when(graphNodeRepository.count(nodeWrapper)).thenReturn(10L);
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
+        when(nodeChain.count()).thenReturn(10L);
 
-        LambdaQueryWrapper<GraphNode> confirmedNodeWrapper = new LambdaQueryWrapper<>();
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeWrapper);
-        when(graphNodeRepository.lambdaQuery().eq(any(), any())).thenReturn(nodeWrapper);
-        when(graphNodeRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(confirmedNodeWrapper);
-        when(graphNodeRepository.count(confirmedNodeWrapper)).thenReturn(5L);
+        LambdaQueryChainWrapper<GraphNode> confirmedNodeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(confirmedNodeChain);
+        when(confirmedNodeChain.count()).thenReturn(5L);
 
-        LambdaQueryWrapper<GraphNode> pendingNodeWrapper = new LambdaQueryWrapper<>();
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeWrapper);
-        when(graphNodeRepository.lambdaQuery().eq(any(), any())).thenReturn(nodeWrapper);
-        when(graphNodeRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(pendingNodeWrapper);
-        when(graphNodeRepository.count(pendingNodeWrapper)).thenReturn(3L);
-        when(graphNodeRepository.list(nodeWrapper)).thenReturn(List.of(testNode));
+        LambdaQueryChainWrapper<GraphNode> pendingNodeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(pendingNodeChain);
+        when(pendingNodeChain.count()).thenReturn(3L);
+        when(nodeChain.list()).thenReturn(List.of(testNode));
 
-        LambdaQueryWrapper<GraphEdge> edgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.count(edgeWrapper)).thenReturn(20L);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.count()).thenReturn(20L);
 
-        LambdaQueryWrapper<GraphEdge> confirmedEdgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(confirmedEdgeWrapper);
-        when(graphEdgeRepository.count(confirmedEdgeWrapper)).thenReturn(10L);
+        LambdaQueryChainWrapper<GraphEdge> confirmedEdgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(confirmedEdgeChain);
+        when(confirmedEdgeChain.count()).thenReturn(10L);
 
-        LambdaQueryWrapper<GraphEdge> pendingEdgeWrapper = new LambdaQueryWrapper<>();
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(edgeWrapper);
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(pendingEdgeWrapper);
-        when(graphEdgeRepository.count(pendingEdgeWrapper)).thenReturn(5L);
+        LambdaQueryChainWrapper<GraphEdge> pendingEdgeChain = mock(LambdaQueryChainWrapper.class);
+        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(pendingEdgeChain);
+        when(pendingEdgeChain.count()).thenReturn(5L);
 
-        LambdaQueryWrapper<TestResult> passedWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(passedWrapper);
-        when(testResultRepository.count(passedWrapper)).thenReturn(3L);
+        LambdaQueryChainWrapper<TestResult> passedChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(passedChain);
+        when(passedChain.eq(any(), any())).thenReturn(passedChain);
+        when(passedChain.eq(any(), any()).eq(any(), any())).thenReturn(passedChain);
+        when(passedChain.count()).thenReturn(3L);
 
-        LambdaQueryWrapper<TestResult> failedWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(failedWrapper);
-        when(testResultRepository.count(failedWrapper)).thenReturn(2L);
+        LambdaQueryChainWrapper<TestResult> failedChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(failedChain);
+        when(failedChain.eq(any(), any())).thenReturn(failedChain);
+        when(failedChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(failedChain);
+        when(failedChain.count()).thenReturn(2L);
 
         GraphValidatorService.ValidationReport report = graphValidatorService.getValidationReport("version-1");
 
@@ -396,10 +397,10 @@ class GraphValidatorServiceTest {
 
     @Test
     void testUpdateConfidenceByTestResults_NullTestCaseDoesNothing() {
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(passedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(null);
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
@@ -411,10 +412,10 @@ class GraphValidatorServiceTest {
     void testUpdateConfidenceByTestResults_NullTargetNodeIdDoesNothing() {
         testCase.setTargetNodeId(null);
 
-        LambdaQueryWrapper<TestResult> resultWrapper = new LambdaQueryWrapper<>();
-        when(testResultRepository.lambdaQuery()).thenReturn(resultWrapper);
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(resultWrapper);
-        when(testResultRepository.list(resultWrapper)).thenReturn(List.of(passedResult));
+        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
+        when(resultChain.eq(any(), any())).thenReturn(resultChain);
+        when(resultChain.list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
         graphValidatorService.updateConfidenceByTestResults("version-1");

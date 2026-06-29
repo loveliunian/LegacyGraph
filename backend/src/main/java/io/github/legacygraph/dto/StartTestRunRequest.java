@@ -19,4 +19,6 @@ public class StartTestRunRequest {
     private List<String> caseIds;
 
     private String environment;
+
+    private String baseUrl;
 }

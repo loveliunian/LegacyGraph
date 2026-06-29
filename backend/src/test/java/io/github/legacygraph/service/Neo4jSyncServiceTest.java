@@ -1,7 +1,7 @@
 package io.github.legacygraph.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.repository.GraphEdgeRepository;
@@ -82,16 +82,16 @@ class Neo4jSyncServiceTest {
 
         // Since we can't easily mock the entire lambda chain, just verify
         // that the method completes without exceptions when repositories return empty
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<GraphNode> nodeChain =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<>(graphNodeRepository);
+        LambdaQueryChainWrapper<GraphNode> nodeChain =
+                new LambdaQueryChainWrapper<>(graphNodeRepository);
         when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.list()).thenReturn(Collections.emptyList());
 
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<GraphEdge> edgeChain =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<>(graphEdgeRepository);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain =
+                new LambdaQueryChainWrapper<>(graphEdgeRepository);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
@@ -111,16 +111,16 @@ class Neo4jSyncServiceTest {
         when(session.beginTransaction()).thenReturn(transaction);
         doNothing().when(transaction).run(anyString(), anyMap());
 
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<GraphNode> nodeChain =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<>(graphNodeRepository);
+        LambdaQueryChainWrapper<GraphNode> nodeChain =
+                new LambdaQueryChainWrapper<>(graphNodeRepository);
         when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.list()).thenReturn(List.of(testNode));
 
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<GraphEdge> edgeChain =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<>(graphEdgeRepository);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain =
+                new LambdaQueryChainWrapper<>(graphEdgeRepository);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
@@ -149,16 +149,16 @@ class Neo4jSyncServiceTest {
         node2.setNodeKey("TestService");
         node2.setStatus("CONFIRMED");
 
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<GraphNode> nodeChain =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<>(graphNodeRepository);
+        LambdaQueryChainWrapper<GraphNode> nodeChain =
+                new LambdaQueryChainWrapper<>(graphNodeRepository);
         when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.list()).thenReturn(List.of(testNode, node2));
 
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<GraphEdge> edgeChain =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper<>(graphEdgeRepository);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain =
+                new LambdaQueryChainWrapper<>(graphEdgeRepository);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);

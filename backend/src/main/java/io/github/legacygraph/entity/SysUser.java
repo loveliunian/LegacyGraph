@@ -48,6 +48,16 @@ public class SysUser {
     private String avatar;
 
     /**
+     * 角色（逗号分隔）
+     */
+    private String roles;
+
+    /**
+     * 权限（逗号分隔）
+     */
+    private String permissions;
+
+    /**
      * 状态: ACTIVE/DISABLED
      */
     private String status;

@@ -1,11 +1,12 @@
 package io.github.legacygraph.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.legacygraph.entity.AuditLog;
 import io.github.legacygraph.repository.AuditLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -26,7 +27,7 @@ class AuditLogControllerTest {
 
     @BeforeEach
     void setUp() {
-        auditLogRepository.delete(null);
+        auditLogRepository.delete(new QueryWrapper<>());
     }
 
     @Test

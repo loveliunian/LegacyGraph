@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -27,8 +27,7 @@ class ScanControllerTest {
     @Test
     void testCreateScanVersion_Success() throws Exception {
         CreateScanVersionRequest request = new CreateScanVersionRequest();
-        request.setVersionName("v1.0");
-        request.setDescription("Initial scan");
+        request.setVersionNo("v1.0");
 
         mockMvc.perform(post("/lg/projects/{projectId}/scan-versions", testProjectId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -41,8 +40,7 @@ class ScanControllerTest {
     void testGetProgress_Success() throws Exception {
         // First create a version
         CreateScanVersionRequest request = new CreateScanVersionRequest();
-        request.setVersionName("v1.0");
-        request.setDescription("Test scan");
+        request.setVersionNo("v1.0");
 
         String result = mockMvc.perform(post("/lg/projects/{projectId}/scan-versions", testProjectId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -63,8 +61,7 @@ class ScanControllerTest {
     void testStartScan_Success() throws Exception {
         // First create a version
         CreateScanVersionRequest request = new CreateScanVersionRequest();
-        request.setVersionName("v1.0");
-        request.setDescription("Test scan");
+        request.setVersionNo("v1.0");
 
         String result = mockMvc.perform(post("/lg/projects/{projectId}/scan-versions", testProjectId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -83,8 +80,7 @@ class ScanControllerTest {
     @Test
     void testPauseScan_Success() throws Exception {
         CreateScanVersionRequest request = new CreateScanVersionRequest();
-        request.setVersionName("v1.0");
-        request.setDescription("Test scan");
+        request.setVersionNo("v1.0");
 
         String result = mockMvc.perform(post("/lg/projects/{projectId}/scan-versions", testProjectId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -103,8 +99,7 @@ class ScanControllerTest {
     @Test
     void testCancelScan_Success() throws Exception {
         CreateScanVersionRequest request = new CreateScanVersionRequest();
-        request.setVersionName("v1.0");
-        request.setDescription("Test scan");
+        request.setVersionNo("v1.0");
 
         String result = mockMvc.perform(post("/lg/projects/{projectId}/scan-versions", testProjectId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -123,8 +118,7 @@ class ScanControllerTest {
     @Test
     void testResumeScan_Success() throws Exception {
         CreateScanVersionRequest request = new CreateScanVersionRequest();
-        request.setVersionName("v1.0");
-        request.setDescription("Test scan");
+        request.setVersionNo("v1.0");
 
         String result = mockMvc.perform(post("/lg/projects/{projectId}/scan-versions", testProjectId)
                         .contentType(MediaType.APPLICATION_JSON)
