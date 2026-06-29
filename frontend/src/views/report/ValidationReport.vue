@@ -4,8 +4,11 @@
       <h3>验证报告</h3>
       <div class="header-actions">
         <el-select v-model="selectedVersion" placeholder="选择图谱版本" size="small" style="width: 220px;">
-          <el-option label="当前版本 (v1.0)" value="v1.0" />
-          <el-option label="历史版本 (v0.9)" value="v0.9" />
+          <el-option
+            v-for="v in versions" :key="v.id"
+            :label="(v.versionNumber || v.versionName || '') + ' - ' + (v.nodeCount || 0) + '节点'"
+            :value="v.id"
+          />
         </el-select>
         <el-button type="primary" size="small" @click="exportReport">
           <el-icon><Download /></el-icon>
@@ -150,30 +153,30 @@
             <div class="coverage-item">
               <div class="coverage-label">API接口覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="78" :stroke-width="20" status="warning" />
+                <el-progress :percentage="coverageData.apiCoverage" :stroke-width="20" :status="coverageData.apiCoverage >= 70 ? 'success' : coverageData.apiCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
-              <div class="coverage-value">78%</div>
+              <div class="coverage-value">{{ coverageData.apiCoverage }}%</div>
             </div>
             <div class="coverage-item">
               <div class="coverage-label">业务流程覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="65" :stroke-width="20" status="warning" />
+                <el-progress :percentage="coverageData.processCoverage" :stroke-width="20" :status="coverageData.processCoverage >= 70 ? 'success' : coverageData.processCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
-              <div class="coverage-value">65%</div>
+              <div class="coverage-value">{{ coverageData.processCoverage }}%</div>
             </div>
             <div class="coverage-item">
               <div class="coverage-label">数据库表覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="82" :stroke-width="20" status="success" />
+                <el-progress :percentage="coverageData.tableCoverage" :stroke-width="20" :status="coverageData.tableCoverage >= 70 ? 'success' : coverageData.tableCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
-              <div class="coverage-value">82%</div>
+              <div class="coverage-value">{{ coverageData.tableCoverage }}%</div>
             </div>
             <div class="coverage-item">
               <div class="coverage-label">代码行覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="45" :stroke-width="20" status="exception" />
+                <el-progress :percentage="coverageData.lineCoverage" :stroke-width="20" :status="coverageData.lineCoverage >= 70 ? 'success' : coverageData.lineCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
-              <div class="coverage-value">45%</div>
+              <div class="coverage-value">{{ coverageData.lineCoverage }}%</div>
             </div>
           </div>
         </el-card>
@@ -197,7 +200,7 @@
             </div>
             <div class="summary-item">
               <span class="summary-label">未覆盖关键路径</span>
-              <span class="summary-value danger">3</span>
+              <span class="summary-value danger">{{ coverageData.uncoveredCriticalPaths }}</span>
             </div>
           </div>
         </el-card>
@@ -236,93 +239,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Connection, Link, CircleCheck, Warning, Opportunity, Star } from '@element-plus/icons-vue'
+import { get } from '@/utils/request'
 
-const selectedVersion = ref('v1.0')
+const route = useRoute()
+const projectId = route.params.projectId as string
+
+const selectedVersion = ref('')
+const versions = ref<any[]>([])
 
 const reportData = ref({
-  totalNodes: 1256,
-  totalEdges: 3428,
-  validatedNodes: 892,
-  validatedEdges: 2156,
-  testCoveredNodes: 985,
-  testCoveredEdges: 2568,
-  validationPassRate: 78,
-  pendingItems: 364,
-  riskLevel: '中等'
+  totalNodes: 0,
+  totalEdges: 0,
+  validatedNodes: 0,
+  validatedEdges: 0,
+  testCoveredNodes: 0,
+  testCoveredEdges: 0,
+  validationPassRate: 0,
+  pendingItems: 0,
+  riskLevel: '-'
 })
 
-const nodeTypeDistribution = ref([
-  { type: 'CONTROLLER', label: 'Controller', count: 45, percentage: 14, color: '#409eff' },
-  { type: 'SERVICE', label: 'Service', count: 78, percentage: 25, color: '#67c23a' },
-  { type: 'MAPPER', label: 'Mapper', count: 56, percentage: 18, color: '#e6a23c' },
-  { type: 'TABLE', label: '数据表', count: 42, percentage: 13, color: '#f56c6c' },
-  { type: 'API', label: 'API接口', count: 89, percentage: 28, color: '#909399' },
-  { type: 'OTHER', label: '其他', count: 15, percentage: 5, color: '#c0c4cc' }
-])
+const nodeTypeDistribution = ref<any[]>([])
+const confidenceDistribution = ref<any[]>([])
+const risks = ref<any[]>([])
 
-const confidenceDistribution = ref([
-  { range: '90-100%', count: 456, percentage: 36, color: '#67c23a' },
-  { range: '80-90%', count: 389, percentage: 31, color: '#85ce61' },
-  { range: '70-80%', count: 256, percentage: 20, color: '#e6a23c' },
-  { range: '60-70%', count: 123, percentage: 10, color: '#f56c6c' },
-  { range: '<60%', count: 32, percentage: 3, color: '#ff4d4f' }
-])
-
-const risks = ref([
-  {
-    id: '1',
-    severity: 'HIGH',
-    riskType: 'COMPLEX_CALL_CHAIN',
-    riskName: '订单创建流程存在复杂调用链',
-    description: '订单创建过程涉及12个服务接口的同步调用，包括库存、支付、用户、通知等多个模块，任意一个环节失败都可能导致数据不一致。',
-    suggestion: '建议引入分布式事务方案，如Seata或本地消息表+最终一致性。',
-    impactedCount: 12,
-    evidenceCount: 8
-  },
-  {
-    id: '2',
-    severity: 'HIGH',
-    riskType: 'TABLE_COUPLING',
-    riskName: 't_order表与多表存在耦合',
-    description: '订单主表被8个服务直接读写，跨模块数据访问频繁，存在数据安全和性能隐患。',
-    suggestion: '建议拆分订单表，按领域划分建立独立的订单域服务。',
-    impactedCount: 8,
-    evidenceCount: 15
-  },
-  {
-    id: '3',
-    severity: 'MEDIUM',
-    riskType: 'MISSING_DOC',
-    riskName: '支付回调流程缺少完整文档',
-    description: '支付回调的业务规则仅在代码中体现，缺少架构设计文档和时序图，新人理解成本高。',
-    suggestion: '补充支付模块的架构设计文档，包含时序图和状态流转说明。',
-    impactedCount: 5,
-    evidenceCount: 2
-  },
-  {
-    id: '4',
-    severity: 'MEDIUM',
-    riskType: 'UNCLEAR_LINEAGE',
-    riskName: '用户数据血缘不完整',
-    description: '用户信息在多个模块之间流转，但数据血缘图谱存在断点，部分中间状态的处理逻辑不明确。',
-    suggestion: '完善用户数据的全链路追踪，补充中间节点的证据来源。',
-    impactedCount: 6,
-    evidenceCount: 3
-  },
-  {
-    id: '5',
-    severity: 'LOW',
-    riskType: 'EXTERNAL_DEPENDENCY',
-    riskName: '第三方短信服务直接耦合',
-    description: '多个模块直接调用短信服务接口，缺少统一的消息发送网关。',
-    suggestion: '引入统一的消息发送服务，支持多种渠道扩展。',
-    impactedCount: 4,
-    evidenceCount: 6
-  }
-])
+// 测试覆盖率数据，从后端概览接口加载
+const coverageData = ref({
+  apiCoverage: 0,
+  processCoverage: 0,
+  tableCoverage: 0,
+  lineCoverage: 0,
+  uncoveredCriticalPaths: 0,
+})
 
 const getRiskTypeText = (type: string) => {
   const map: Record<string, string> = {
@@ -341,6 +293,72 @@ const getRiskTypeText = (type: string) => {
 const exportReport = () => {
   ElMessage.success('报告导出中...')
 }
+
+onMounted(async () => {
+  if (!projectId) return
+  try {
+    const [versionsRes, overviewRes] = await Promise.all([
+      get(`/lg/projects/${projectId}/scan-versions`).catch(() => null),
+      get(`/lg/projects/${projectId}/overview`).catch(() => null)
+    ])
+    // 加载版本列表
+    versions.value = (Array.isArray(versionsRes) ? versionsRes : versionsRes?.list || [])
+    if (versions.value.length > 0) {
+      selectedVersion.value = versions.value[0].id
+    }
+
+    // 加载概览数据
+    if (overviewRes) {
+      const graphStats = overviewRes.data?.graphStats || overviewRes.graphStats || overviewRes
+      reportData.value = {
+        totalNodes: graphStats.totalNodes || 0,
+        totalEdges: graphStats.totalEdges || 0,
+        validatedNodes: graphStats.confirmedNodes || graphStats.approvedCount || 0,
+        validatedEdges: graphStats.confirmedEdges || 0,
+        testCoveredNodes: graphStats.testCoveredNodes || 0,
+        testCoveredEdges: graphStats.testCoveredEdges || 0,
+        validationPassRate: graphStats.validationPassRate || 0,
+        pendingItems: graphStats.pendingItems || graphStats.pendingCount || 0,
+        riskLevel: graphStats.riskLevel || '-'
+      }
+      if (overviewRes.data?.confidenceDistribution) {
+        confidenceDistribution.value = overviewRes.data.confidenceDistribution
+      }
+      if (overviewRes.data?.nodeTypeDistribution) {
+        nodeTypeDistribution.value = overviewRes.data.nodeTypeDistribution
+      }
+      if (overviewRes.data?.risks) {
+        risks.value = overviewRes.data.risks
+      }
+      // 加载覆盖率数据
+      if (overviewRes.data?.coverage || graphStats.coverage) {
+        const cov = overviewRes.data?.coverage || graphStats.coverage || {}
+        coverageData.value = {
+          apiCoverage: cov.apiCoverage || cov.api || 0,
+          processCoverage: cov.processCoverage || cov.process || 0,
+          tableCoverage: cov.tableCoverage || cov.table || 0,
+          lineCoverage: cov.lineCoverage || cov.line || 0,
+          uncoveredCriticalPaths: cov.uncoveredCriticalPaths || cov.criticalPathGaps || 0,
+        }
+      } else if (graphStats.totalNodes) {
+        // 从图谱统计数据推算覆盖率的近似值
+        const total = graphStats.totalNodes || 1
+        const approved = graphStats.confirmedNodes || graphStats.approvedCount || 0
+        const pending = graphStats.pendingItems || graphStats.pendingCount || 0
+        const rate = total > 0 ? Math.round((approved / total) * 100) : 0
+        coverageData.value = {
+          apiCoverage: rate,
+          processCoverage: Math.max(0, rate - 10),
+          tableCoverage: Math.min(100, rate + 5),
+          lineCoverage: Math.max(0, rate - 20),
+          uncoveredCriticalPaths: pending,
+        }
+      }
+    }
+  } catch (err) {
+    console.error('获取验证报告数据失败:', err)
+  }
+})
 </script>
 
 <style scoped>

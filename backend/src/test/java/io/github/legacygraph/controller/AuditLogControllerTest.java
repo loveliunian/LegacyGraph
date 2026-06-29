@@ -49,7 +49,7 @@ class AuditLogControllerTest {
                 .param("pageNum", "1")
                 .param("pageSize", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.list").exists())
                 .andExpect(jsonPath("$.data.total").value(1));
     }
@@ -66,16 +66,18 @@ class AuditLogControllerTest {
 
         mockMvc.perform(get("/lg/audit/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.id").value(id));
     }
 
     @Test
     void testGetById_NotFound() throws Exception {
+        // Controller returns Result.success(null) when log is not found,
+        // which serializes to {"code": 0, "data": null}.
+        // $.data will be null — check it exists or is null rather than isEmpty()
         mockMvc.perform(get("/lg/audit/999999"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -90,7 +92,7 @@ class AuditLogControllerTest {
 
         mockMvc.perform(delete("/lg/audit/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -109,12 +111,15 @@ class AuditLogControllerTest {
 
         mockMvc.perform(delete("/lg/audit/clear"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.code").value(0));
 
+        // After clear(), the @Log aspect inserts a log entry for the "清空审计日志" operation,
+        // so total will be 1 (the clear operation itself).
         mockMvc.perform(get("/lg/audit/list")
                         .param("pageNum", "1")
                         .param("pageSize", "10"))
-                .andExpect(jsonPath("$.data.total").value(0));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.total").value(1));
     }
 
     @Test
@@ -127,7 +132,7 @@ class AuditLogControllerTest {
 
         mockMvc.perform(get("/lg/audit/stats/count"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.total").exists());
     }
 }

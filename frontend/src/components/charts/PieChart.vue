@@ -39,7 +39,7 @@ const props = withDefaults(defineProps<Props>(), {
   loading: false,
   legend: true,
   showTooltip: true,
-  radius: ['40%', '70%']
+  radius: () => ['40%', '70%']
 })
 
 const emit = defineEmits<{
@@ -76,7 +76,7 @@ const chartOption = computed<EChartsOption>(() => ({
       type: 'pie',
       radius: props.radius,
       center: props.center || ['50%', '50%'],
-      roseType: props.roseType,
+      roseType: props.roseType === false ? undefined : (props.roseType as 'radius' | 'area' | undefined),
       avoidLabelOverlap: false,
       itemStyle: {
         borderRadius: 10,

@@ -38,7 +38,7 @@
           <div class="diff-column old-code">
             <div class="column-header">
               <el-icon><Clock /></el-icon>
-              <span>{{ oldVersion || $t('migration.riskType') === 8 }}</span>
+              <span>{{ oldVersion || '' }}</span>
             </div>
             <div class="code-lines">
               <div
@@ -124,6 +124,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
 import * as Diff from 'diff'

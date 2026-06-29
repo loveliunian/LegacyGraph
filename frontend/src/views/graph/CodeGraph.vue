@@ -6,7 +6,7 @@
           <span>代码图谱查询</span>
           <el-tag type="info">Controller -> Service -> Mapper -> SQL -> Table</el-tag>
           <div class="actions">
-            <el-dropdown @command="handleExport">
+            <el-dropdown @command="(cmd: string) => handleExport(cmd)">
               <el-button type="primary">
                 导出
                 <el-icon><arrow-down /></el-icon>
@@ -115,60 +115,15 @@ const nodes = ref<GraphNode[]>([])
 const edges = ref<GraphEdge[]>([])
 const resultList = ref<any[]>([])
 
-// 加载工单派发示例 (来自详细设计文档)
+// 查询调用链：有版本/方法时调用后端真实接口，否则提示输入条件
 const loadExample = () => {
-  // 示例: TicketController.dispatch -> TicketService.dispatch -> TicketMapper.updateHandler -> SQL UPDATE -> t_ticket
-  const exampleNodes: GraphNode[] = [
-    {
-      id: 'TicketController.dispatch',
-      type: 'Controller',
-      position: { x: 100, y: 150 },
-      data: { label: 'TicketController.dispatch', type: 'Controller', confidence: 0.98 }
-    },
-    {
-      id: 'TicketService.dispatch',
-      type: 'Service',
-      position: { x: 350, y: 150 },
-      data: { label: 'TicketService.dispatch', type: 'Service', confidence: 0.95 }
-    },
-    {
-      id: 'TicketMapper.updateHandler',
-      type: 'Mapper',
-      position: { x: 600, y: 150 },
-      data: { label: 'TicketMapper.updateHandler', type: 'Mapper', confidence: 0.95 }
-    },
-    {
-      id: 'SQL_UPDATE_t_ticket',
-      type: 'SQL',
-      position: { x: 800, y: 100 },
-      data: { label: 'UPDATE t_ticket', type: 'SQL', confidence: 0.92 }
-    },
-    {
-      id: 't_ticket.status',
-      type: 'Column',
-      position: { x: 950, y: 50 },
-      data: { label: 'status', type: 'Column', confidence: 0.98 }
-    },
-    {
-      id: 't_ticket.handler_id',
-      type: 'Column',
-      position: { x: 950, y: 150 },
-      data: { label: 'handler_id', type: 'Column', confidence: 0.98 }
-    },
-  ]
-
-  const exampleEdges: GraphEdge[] = [
-    { id: 'c->s', source: 'TicketController.dispatch', target: 'TicketService.dispatch', label: 'CALLS' },
-    { id: 's->m', source: 'TicketService.dispatch', target: 'TicketMapper.updateHandler', label: 'CALLS' },
-    { id: 'm->sql', source: 'TicketMapper.updateHandler', target: 'SQL_UPDATE_t_ticket', label: 'EXECUTES' },
-    { id: 'sql->status', source: 'SQL_UPDATE_t_ticket', target: 't_ticket.status', label: 'WRITES' },
-    { id: 'sql->handler', source: 'SQL_UPDATE_t_ticket', target: 't_ticket.handler_id', label: 'WRITES' },
-  ]
-
-  nodes.value = exampleNodes
-  edges.value = exampleEdges
-  graphData.value = exampleNodes
-  ElMessage.success('已加载「工单派发」代码图谱示例')
+  // 调用后端 getApiChain 接口查询真实的调用链数据
+  if (query.versionId && query.method) {
+    queryGraph()
+    return
+  }
+  // 没有查询条件时提示
+  ElMessage.info('请输入版本ID和方法名后查询，或留空后查看全部链路')
 }
 
 const queryGraph = async () => {
@@ -177,7 +132,7 @@ const queryGraph = async () => {
     return
   }
   try {
-    const data = await graphApi.getApiChain(query.versionId, query.method)
+    const data = await graphApi.getApiChain('', query.versionId, query.method) as any
     graphData.value = data
     // 解析图谱数据转换为VueFlow格式
     processGraphData(data)
@@ -244,6 +199,10 @@ const processGraphData = (data: any[]) => {
 const getEdgeType = (from: any, to: any) => {
   // 从properties中获取关系类型
   return 'RELATED'
+}
+
+const handleExport = (cmd: string) => {
+  ElMessage.info(`导出图谱为 ${cmd} 格式`)
 }
 </script>
 

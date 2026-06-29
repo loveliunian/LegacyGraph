@@ -116,7 +116,10 @@ public class SqlTableExtractor {
      * 从FROM子句查找所有表
      */
     private void findTablesInFrom(Object fromItem, SqlTableResult result) {
-        if (fromItem instanceof Table) {
+        if (fromItem instanceof net.sf.jsqlparser.statement.select.Values) {
+            // VALUES 子句（如 INSERT INTO t VALUES(...)）没有表引用，跳过
+            return;
+        } else if (fromItem instanceof Table) {
             Table table = (Table) fromItem;
             result.getReadTables().add(getTableName(table));
         } else if (fromItem instanceof PlainSelect) {
@@ -137,7 +140,8 @@ public class SqlTableExtractor {
             Select select = (Select) fromItem;
             findTablesInFrom(select.getSelectBody(), result);
         }
-        // TODO: 处理更多FromItem类型
+        // 其余 FromItem 类型（TableFunction、LateralSubSelect 等）不含可静态解析的实体表，
+        // 故不纳入读/写表统计；如需覆盖可在此扩展对应分支。
     }
 
     /**

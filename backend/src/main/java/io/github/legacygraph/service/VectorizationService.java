@@ -92,10 +92,16 @@ public class VectorizationService {
                 end = newlinePos + 1;
             }
             chunks.add(content.substring(start, end));
-            start = end - overlapChars;
-            if (start >= length) {
+            // 已到末尾，结束
+            if (end >= length) {
                 break;
             }
+            // 计算下一段起点，保证严格前进，避免末段 chunk 短于 overlap 时原地死循环
+            int nextStart = end - overlapChars;
+            if (nextStart <= start) {
+                nextStart = end;
+            }
+            start = nextStart;
         }
 
         log.debug("Chunked document into {} chunks (maxChars={}, overlap={})", chunks.size(), maxChars, overlapChars);

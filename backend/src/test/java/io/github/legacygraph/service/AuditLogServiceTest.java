@@ -116,7 +116,7 @@ class AuditLogServiceTest {
 
     @Test
     void testClear() {
-        doNothing().when(auditLogRepository).delete(any(LambdaQueryWrapper.class));
+        when(auditLogRepository.delete(any(LambdaQueryWrapper.class))).thenReturn(1);
 
         assertDoesNotThrow(() -> auditLogService.clear());
 

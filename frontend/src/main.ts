@@ -5,10 +5,12 @@ import ElementPlus from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import en from 'element-plus/es/locale/lang/en'
 import 'element-plus/dist/index.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
+import './styles/variables.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
-import i18n, { getLocale } from './locales'
+import i18n, { getLocale, setLocale } from './locales'
 import { useAppStore } from './stores/app'
 
 const app = createApp(App)
@@ -17,7 +19,7 @@ pinia.use(piniaPluginPersistedstate)
 app.use(pinia)
 
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
+  app.component(key, component as any)
 }
 
 app.use(i18n)

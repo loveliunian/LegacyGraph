@@ -2,11 +2,13 @@ package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;
+import io.github.legacygraph.dto.report.GraphMetricsReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.entity.Report;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
@@ -45,6 +47,7 @@ public class ReportingService {
     private final GraphEdgeRepository edgeRepository;
     private final TestResultRepository testResultRepository;
     private final io.github.legacygraph.repository.TestCaseRepository testCaseRepository;
+    private final io.github.legacygraph.repository.NodeEvidenceRepository nodeEvidenceRepository;
     private final MinioClient minioClient;
     private final ObjectMapper objectMapper;
     private final ReportExportService reportExportService;
@@ -56,6 +59,7 @@ public class ReportingService {
                            GraphEdgeRepository edgeRepository,
                            TestResultRepository testResultRepository,
                            io.github.legacygraph.repository.TestCaseRepository testCaseRepository,
+                           io.github.legacygraph.repository.NodeEvidenceRepository nodeEvidenceRepository,
                            MinioClient minioClient,
                            ObjectMapper objectMapper,
                            ReportExportService reportExportService) {
@@ -64,6 +68,7 @@ public class ReportingService {
         this.edgeRepository = edgeRepository;
         this.testResultRepository = testResultRepository;
         this.testCaseRepository = testCaseRepository;
+        this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.minioClient = minioClient;
         this.objectMapper = objectMapper;
         this.reportExportService = reportExportService;
@@ -126,7 +131,7 @@ public class ReportingService {
                     .count();
             stat.setConfirmed(confirmed);
             BigDecimal avgConf = entry.getValue().stream()
-                    .map(GraphNode::getConfidence)
+                    .map(n -> n.getConfidence() != null ? n.getConfidence() : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .divide(BigDecimal.valueOf(entry.getValue().size()), 4, RoundingMode.HALF_UP);
             stat.setAverageConfidence(avgConf);
@@ -143,7 +148,7 @@ public class ReportingService {
 
         // 低置信度节点
         for (GraphNode node : allNodes) {
-            if (node.getConfidence().compareTo(BigDecimal.valueOf(0.5)) < 0) {
+            if (node.getConfidence() != null && node.getConfidence().compareTo(BigDecimal.valueOf(0.5)) < 0) {
                 MigrationReadinessReport.RiskItem risk = new MigrationReadinessReport.RiskItem();
                 risk.setRiskType("LOW_CONFIDENCE");
                 risk.setDescription("节点置信度低于 0.5，需要人工审核");
@@ -478,6 +483,84 @@ public class ReportingService {
         saveReport(projectId, "GRAPH_QUALITY", "图谱质量报告");
 
         return report;
+    }
+
+    /**
+     * 生成图谱质量度量汇总（P2-3）
+     * 输出覆盖率、证据完备度、待审核比例、测试通过率、运行时验证比例。
+     */
+    public GraphMetricsReport generateGraphMetrics(String projectId, String versionId) {
+        log.info("Generating graph metrics for project {}, version {}", projectId, versionId);
+
+        GraphMetricsReport report = new GraphMetricsReport();
+        report.setProjectId(projectId);
+        report.setVersionId(versionId);
+
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GraphNode> nodeQuery =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        nodeQuery.eq(GraphNode::getProjectId, projectId).eq(GraphNode::getVersionId, versionId);
+        List<GraphNode> nodes = nodeRepository.selectList(nodeQuery);
+
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GraphEdge> edgeQuery =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        edgeQuery.eq(GraphEdge::getProjectId, projectId).eq(GraphEdge::getVersionId, versionId);
+        long edgeCount = edgeRepository.selectCount(edgeQuery);
+
+        long total = nodes.size();
+        report.setTotalNodes(total);
+        report.setTotalEdges(edgeCount);
+
+        if (total == 0) {
+            report.setCoverageRatio(BigDecimal.ZERO);
+            report.setEvidenceCompletenessRatio(BigDecimal.ZERO);
+            report.setPendingReviewRatio(BigDecimal.ZERO);
+            report.setRuntimeVerifiedRatio(BigDecimal.ZERO);
+            report.setTestPassRatio(computeTestPassRatio(projectId, versionId));
+            return report;
+        }
+
+        long confirmed = nodes.stream().filter(n -> "CONFIRMED".equals(n.getStatus())).count();
+        long pending = nodes.stream().filter(n -> "PENDING_CONFIRM".equals(n.getStatus())).count();
+        long runtimeVerified = nodes.stream()
+                .filter(n -> n.getVerifiedScore() != null && n.getVerifiedScore().signum() > 0)
+                .count();
+
+        // 证据完备度：拥有至少一条 NodeEvidence 关联的节点
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NodeEvidence> neQuery =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        neQuery.in(NodeEvidence::getNodeId, nodes.stream().map(GraphNode::getId).toList());
+        Set<String> nodesWithEvidence = new HashSet<>();
+        for (NodeEvidence ne : nodeEvidenceRepository.selectList(neQuery)) {
+            nodesWithEvidence.add(ne.getNodeId());
+        }
+
+        report.setCoverageRatio(ratio(confirmed, total));
+        report.setPendingReviewRatio(ratio(pending, total));
+        report.setRuntimeVerifiedRatio(ratio(runtimeVerified, total));
+        report.setEvidenceCompletenessRatio(ratio(nodesWithEvidence.size(), total));
+        report.setTestPassRatio(computeTestPassRatio(projectId, versionId));
+
+        return report;
+    }
+
+    private BigDecimal computeTestPassRatio(String projectId, String versionId) {
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TestResult> trQuery =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        trQuery.eq(TestResult::getProjectId, projectId).eq(TestResult::getVersionId, versionId);
+        List<TestResult> results = testResultRepository.selectList(trQuery);
+        if (results.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        long passed = results.stream().filter(r -> "PASSED".equals(r.getResultStatus())).count();
+        return ratio(passed, results.size());
+    }
+
+    private BigDecimal ratio(long numerator, long denominator) {
+        if (denominator == 0) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(numerator)
+                .divide(BigDecimal.valueOf(denominator), 4, RoundingMode.HALF_UP);
     }
 
     /**

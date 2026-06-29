@@ -7,10 +7,15 @@ import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.GenerateTestCasesRequest;
+import io.github.legacygraph.dto.GenerateTestCasesRequest.Scope;
 import io.github.legacygraph.dto.GeneratedTestCase;
+import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.entity.TestRun;
+import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
 import io.github.legacygraph.repository.TestRunRepository;
@@ -40,19 +45,25 @@ public class TestCaseController {
     private final io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler;
     private final GraphValidatorService graphValidatorService;
     private final TestCaseAgent testCaseAgent;
+    private final GraphNodeRepository graphNodeRepository;
+    private final ScanTaskRepository scanTaskRepository;
 
     public TestCaseController(TestCaseRepository testCaseRepository,
                               TestResultRepository testResultRepository,
                               TestRunRepository testRunRepository,
                               io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler,
                               GraphValidatorService graphValidatorService,
-                              TestCaseAgent testCaseAgent) {
+                              TestCaseAgent testCaseAgent,
+                              GraphNodeRepository graphNodeRepository,
+                              ScanTaskRepository scanTaskRepository) {
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
         this.testRunRepository = testRunRepository;
         this.testExecutionScheduler = testExecutionScheduler;
         this.graphValidatorService = graphValidatorService;
         this.testCaseAgent = testCaseAgent;
+        this.graphNodeRepository = graphNodeRepository;
+        this.scanTaskRepository = scanTaskRepository;
     }
 
     @GetMapping("/test-cases")
@@ -101,6 +112,25 @@ public class TestCaseController {
         return Result.success(testCase);
     }
 
+    @PostMapping("/test-cases")
+    @Operation(summary = "创建测试用例", description = "创建新的测试用例")
+    public Result<TestCase> createTestCase(
+            @PathVariable String projectId,
+            @RequestBody TestCase request) {
+        if (!projectId.equals(request.getProjectId())) {
+            request.setProjectId(projectId);
+        }
+        if (request.getId() == null) {
+            request.setId(UUID.randomUUID().toString());
+        }
+        if (request.getStatus() == null) {
+            request.setStatus("ENABLED");
+        }
+        request.setCreatedAt(LocalDateTime.now());
+        testCaseRepository.insert(request);
+        return Result.success(request);
+    }
+
     @PutMapping("/test-cases/{id}")
     @Operation(summary = "更新测试用例")
     public Result<TestCase> updateTestCase(
@@ -141,16 +171,75 @@ public class TestCaseController {
             @PathVariable String projectId,
             @RequestBody GenerateTestCasesRequest request) {
 
-        // TODO: 完整实现批量按范围生成
-        // 当前已移除随机生成逻辑，占位等待完整 LLM 集成
-
         log.info("Test case generation requested for project {}, version {}", projectId, request.getVersionId());
 
-        return Result.success(Map.of(
-                "projectId", projectId,
-                "versionId", request.getVersionId(),
-                "status", "queued"
-        ));
+        // 获取所有 API 节点，用 TestCaseAgent 生成测试用例
+        try {
+            List<GraphNode> apiNodes = graphNodeRepository.lambdaQuery()
+                    .eq(GraphNode::getProjectId, projectId)
+                    .eq(GraphNode::getVersionId, request.getVersionId())
+                    .in(GraphNode::getNodeType, "ApiEndpoint", "Feature", "Controller")
+                    .list();
+
+            if (apiNodes.isEmpty()) {
+                log.info("No API/Feature nodes found for test generation");
+                return Result.success(Map.of(
+                        "projectId", projectId,
+                        "versionId", request.getVersionId(),
+                        "status", "completed",
+                        "generated", 0,
+                        "message", "未找到可生成测试用例的节点"
+                ));
+            }
+
+            Scope scope = request.getScope();
+            List<String> targetTypes = (scope != null && scope.getNodeTypes() != null)
+                    ? scope.getNodeTypes() : List.of("ApiEndpoint");
+
+            int totalGenerated = 0;
+            for (GraphNode node : apiNodes) {
+                if (!targetTypes.contains(node.getNodeType())) continue;
+
+                TestCaseAgent.TestGenerationRequest genReq = new TestCaseAgent.TestGenerationRequest();
+                genReq.setProjectId(projectId);
+                genReq.setFeatureKey(node.getNodeKey());
+                genReq.setFeatureName(node.getNodeName());
+                genReq.setApiEndpoint(node.getNodeKey());
+                genReq.setHttpMethod("GET");
+
+                List<GeneratedTestCase> generated = testCaseAgent.generateTestCases(genReq);
+
+                for (GeneratedTestCase genCase : generated) {
+                    TestCase tc = new TestCase();
+                    tc.setProjectId(projectId);
+                    tc.setVersionId(request.getVersionId());
+                    tc.setCaseCode("TC-" + System.currentTimeMillis() + "-" + totalGenerated);
+                    tc.setCaseName(genCase.getCaseName() != null ? genCase.getCaseName() : node.getNodeName() + " 测试");
+                    tc.setCaseType(genCase.getCaseType() != null ? genCase.getCaseType().name() : "API");
+                    tc.setTargetNodeId(node.getId());
+                    tc.setSteps(genCase.getSteps() != null ? String.join("\\n", genCase.getSteps()) : "");
+                    tc.setExpectedResult("验证接口返回符合预期");
+                    tc.setStatus("ENABLED");
+                    tc.setGeneratedBy("LLM");
+                    tc.setCreatedAt(LocalDateTime.now());
+                    testCaseRepository.insert(tc);
+                    totalGenerated++;
+                }
+            }
+
+            log.info("Test case generation completed for project {}, version {}: generated {} cases",
+                    projectId, request.getVersionId(), totalGenerated);
+
+            return Result.success(Map.of(
+                    "projectId", projectId,
+                    "versionId", request.getVersionId(),
+                    "status", "completed",
+                    "generated", totalGenerated
+            ));
+        } catch (Exception e) {
+            log.error("Test case generation failed", e);
+            return Result.error("生成测试用例失败: " + e.getMessage());
+        }
     }
 
     @PostMapping("/test-cases/{id}/run")
@@ -331,11 +420,37 @@ public class TestCaseController {
 
     @GetMapping("/test-runs/{runId}/logs")
     @Operation(summary = "获取测试运行日志", description = "获取测试运行的完整日志内容")
-    public Result<String> getResultLogs(
+    public Result<List<Map<String, Object>>> getResultLogs(
             @PathVariable String projectId,
             @PathVariable String runId) {
-        // TODO: 当日志存储就绪后返回真实日志
-        return Result.success("测试运行日志暂未存储，该功能待完善");
+        // 从扫描任务中获取关联的日志记录
+        List<ScanTask> tasks = scanTaskRepository.lambdaQuery()
+                .eq(ScanTask::getVersionId, runId)
+                .list();
+
+        List<Map<String, Object>> logs = new ArrayList<>();
+        for (ScanTask task : tasks) {
+            Map<String, Object> entry = new java.util.LinkedHashMap<>();
+            entry.put("time", task.getCreatedAt() != null ? task.getCreatedAt().toString() : "-");
+            entry.put("type", "FAILED".equals(task.getTaskStatus()) ? "ERROR" : "INFO");
+            entry.put("message", task.getTaskName() != null
+                    ? "任务 [" + task.getTaskName() + "] 状态: " + task.getTaskStatus()
+                    : "扫描子任务状态: " + task.getTaskStatus());
+            if (task.getErrorMessage() != null) {
+                entry.put("error", task.getErrorMessage());
+            }
+            logs.add(entry);
+        }
+
+        if (logs.isEmpty()) {
+            logs.add(Map.of(
+                    "time", LocalDateTime.now().toString(),
+                    "type", "INFO",
+                    "message", "暂无日志记录"
+            ));
+        }
+
+        return Result.success(logs);
     }
 
     /**

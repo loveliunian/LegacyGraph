@@ -17,7 +17,7 @@
           </el-descriptions-item>
           <el-descriptions-item label="置信度">
             <el-progress
-              :percentage="(node.data?.confidence || 0) * 100"
+              :percentage="Number(node.data?.confidence || 0) * 100"
               :color="getConfidenceColor(node.data?.confidence)"
               :stroke-width="12"
             />
@@ -117,8 +117,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 interface GraphNode {
   id: string
@@ -181,7 +181,7 @@ function getNodeTypeColor(type: string): string {
   return colorMap[type] || 'info'
 }
 
-function getConfidenceColor(confidence: number): string {
+function getConfidenceColor(confidence: number | undefined): string {
   if (!confidence) return '#909399'
   if (confidence >= 0.8) return '#67c23a'
   if (confidence >= 0.6) return '#e6a23c'
@@ -195,7 +195,15 @@ function formatValue(value: any): string {
 }
 
 function showEvidenceDetail(evidence: Evidence) {
-  ElMessage.info('查看证据详情功能开发中...')
+  const content = evidence.content
+    ? evidence.content.length > 500
+      ? evidence.content.substring(0, 500) + '\n\n... (内容过长，已截断)' 
+      : evidence.content
+    : '暂无内容'
+  ElMessageBox.alert(content, `证据详情 — ${evidence.source || evidence.type}`, {
+    confirmButtonText: '关闭',
+    customClass: 'evidence-detail-dialog',
+  })
 }
 
 function highlightNode(nodeId: string) {
@@ -212,26 +220,51 @@ function handleReview() {
   }
 }
 
-// 模拟加载关联数据
-const loadRelatedData = () => {
+// 根据节点属性加载关联数据（边、证据、关联节点）
+const loadRelatedData = async () => {
+  if (!props.node) return
   loading.value = true
-  setTimeout(() => {
-    // 模拟数据
-    edges.value = [
-      { id: 'e1', source: 'TicketService.dispatch', target: 'TicketMapper.updateHandler', label: 'CALLS' },
-      { id: 'e2', source: 'TicketController.dispatch', target: 'TicketService.dispatch', label: 'CALLS' }
-    ]
-    evidenceList.value = [
-      { type: 'CODE', source: 'TicketController.java', content: '调用 TicketService.dispatch 方法', timestamp: '2024-01-15 10:30:00' },
-      { type: 'CODE', source: 'TicketService.java', content: '调用 TicketMapper.updateHandler', timestamp: '2024-01-15 10:30:01' },
-      { type: 'SQL', source: 'TicketMapper.xml', content: 'UPDATE t_ticket SET status = ? WHERE id = ?', timestamp: '2024-01-15 10:30:02' }
-    ]
-    relatedNodes.value = [
-      { id: 'TicketService.dispatch', type: 'Service', data: { label: 'TicketService.dispatch' } },
-      { id: 'TicketMapper.updateHandler', type: 'Mapper', data: { label: 'TicketMapper.updateHandler' } }
-    ]
+
+  try {
+    // 解析节点属性中的边和关系信息
+    const nodeData = props.node.data
+    const propsMap = nodeData?.properties || {}
+
+    // 从节点属性中提取关联边
+    const rawEdges = propsMap.edges || propsMap.relatedEdges || []
+    edges.value = (Array.isArray(rawEdges) ? rawEdges : []).slice(0, 10).map((e: any, idx: number) => ({
+      id: e.id || `edge-${idx}`,
+      source: e.source || e.startNodeId || '',
+      target: e.target || e.endNodeId || '',
+      label: e.type || e.label || 'RELATED',
+    }))
+
+    // 从节点属性中提取证据
+    const rawEvidence = propsMap.evidence || propsMap.evidences || propsMap.references || []
+    evidenceList.value = (Array.isArray(rawEvidence) ? rawEvidence : []).slice(0, 10).map((ev: any, idx: number) => ({
+      type: ev.type || ev.evidenceType || 'CODE',
+      source: ev.source || ev.sourceName || ev.filePath || propsMap.sourcePath || '',
+      content: ev.content || ev.summary || ev.description || '',
+      timestamp: ev.timestamp || ev.createdAt || '',
+    }))
+
+    // 从节点属性中提取关联节点
+    const rawRelated = propsMap.relatedNodes || propsMap.neighbors || []
+    relatedNodes.value = (Array.isArray(rawRelated) ? rawRelated : []).slice(0, 10).map((rn: any, idx: number) => ({
+      id: rn.id || rn.nodeId || `related-${idx}`,
+      type: rn.type || rn.nodeType || 'Node',
+      data: {
+        label: rn.label || rn.name || rn.nodeName || `节点 ${idx}`,
+      },
+    }))
+  } catch (error) {
+    console.error('加载关联数据失败', error)
+    edges.value = []
+    evidenceList.value = []
+    relatedNodes.value = []
+  } finally {
     loading.value = false
-  }, 500)
+  }
 }
 
 // 监听节点变化，加载关联数据

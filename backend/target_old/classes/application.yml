@@ -1,0 +1,123 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    engine: jetty
+
+spring:
+  application:
+    name: legacy-graph-api
+
+  # 数据源配置
+  datasource:
+    url: jdbc:postgresql://118.145.225.100:5432/legacy_graph
+    username: mumuai
+    password: Liucl157
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      pool-name: LegacyGraphHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  # Redis 配置
+  data:
+    redis:
+      host: 47.95.208.205
+      port: 6379
+      password:
+      database: 11
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 8
+          min-idle: 0
+
+  # Jackson 配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+
+  # Neo4j 配置
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: password
+
+  # Spring AI OpenAI 配置
+  # 在 application-local.yml 中配置实际的 api-key
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:your-openai-api-key-here}
+      base-url: https://api.openai.com/v1
+      chat:
+        options:
+          model: gpt-5.5
+          temperature: 0.1
+      embedding:
+        options:
+          model: text-embedding-3-small
+          dimensions: 768
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: io.github.legacygraph.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: ASSIGN_UUID
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# MinIO 配置
+minio:
+  endpoint: http://47.95.208.205:9000
+  access-key: minio
+  secret-key: Liucl@157
+  bucket-name: legacy-graph
+
+# JWT 配置
+jwt:
+  secret: legacy-graph-secret-key-for-jwt-token-authentication-2026
+  expiration: 86400000
+
+# 日志配置
+logging:
+  level:
+    io.github.legacygraph: debug
+    org.springframework.security: debug
+
+# OpenAPI/Swagger 配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+# LegacyGraph 自定义配置
+legacy-graph:
+  scan:
+    # 并发扫描文件数
+    max-concurrent-files: 10
+    # 文件大小限制 (MB)
+    max-file-size-mb: 100
+  test:
+    # 是否允许在生产环境执行测试
+    allow-production-test: false
+    # 测试执行超时时间 (秒)
+    execution-timeout: 300
+  ai:
+    # LLM 超时时间 (秒)
+    llm-timeout: 120

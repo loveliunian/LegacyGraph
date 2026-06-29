@@ -13,7 +13,9 @@
         <el-table-column prop="projectName" label="项目名称" width="200" />
         <el-table-column prop="description" label="描述" />
         <el-table-column prop="owner" label="负责人" width="120" />
-        <el-table-column prop="createdAt" label="创建时间" width="180" />
+        <el-table-column label="创建时间" width="180">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click="goToDetail(row.id)">详情</el-button>
@@ -68,6 +70,7 @@
 import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import dayjs from 'dayjs'
 import { projectApi } from '@/api'
 import type { PageResult } from '@/types'
 import type { Project } from '@/types'
@@ -75,6 +78,11 @@ import type { Project } from '@/types'
 const router = useRouter()
 const loading = ref(false)
 const createDialogVisible = ref(false)
+
+const formatTime = (time: string) => {
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+}
+
 const pageData = ref<PageResult<Project>>({
   list: [],
   total: 0,
@@ -100,7 +108,7 @@ const newProject = reactive({
 const loadData = async () => {
   loading.value = true
   try {
-    const data = await projectApi.list(query)
+    const data = await projectApi.list(query) as any
     pageData.value = data
   } catch (e) {
     console.error(e)

@@ -143,6 +143,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 interface Props {
   type?: 'table' | 'card' | 'list' | 'detail' | 'form' | 'graph' | 'avatar' | 'custom'
   rows?: number
@@ -153,7 +155,7 @@ interface Props {
   loading?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   type: 'card',
   rows: 3,
   cols: 4,

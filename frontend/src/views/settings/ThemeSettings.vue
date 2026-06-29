@@ -15,7 +15,7 @@
             :key="option.value"
             class="mode-option"
             :class="{ active: themeStore.mode === option.value }"
-            @click="themeStore.setMode(option.value)"
+            @click="themeStore.setMode(option.value as ThemeMode)"
           >
             <div class="mode-preview" :class="option.value">
               <div class="preview-header"></div>
@@ -132,6 +132,7 @@ import { reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
 import { useThemeStore } from '@/stores/theme'
+import type { ThemeMode } from '@/types'
 
 const themeStore = useThemeStore()
 

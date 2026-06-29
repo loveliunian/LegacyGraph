@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -29,6 +30,8 @@ class AuthControllerTest {
     @Autowired
     private SysUserRepository userRepository;
 
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     @BeforeEach
     void setUp() {
         userRepository.delete(new QueryWrapper<>());
@@ -37,9 +40,9 @@ class AuthControllerTest {
     @Test
     void testLogin_Success() throws Exception {
         SysUser user = new SysUser();
-        user.setId("test-user-1");
+        user.setId("00000000-0000-0000-0000-000000000001");
         user.setUsername("testuser");
-        user.setPassword("password123");
+        user.setPassword(passwordEncoder.encode("password123"));
         user.setNickname("Test User");
         user.setEmail("test@example.com");
         user.setStatus("ACTIVE");
@@ -54,7 +57,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.accessToken").exists())
                 .andExpect(jsonPath("$.data.user.username").value("testuser"));
     }
@@ -69,15 +72,15 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
     void testLogin_WrongPassword() throws Exception {
         SysUser user = new SysUser();
-        user.setId("test-user-2");
+        user.setId("00000000-0000-0000-0000-000000000002");
         user.setUsername("testuser2");
-        user.setPassword("correctpassword");
+        user.setPassword(passwordEncoder.encode("correctpassword"));
         user.setNickname("Test User 2");
         user.setStatus("ACTIVE");
         userRepository.insert(user);
@@ -90,15 +93,15 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
     void testLogin_InactiveUser() throws Exception {
         SysUser user = new SysUser();
-        user.setId("test-user-3");
+        user.setId("00000000-0000-0000-0000-000000000003");
         user.setUsername("inactiveuser");
-        user.setPassword("password");
+        user.setPassword(passwordEncoder.encode("password"));
         user.setNickname("Inactive User");
         user.setStatus("INACTIVE");
         userRepository.insert(user);
@@ -111,14 +114,14 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
     void testLogout_Success() throws Exception {
         mockMvc.perform(post("/lg/auth/logout"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -131,7 +134,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.user.username").value("admin"))
                 .andExpect(jsonPath("$.data.user.nickname").value("管理员"));
     }

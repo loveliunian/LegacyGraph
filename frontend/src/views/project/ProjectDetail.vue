@@ -22,9 +22,9 @@
               <el-icon><FolderOpened /></el-icon>
               <span>资料接入</span>
             </template>
-            <el-menu-item :index="`/projects/${projectId}/sources/repos`">代码仓库</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/sources/databases`">数据库连接</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/sources/docs`">文档资料</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/repos`">代码仓库</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/databases`">数据库连接</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/documents`">文档资料</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="scan">
@@ -32,8 +32,7 @@
               <el-icon><Search /></el-icon>
               <span>扫描任务</span>
             </template>
-            <el-menu-item :index="`/projects/${projectId}/scans`">任务列表</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/scans/create`">新建扫描</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/scan-versions`">任务列表</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="graph">
@@ -41,12 +40,12 @@
               <el-icon><Connection /></el-icon>
               <span>图谱中心</span>
             </template>
-            <el-menu-item :index="`/projects/${projectId}/graphs/unified`">统一图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graphs/business`">业务图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graphs/feature`">功能图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graphs/code`">代码图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graphs/data-lineage`">数据血缘</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graphs/runtime`">运行链路</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/graph/unified`">统一图谱</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/graph/business`">业务图谱</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/graph/feature`">功能图谱</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/graph/code`">代码图谱</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/graph/lineage`">数据血缘</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/graph/runtime`">运行链路</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="fact">
@@ -64,7 +63,7 @@
               <span>人工审核</span>
             </template>
             <el-menu-item :index="`/projects/${projectId}/reviews`">审核队列</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/reviews/history`">审核历史</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/review-history`">审核历史</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="test">
@@ -81,7 +80,7 @@
               <el-icon><Tickets /></el-icon>
               <span>验证报告</span>
             </template>
-            <el-menu-item :index="`/projects/${projectId}/reports/validation`">验证报告</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/validation`">验证报告</el-menu-item>
             <el-menu-item :index="`/projects/${projectId}/migration/risks`">迁移风险</el-menu-item>
           </el-sub-menu>
         </el-menu>

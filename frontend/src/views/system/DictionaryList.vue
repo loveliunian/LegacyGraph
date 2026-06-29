@@ -11,7 +11,7 @@
         </div>
       </template>
 
-      <SearchForm @search="loadData" @reset="resetFilter">
+      <SearchForm :model="filterParams" @search="loadData" @reset="resetFilter">
         <el-form-item label="字典类型">
           <el-input v-model="filterParams.dictType" placeholder="请输入字典类型" clearable style="width: 200px" />
         </el-form-item>
@@ -131,6 +131,7 @@ async function loadData() {
       pageNum: pagination.value.pageNum,
       pageSize: pagination.value.pageSize,
       dictType: filterParams.value.dictType,
+      status: filterParams.value.status,
     })
     list.value = result.list
     total.value = result.total

@@ -726,5 +726,30 @@ VALUES
     ('00000000-0000-0000-0000-000000000004', 'llm.max_tokens', 'LLM 最大令牌数', '4096', 'NUMBER', TRUE);
 
 -- ============================================
+-- 32. 运行时链路 span 表 (P2-1)
+-- ============================================
+CREATE TABLE lg_runtime_trace (
+    id              UUID PRIMARY KEY,
+    project_id      UUID NOT NULL REFERENCES lg_project(id),
+    version_id      UUID REFERENCES lg_scan_version(id),
+    trace_id        VARCHAR(128),
+    span_id         VARCHAR(128),
+    parent_span_id  VARCHAR(128),
+    service_name    VARCHAR(256),
+    operation_name  VARCHAR(512),
+    span_kind       VARCHAR(32),
+    duration_ms     BIGINT,
+    status          VARCHAR(32) NOT NULL DEFAULT 'OK',
+    started_at      TIMESTAMP,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted         INT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_lg_runtime_trace_project_version ON lg_runtime_trace(project_id, version_id);
+CREATE INDEX idx_lg_runtime_trace_trace_id ON lg_runtime_trace(trace_id);
+
+COMMENT ON TABLE lg_runtime_trace IS '运行时链路 span 表';
+
+-- ============================================
 -- 结束
 -- ============================================

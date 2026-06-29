@@ -38,6 +38,11 @@ class VectorizationServiceTest {
         String content = "测试文档内容";
         float[] mockEmbedding = {0.1f, 0.2f, 0.3f, 0.4f};
         when(embeddingModel.embed(content)).thenReturn(mockEmbedding);
+        // 模拟 DB 在 insert 时回填自增主键（@TableId(IdType.AUTO)）
+        when(vectorDocumentRepository.insert(any(VectorDocument.class))).thenAnswer(inv -> {
+            inv.getArgument(0, VectorDocument.class).setId(1L);
+            return 1;
+        });
 
         // when
         Long resultId = vectorizationService.embedAndStore(
@@ -56,6 +61,10 @@ class VectorizationServiceTest {
         String content = "";
         float[] mockEmbedding = {0.0f, 0.0f};
         when(embeddingModel.embed(content)).thenReturn(mockEmbedding);
+        when(vectorDocumentRepository.insert(any(VectorDocument.class))).thenAnswer(inv -> {
+            inv.getArgument(0, VectorDocument.class).setId(2L);
+            return 1;
+        });
 
         // when
         Long resultId = vectorizationService.embedAndStore(
@@ -78,9 +87,9 @@ class VectorizationServiceTest {
 
     @Test
     void testChunkDocument_LongContent() {
-        // 构造超过 maxChars 的文本
+        // 构造超过 maxChars 的文本（小数据量避免 OOM）
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 5; i++) {
             sb.append("第").append(i).append("行的内容是一些测试数据，用于验证分片逻辑。\n");
         }
         String content = sb.toString();
@@ -161,8 +170,8 @@ class VectorizationServiceTest {
 
     @Test
     void testIsProbablyDuplicate_BelowThreshold() {
-        List<Double> a = Arrays.asList(1.0, 2.0, 3.0);
-        List<Double> b = Arrays.asList(10.0, 20.0, 30.0);  // 差异很大
+        List<Double> a = Arrays.asList(1.0, 0.0, 0.0);
+        List<Double> b = Arrays.asList(0.0, 1.0, 0.0);  // 正交向量，余弦相似度为 0
 
         boolean duplicate = vectorizationService.isProbablyDuplicate(a, b);
 

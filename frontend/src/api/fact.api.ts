@@ -123,7 +123,7 @@ export const factApi = {
     filePath: string
     content: string
   }) => {
-    return post(`/api/agents/run`, {
+    return post(`/agents/run`, {
       agentType: 'codefact',
       projectId,
       variables: {
@@ -144,7 +144,7 @@ export const factApi = {
     docId: string
     content: string
   }) => {
-    return post(`/api/agents/run`, {
+    return post(`/agents/run`, {
       agentType: 'docunderstanding',
       projectId,
       variables: {

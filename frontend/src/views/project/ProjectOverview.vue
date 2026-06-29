@@ -234,6 +234,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { get } from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import {
   FolderOpened,
@@ -260,7 +261,7 @@ const recentScans = ref<any[]>([])
 const recentReviews = ref<any[]>([])
 
 const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm')
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
 const getScanStatusType = (status: string): string => {
@@ -285,15 +286,15 @@ const getReviewStatusType = (status: string): string => {
 }
 
 const goToSources = () => {
-  router.push(`/projects/${projectId}/sources/repos`)
+  router.push(`/projects/${projectId}/repos`)
 }
 
 const goToGraphs = () => {
-  router.push(`/projects/${projectId}/graphs/code`)
+  router.push(`/projects/${projectId}/graph/code`)
 }
 
 const goToScans = () => {
-  router.push(`/projects/${projectId}/scans`)
+  router.push(`/projects/${projectId}/scan-versions`)
 }
 
 const goToReviews = () => {
@@ -301,65 +302,24 @@ const goToReviews = () => {
 }
 
 const startNewScan = () => {
-  router.push(`/projects/${projectId}/scans/create`)
+  router.push(`/projects/${projectId}/scan-versions`)
 }
 
 const generateTestCases = () => {
-  ElMessage.info('测试用例生成功能开发中')
+  router.push(`/projects/${projectId}/test-cases`)
 }
 
 onMounted(async () => {
-  overview.value = {
-    sourceStatus: {
-      repos: { configured: 2, scanned: 2, failed: 0 },
-      databases: { configured: 1, scanned: 1, failed: 0 },
-      documents: { uploaded: 3, parsed: 3, failed: 0 },
-      testEnv: { configured: true, available: true }
-    }
+  try {
+    const res = await get(`/lg/projects/${projectId}/overview`)
+    overview.value = res.sourceStatus
+    graphStats.value = res.graphStats
+    recentScans.value = res.recentScanVersions || []
+    recentReviews.value = res.recentReviews || []
+  } catch (err) {
+    console.error('获取项目概览数据失败:', err)
+    ElMessage.error('获取项目概览数据失败')
   }
-
-  graphStats.value = {
-    totalNodes: 1256,
-    totalEdges: 3428,
-    avgConfidence: 0.87,
-    approvedCount: 892,
-    pendingCount: 364,
-    withEvidenceCount: 1021
-  }
-
-  recentScans.value = [
-    {
-      id: '1',
-      taskName: '全量代码扫描',
-      taskType: 'CODE_SCAN',
-      status: 'SUCCESS',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: '2',
-      taskName: '数据库元数据提取',
-      taskType: 'DB_SCAN',
-      status: 'SUCCESS',
-      createdAt: new Date(Date.now() - 86400000).toISOString()
-    }
-  ]
-
-  recentReviews.value = [
-    {
-      id: '1',
-      targetName: 'UserController.getUser',
-      targetType: 'NODE',
-      status: 'APPROVED',
-      reviewedAt: new Date().toISOString()
-    },
-    {
-      id: '2',
-      targetName: 'OrderService.createOrder -> DB:order',
-      targetType: 'EDGE',
-      status: 'PENDING',
-      createdAt: new Date(Date.now() - 3600000).toISOString()
-    }
-  ]
 })
 </script>
 

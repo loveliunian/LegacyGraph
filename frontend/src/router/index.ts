@@ -34,6 +34,7 @@ const routes: RouteRecordRaw[] = [
         name: 'ProjectDetail',
         component: () => import('@/views/project/ProjectDetail.vue'),
         meta: { requiresAuth: true, title: 'menu.projectDetail' },
+        redirect: { name: 'ProjectOverview' },
         children: [
           {
             path: 'overview',
@@ -93,13 +94,13 @@ const routes: RouteRecordRaw[] = [
             path: 'graph/lineage',
             name: 'DataLineageGraph',
             component: () => import('@/views/graph/DataLineageGraph.vue'),
-            meta: { title: 'menu.dataLineage', badge: '建设中' }
+            meta: { title: 'menu.dataLineage' }
           },
           {
             path: 'graph/runtime',
             name: 'RuntimeGraph',
             component: () => import('@/views/graph/RuntimeGraph.vue'),
-            meta: { title: 'menu.runtimeGraph', badge: '建设中' }
+            meta: { title: 'menu.runtimeGraph' }
           },
           {
             path: 'reviews',

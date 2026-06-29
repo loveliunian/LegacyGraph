@@ -11,7 +11,7 @@ export interface CodeRepo {
   projectId: string
   /** 仓库名称 */
   repoName: string
-  /** 仓库类型 */
+  /** 仓库类型: BACKEND | FRONTEND | FULLSTACK */
   repoType: string
   /** Git仓库地址 */
   gitUrl: string
@@ -25,6 +25,10 @@ export interface CodeRepo {
   includePattern?: string
   /** 排除文件模式 */
   excludePattern?: string
+  /** 全栈项目-后端子路径 */
+  backendSubPath?: string
+  /** 全栈项目-前端子路径 */
+  frontendSubPath?: string
   /** 本地存储路径 */
   localPath: string
   /** 仓库状态 */
@@ -128,12 +132,73 @@ export const sourceApi = {
   },
 
   /**
+   * 拉取代码仓库代码
+   * @param projectId 项目ID
+   * @param id 仓库ID
+   * @returns 拉取结果
+   */
+  pullRepo: (projectId: string, id: string) => {
+    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/repos/${id}/pull`)
+  },
+
+  /**
+   * 扫描代码仓库
+   * @param projectId 项目ID
+   * @param id 仓库ID
+   * @returns 扫描版本ID
+   */
+  scanRepo: (projectId: string, id: string) => {
+    return post<{ versionId: string; message: string }>(`/lg/projects/${projectId}/sources/repos/${id}/scan`)
+  },
+
+  /**
+   * 测试代码仓库连接
+   * @param projectId 项目ID
+   * @param id 代码仓库ID
+   * @returns 测试结果，包含成功标志和消息
+   */
+  testRepoConnection: (projectId: string, id: string) => {
+    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/repos/${id}/test-connection`)
+  },
+
+  /**
+   * 测试 Git URL 连通性（无需已保存的仓库）
+   * @param projectId 项目ID
+   * @param gitUrl Git仓库地址
+   * @returns 测试结果
+   */
+  testRepoUrl: (projectId: string, gitUrl: string) => {
+    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/repos/test-url`, { gitUrl })
+  },
+
+  /**
    * 测试数据库连接
+   * @param projectId 项目ID
    * @param id 数据库连接ID
    * @returns 测试结果，包含成功标志和消息
    */
-  testConnection: (projectId: string, id: string) => {
+  testDbConnection: (projectId: string, id: string) => {
     return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/databases/${id}/test-connection`)
+  },
+
+  /**
+   * 扫描数据库表结构
+   * @param projectId 项目ID
+   * @param id 数据库连接ID
+   * @returns 扫描结果
+   */
+  scanDbSchema: (projectId: string, id: string) => {
+    return post<{ tableCount: number }>(`/lg/projects/${projectId}/sources/databases/${id}/scan`)
+  },
+
+  /**
+   * 解析文档
+   * @param projectId 项目ID
+   * @param id 文档ID
+   * @returns 解析结果
+   */
+  parseDocument: (projectId: string, id: string) => {
+    return post<{ factCount: number }>(`/lg/projects/${projectId}/sources/documents/${id}/parse`)
   },
 
   /**

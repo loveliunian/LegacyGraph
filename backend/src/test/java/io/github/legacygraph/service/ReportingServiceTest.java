@@ -1,5 +1,7 @@
 package io.github.legacygraph.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
@@ -18,6 +20,7 @@ import io.minio.MinioClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -49,6 +52,9 @@ class ReportingServiceTest {
     private io.github.legacygraph.repository.TestCaseRepository testCaseRepository;
 
     @Mock
+    private io.github.legacygraph.repository.NodeEvidenceRepository nodeEvidenceRepository;
+
+    @Mock
     private MinioClient minioClient;
 
     @Mock
@@ -70,6 +76,7 @@ class ReportingServiceTest {
                 edgeRepository,
                 testResultRepository,
                 testCaseRepository,
+                nodeEvidenceRepository,
                 minioClient,
                 objectMapper,
                 reportExportService
@@ -118,13 +125,15 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateMigrationReport_Success() {
-        when(nodeRepository.lambdaQuery()).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(nodeRepository));
-        when(nodeRepository.lambdaQuery().eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(nodeRepository));
-        when(nodeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(mockNodes);
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
+        when(nodeRepository.lambdaQuery()).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
+        when(nodeChain.list()).thenReturn(mockNodes);
 
-        when(edgeRepository.lambdaQuery()).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(edgeRepository));
-        when(edgeRepository.lambdaQuery().eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(edgeRepository));
-        when(edgeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(mockEdges);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(edgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(mockEdges);
 
         MigrationReadinessReport report = reportingService.generateMigrationReport("project-1");
 
@@ -143,13 +152,15 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateMigrationReport_EmptyNodes() {
-        when(nodeRepository.lambdaQuery()).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(nodeRepository));
-        when(nodeRepository.lambdaQuery().eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(nodeRepository));
-        when(nodeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(Collections.emptyList());
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
+        when(nodeRepository.lambdaQuery()).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
+        when(nodeChain.list()).thenReturn(Collections.emptyList());
 
-        when(edgeRepository.lambdaQuery()).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(edgeRepository));
-        when(edgeRepository.lambdaQuery().eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(edgeRepository));
-        when(edgeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(Collections.emptyList());
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(edgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(Collections.emptyList());
 
         MigrationReadinessReport report = reportingService.generateMigrationReport("project-1");
 
@@ -160,21 +171,20 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateTestCoverageReport_Success() {
-        when(nodeRepository.lambdaQuery()).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(nodeRepository));
-        when(nodeRepository.lambdaQuery().eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(nodeRepository));
-        when(nodeRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(nodeRepository));
-        when(nodeRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).count()).thenReturn(5L);
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
+        when(nodeRepository.lambdaQuery()).thenReturn(nodeChain);
+        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
+        when(nodeChain.list()).thenReturn(mockNodes);
 
-        when(testCaseRepository.lambdaQuery()).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(testCaseRepository));
-        when(testCaseRepository.lambdaQuery().eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(testCaseRepository));
-        when(testCaseRepository.lambdaQuery().eq(any(), any()).count()).thenReturn(3L);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
+        when(edgeRepository.lambdaQuery()).thenReturn(edgeChain);
+        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
+        when(edgeChain.list()).thenReturn(mockEdges);
 
-        when(testResultRepository.lambdaQuery()).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(testResultRepository));
-        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(testResultRepository));
-        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(testResultRepository));
-        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).count()).thenReturn(2L);
-        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).in(any(), (Collection<?>) any())).thenReturn(new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(testResultRepository));
-        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).in(any(), (Collection<?>) any()).count()).thenReturn(1L);
+        LambdaQueryChainWrapper<TestResult> trChain = mock(LambdaQueryChainWrapper.class);
+        when(testResultRepository.lambdaQuery()).thenReturn(trChain);
+        when(trChain.eq(any(), any())).thenReturn(trChain);
+        when(trChain.list()).thenReturn(Collections.emptyList());
 
         TestCoverageReport report = reportingService.generateTestCoverageReport("project-1", "v1");
 
@@ -183,5 +193,60 @@ class ReportingServiceTest {
         assertTrue(report.getTotalNodes() >= 0);
         assertTrue(report.getCoveredNodes() >= 0);
         assertNotNull(report.getCoveragePercentage());
+    }
+
+    @Test
+    void testGenerateGraphMetrics_ComputesAllRatios() {
+        GraphNode confirmed = new GraphNode();
+        confirmed.setId("n-confirmed");
+        confirmed.setStatus("CONFIRMED");
+        confirmed.setVerifiedScore(BigDecimal.valueOf(0.8)); // 运行时已验证
+
+        GraphNode pending = new GraphNode();
+        pending.setId("n-pending");
+        pending.setStatus("PENDING_CONFIRM");
+
+        when(nodeRepository.selectList(any())).thenReturn(Arrays.asList(confirmed, pending));
+        when(edgeRepository.selectCount(any())).thenReturn(1L);
+
+        // 仅 confirmed 节点有证据关联
+        io.github.legacygraph.entity.NodeEvidence ne = new io.github.legacygraph.entity.NodeEvidence();
+        ne.setNodeId("n-confirmed");
+        when(nodeEvidenceRepository.selectList(any())).thenReturn(Collections.singletonList(ne));
+
+        // 2 条测试结果，1 条通过
+        TestResult pass = new TestResult();
+        pass.setResultStatus("PASSED");
+        TestResult fail = new TestResult();
+        fail.setResultStatus("FAILED");
+        when(testResultRepository.selectList(any())).thenReturn(Arrays.asList(pass, fail));
+
+        io.github.legacygraph.dto.report.GraphMetricsReport report =
+                reportingService.generateGraphMetrics("project-1", "v1");
+
+        assertNotNull(report);
+        assertEquals(2, report.getTotalNodes());
+        assertEquals(1, report.getTotalEdges());
+        // 覆盖率 1/2、待审核 1/2、运行时验证 1/2、证据完备 1/2、测试通过 1/2
+        assertEquals(0, report.getCoverageRatio().compareTo(BigDecimal.valueOf(0.5)));
+        assertEquals(0, report.getPendingReviewRatio().compareTo(BigDecimal.valueOf(0.5)));
+        assertEquals(0, report.getRuntimeVerifiedRatio().compareTo(BigDecimal.valueOf(0.5)));
+        assertEquals(0, report.getEvidenceCompletenessRatio().compareTo(BigDecimal.valueOf(0.5)));
+        assertEquals(0, report.getTestPassRatio().compareTo(BigDecimal.valueOf(0.5)));
+    }
+
+    @Test
+    void testGenerateGraphMetrics_EmptyGraph() {
+        when(nodeRepository.selectList(any())).thenReturn(Collections.emptyList());
+        when(edgeRepository.selectCount(any())).thenReturn(0L);
+        when(testResultRepository.selectList(any())).thenReturn(Collections.emptyList());
+
+        io.github.legacygraph.dto.report.GraphMetricsReport report =
+                reportingService.generateGraphMetrics("project-1", "v1");
+
+        assertNotNull(report);
+        assertEquals(0, report.getTotalNodes());
+        assertEquals(0, report.getCoverageRatio().compareTo(BigDecimal.ZERO));
+        assertEquals(0, report.getTestPassRatio().compareTo(BigDecimal.ZERO));
     }
 }

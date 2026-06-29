@@ -2,8 +2,11 @@ package io.github.legacygraph.service;
 
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.GraphEdgeRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.repository.ScanTaskRepository;
+import io.github.legacygraph.repository.ScanVersionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +36,15 @@ class GraphQueryServiceTest {
 
     @Mock
     private GraphEdgeRepository graphEdgeRepository;
+
+    @Mock
+    private ScanVersionRepository scanVersionRepository;
+
+    @Mock
+    private ScanTaskRepository scanTaskRepository;
+
+    @Mock
+    private FactRepository factRepository;
 
     @Mock
     private Driver neo4jDriver;
@@ -65,6 +77,9 @@ class GraphQueryServiceTest {
         graphQueryService = new GraphQueryService(
                 graphNodeRepository,
                 graphEdgeRepository,
+                scanVersionRepository,
+                scanTaskRepository,
+                factRepository,
                 neo4jDriver
         );
     }

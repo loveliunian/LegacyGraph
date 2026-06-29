@@ -1,0 +1,43 @@
+# Docker 环境配置
+# 从环境变量读取配置，适配 docker-compose 服务名
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/legacy_graph}
+    username: ${SPRING_DATASOURCE_USERNAME:legacy_graph}
+    password: ${SPRING_DATASOURCE_PASSWORD:legacy_graph}
+    driver-class-name: org.postgresql.Driver
+
+  neo4j:
+    uri: ${SPRING_NEO4J_URI:bolt://neo4j:7687}
+    authentication:
+      username: ${SPRING_NEO4J_AUTHENTICATION_USERNAME:neo4j}
+      password: ${SPRING_NEO4J_AUTHENTICATION_PASSWORD:password}
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+
+  ai:
+    openai:
+      api-key: ${SPRING_AI_OPENAI_API_KEY:}
+      base-url: ${SPRING_AI_OPENAI_BASE_URL:https://api.openai.com/v1}
+      chat:
+        options:
+          model: ${SPRING_AI_OPENAI_CHAT_MODEL:gpt-4o}
+          temperature: 0.7
+
+# MinIO 配置
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://minio:9000}
+  access-key: ${MINIO_ACCESS_KEY:minio}
+  secret-key: ${MINIO_SECRET_KEY:minio123456}
+  bucket-name: ${MINIO_BUCKET_NAME:legacygraph}
+
+# 日志级别
+logging:
+  level:
+    io.github.legacygraph: INFO
+    org.springframework: INFO

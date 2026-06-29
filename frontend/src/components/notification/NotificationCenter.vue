@@ -86,8 +86,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Bell, CircleCheck, InfoFilled, WarningFilled, CircleClose, ArrowRight, Tools, Document } from '@element-plus/icons-vue'
+import { get } from '@/utils/request'
 
 export interface NotificationAction {
   key: string
@@ -157,7 +159,7 @@ function handleCommand(command: string) {
 }
 
 function onVisibleChange(visible: boolean) {
-  if (visible && !notifications.value.length) {
+  if (visible && notifications.value.length === 0) {
     loadNotifications()
   }
 }
@@ -193,47 +195,50 @@ function formatTime(date: Date): string {
   return date.toLocaleDateString()
 }
 
-function loadNotifications() {
-  notifications.value = [
-    {
-      id: '1',
-      type: 'success',
-      title: '分析完成',
-      content: '您的项目代码分析已完成，点击查看详情',
-      timestamp: new Date(Date.now() - 300000),
-      isRead: false,
-      data: { url: '/analysis/result' },
-      actions: [{ key: 'view', label: '查看详情' }]
-    },
-    {
-      id: '2',
-      type: 'info',
-      title: '系统更新',
-      content: 'LegacyGraph 已更新至 v2.1.0 版本，新增图表导出功能',
-      timestamp: new Date(Date.now() - 3600000),
-      isRead: false,
-      data: { url: '/about/changelog' },
-      actions: [{ key: 'changelog', label: '查看更新日志' }]
-    },
-    {
-      id: '3',
-      type: 'warning',
-      title: '任务异常',
-      content: '扫描任务 #20240123 执行时间超过预期，建议检查',
-      timestamp: new Date(Date.now() - 7200000),
-      isRead: true,
-      data: { url: '/tasks/20240123' },
-      actions: [{ key: 'check', label: '检查任务' }]
-    },
-    {
-      id: '4',
-      type: 'system',
-      title: '维护提醒',
-      content: '系统将在今晚 22:00-23:00 进行例行维护',
-      timestamp: new Date(Date.now() - 86400000),
-      isRead: true
-    }
-  ]
+async function loadNotifications() {
+  try {
+    const res: any = await get('/lg/audit/list', { pageNum: 1, pageSize: 10 })
+    const logs = res?.list || res?.records || []
+    notifications.value = logs.map((log: any, idx: number) => {
+      const typeMap: Record<string, NotificationItem['type']> = {
+        CREATE: 'success',
+        UPDATE: 'info',
+        DELETE: 'error',
+        QUERY: 'info',
+        LOGIN: 'info',
+        LOGOUT: 'info',
+      }
+      return {
+        id: String(log.id || idx),
+        type: typeMap[log.operation] || 'info',
+        title: log.operation || '系统通知',
+        content: log.description || log.operation || '',
+        timestamp: log.createdAt ? new Date(log.createdAt) : new Date(),
+        isRead: false,
+        data: {},
+        actions: [],
+      }
+    })
+  } catch {
+    // 后端不可用时显示空状态，不阻断页面渲染
+    notifications.value = []
+  }
+}
+
+// 定时轮询通知，每30秒刷新一次
+let pollTimer: number | null = null
+function startPolling() {
+  loadNotifications()
+  pollTimer = window.setInterval(() => {
+    loadNotifications()
+  }, 30000)
+}
+
+function stopPolling() {
+  if (pollTimer !== null) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
 }
 
 const emit = defineEmits<{
@@ -242,7 +247,11 @@ const emit = defineEmits<{
 }>()
 
 onMounted(() => {
-  loadNotifications()
+  startPolling()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 

@@ -24,6 +24,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import org.mockito.Answers;
 
 @ExtendWith(MockitoExtension.class)
 class GraphValidatorServiceTest {
@@ -156,7 +157,7 @@ class GraphValidatorServiceTest {
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
         // Should still be 1.0
-        assertEquals(BigDecimal.ONE, testEdge.getConfidence());
+        assertEquals(0, BigDecimal.ONE.compareTo(testEdge.getConfidence()), "Confidence should be 1.0");
         verify(graphEdgeRepository, times(1)).updateById(testEdge);
     }
 
@@ -190,14 +191,14 @@ class GraphValidatorServiceTest {
         LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.in(any())).thenReturn(edgeChain);
+        when(edgeChain.in(any(), anyString(), anyString())).thenReturn(edgeChain);
         when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
-        // 0.7 - 0.1 = 0.6
+        // 0.7 - 0.1 = 0.6, which is >= 0.5, so status should remain PENDING
         assertEquals(new BigDecimal("0.6000"), testEdge.getConfidence());
-        assertEquals("PENDING_CONFIRM", testEdge.getStatus());
+        assertEquals("PENDING", testEdge.getStatus());
         verify(graphEdgeRepository, times(1)).updateById(testEdge);
     }
 
@@ -214,7 +215,7 @@ class GraphValidatorServiceTest {
         LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.in(any())).thenReturn(edgeChain);
+        when(edgeChain.in(any(), anyString(), anyString())).thenReturn(edgeChain);
         when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
@@ -333,51 +334,62 @@ class GraphValidatorServiceTest {
 
     @Test
     void testGetValidationReport_WithData() {
-        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.count()).thenReturn(10L);
-
+        // Create individual chain mocks for each lambdaQuery() call
+        // Calls to graphNodeRepository.lambdaQuery() are in order:
+        //   1. totalNodes (eq + count)
+        //   2. confirmedNodes (eq + eq + count)
+        //   3. pendingNodes (eq + eq + count)
+        //   4. overall confidence list (eq + list)
+        LambdaQueryChainWrapper<GraphNode> totalNodeChain = mock(LambdaQueryChainWrapper.class);
         LambdaQueryChainWrapper<GraphNode> confirmedNodeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(confirmedNodeChain);
-        when(confirmedNodeChain.count()).thenReturn(5L);
-
         LambdaQueryChainWrapper<GraphNode> pendingNodeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(pendingNodeChain);
+        LambdaQueryChainWrapper<GraphNode> listNodeChain = mock(LambdaQueryChainWrapper.class);
+
+        when(graphNodeRepository.lambdaQuery())
+                .thenReturn(totalNodeChain)
+                .thenReturn(confirmedNodeChain)
+                .thenReturn(pendingNodeChain)
+                .thenReturn(listNodeChain);
+        when(totalNodeChain.eq(any(), any())).thenReturn(totalNodeChain);
+        when(totalNodeChain.count()).thenReturn(10L);
+        when(confirmedNodeChain.eq(any(), any())).thenReturn(confirmedNodeChain);
+        when(confirmedNodeChain.count()).thenReturn(5L);
+        when(pendingNodeChain.eq(any(), any())).thenReturn(pendingNodeChain);
         when(pendingNodeChain.count()).thenReturn(3L);
-        when(nodeChain.list()).thenReturn(List.of(testNode));
+        when(listNodeChain.eq(any(), any())).thenReturn(listNodeChain);
+        when(listNodeChain.list()).thenReturn(List.of(testNode));
 
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.count()).thenReturn(20L);
-
+        // Calls to graphEdgeRepository.lambdaQuery():
+        //   1. totalEdges (eq + count)
+        //   2. confirmedEdges (eq + eq + count)
+        //   3. pendingEdges (eq + eq + count)
+        LambdaQueryChainWrapper<GraphEdge> totalEdgeChain = mock(LambdaQueryChainWrapper.class);
         LambdaQueryChainWrapper<GraphEdge> confirmedEdgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(confirmedEdgeChain);
-        when(confirmedEdgeChain.count()).thenReturn(10L);
-
         LambdaQueryChainWrapper<GraphEdge> pendingEdgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(pendingEdgeChain);
+
+        when(graphEdgeRepository.lambdaQuery())
+                .thenReturn(totalEdgeChain)
+                .thenReturn(confirmedEdgeChain)
+                .thenReturn(pendingEdgeChain);
+        when(totalEdgeChain.eq(any(), any())).thenReturn(totalEdgeChain);
+        when(totalEdgeChain.count()).thenReturn(20L);
+        when(confirmedEdgeChain.eq(any(), any())).thenReturn(confirmedEdgeChain);
+        when(confirmedEdgeChain.count()).thenReturn(10L);
+        when(pendingEdgeChain.eq(any(), any())).thenReturn(pendingEdgeChain);
         when(pendingEdgeChain.count()).thenReturn(5L);
 
+        // Calls to testResultRepository.lambdaQuery():
+        //   1. passedTests (eq + eq + count)
+        //   2. failedTests (eq + eq + count)
         LambdaQueryChainWrapper<TestResult> passedChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(passedChain);
-        when(passedChain.eq(any(), any())).thenReturn(passedChain);
-        when(passedChain.eq(any(), any()).eq(any(), any())).thenReturn(passedChain);
-        when(passedChain.count()).thenReturn(3L);
-
         LambdaQueryChainWrapper<TestResult> failedChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(failedChain);
+
+        when(testResultRepository.lambdaQuery())
+                .thenReturn(passedChain)
+                .thenReturn(failedChain);
+        when(passedChain.eq(any(), any())).thenReturn(passedChain);
+        when(passedChain.count()).thenReturn(3L);
         when(failedChain.eq(any(), any())).thenReturn(failedChain);
-        when(failedChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(failedChain);
         when(failedChain.count()).thenReturn(2L);
 
         GraphValidatorService.ValidationReport report = graphValidatorService.getValidationReport("version-1");

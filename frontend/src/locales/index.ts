@@ -38,20 +38,25 @@ const i18n = createI18n({
 
 export function setLocale(locale: LocaleType) {
   if (i18n.mode === 'legacy') {
-    i18n.global.locale = locale
+    (i18n.global.locale as any) = locale
   } else {
     (i18n.global.locale as any).value = locale
   }
   localStorage.setItem(LOCALE_KEY, locale)
   document.documentElement.setAttribute('lang', locale)
+  // 通知 Element Plus 更新 locale
+  window.dispatchEvent(new CustomEvent('locale-changed', { detail: locale }))
 }
 
 export function getLocale(): LocaleType {
-  return i18n.global.locale as LocaleType
+  if (i18n.mode === 'legacy') {
+    return i18n.global.locale as unknown as LocaleType
+  }
+  return (i18n.global.locale as unknown as { value: LocaleType }).value
 }
 
-export function t(key: string, params?: Record<string, any>): string {
-  return i18n.global.t(key, params)
+export function t(key: string, params?: Record<string, unknown>): string {
+  return i18n.global.t(key, params as any)
 }
 
 export default i18n

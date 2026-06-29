@@ -17,7 +17,7 @@
           <ConfidenceBadge :value="node.confidence" />
         </el-descriptions-item>
         <el-descriptions-item label="审核状态">
-          <el-tag :type="getReviewStatusType(node.reviewStatus)" size="small">
+          <el-tag :type="getReviewStatusType(node.reviewStatus!)" size="small">
             {{ node.reviewStatus }}
           </el-tag>
         </el-descriptions-item>
@@ -91,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import dayjs from 'dayjs'
 import type { GraphNode, GraphEdge, Evidence, ReviewStatus } from '@/types'
 import ConfidenceBadge from './ConfidenceBadge.vue'
@@ -121,14 +121,14 @@ const emit = defineEmits<{
 
 const visible = computed({
   get: () => props.visible,
-  set: (value) => emit('update:visible', value)
+  set: (value: boolean) => emit('update:visible', value)
 })
 
 const handleClose = () => {
   emit('close')
 }
 
-const formatTime = (time: string) => {
+const formatTime = (time: string | undefined) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
@@ -139,15 +139,15 @@ const formatProperty = (value: any): string => {
   return String(value)
 }
 
-const getReviewStatusType = (status: ReviewStatus): string => {
-  const map: Record<ReviewStatus, string> = {
+const getReviewStatusType = (status: string): string => {
+  const map: Record<string, string> = {
     APPROVED: 'success',
     REJECTED: 'danger',
     PENDING: 'warning',
     CONFIRMED: 'success',
     IGNORED: 'info'
   }
-  return map[status] || 'info'
+  return map[status ?? 'PENDING'] || 'info'
 }
 
 const approve = () => {

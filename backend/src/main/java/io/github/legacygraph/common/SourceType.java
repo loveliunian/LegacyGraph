@@ -14,6 +14,7 @@ public enum SourceType {
     CONFIG_FILE("配置文件"),
     AI_INFERENCE("AI推断"),
     TEST_EXECUTION("测试执行"),
+    RUNTIME_TRACE("运行时链路"),
     MANUAL_CONFIRM("人工确认");
 
     private final String description;

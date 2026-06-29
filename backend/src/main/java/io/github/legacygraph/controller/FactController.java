@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.legacygraph.agent.CodeFactAgent;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
+import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
@@ -12,10 +13,12 @@ import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.NodeEvidence;
+import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.FactRepository;
+import io.github.legacygraph.repository.ScanVersionRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +39,8 @@ public class FactController {
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
     private final GraphNodeRepository graphNodeRepository;
+    private final ScanVersionRepository scanVersionRepository;
+    private final BusinessGraphBuilder businessGraphBuilder;
     private final CodeFactAgent codeFactAgent;
     private final DocUnderstandingAgent docUnderstandingAgent;
 
@@ -43,12 +48,16 @@ public class FactController {
                           EvidenceRepository evidenceRepository,
                           NodeEvidenceRepository nodeEvidenceRepository,
                           GraphNodeRepository graphNodeRepository,
+                          ScanVersionRepository scanVersionRepository,
+                          BusinessGraphBuilder businessGraphBuilder,
                           CodeFactAgent codeFactAgent,
                           DocUnderstandingAgent docUnderstandingAgent) {
         this.factRepository = factRepository;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.graphNodeRepository = graphNodeRepository;
+        this.scanVersionRepository = scanVersionRepository;
+        this.businessGraphBuilder = businessGraphBuilder;
         this.codeFactAgent = codeFactAgent;
         this.docUnderstandingAgent = docUnderstandingAgent;
     }
@@ -107,10 +116,28 @@ public class FactController {
             return Result.error("事实不存在");
         }
 
-        // 事实抽取自图谱节点，通过 node-evidences 关系找到关联节点
-        // 每个证据关联一个节点，每个事实关联多个证据
+        // 事实与图谱节点通过证据(Evidence)关联：
+        //   Fact(projectId, sourcePath) -> Evidence(同源) -> NodeEvidence(evidenceId) -> GraphNode(nodeId)
+        // 注意：Fact.evidenceIds 标记为 @TableField(exist=false) 未持久化，
+        // 且不存在 fact_id 外键，因此按来源(projectId+sourcePath)匹配证据。
+        if (!StringUtils.hasText(fact.getSourcePath())) {
+            return Result.success(List.of());
+        }
+        LambdaQueryWrapper<Evidence> evWrapper = new LambdaQueryWrapper<>();
+        evWrapper.eq(Evidence::getProjectId, projectId)
+                .eq(Evidence::getSourcePath, fact.getSourcePath());
+        List<String> evidenceIds = evidenceRepository.selectList(evWrapper).stream()
+                .map(Evidence::getId)
+                .filter(e -> e != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (evidenceIds.isEmpty()) {
+            return Result.success(List.of());
+        }
+
         LambdaQueryWrapper<NodeEvidence> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(NodeEvidence::getEvidenceId, id);
+        wrapper.in(NodeEvidence::getEvidenceId, evidenceIds);
         List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.selectList(wrapper);
 
         List<String> nodeIds = nodeEvidences.stream()
@@ -211,7 +238,34 @@ public class FactController {
                 + result.getBusinessRules().size();
         log.info("Document fact extraction completed for {}: {} facts extracted",
                 request.getDocId(), factCount);
+
+        // 将抽取到的业务事实落库到业务图谱（业务域/流程/对象/规则节点 + 证据关联）
+        if (factCount > 0) {
+            String versionId = resolveLatestVersionId(projectId);
+            if (StringUtils.hasText(versionId)) {
+                try {
+                    businessGraphBuilder.buildBusinessGraph(projectId, versionId, result);
+                    log.info("Business graph built from doc facts: projectId={}, versionId={}", projectId, versionId);
+                } catch (Exception e) {
+                    log.error("Failed to build business graph from doc facts: projectId={}", projectId, e);
+                }
+            } else {
+                log.warn("No scan version found for project {}, skip business graph build", projectId);
+            }
+        }
         return Result.success(result);
+    }
+
+    /**
+     * 解析项目最新的扫描版本 ID（按创建时间倒序取第一条）
+     */
+    private String resolveLatestVersionId(String projectId) {
+        LambdaQueryWrapper<ScanVersion> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ScanVersion::getProjectId, projectId)
+                .orderByDesc(ScanVersion::getStartedAt)
+                .last("LIMIT 1");
+        ScanVersion version = scanVersionRepository.selectOne(wrapper);
+        return version != null ? version.getId() : null;
     }
 
     /**

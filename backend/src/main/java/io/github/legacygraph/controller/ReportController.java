@@ -2,6 +2,7 @@ package io.github.legacygraph.controller;
 
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;
+import io.github.legacygraph.dto.report.GraphMetricsReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
@@ -9,14 +10,15 @@ import io.github.legacygraph.entity.Report;
 import io.github.legacygraph.service.ReportingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 /**
  * 报告控制器
  * 提供各类分析报告的生成和查询
  */
+@Slf4j
 @RestController
 @RequestMapping("/lg/projects/{projectId}")
 @Tag(name = "报告生成", description = "迁移就绪度、置信度趋势、测试覆盖率、图谱质量报告")
@@ -69,28 +71,53 @@ public class ReportController {
         return Result.success(report);
     }
 
+    @GetMapping("/reports/graph-metrics")
+    @Operation(summary = "获取图谱质量度量汇总",
+            description = "一次性返回覆盖率、证据完备度、待审核比例、测试通过率、运行时验证比例")
+    public Result<GraphMetricsReport> getGraphMetrics(
+            @PathVariable String projectId,
+            @RequestParam String versionId) {
+        GraphMetricsReport report = reportingService.generateGraphMetrics(projectId, versionId);
+        return Result.success(report);
+    }
+
     @GetMapping("/reports/{reportId}/download")
-    @Operation(summary = "下载报告", description = "下载报告文件，支持JSON格式")
+    @Operation(summary = "下载报告", description = "下载报告文件，支持MD/PDF/Excel/JSON格式")
     public org.springframework.http.ResponseEntity<byte[]> downloadReport(
             @PathVariable String projectId,
             @PathVariable String reportId,
-            @RequestParam(defaultValue = "JSON") String format) {
-        // TODO: 从MinIO获取报告文件或实时生成
-        // 当前简化实现，直接导出JSON
+            @RequestParam(defaultValue = "MD") String format) {
         try {
             byte[] data = reportingService.exportReport(reportId, format);
-            String contentType = "application/json";
-            if ("PDF".equalsIgnoreCase(format)) {
-                contentType = "application/pdf";
-            } else if ("EXCEL".equalsIgnoreCase(format)) {
-                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+            String contentType;
+            String extension;
+            switch (format.toUpperCase()) {
+                case "PDF":
+                    contentType = "application/pdf";
+                    extension = "pdf";
+                    break;
+                case "EXCEL":
+                case "XLSX":
+                    contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    extension = "xlsx";
+                    break;
+                case "JSON":
+                    contentType = "application/json";
+                    extension = "json";
+                    break;
+                default:
+                    contentType = "text/markdown";
+                    extension = "md";
             }
+
             return org.springframework.http.ResponseEntity.ok()
                     .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=report-" + reportId + "." + format.toLowerCase())
+                            "attachment; filename=report-" + reportId + "." + extension)
                     .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
                     .body(data);
         } catch (Exception e) {
+            log.error("报告下载失败", e);
             return org.springframework.http.ResponseEntity.internalServerError().build();
         }
     }

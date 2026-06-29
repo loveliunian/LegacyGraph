@@ -154,7 +154,13 @@ class SysUserServiceTest {
         newUser.setEmail("new@example.com");
         newUser.setPassword("password123");
 
-        when(sysUserRepository.insert(any(SysUser.class))).thenReturn(1);
+        // Use doAnswer to capture password before it gets cleared
+        final String[] capturedPassword = {null};
+        doAnswer(invocation -> {
+            SysUser userArg = invocation.getArgument(0);
+            capturedPassword[0] = userArg.getPassword();
+            return 1;
+        }).when(sysUserRepository).insert(any(SysUser.class));
 
         SysUser result = sysUserService.create(newUser);
 
@@ -164,14 +170,14 @@ class SysUserServiceTest {
         assertNull(result.getPassword()); // Password cleared in return
         verify(sysUserRepository).insert(any(SysUser.class));
 
-        // Capture the inserted user to verify password was encoded
+        // Verify password was encoded (captured before it was cleared)
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        assertTrue(encoder.matches("password123", capturedPassword[0]));
+        // Verify the inserted user status and created time
         ArgumentCaptor<SysUser> captor = ArgumentCaptor.forClass(SysUser.class);
         verify(sysUserRepository).insert(captor.capture());
         SysUser inserted = captor.getValue();
-
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        assertTrue(encoder.matches("password123", inserted.getPassword()));
-        assertEquals("ACTIVE", inserted.getStatus()); // default status
+        assertEquals("ACTIVE", inserted.getStatus());
         assertNotNull(inserted.getCreatedAt());
     }
 

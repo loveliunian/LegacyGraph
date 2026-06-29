@@ -145,7 +145,7 @@ class ProjectServiceTest {
         project.setId("project-1");
 
         when(projectRepository.selectById("project-1")).thenReturn(project);
-        doNothing().when(projectRepository).deleteById("project-1");
+        when(projectRepository.deleteById("project-1")).thenReturn(1);
 
         assertDoesNotThrow(() -> projectService.deleteById("project-1"));
 

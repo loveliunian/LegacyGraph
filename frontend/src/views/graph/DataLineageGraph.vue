@@ -13,6 +13,7 @@
         <el-card class="table-card">
           <template #header>
             <span>数据表</span>
+            <el-tag size="small" type="info">{{ tables.length }} 个</el-tag>
           </template>
           <el-input
             v-model="searchKeyword"
@@ -22,6 +23,9 @@
             style="margin-bottom: 12px;"
           />
           <div class="table-list">
+            <div v-if="tables.length === 0 && !loading" class="table-empty">
+              <el-empty description="暂无数据表" :image-size="60" />
+            </div>
             <div
               v-for="table in filteredTables"
               :key="table.id"
@@ -57,56 +61,90 @@
                 上游来源
               </el-button>
             </el-button-group>
+            <div v-if="selectedTableName" class="graph-context">
+              当前表: <b>{{ selectedTableName }}</b>
+            </div>
           </div>
           <div class="graph-container" ref="graphContainer">
-            <div v-if="tables.length === 0" class="graph-placeholder">
+            <div v-if="loading" class="graph-loading">
+              <el-icon :size="32" class="is-loading"><Refresh /></el-icon>
+              <p>加载中...</p>
+            </div>
+            <div v-else-if="!lineageData.nodes.length && !selectedTable" class="graph-placeholder">
               <div class="placeholder-content">
                 <el-icon :size="64" color="#c0c4cc"><Share /></el-icon>
                 <p>数据血缘可视化</p>
-                <p class="placeholder-tip">选择数据表查看表之间的数据流转关系</p>
-                <div class="stats">
-                  <el-tag type="danger">数据表: {{ tables.length }}</el-tag>
-                  <el-tag type="primary">API接口: {{ apiCount }}</el-tag>
-                  <el-tag type="success">服务: {{ serviceCount }}</el-tag>
-                </div>
+                <p class="placeholder-tip">选择左侧数据表查看表之间的数据流转关系</p>
               </div>
             </div>
+            <div v-else-if="!lineageData.nodes.length && selectedTable" class="graph-placeholder">
+              <div class="placeholder-content">
+                <el-icon :size="64" color="#e6a23c"><WarningFilled /></el-icon>
+                <p>暂无血缘数据</p>
+                <p class="placeholder-tip">该表暂未检测到上下游血缘关系</p>
+              </div>
+            </div>
+            <VueFlow
+              v-else
+              :nodes="vueFlowNodes"
+              :edges="vueFlowEdges"
+              fit-view
+              class="vue-flow-container"
+            >
+              <template #node-custom="nodeProps">
+                <div
+                  class="lineage-node"
+                  :class="{
+                    'table-node': nodeProps.data.type === 'Table' || nodeProps.data.type === 'table',
+                    'api-node': nodeProps.data.type === 'ApiEndpoint' || nodeProps.data.type === 'api',
+                    'service-node': nodeProps.data.type === 'Service' || nodeProps.data.type === 'service'
+                  }"
+                >
+                  <div class="node-label">{{ nodeProps.data.label }}</div>
+                  <div class="node-type">{{ nodeProps.data.type }}</div>
+                </div>
+              </template>
+            </VueFlow>
           </div>
         </el-card>
       </el-col>
 
       <el-col :span="5">
-        <el-card class="detail-card" v-if="selectedTable && getSelectedTable()">
+        <el-card class="detail-card" v-if="selectedTableName">
           <template #header>
             <span>表结构详情</span>
           </template>
           <div class="table-detail">
-            <h4>{{ getSelectedTable()?.name || '' }}</h4>
+            <h4>{{ selectedTableName }}</h4>
             <div class="detail-item">
               <span class="label">字段数</span>
-              <span class="value">{{ getSelectedTable()?.columnCount }}</span>
+              <span class="value">{{ tableDetail.columnCount }}</span>
             </div>
             <div class="detail-item">
               <span class="label">上游来源</span>
-              <span class="value">{{ upstreamCount }}</span>
+              <span class="value">{{ tableDetail.upstreamCount }}</span>
             </div>
             <div class="detail-item">
               <span class="label">下游影响</span>
-              <span class="value">{{ downstreamCount }}</span>
+              <span class="value">{{ tableDetail.downstreamCount }}</span>
             </div>
             <div class="detail-item">
               <span class="label">关联API</span>
-              <span class="value">{{ apiCount }}</span>
+              <span class="value">{{ tableDetail.apiCount }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="label">关系数</span>
+              <span class="value">{{ tableDetail.relationCount }}</span>
             </div>
           </div>
         </el-card>
 
-        <el-card class="risk-card" style="margin-top: 16px;" v-if="!selectedTable">
+        <el-card class="risk-card" style="margin-top: 16px;" v-if="tableRisks.length > 0">
           <template #header>
             <span>数据风险提示</span>
           </template>
           <div class="risk-list">
-            <div class="risk-item" v-for="risk in risks" :key="risk.id">
+            <div class="risk-item" v-for="risk in tableRisks" :key="risk.id">
               <el-tag
                 :type="risk.level === 'high' ? 'danger' : risk.level === 'medium' ? 'warning' : 'info'"
                 size="small"
@@ -117,6 +155,26 @@
             </div>
           </div>
         </el-card>
+
+        <el-card class="stats-card" style="margin-top: 16px;" v-if="tables.length > 0 && !selectedTable">
+          <template #header>
+            <span>数据统计</span>
+          </template>
+          <div class="stat-list">
+            <div class="stat-item">
+              <span class="stat-label">已扫描表</span>
+              <span class="stat-value">{{ tables.length }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">总字段数</span>
+              <span class="stat-value">{{ totalColumns }}</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">总关系数</span>
+              <span class="stat-value">{{ totalRelations }}</span>
+            </div>
+          </div>
+        </el-card>
       </el-col>
     </el-row>
   </div>
@@ -124,10 +182,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Tickets, Share, Refresh } from '@element-plus/icons-vue'
+import { Tickets, Share, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { graphApi } from '@/api'
 import { useRoute } from 'vue-router'
+import { VueFlow } from '@vue-flow/core'
+import '@vue-flow/core/dist/style.css'
 
 interface TableColumn {
   columnName: string
@@ -154,6 +214,24 @@ interface RiskItem {
   text: string
 }
 
+interface VueFlowNode {
+  id: string
+  type: string
+  position: { x: number; y: number }
+  data: {
+    label: string
+    type: string
+    [key: string]: any
+  }
+}
+
+interface VueFlowEdge {
+  id: string
+  source: string
+  target: string
+  label: string
+}
+
 const route = useRoute()
 const projectId = computed(() => route.params.projectId as string)
 const currentVersion = computed(() => route.query.version as string)
@@ -163,44 +241,38 @@ const searchKeyword = ref('')
 const selectedTable = ref<string | null>(null)
 const loading = ref(false)
 
-const tables = ref<TableListItem[]>([
-  { id: 't-order', name: 't_order', type: 'table', columnCount: 24, relationCount: 8, upstreamCount: 2, downstreamCount: 5, apiCount: 12 },
-  { id: 't-order-item', name: 't_order_item', type: 'relation', columnCount: 12, relationCount: 4, upstreamCount: 1, downstreamCount: 3, apiCount: 6 },
-  { id: 't-user', name: 't_user', type: 'main', columnCount: 32, relationCount: 15, upstreamCount: 3, downstreamCount: 10, apiCount: 25 },
-  { id: 't-product', name: 't_product', type: 'main', columnCount: 18, relationCount: 6, upstreamCount: 2, downstreamCount: 4, apiCount: 8 },
-  { id: 't-inventory', name: 't_inventory', type: 'main', columnCount: 14, relationCount: 5, upstreamCount: 1, downstreamCount: 3, apiCount: 6 },
-])
+// 从后端加载的数据表列表，初始为空
+const tables = ref<TableListItem[]>([])
 
 const filteredTables = computed(() => {
   if (!searchKeyword.value) return tables.value
   return tables.value.filter(t => t.name.includes(searchKeyword.value))
 })
 
-const apiCount = computed(() => {
-  const table = getSelectedTable()
-  return table ? table.apiCount : 0
+const selectedTableName = computed(() => {
+  const t = getSelectedTable()
+  return t ? t.name : ''
 })
 
-const serviceCount = computed(() => {
-  const table = getSelectedTable()
-  return table ? (table.serviceCount || 0) : 0
-})
+const tableDetail = computed(() => ({
+  columnCount: getSelectedTable()?.columnCount || 0,
+  upstreamCount: getSelectedTable()?.upstreamCount || 0,
+  downstreamCount: getSelectedTable()?.downstreamCount || 0,
+  apiCount: getSelectedTable()?.apiCount || 0,
+  relationCount: getSelectedTable()?.relationCount || 0,
+}))
 
-const upstreamCount = computed(() => {
-  const table = getSelectedTable()
-  return table ? table.upstreamCount : 0
-})
+const totalColumns = computed(() => tables.value.reduce((s, t) => s + t.columnCount, 0))
+const totalRelations = computed(() => tables.value.reduce((s, t) => s + t.relationCount, 0))
 
-const downstreamCount = computed(() => {
-  const table = getSelectedTable()
-  return table ? table.downstreamCount : 0
-})
+const tableRisks = ref<RiskItem[]>([])
 
-const risks = ref<RiskItem[]>([
-  { id: '1', level: 'high', text: 't_order 表缺少主键定义' },
-  { id: '2', level: 'medium', text: '缺少更新时间戳字段缺少注释' },
-  { id: '3', level: 'low', text: '库存扣减逻辑缺少数据库事务' },
-])
+// 血缘图数据
+const lineageData = ref<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] })
+
+// VueFlow 格式数据
+const vueFlowNodes = ref<VueFlowNode[]>([])
+const vueFlowEdges = ref<VueFlowEdge[]>([])
 
 function getSelectedTable(): TableListItem | undefined {
   return tables.value.find(t => t.id === selectedTable.value)
@@ -210,7 +282,7 @@ async function loadTablesFromBackend() {
   if (!projectId.value || !currentVersion.value) return
   loading.value = true
   try {
-    // 从后端获取数据库中已扫描到的表列表
+    // 从后端获取数据库中已扫描到的表列表 — 使用 getUnifiedGraph 中的 Table 节点
     const data: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
     if (data && data.nodes) {
       const tableNodes = (data.nodes || []).filter((n: any) =>
@@ -227,44 +299,199 @@ async function loadTablesFromBackend() {
           downstreamCount: 0,
           apiCount: 0,
         }))
+      } else {
+        tables.value = []
       }
     }
   } catch (error) {
-    console.error('加载后端表列表失败，使用本地示例数据', error)
-    // 保持本地的示例数据不变
+    console.error('加载后端表列表失败', error)
+    tables.value = []
+    ElMessage.warning('加载数据表列表失败')
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 从后端加载指定表的血缘数据
+ * 使用 getTableImpact 接口获取表的影响链路
+ */
+async function loadLineageData(tableName: string) {
+  if (!projectId.value || !currentVersion.value) return
+
+  loading.value = true
+  try {
+    // 调用后端 API 查询该表的上游/下游影响链路
+    const impact = await graphApi.getTableImpact(projectId.value, currentVersion.value, tableName)
+
+    if (impact && Array.isArray(impact) && impact.length > 0) {
+      // 解析影响链路为血缘图的节点和边
+      const nodeMap = new Map<string, any>()
+      const edgeList: any[] = []
+
+      impact.forEach((path: any) => {
+        // 处理路径中的节点
+        if (path.nodes) {
+          path.nodes.forEach((node: any) => {
+            const nodeId = node.id || node.elementId
+            if (nodeId && !nodeMap.has(nodeId)) {
+              nodeMap.set(nodeId, {
+                id: nodeId,
+                labels: node.labels || ['Node'],
+                properties: node.properties || {},
+              })
+            }
+          })
+        }
+        // 处理邻接关系（针对 API 返回格式：{api: {...}, p: {nodes, relationships}}）
+        if (path.start && path.end) {
+          const startId = path.start.id || path.start.elementId
+          const endId = path.end.id || path.end.elementId
+          if (startId && endId) {
+            edgeList.push({
+              id: `${startId}-${endId}`,
+              source: startId,
+              target: endId,
+              type: path.relationship?.type || '',
+            })
+          }
+        }
+        // 处理 p 路径（返回 paths 格式）
+        if (path.p && path.p.nodes) {
+          for (let i = 0; i < path.p.nodes.length - 1; i++) {
+            const from = path.p.nodes[i]
+            const to = path.p.nodes[i + 1]
+            const fromId = from.id || from.elementId
+            const toId = to.id || to.elementId
+            if (fromId && toId && !edgeList.find(e => e.source === fromId && e.target === toId)) {
+              edgeList.push({
+                id: `${fromId}-${toId}`,
+                source: fromId,
+                target: toId,
+                type: '',
+              })
+            }
+          }
+        }
+      })
+
+      lineageData.value = {
+        nodes: Array.from(nodeMap.values()),
+        edges: edgeList,
+      }
+      convertToVueFlow()
+      ElMessage.success(`已加载 ${tableName} 的血缘链路`)
+
+      // 更新选中表的上游/下游计数
+      const selected = getSelectedTable()
+      if (selected) {
+        const upstreamSet = new Set<string>()
+        const downstreamSet = new Set<string>()
+        edgeList.forEach(e => {
+          if (e.target === selected.id && e.source) upstreamSet.add(e.source)
+          if (e.source === selected.id && e.target) downstreamSet.add(e.target)
+        })
+        selected.upstreamCount = upstreamSet.size
+        selected.downstreamCount = downstreamSet.size
+      }
+    } else {
+      lineageData.value = { nodes: [], edges: [] }
+      vueFlowNodes.value = []
+      vueFlowEdges.value = []
+      ElMessage.info(`${tableName} 暂无血缘数据`)
+    }
+  } catch (error) {
+    console.error('加载表血缘数据失败', error)
+    lineageData.value = { nodes: [], edges: [] }
+    vueFlowNodes.value = []
+    vueFlowEdges.value = []
+    ElMessage.warning('加载血缘数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * 将后端数据转换为 VueFlow 格式
+ */
+function convertToVueFlow() {
+  const nodes: VueFlowNode[] = []
+  const edges: VueFlowEdge[] = []
+  let x = 50
+  let y = 50
+  const existingNodes = new Set<string>()
+
+  lineageData.value.nodes.forEach((node: any) => {
+    const nodeId = node.id || node.elementId
+    if (!nodeId || existingNodes.has(nodeId)) return
+    existingNodes.add(nodeId)
+
+    const labels = node.labels ? (Array.isArray(node.labels) ? node.labels[0] : node.labels) : 'Node'
+    const props = node.properties || {}
+
+    nodes.push({
+      id: nodeId,
+      type: 'custom',
+      position: { x, y },
+      data: {
+        label: props.nodeName || props.displayName || props.label || nodeId,
+        type: labels,
+        confidence: props.confidence || 1,
+      },
+    })
+
+    x += 180
+    if (x > 800) {
+      x = 50
+      y += 100
+    }
+  })
+
+  // 去重边
+  const edgeKeys = new Set<string>()
+  lineageData.value.edges.forEach((edge: any) => {
+    const source = edge.source || edge.startNodeId
+    const target = edge.target || edge.endNodeId
+    const edgeKey = `${source}-${target}`
+    if (!source || !target || edgeKeys.has(edgeKey)) return
+    edgeKeys.add(edgeKey)
+
+    edges.push({
+      id: edge.id || edgeKey,
+      source,
+      target,
+      label: edge.type || edge.label || '',
+    })
+  })
+
+  vueFlowNodes.value = nodes
+  vueFlowEdges.value = edges
 }
 
 async function selectTable(id: string) {
   selectedTable.value = selectedTable.value === id ? null : id
-  if (!selectedTable.value || !projectId.value || !currentVersion.value) return
+  if (!selectedTable.value) {
+    lineageData.value = { nodes: [], edges: [] }
+    vueFlowNodes.value = []
+    vueFlowEdges.value = []
+    return
+  }
 
-  loading.value = true
-  try {
-    const selected = getSelectedTable()
-    if (selected) {
-      // 调用后端 API 查询该表的影响范围
-      const impact = await graphApi.getTableImpact(projectId.value, currentVersion.value, selected.name)
-      if (impact) {
-        console.log('Table impact data loaded:', impact)
-        ElMessage.success(`已加载 ${selected.name} 的影响分析`)
-      }
-    }
-  } catch (error) {
-    console.error('加载表影响数据失败', error)
-  } finally {
-    loading.value = false
+  const selected = getSelectedTable()
+  if (selected) {
+    await loadLineageData(selected.name)
   }
 }
 
 async function refreshGraph() {
-  if (!selectedTable.value) {
-    ElMessage.warning('请先选择一个数据表')
-    return
+  if (selectedTable.value) {
+    const selected = getSelectedTable()
+    if (selected) {
+      await loadLineageData(selected.name)
+    }
+  } else {
+    await loadTablesFromBackend()
   }
-  await selectTable(selectedTable.value)
 }
 
 onMounted(async () => {
@@ -296,6 +523,10 @@ onMounted(async () => {
 .table-list {
   max-height: 500px;
   overflow-y: auto;
+}
+
+.table-empty {
+  padding: 20px 0;
 }
 
 .table-item {
@@ -355,7 +586,15 @@ onMounted(async () => {
 }
 
 .graph-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 12px;
+}
+
+.graph-context {
+  font-size: 13px;
+  color: #606266;
 }
 
 .graph-container {
@@ -365,6 +604,12 @@ onMounted(async () => {
   justify-content: center;
   background: #fafafa;
   border-radius: 4px;
+  position: relative;
+}
+
+.graph-loading {
+  text-align: center;
+  color: #909399;
 }
 
 .graph-placeholder .placeholder-content {
@@ -387,6 +632,48 @@ onMounted(async () => {
   display: flex;
   gap: 8px;
   justify-content: center;
+}
+
+.vue-flow-container {
+  width: 100%;
+  height: 100%;
+}
+
+.lineage-node {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #fff;
+  border: 2px solid #ddd;
+  min-width: 80px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.lineage-node.table-node {
+  border-color: #13c2c2;
+  background: #e6fffb;
+}
+
+.lineage-node.api-node {
+  border-color: #e6a23c;
+  background: #fff7e6;
+}
+
+.lineage-node.service-node {
+  border-color: #409eff;
+  background: #ecf5ff;
+}
+
+.node-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-type {
+  font-size: 10px;
+  color: #999;
 }
 
 .table-detail h4 {
@@ -424,5 +711,29 @@ onMounted(async () => {
   font-size: 13px;
   color: #606266;
   line-height: 1.4;
+}
+
+.stat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.stat-label {
+  color: #909399;
+  font-size: 13px;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #303133;
+  font-size: 14px;
 }
 </style>

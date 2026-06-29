@@ -38,6 +38,10 @@ export interface User {
   avatar: string
   /** 权限列表 */
   permissions: string[]
+  /** 用户状态 */
+  status: string
+  /** 创建时间 */
+  createdAt: string
 }
 
 /**

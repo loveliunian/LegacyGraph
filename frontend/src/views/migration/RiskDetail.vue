@@ -70,7 +70,7 @@ import { ref, onMounted } from 'vue'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
-import { graphApi } from '@/api'
+import { graphApi, reviewApi } from '@/api'
 import type { RiskItem, GraphNode } from '@/types'
 import { ElMessage } from 'element-plus'
 
@@ -172,20 +172,17 @@ function markConfirmed() {
     goBack()
     return
   }
-  // 通过审核API标记确认
-  import('@/api').then(({ reviewApi }) => {
-    reviewApi.confirmReview(pid, {
-      targetId: risk.value!.affectedNodeId,
-      targetType: risk.value!.riskType || 'NODE',
-      comment: '迁移风险确认: 已人工审核通过'
-    }).then(() => {
-      ElMessage.success('已标记为确认')
-      goBack()
-    }).catch((err) => {
-      console.error('标记确认失败', err)
-      ElMessage.success('已标记为确认')
-      goBack()
-    })
+  reviewApi.confirmReview(pid, {
+    targetId: risk.value.affectedNodeId,
+    targetType: risk.value.riskType || 'NODE',
+    comment: '迁移风险确认: 已人工审核通过'
+  }).then(() => {
+    ElMessage.success('已标记为确认')
+    goBack()
+  }).catch((err) => {
+    console.error('标记确认失败', err)
+    ElMessage.success('已标记为确认')
+    goBack()
   })
 }
 
@@ -196,19 +193,17 @@ function markIgnored() {
     goBack()
     return
   }
-  import('@/api').then(({ reviewApi }) => {
-    reviewApi.rejectReview(pid, {
-      targetId: risk.value!.affectedNodeId,
-      targetType: risk.value!.riskType || 'NODE',
-      comment: '迁移风险忽略: 已评估无影响'
-    }).then(() => {
-      ElMessage.success('已标记为忽略')
-      goBack()
-    }).catch((err) => {
-      console.error('标记忽略失败', err)
-      ElMessage.success('已标记为忽略')
-      goBack()
-    })
+  reviewApi.rejectReview(pid, {
+    targetId: risk.value.affectedNodeId,
+    targetType: risk.value.riskType || 'NODE',
+    comment: '迁移风险忽略: 已评估无影响'
+  }).then(() => {
+    ElMessage.success('已标记为忽略')
+    goBack()
+  }).catch((err) => {
+    console.error('标记忽略失败', err)
+    ElMessage.success('已标记为忽略')
+    goBack()
   })
 }
 

@@ -149,7 +149,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: Partial<TestCase>): void
 }>()
 
-const form = ref<Partial<TestCase>>({
+const form = ref<any>({
   caseCode: '',
   caseName: '',
   caseType: 'API',

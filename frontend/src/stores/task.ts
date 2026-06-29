@@ -39,7 +39,7 @@ export const useTaskStore = defineStore('task', () => {
         return
       }
       try {
-        const result = await scanApi.getProgress(projectId, taskId)
+        const result = await scanApi.progress(projectId, taskId) as any
         updateTaskProgress(taskId, result.progress, result.stage)
         
         if (result.progress >= 100) {

@@ -1,3 +1,24 @@
+// 图谱数据
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+// 扫描任务
+export interface ScanTask {
+  id: string
+  projectId: string
+  type: string
+  status: string
+  progress: number
+  stage: string
+  nodeCount?: number
+  edgeCount?: number
+  factCount?: number
+  createdAt: string
+  updatedAt: string
+}
+
 // 通用分页结果
 export interface PageResult<T> {
   list: T[]
@@ -62,6 +83,10 @@ export interface GraphNode {
   properties: Record<string, any>
   aliasNames?: string
   evidenceIds?: string
+  evidenceCount?: number
+  sourceType?: string
+  reviewStatus?: string
+  testStatus?: string
   deleted?: number
   createdAt?: string
   updatedAt?: string
@@ -197,6 +222,7 @@ export interface User {
   avatar: string
   status: string
   permissions: string[]
+  password?: string
   createdAt: string
 }
 
@@ -204,8 +230,12 @@ export interface User {
 export interface CodeRepo {
   id: string
   projectId: string
+  repoName: string
+  repoType: string
   repoUrl: string
   branchName: string
+  backendSubPath?: string
+  frontendSubPath?: string
   localPath: string
   status: string
   createdAt: string
@@ -405,6 +435,8 @@ export interface SystemConfig {
 }
 
 // 枚举定义
+export type ThemeMode = 'light' | 'dark'
+
 export enum GraphNodeType {
   API_ENDPOINT = 'ApiEndpoint',
   DATABASE_TABLE = 'DatabaseTable',

@@ -1,5 +1,6 @@
 package io.github.legacygraph.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.github.legacygraph.dto.ScanProgressResponse;
@@ -13,15 +14,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanVersion> {
 
     private final ScanTaskRepository scanTaskRepository;
+    private final ScanVersionRepository scanVersionRepository;
 
-    public ScanVersionService(ScanTaskRepository scanTaskRepository) {
+    public ScanVersionService(ScanTaskRepository scanTaskRepository,
+                              ScanVersionRepository scanVersionRepository) {
         this.scanTaskRepository = scanTaskRepository;
+        this.scanVersionRepository = scanVersionRepository;
     }
 
     /**
@@ -39,7 +42,7 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         version.setCreatedAt(LocalDateTime.now());
         version.setUpdatedAt(LocalDateTime.now());
 
-        save(version);
+        scanVersionRepository.insert(version);
         return version;
     }
 
@@ -47,14 +50,14 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
      * 获取扫描进度
      */
     public ScanProgressResponse getScanProgress(String versionId) {
-        ScanVersion version = getById(versionId);
+        ScanVersion version = scanVersionRepository.selectById(versionId);
         if (version == null) {
             throw new IllegalArgumentException("扫描版本不存在: " + versionId);
         }
 
-        List<ScanTask> tasks = scanTaskRepository.lambdaQuery()
-                .eq(ScanTask::getVersionId, versionId)
-                .list();
+        LambdaQueryWrapper<ScanTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ScanTask::getVersionId, versionId);
+        List<ScanTask> tasks = scanTaskRepository.selectList(wrapper);
 
         List<ScanProgressResponse.TaskProgress> taskProgressList = new ArrayList<>();
         int totalTasks = tasks.size();
@@ -82,7 +85,7 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
      */
     @Transactional
     public void updateScanStatus(String versionId, String status) {
-        ScanVersion version = getById(versionId);
+        ScanVersion version = scanVersionRepository.selectById(versionId);
         if (version != null) {
             version.setScanStatus(status);
             if ("RUNNING".equals(status)) {
@@ -91,7 +94,21 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 version.setFinishedAt(LocalDateTime.now());
             }
             version.setUpdatedAt(LocalDateTime.now());
-            updateById(version);
+            scanVersionRepository.updateById(version);
         }
+    }
+
+    /**
+     * 删除扫描版本及其关联的扫描任务
+     */
+    @Transactional
+    public void deleteScanVersion(String versionId) {
+        // 先删除关联的扫描任务
+        LambdaQueryWrapper<ScanTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ScanTask::getVersionId, versionId);
+        scanTaskRepository.selectList(wrapper)
+                .forEach(task -> scanTaskRepository.deleteById(task.getId()));
+        // 再删除版本本身
+        scanVersionRepository.deleteById(versionId);
     }
 }

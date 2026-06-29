@@ -71,6 +71,8 @@
       :page-sizes="[10, 20, 50, 100]"
       layout="total, sizes, prev, pager, next, jumper"
       style="margin-top: 20px; justify-content: flex-end;"
+      @current-change="handlePageChange"
+      @size-change="handleSizeChange"
     />
 
     <el-drawer v-model="detailVisible" title="审核详情" size="60%">
@@ -108,9 +110,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
+import { reviewApi } from '@/api'
+import type { PageResult } from '@/types'
+
+const route = useRoute()
+const projectId = route.params.projectId as string
 
 const loading = ref(false)
 const detailVisible = ref(false)
@@ -119,83 +127,18 @@ const selectedItem = ref<any>(null)
 const filters = ref({
   targetType: '',
   status: '',
-  dateRange: []
+  dateRange: [] as string[]
 })
 
 const pagination = ref({
   page: 1,
   pageSize: 20,
-  total: 89
+  total: 0
 })
 
-const historyList = ref([
-  {
-    id: '1',
-    targetType: 'NODE',
-    targetName: 'OrderController.createOrder -> OrderService.processOrder',
-    graphType: 'CODE',
-    confidence: 0.95,
-    status: 'APPROVED',
-    comment: '代码分析正确，调用关系明确',
-    reviewedBy: '张三',
-    reviewedAt: new Date(Date.now() - 3600000).toISOString(),
-    evidenceCount: 3
-  },
-  {
-    id: '2',
-    targetType: 'NODE',
-    targetName: 'OrderService.processOrder -> t_order表',
-    graphType: 'DATA_LINEAGE',
-    confidence: 0.88,
-    status: 'CONFIRMED',
-    comment: '数据流向正确，SQL分析无误',
-    reviewedBy: '李四',
-    reviewedAt: new Date(Date.now() - 7200000).toISOString(),
-    evidenceCount: 2
-  },
-  {
-    id: '3',
-    targetType: 'EDGE',
-    targetName: '创建订单 -> 扣减库存 调用关系',
-    graphType: 'BUSINESS',
-    confidence: 0.72,
-    status: 'REJECTED',
-    comment: '实际代码中扣减库存是异步消息触发，非直接调用',
-    reviewedBy: '王五',
-    reviewedAt: new Date(Date.now() - 86400000).toISOString(),
-    evidenceCount: 1
-  },
-  {
-    id: '4',
-    targetType: 'NODE',
-    targetName: '订单创建流程业务节点',
-    graphType: 'BUSINESS',
-    confidence: 0.68,
-    status: 'IGNORED',
-    comment: '该业务流程已重构，旧代码作废',
-    reviewedBy: '赵六',
-    reviewedAt: new Date(Date.now() - 172800000).toISOString(),
-    evidenceCount: 2
-  },
-  {
-    id: '5',
-    targetType: 'EDGE',
-    targetName: 'PaymentService.notify -> OrderService.updateStatus',
-    graphType: 'CODE',
-    confidence: 0.91,
-    status: 'APPROVED',
-    comment: '回调关系正确',
-    reviewedBy: '张三',
-    reviewedAt: new Date(Date.now() - 259200000).toISOString(),
-    evidenceCount: 4
-  }
-])
+const historyList = ref<any[]>([])
 
-const evidenceList = ref([
-  { type: '代码行', source: 'OrderController.java:45', summary: '调用orderService.processOrder()' },
-  { type: '代码行', source: 'OrderService.java:78', summary: '方法实现包含业务逻辑' },
-  { type: 'SQL语句', source: 'OrderMapper.xml:23', summary: 'INSERT INTO t_order' }
-])
+const evidenceList = ref<any[]>([])
 
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
@@ -211,6 +154,24 @@ const getStatusType = (status: string) => {
   return map[status] || 'info'
 }
 
+const loadData = async () => {
+  loading.value = true
+  try {
+    const data = await reviewApi.listHistory(projectId, {
+      pageNum: pagination.value.page,
+      pageSize: pagination.value.pageSize,
+      status: filters.value.status || undefined,
+      reviewedBy: undefined
+    }) as any
+    historyList.value = data.list
+    pagination.value.total = data.total
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
+}
+
 const viewDetail = (row: any) => {
   selectedItem.value = row
   detailVisible.value = true
@@ -219,6 +180,21 @@ const viewDetail = (row: any) => {
 const viewGraph = (row: any) => {
   ElMessage.info(`查看 ${row.targetName} 的图谱位置`)
 }
+
+const handlePageChange = (page: number) => {
+  pagination.value.page = page
+  loadData()
+}
+
+const handleSizeChange = (size: number) => {
+  pagination.value.pageSize = size
+  pagination.value.page = 1
+  loadData()
+}
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>

@@ -91,8 +91,8 @@ const handleScroll = (e: Event) => {
   const target = e.target as HTMLElement
   scrollTop.value = target.scrollTop
 
-  const { scrollTop, scrollHeight, clientHeight } = target
-  if (scrollHeight - scrollTop - clientHeight <= props.threshold && !props.isLoading && props.hasMore) {
+  const { scrollTop: st, scrollHeight, clientHeight } = target
+  if (scrollHeight - st - clientHeight <= props.threshold && !props.isLoading && props.hasMore) {
     emit('load-more')
   }
 }

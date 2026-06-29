@@ -7,7 +7,7 @@
         </div>
       </template>
 
-      <SearchForm @search="loadData" @reset="resetFilter">
+      <SearchForm :model="filterParams" @search="loadData" @reset="resetFilter">
         <el-form-item label="配置键">
           <el-input v-model="filterParams.configKey" placeholder="请输入配置键" clearable style="width: 250px" />
         </el-form-item>

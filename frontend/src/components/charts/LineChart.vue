@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import BaseChart from './BaseChart.vue'
 import type { EChartsOption, ECharts } from 'echarts'
 

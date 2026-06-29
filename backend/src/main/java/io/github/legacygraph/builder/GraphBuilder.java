@@ -523,13 +523,21 @@ public class GraphBuilder {
         for (ServiceCallExtractor.CallRelation call : calls) {
             // 查找或创建调用方节点
             String callerClassKey = call.getCallerClass();
-            NodeType callerNodeType = inferNodeType(call.getCallerClass());
+            if (callerClassKey == null || callerClassKey.isEmpty()) {
+                continue;
+            }
+            NodeType callerNodeType = inferNodeType(callerClassKey);
             GraphNode callerNode = findOrCreateNodeByClass(
                     projectId, versionId, callerNodeType, callerClassKey, call.getSourcePath());
 
-            // 查找或创建被调用方节点
+            // 查找或创建被调用方节点（targetClass 可能为 null，此时跳过该调用关系）
             String targetClassKey = call.getTargetClass();
-            NodeType targetNodeType = inferNodeType(call.getTargetClass());
+            if (targetClassKey == null || targetClassKey.isEmpty()) {
+                log.debug("Skipping call relation with null targetClass: caller={}, calledMethod={}",
+                        callerClassKey, call.getCalledMethod());
+                continue;
+            }
+            NodeType targetNodeType = inferNodeType(targetClassKey);
             GraphNode targetNode = findOrCreateNodeByClass(
                     projectId, versionId, targetNodeType, targetClassKey, call.getSourcePath());
 
@@ -571,6 +579,9 @@ public class GraphBuilder {
      * 根据类名推断节点类型
      */
     private NodeType inferNodeType(String className) {
+        if (className == null || className.isEmpty()) {
+            return NodeType.Service; // 默认作为服务类
+        }
         if (className.contains("Controller") || className.contains("controller")) {
             return NodeType.Controller;
         }

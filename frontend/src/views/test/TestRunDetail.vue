@@ -21,8 +21,8 @@
 
       <div class="summary">
         <el-progress
-          :percentage="getPercentage()"
-          :color="getProgressColor()"
+          :percentage="getPercentage"
+          :color="getProgressColor"
           :stroke-width="12"
         />
       </div>

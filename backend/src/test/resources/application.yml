@@ -1,5 +1,5 @@
 # ============================================
-# 测试环境配置
+# 测试环境配置 - H2 内存数据库
 # ============================================
 
 server:
@@ -11,25 +11,38 @@ spring:
   application:
     name: legacy-graph-api-test
 
-  # 数据源 - 使用与主配置相同的 PostgreSQL
+  profiles:
+    active: test
+
+  # 数据源 - H2 内存数据库
   datasource:
-    url: jdbc:postgresql://118.145.225.100:5432/legacy_graph
-    username: mumuai
-    password: Liucl157
-    driver-class-name: org.postgresql.Driver
+    url: jdbc:h2:mem:legacy_graph;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
     hikari:
       minimum-idle: 1
       maximum-pool-size: 5
       pool-name: LegacyGraphTestHikariCP
+  sql:
+    init:
+      schema-locations: classpath:schema-h2.sql
+      data-locations: classpath:data-h2.sql
+      mode: always
+
+  # H2 Console（调试用）
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
 
   # Redis - 禁用
   data:
     redis:
       host: localhost
       port: 6379
-    # 禁用 Redis 自动配置（通过 exclude 在 test class 中处理）
 
-  # Neo4j - 使用占位值（Driver 不会立即连接）
+  # Neo4j - 使用占位值
   neo4j:
     uri: bolt://localhost:7687
     authentication:
@@ -54,8 +67,6 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
-    serialization:
-      writeDatesAsTimestamps: false
     default-property-inclusion: non_null
 
   # 禁用不需要的自动配置
@@ -67,15 +78,20 @@ spring:
       # JPA（项目未使用 JPA 实体）
       - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
-      # Spring AI OpenAI
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      # Neo4j
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jReactiveDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jReactiveRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.neo4j.Neo4jRepositoriesAutoConfiguration
+      # Spring AI OpenAI（保留自动配置以创建 OpenAiChatModel / EmbeddingModel bean）
+      # - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+      # - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
-      # Spring AI PgVector
-      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+      # Spring AI PgVector（保留自动配置）
+      # - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
       # Spring AI Retry
       - org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration
 
@@ -93,11 +109,11 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# MinIO - 使用占位值
+# MinIO - 不使用
 minio:
   endpoint: http://localhost:9000
-  access-key: minio
-  secret-key: minio123456
+  access-key: test
+  secret-key: test123456
   bucket-name: test-bucket
 
 # JWT

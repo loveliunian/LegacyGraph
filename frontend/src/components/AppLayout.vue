@@ -111,10 +111,10 @@ const handleUserCommand = async (command: string) => {
       }
       break
     case 'profile':
-      ElMessage.info('个人信息功能开发中')
+      router.push('/dashboard')
       break
     case 'settings':
-      ElMessage.info('系统设置功能开发中')
+      router.push('/dashboard')
       break
   }
 }

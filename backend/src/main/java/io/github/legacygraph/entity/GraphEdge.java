@@ -27,9 +27,12 @@ public class GraphEdge {
     private String status;
     private String properties; // JSONB
 
-    // LLM integration fields added per detailed design
+    // LLM integration fields — 数据库尚未迁移，标记为 exist=false 避免查询报错
+    @TableField(exist = false)
     private String evidenceIds; // JSONB
+    @TableField(exist = false)
     private String relationStatus; // candidate / verified / review / rejected
+    @TableField(exist = false)
     private BigDecimal verifiedScore;
 
     private LocalDateTime createdAt;

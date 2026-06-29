@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>迁移风险检测</span>
           <el-button type="primary" @click="refreshDetection">
-            <el-icon><refreshing /></el-icon>
+            <el-icon><Refresh /></el-icon>
             重新检测
           </el-button>
         </div>

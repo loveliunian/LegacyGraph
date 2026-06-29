@@ -7,45 +7,10 @@ export { testRunApi } from './test-run.api'
 export { systemApi } from './system.api'
 export { reportApi } from './report.api'
 export { vectorApi } from './vector.api'
+export { traceApi } from './trace.api'
 
 // 保留原有导出向后兼容
-import axios from 'axios'
-
-/**
- * 通用HTTP请求实例
- * 配置了基础URL和超时时间，添加了请求/响应拦截器
- */
-const request = axios.create({
-  baseURL: '/api',
-  timeout: 30000
-})
-
-/**
- * 请求拦截器
- * 在请求发送前进行预处理
- */
-request.interceptors.request.use(config => {
-  return config
-}, error => {
-  return Promise.reject(error)
-})
-
-/**
- * 响应拦截器
- * 统一处理响应，只返回数据部分，处理错误
- */
-request.interceptors.response.use(response => {
-  const res = response.data
-  if (res.code === 0) {
-    return res.data
-  } else {
-    console.error('Request error:', res.message)
-    return Promise.reject(new Error(res.message))
-  }
-}, error => {
-  console.error('Request error:', error)
-  return Promise.reject(error)
-})
+import request from '@/utils/request'
 
 /**
  * 项目管理API
@@ -106,11 +71,12 @@ export const scanApi = {
 
   /**
    * 查询扫描进度
+   * @param projectId 项目ID
    * @param versionId 扫描版本ID
    * @returns 扫描进度信息
    */
-  progress: (versionId: string) => {
-    return request.get(`/lg/projects/${versionId}/scan-versions/${versionId}/progress`)
+  progress: (projectId: string, versionId: string) => {
+    return request.get(`/lg/projects/${projectId}/scan-versions/${versionId}/progress`)
   },
 
   /**
@@ -225,6 +191,16 @@ export const graphApi = {
     return request.get(`/lg/projects/${projectId}/graph/unified`, {
       params: { versionId, minConfidence }
     })
+  },
+
+  /**
+   * 获取项目扫描版本列表
+   * 查询项目的所有扫描版本，用于选择展示哪个版本的图谱
+   * @param projectId 项目ID
+   * @returns 扫描版本列表
+   */
+  getScanVersions: (projectId: string) => {
+    return request.get(`/lg/projects/${projectId}/scan-versions`)
   }
 }
 
@@ -316,9 +292,60 @@ export const reviewApi = {
 
 /**
  * 测试用例管理API
- * 支持自动生成测试用例、启动测试执行
+ * 支持自动生成测试用例、CRUD、启动测试执行
  */
 export const testApi = {
+  /**
+   * 分页查询测试用例列表
+   * @param projectId 项目ID
+   * @param params 查询参数
+   */
+  list: (projectId: string, params: {
+    pageNum: number
+    pageSize: number
+    caseType?: string
+    status?: string
+  }) => {
+    return request.get(`/lg/projects/${projectId}/test-cases`, { params })
+  },
+
+  /**
+   * 获取测试用例详情
+   * @param projectId 项目ID
+   * @param id 用例ID
+   */
+  getDetail: (projectId: string, id: string) => {
+    return request.get(`/lg/projects/${projectId}/test-cases/${id}`)
+  },
+
+  /**
+   * 创建测试用例
+   * @param projectId 项目ID
+   * @param data 用例数据
+   */
+  create: (projectId: string, data: any) => {
+    return request.post(`/lg/projects/${projectId}/test-cases`, data)
+  },
+
+  /**
+   * 更新测试用例
+   * @param projectId 项目ID
+   * @param id 用例ID
+   * @param data 用例数据
+   */
+  update: (projectId: string, id: string, data: any) => {
+    return request.put(`/lg/projects/${projectId}/test-cases/${id}`, data)
+  },
+
+  /**
+   * 删除测试用例
+   * @param projectId 项目ID
+   * @param id 用例ID
+   */
+  delete: (projectId: string, id: string) => {
+    return request.delete(`/lg/projects/${projectId}/test-cases/${id}`)
+  },
+
   /**
    * 根据功能节点生成测试用例
    * 使用LLM根据功能描述自动生成测试用例

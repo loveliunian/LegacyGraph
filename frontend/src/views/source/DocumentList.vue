@@ -77,6 +77,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document, Guide, Files, Reading } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { sourceApi } from '@/api/source.api'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -90,7 +91,7 @@ const uploadHeaders = {
 }
 
 const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm')
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
 const formatSize = (bytes: number) => {
@@ -165,18 +166,30 @@ const handleUploadError = () => {
 }
 
 const preview = (row: any) => {
-  ElMessage.info('文档预览功能开发中')
+  if (row.id) {
+    // 尝试在新标签页打开文档下载/预览
+    const url = `/api/projects/${projectId}/sources/docs/download/${row.id}`
+    window.open(url, '_blank')
+  } else {
+    ElMessage.warning('无法预览：缺少文档ID')
+  }
 }
 
 const parseDoc = async (row: any) => {
   try {
     row.parseStatus = 'PARSING'
     ElMessage.info('开始解析文档...')
-    setTimeout(() => {
+    // 调用后端文档解析接口
+    if (row.id) {
+      const res = await sourceApi.parseDocument(projectId, row.id)
+      row.factCount = res?.factCount || 0
       row.parseStatus = 'PARSED'
-      row.factCount = Math.floor(Math.random() * 100) + 10
       ElMessage.success(`解析完成，共抽取 ${row.factCount} 个事实`)
-    }, 3000)
+    } else {
+      row.parseStatus = 'PARSED'
+      row.factCount = 0
+      ElMessage.success('解析完成')
+    }
   } catch (error) {
     row.parseStatus = 'FAILED'
     ElMessage.error('解析失败')
@@ -190,56 +203,28 @@ const deleteDoc = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    const index = docList.value.findIndex(d => d.id === row.id)
-    if (index > -1) {
-      docList.value.splice(index, 1)
-    }
+    await sourceApi.deleteDocument(projectId, row.id)
     ElMessage.success('删除成功')
+    await loadDocList()
   } catch {
     // cancelled
   }
 }
 
-onMounted(async () => {
+const loadDocList = async () => {
   loading.value = true
-  setTimeout(() => {
-    docList.value = [
-      {
-        id: '1',
-        docName: '产品需求说明书V2.0',
-        docType: 'PRODUCT',
-        fileType: 'DOCX',
-        fileSize: 2457600,
-        uploader: '张三',
-        uploadedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-        parseStatus: 'PARSED',
-        factCount: 87
-      },
-      {
-        id: '2',
-        docName: 'RESTful API文档',
-        docType: 'API',
-        fileType: 'MD',
-        fileSize: 512000,
-        uploader: '李四',
-        uploadedAt: new Date(Date.now() - 86400000).toISOString(),
-        parseStatus: 'PARSED',
-        factCount: 124
-      },
-      {
-        id: '3',
-        docName: '数据库设计说明书',
-        docType: 'DB_DESIGN',
-        fileType: 'PDF',
-        fileSize: 1024000,
-        uploader: '王五',
-        uploadedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-        parseStatus: 'UPLOADED',
-        factCount: null
-      }
-    ]
+  try {
+    const result = await sourceApi.listDocuments(projectId, { pageNum: 1, pageSize: 100 })
+    docList.value = result.list
+  } catch (error) {
+    ElMessage.error('获取文档列表失败')
+  } finally {
     loading.value = false
-  }, 500)
+  }
+}
+
+onMounted(async () => {
+  await loadDocList()
 })
 </script>
 

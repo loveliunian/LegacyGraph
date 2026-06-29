@@ -185,7 +185,7 @@ class SysDictServiceTest {
     @Test
     void testDelete_Success() {
         when(sysDictRepository.deleteById("dict-1")).thenReturn(1);
-        doNothing().when(sysDictItemRepository).delete(any(LambdaQueryWrapper.class));
+        when(sysDictItemRepository.delete(any(LambdaQueryWrapper.class))).thenReturn(1);
 
         boolean result = sysDictService.delete("dict-1");
 

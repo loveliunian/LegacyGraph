@@ -23,6 +23,7 @@
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
+        <el-button type="primary" size="small" @click="loadData">搜索</el-button>
       </div>
     </div>
 
@@ -72,6 +73,8 @@
       :page-sizes="[10, 20, 50, 100]"
       layout="total, sizes, prev, pager, next, jumper"
       style="margin-top: 20px; justify-content: flex-end;"
+      @size-change="loadData"
+      @current-change="loadData"
     />
 
     <el-dialog v-model="detailVisible" title="事实详情" width="800px">
@@ -94,7 +97,7 @@
         </div>
 
         <div class="detail-section">
-          <h4>关联节点 ({{ selectedFact.relatedNodeCount }})</h4>
+          <h4>关联节点 ({{ relatedNodes.length }})</h4>
           <el-table :data="relatedNodes" size="small" border>
             <el-table-column prop="nodeName" label="节点名称" />
             <el-table-column prop="nodeType" label="节点类型" width="120">
@@ -113,10 +116,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { factApi } from '@/api'
+
+const route = useRoute()
+const router = useRouter()
+const projectId = route.params.projectId as string
 
 const loading = ref(false)
 const detailVisible = ref(false)
@@ -131,106 +140,93 @@ const filters = ref({
 const pagination = ref({
   page: 1,
   pageSize: 20,
-  total: 156
+  total: 0
 })
 
-const facts = ref([
-  {
-    id: '1',
-    factName: 'OrderController.createOrder',
-    factType: 'METHOD',
-    sourceType: 'CODE',
-    sourcePath: 'com/example/controller/OrderController.java',
-    sourceLine: 45,
-    confidence: 0.95,
-    relatedNodeCount: 3,
-    contentSummary: '创建订单接口，接收用户ID和商品列表，返回订单ID',
-    createdAt: new Date(Date.now() - 3600000).toISOString()
-  },
-  {
-    id: '2',
-    factName: 'OrderService.processOrder',
-    factType: 'METHOD',
-    sourceType: 'CODE',
-    sourcePath: 'com/example/service/OrderService.java',
-    sourceLine: 78,
-    confidence: 0.92,
-    relatedNodeCount: 5,
-    contentSummary: '处理订单逻辑，包括校验库存、计算价格、生成订单',
-    createdAt: new Date(Date.now() - 3600000).toISOString()
-  },
-  {
-    id: '3',
-    factName: 't_order表',
-    factType: 'TABLE',
-    sourceType: 'DB',
-    sourcePath: 'legacy_db.public',
-    sourceLine: null,
-    confidence: 0.98,
-    relatedNodeCount: 8,
-    contentSummary: '订单主表，包含订单ID、用户ID、总金额、状态等字段',
-    createdAt: new Date(Date.now() - 86400000).toISOString()
-  },
-  {
-    id: '4',
-    factName: 'SELECT * FROM t_order WHERE user_id = ?',
-    factType: 'SQL',
-    sourceType: 'CODE',
-    sourcePath: 'com/example/mapper/OrderMapper.xml',
-    sourceLine: 23,
-    confidence: 0.88,
-    relatedNodeCount: 2,
-    contentSummary: '根据用户ID查询订单列表',
-    createdAt: new Date(Date.now() - 7200000).toISOString()
-  },
-  {
-    id: '5',
-    factName: '订单创建成功后需要扣减库存',
-    factType: 'RULE',
-    sourceType: 'DOC',
-    sourcePath: 'docs/业务流程.md',
-    sourceLine: 45,
-    confidence: 0.75,
-    relatedNodeCount: 4,
-    contentSummary: '业务规则：订单创建成功后，需要同步扣减对应商品的库存',
-    createdAt: new Date(Date.now() - 172800000).toISOString()
-  },
-  {
-    id: '6',
-    factName: 'GET /api/product/list',
-    factType: 'API',
-    sourceType: 'CODE',
-    sourcePath: 'com/example/controller/ProductController.java',
-    sourceLine: 32,
-    confidence: 0.94,
-    relatedNodeCount: 3,
-    contentSummary: '商品列表查询接口，支持分页和分类筛选',
-    createdAt: new Date(Date.now() - 3600000).toISOString()
-  }
-])
-
-const relatedNodes = ref([
-  { nodeName: 'OrderController', nodeType: 'CONTROLLER', confidence: 0.95 },
-  { nodeName: 'OrderService', nodeType: 'SERVICE', confidence: 0.92 },
-  { nodeName: 't_order', nodeType: 'TABLE', confidence: 0.88 }
-])
+const facts = ref<any[]>([])
+const relatedNodes = ref<any[]>([])
 
 const formatTime = (time: string) => {
+  if (!time) return '-'
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
-const viewDetail = (row: any) => {
+const loadData = async () => {
+  if (!projectId) return
+  loading.value = true
+  try {
+    const data: any = await factApi.listFacts(projectId, {
+      pageNum: pagination.value.page,
+      pageSize: pagination.value.pageSize,
+      factType: filters.value.factType || undefined,
+      sourceType: filters.value.sourceType || undefined,
+      minConfidence: undefined,
+    })
+    // factApi.listFacts 返回的是 PageResult<Fact> 格式
+    // 但后端返回的数据结构可能不同，需要适配
+    if (data) {
+      if (data.list) {
+        facts.value = data.list
+        pagination.value.total = data.total || data.list.length
+      } else if (Array.isArray(data)) {
+        facts.value = data
+        pagination.value.total = data.length
+      } else {
+        facts.value = []
+        pagination.value.total = 0
+      }
+    }
+  } catch (e) {
+    console.error('加载事实列表失败', e)
+    facts.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+const viewDetail = async (row: any) => {
   selectedFact.value = row
   detailVisible.value = true
+  // 尝试加载关联节点
+  if (row.id && projectId) {
+    try {
+      const related = await factApi.getRelatedNodes(projectId, row.id)
+      if (related && Array.isArray(related)) {
+        relatedNodes.value = related.map((id: string, idx: number) => ({
+          nodeName: id,
+          nodeType: 'UNKNOWN',
+          confidence: 0.5,
+        }))
+      }
+    } catch (e) {
+      console.error('加载关联节点失败', e)
+    }
+  }
 }
 
 const viewRelatedNodes = (row: any) => {
-  ElMessage.info(`查看 ${row.factName} 的关联图谱`)
+  // 跳转到统一图谱，展示该事实关联的节点
+  if (row.id) {
+    router.push(`/projects/${projectId}/graph/unified?versionId=&keyword=${encodeURIComponent(row.factName || '')}`)
+  } else {
+    router.push(`/projects/${projectId}/graph/unified`)
+  }
 }
 
 const viewEvidence = (row: any) => {
-  ElMessage.info(`查看 ${row.factName} 的证据`)
+  // 打开证据检索页面，预填搜索关键词
+  if (row.factName) {
+    router.push(`/projects/${projectId}/evidence?keyword=${encodeURIComponent(row.factName)}`)
+  } else {
+    router.push(`/projects/${projectId}/evidence`)
+  }
 }
+
+onMounted(() => {
+  if (projectId) {
+    loadData()
+  }
+})
 </script>
 
 <style scoped>
@@ -241,7 +237,7 @@ const viewEvidence = (row: any) => {
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 20px;
 }
 
@@ -255,7 +251,6 @@ const viewEvidence = (row: any) => {
 .header-actions {
   display: flex;
   gap: 12px;
-  align-items: center;
 }
 
 .fact-name {
@@ -287,12 +282,13 @@ const viewEvidence = (row: any) => {
 
 .code-block {
   background: #f5f7fa;
-  padding: 12px 16px;
+  border: 1px solid #e4e7ed;
   border-radius: 4px;
-  font-family: monospace;
+  padding: 12px;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 13px;
-  color: #606266;
-  line-height: 1.6;
+  line-height: 1.5;
   white-space: pre-wrap;
+  color: #303133;
 }
 </style>

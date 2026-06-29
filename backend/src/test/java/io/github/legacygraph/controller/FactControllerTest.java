@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.Evidence;
+import io.github.legacygraph.entity.Project;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
+import io.github.legacygraph.repository.ProjectRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,12 +35,37 @@ class FactControllerTest {
     @Autowired
     private EvidenceRepository evidenceRepository;
 
-    private final String testProjectId = "test-project-1";
+    @Autowired
+    private ProjectRepository projectRepository;
+
+    // Use unique IDs per test run to avoid PK conflicts from soft-delete
+    private static final String TS = String.valueOf(System.currentTimeMillis());
+    private final String testProjectId = "test-project-fact-" + TS;
+    private final String wrongProjectId = "wrong-project-fact-" + TS;
 
     @BeforeEach
     void setUp() {
-        factRepository.delete(new QueryWrapper<>());
         evidenceRepository.delete(new QueryWrapper<>());
+        factRepository.delete(new QueryWrapper<>());
+        projectRepository.delete(new QueryWrapper<>());
+
+        createProject(testProjectId, "FACT-TEST-" + TS, "Fact Test Project");
+        createProject(wrongProjectId, "WRONG-PROJ-" + TS, "Wrong Project");
+    }
+
+    private void createProject(String id, String code, String name) {
+        Project p = new Project();
+        p.setId(id);
+        p.setProjectCode(code);
+        p.setProjectName(name);
+        p.setRepoUrl("https://github.com/test/" + code.toLowerCase());
+        p.setOwner("admin");
+        p.setStatus("ACTIVE");
+        try {
+            projectRepository.insert(p);
+        } catch (Exception e) {
+            // already exists — ignore (soft-delete may leave the row)
+        }
     }
 
     @Test
@@ -47,7 +74,7 @@ class FactControllerTest {
                         .param("pageNum", "1")
                         .param("pageSize", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.list").exists());
     }
 
@@ -56,8 +83,11 @@ class FactControllerTest {
         Fact fact = new Fact();
         fact.setId("fact-1");
         fact.setProjectId(testProjectId);
+        fact.setVersionId("version-1");
         fact.setFactType("BUSINESS_RULE");
+        fact.setFactKey("business-rule-key");
         fact.setSourceType("CODE");
+        fact.setNormalizedData("test data");
         fact.setConfidence(0.95);
         factRepository.insert(fact);
 
@@ -67,53 +97,70 @@ class FactControllerTest {
                         .param("factType", "BUSINESS_RULE")
                         .param("minConfidence", "0.9"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.total").value(1));
     }
 
     @Test
     void testGetFact_Success() throws Exception {
         Fact fact = new Fact();
-        fact.setId("fact-1");
+        fact.setId("fact-get-success");
         fact.setProjectId(testProjectId);
+        fact.setVersionId("version-1");
         fact.setFactType("BUSINESS_RULE");
+        fact.setFactKey("business-rule-key");
+        fact.setSourceType("CODE");
+        fact.setNormalizedData("test data");
+        fact.setConfidence(1.0);
         factRepository.insert(fact);
 
-        mockMvc.perform(get("/lg/projects/{projectId}/facts/{id}", testProjectId, "fact-1"))
+        mockMvc.perform(get("/lg/projects/{projectId}/facts/{id}", testProjectId, "fact-get-success"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.id").value("fact-1"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.id").value("fact-get-success"));
     }
 
     @Test
     void testGetFact_NotFound() throws Exception {
         mockMvc.perform(get("/lg/projects/{projectId}/facts/{id}", testProjectId, "nonexistent"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
     void testGetFact_WrongProject() throws Exception {
         Fact fact = new Fact();
-        fact.setId("fact-1");
-        fact.setProjectId("wrong-project");
+        fact.setId("fact-wrong-project");
+        fact.setProjectId(wrongProjectId);
+        fact.setVersionId("version-1");
+        fact.setFactType("BUSINESS_RULE");
+        fact.setFactKey("business-rule-key");
+        fact.setSourceType("CODE");
+        fact.setNormalizedData("test data");
+        fact.setConfidence(1.0);
         factRepository.insert(fact);
 
-        mockMvc.perform(get("/lg/projects/{projectId}/facts/{id}", testProjectId, "fact-1"))
+        mockMvc.perform(get("/lg/projects/{projectId}/facts/{id}", testProjectId, "fact-wrong-project"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
     void testGetRelatedNodes() throws Exception {
         Fact fact = new Fact();
-        fact.setId("fact-1");
+        fact.setId("fact-related-nodes");
         fact.setProjectId(testProjectId);
+        fact.setVersionId("version-1");
+        fact.setFactType("BUSINESS_RULE");
+        fact.setFactKey("business-rule-key");
+        fact.setSourceType("CODE");
+        fact.setNormalizedData("test data");
+        fact.setConfidence(1.0);
         factRepository.insert(fact);
 
-        mockMvc.perform(get("/lg/projects/{projectId}/facts/{id}/related-nodes", testProjectId, "fact-1"))
+        mockMvc.perform(get("/lg/projects/{projectId}/facts/{id}/related-nodes", testProjectId, "fact-related-nodes"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -122,28 +169,29 @@ class FactControllerTest {
                         .param("pageNum", "1")
                         .param("pageSize", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
     void testGetEvidence_Success() throws Exception {
         Evidence evidence = new Evidence();
-        evidence.setId("evidence-1");
+        evidence.setId("evidence-success");
         evidence.setProjectId(testProjectId);
+        evidence.setVersionId("version-1");
         evidence.setEvidenceType("CODE");
         evidenceRepository.insert(evidence);
 
-        mockMvc.perform(get("/lg/projects/{projectId}/evidence/{id}", testProjectId, "evidence-1"))
+        mockMvc.perform(get("/lg/projects/{projectId}/evidence/{id}", testProjectId, "evidence-success"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.id").value("evidence-1"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.id").value("evidence-success"));
     }
 
     @Test
     void testGetEvidence_NotFound() throws Exception {
         mockMvc.perform(get("/lg/projects/{projectId}/evidence/{id}", testProjectId, "nonexistent"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
@@ -157,7 +205,7 @@ class FactControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -170,6 +218,6 @@ class FactControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

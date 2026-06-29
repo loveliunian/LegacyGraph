@@ -23,9 +23,16 @@
         </template>
       </el-table-column>
       <el-table-column prop="stage" label="当前阶段" width="150" />
-      <el-table-column prop="progress" label="进度" width="150">
+      <el-table-column prop="progress" label="进度" width="180">
         <template #default="{ row }">
-          <el-progress :percentage="row.progress" :status="row.status === 'FAILED' ? 'exception' : undefined" />
+          <div class="progress-wrapper">
+            <el-progress
+              :percentage="row.progress"
+              :status="row.status === 'FAILED' ? 'exception' : (row.progress === 100 ? 'success' : undefined)"
+              :stroke-width="16"
+            />
+            <span v-if="row.taskCount > 0" class="progress-text">{{ row.completedTaskCount }}/{{ row.taskCount }}</span>
+          </div>
         </template>
       </el-table-column>
       <el-table-column prop="factCount" label="事实数" width="100" align="center">
@@ -92,6 +99,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { get, post } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -123,6 +131,18 @@ const getTaskTypeText = (type: string) => {
   return map[type] || type
 }
 
+const getStageText = (stage: string) => {
+  const map: Record<string, string> = {
+    CODE_SCAN: '代码扫描中',
+    DB_SCAN: '数据库扫描中',
+    DOC_PARSE: '文档解析中',
+    GRAPH_BUILD: '图谱构建中',
+    TEST_GENERATE: '测试生成中',
+    COMPLETED: '已完成',
+  }
+  return map[stage] || stage
+}
+
 const getStatusType = (status: string): string => {
   const map: Record<string, string> = {
     PENDING: 'info',
@@ -135,22 +155,20 @@ const getStatusType = (status: string): string => {
 }
 
 const goToCreate = () => {
-  router.push(`/projects/${projectId}/scans/create`)
+  router.push(`/projects/${projectId}/scan-versions`)
 }
 
-const viewLogs = (row: any) => {
+const viewLogs = async (row: any) => {
   logDialogVisible.value = true
-  logs.value = [
-    { time: '2024-01-15 10:30:00', type: 'INFO', message: '任务开始执行...' },
-    { time: '2024-01-15 10:30:05', type: 'INFO', message: '开始拉取代码仓库...' },
-    { time: '2024-01-15 10:30:15', type: 'INFO', message: '代码拉取完成，开始解析 Java 文件...' },
-    { time: '2024-01-15 10:30:45', type: 'INFO', message: '解析 Controller 完成，发现 24 个 API 端点' },
-    { time: '2024-01-15 10:31:00', type: 'INFO', message: '解析 Service 完成，发现 56 个 Service 方法' },
-    { time: '2024-01-15 10:31:30', type: 'INFO', message: '解析 Mapper 和 SQL 完成，发现 89 条 SQL 语句' },
-    { time: '2024-01-15 10:32:00', type: 'INFO', message: '开始构建图谱节点和关系...' },
-    { time: '2024-01-15 10:32:30', type: 'INFO', message: '图谱构建完成，共生成 168 个节点，324 个关系' },
-    { time: '2024-01-15 10:32:35', type: 'INFO', message: '任务执行完成' }
-  ]
+  logs.value = []
+  try {
+    const logData = await get(`/lg/projects/${projectId}/scan-versions/${row.versionId}/logs`)
+    if (Array.isArray(logData)) {
+      logs.value = logData
+    }
+  } catch (err) {
+    // 日志为空时静默处理
+  }
 }
 
 const stopTask = async (row: any) => {
@@ -160,6 +178,7 @@ const stopTask = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
+    await post(`/lg/projects/${projectId}/scan-versions/${row.versionId}/cancel`)
     row.status = 'CANCELED'
     ElMessage.success('任务已停止')
   } catch {
@@ -174,78 +193,52 @@ const retryTask = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    row.status = 'RUNNING'
+    await post(`/lg/projects/${projectId}/scan-versions/${row.versionId}/resume`)
+    row.status = 'PENDING'
     row.progress = 0
-    ElMessage.success('任务已重新启动')
+    ElMessage.success('任务已重新提交')
+    // 刷新列表
+    loadTaskList()
   } catch {
     // cancelled
   }
 }
 
-onMounted(async () => {
-  loading.value = true
-  setTimeout(() => {
-    taskList.value = [
-      {
-        id: '1',
-        taskName: '全量代码扫描',
-        taskType: 'CODE_SCAN',
-        status: 'SUCCESS',
-        stage: '完成',
-        progress: 100,
-        factCount: 256,
-        nodeCount: 168,
-        edgeCount: 324,
-        startTime: new Date(Date.now() - 86400000).toISOString(),
-        duration: 155,
-        createdBy: '张三'
-      },
-      {
-        id: '2',
-        taskName: '数据库结构扫描',
-        taskType: 'DB_SCAN',
-        status: 'SUCCESS',
-        stage: '完成',
-        progress: 100,
-        factCount: 89,
-        nodeCount: 56,
-        edgeCount: 142,
-        startTime: new Date(Date.now() - 86400000 * 2).toISOString(),
-        duration: 45,
-        createdBy: '李四'
-      },
-      {
-        id: '3',
-        taskName: '产品文档解析',
-        taskType: 'DOC_PARSE',
-        status: 'RUNNING',
-        stage: '解析业务规则',
-        progress: 65,
-        factCount: 45,
-        nodeCount: 0,
-        edgeCount: 0,
-        startTime: new Date(Date.now() - 120000).toISOString(),
-        duration: 120,
-        createdBy: '王五'
-      },
-      {
-        id: '4',
-        taskName: '测试用例生成',
-        taskType: 'TEST_GENERATE',
-        status: 'PENDING',
-        stage: '等待执行',
-        progress: 0,
-        factCount: 0,
-        nodeCount: 0,
-        edgeCount: 0,
-        startTime: null,
-        duration: 0,
-        createdBy: '张三'
-      }
-    ]
-    loading.value = false
-  }, 500)
+onMounted(() => {
+  loadTaskList()
 })
+
+async function loadTaskList() {
+  loading.value = true
+  try {
+    const res = await get(`/lg/projects/${projectId}/scan-versions`)
+    const list = Array.isArray(res) ? res : (res.list || [])
+    taskList.value = list.map((v: any) => ({
+      id: v.id,
+      versionId: v.id,
+      taskName: v.versionName || v.versionNo || '未知任务',
+      taskType: v.scanType || 'CODE_SCAN',
+      status: (v.scanStatus === 'COMPLETED' || v.scanStatus === 'SUCCESS') ? 'SUCCESS' :
+              (v.scanStatus === 'FAILED') ? 'FAILED' :
+              (v.scanStatus === 'RUNNING') ? 'RUNNING' :
+              (v.scanStatus || 'PENDING'),
+      stage: getStageText(v.stage || '-'),
+      progress: v.progress != null ? v.progress : (v.scanStatus === 'SUCCESS' || v.scanStatus === 'COMPLETED' ? 100 : 0),
+      taskCount: v.taskCount || 0,
+      completedTaskCount: v.completedTaskCount || 0,
+      factCount: v.factCount || 0,
+      nodeCount: v.nodeCount || 0,
+      edgeCount: v.edgeCount || 0,
+      startTime: v.startedAt || v.createdAt,
+      duration: v.duration || 0,
+      createdBy: v.createdBy || '-'
+    }))
+  } catch (err) {
+    console.error('获取扫描任务列表失败:', err)
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -296,5 +289,17 @@ onMounted(async () => {
 
 .text-gray {
   color: #909399;
+}
+
+.progress-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-wrapper .progress-text {
+  font-size: 11px;
+  color: #909399;
+  text-align: right;
 }
 </style>

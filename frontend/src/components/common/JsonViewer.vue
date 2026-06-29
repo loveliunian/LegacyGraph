@@ -2,7 +2,7 @@
   <div class="json-viewer">
     <div v-if="collapsible" class="json-viewer__header">
       <el-button link size="small" @click="toggleExpand">
-        <el-icon><component :is="isExpanded ? arrowDown : arrowRight" /></el-icon>
+        <el-icon><component :is="isExpanded ? ArrowDown : ArrowRight" /></el-icon>
         {{ label || 'JSON' }} ({{ count }})
       </el-button>
       <span class="json-viewer__type">{{ typeofData }}</span>

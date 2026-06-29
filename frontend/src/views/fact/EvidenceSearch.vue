@@ -58,6 +58,8 @@
       :page-sizes="[10, 20, 50, 100]"
       layout="total, sizes, prev, pager, next, jumper"
       style="margin-top: 20px; justify-content: flex-end;"
+      @size-change="doSearch"
+      @current-change="doSearch"
     />
 
     <el-dialog v-model="contentVisible" title="证据原文" width="900px">
@@ -85,10 +87,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { factApi } from '@/api'
+
+const route = useRoute()
+const router = useRouter()
+const projectId = route.params.projectId as string
 
 const loading = ref(false)
 const contentVisible = ref(false)
@@ -102,84 +110,31 @@ const filters = ref({
 const pagination = ref({
   page: 1,
   pageSize: 20,
-  total: 234
+  total: 0
 })
 
-const evidenceList = ref([
-  {
-    id: '1',
-    evidenceType: 'FILE_LINE',
-    sourceName: 'OrderController.java',
-    location: 'com/example/controller/OrderController.java:45-67',
-    summary: '创建订单方法，包含参数校验、调用Service、返回结果',
-    content: '@PostMapping("/create")\npublic Result<Long> createOrder(@RequestBody OrderDTO dto) {\n    validateOrder(dto);\n    Long orderId = orderService.processOrder(dto);\n    return Result.success(orderId);\n}',
-    relatedNodeCount: 3,
-    relatedNodeIds: ['OrderController', 'OrderService', 'createOrder API'],
-    createdAt: new Date(Date.now() - 3600000).toISOString()
-  },
-  {
-    id: '2',
-    evidenceType: 'SQL_STATEMENT',
-    sourceName: 'OrderMapper.xml',
-    location: 'com/example/mapper/OrderMapper.xml:23-35',
-    summary: '根据用户ID查询订单列表的SQL语句',
-    content: '<select id="listByUserId" resultType="Order">\n    SELECT * FROM t_order\n    WHERE user_id = #{userId}\n    ORDER BY created_at DESC\n</select>',
-    relatedNodeCount: 2,
-    relatedNodeIds: ['OrderMapper', 't_order'],
-    createdAt: new Date(Date.now() - 7200000).toISOString()
-  },
-  {
-    id: '3',
-    evidenceType: 'DB_SCHEMA',
-    sourceName: 'legacy_db.public',
-    location: 'public.t_order',
-    summary: '订单表结构定义，包含id、user_id、total_amount、status等字段',
-    content: 'CREATE TABLE t_order (\n    id BIGINT PRIMARY KEY,\n    user_id BIGINT NOT NULL,\n    total_amount DECIMAL(10,2) NOT NULL,\n    status INT NOT NULL DEFAULT 0,\n    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);',
-    relatedNodeCount: 5,
-    relatedNodeIds: ['t_order', 'Order实体', 'OrderMapper'],
-    createdAt: new Date(Date.now() - 86400000).toISOString()
-  },
-  {
-    id: '4',
-    evidenceType: 'DOC_PARAGRAPH',
-    sourceName: '业务流程.md',
-    location: '第45-52行',
-    summary: '订单创建成功后，需要同步扣减对应商品的库存，并发送通知',
-    content: '### 订单创建流程\n\n1. 用户提交订单信息\n2. 系统校验订单数据合法性\n3. 系统扣减商品库存\n4. 系统生成订单记录\n5. 系统发送订单创建通知',
-    relatedNodeCount: 4,
-    relatedNodeIds: ['订单创建流程', '库存扣减', 'OrderService'],
-    createdAt: new Date(Date.now() - 172800000).toISOString()
-  },
-  {
-    id: '5',
-    evidenceType: 'TEST_RESULT',
-    sourceName: 'OrderServiceTest.java',
-    location: 'testCreateOrder()',
-    summary: '订单创建单元测试，测试正常流程和异常场景',
-    content: '@Test\npublic void testCreateOrder() {\n    OrderDTO dto = new OrderDTO();\n    dto.setUserId(1L);\n    dto.setItems(Collections.singletonList(item));\n    Long orderId = orderService.processOrder(dto);\n    assertNotNull(orderId);\n    assertEquals(OrderStatus.CREATED, order.getStatus());\n}',
-    relatedNodeCount: 2,
-    relatedNodeIds: ['OrderService', '订单创建测试'],
-    createdAt: new Date(Date.now() - 259200000).toISOString()
-  },
-  {
-    id: '6',
-    evidenceType: 'AI_REASONING',
-    sourceName: 'AI归纳',
-    location: '业务规则推断',
-    summary: 'AI基于代码和文档归纳出订单与库存的强关联关系',
-    content: '基于代码分析和文档分析，推断出订单创建过程中必须调用库存服务进行库存扣减，两个模块存在强数据依赖关系。',
-    relatedNodeCount: 4,
-    relatedNodeIds: ['订单模块', '库存模块', '数据依赖关系'],
-    createdAt: new Date(Date.now() - 345600000).toISOString()
-  }
-])
+const evidenceList = ref<any[]>([])
 
 const formatTime = (time: string) => {
+  if (!time) return '-'
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
-const getEvidenceTypeText = (type: string) => {
-  const map: Record<string, string> = {
+const getEvidenceTypeColor = (type: string): string => {
+  const colorMap: Record<string, string> = {
+    FILE_LINE: 'primary',
+    SQL_STATEMENT: 'success',
+    DB_SCHEMA: 'warning',
+    DOC_PARAGRAPH: 'info',
+    API_DOC: '',
+    TEST_RESULT: 'success',
+    AI_REASONING: 'danger'
+  }
+  return colorMap[type] || 'info'
+}
+
+const getEvidenceTypeText = (type: string): string => {
+  const textMap: Record<string, string> = {
     FILE_LINE: '代码行',
     SQL_STATEMENT: 'SQL语句',
     DB_SCHEMA: '数据库模式',
@@ -188,38 +143,73 @@ const getEvidenceTypeText = (type: string) => {
     TEST_RESULT: '测试结果',
     AI_REASONING: 'AI推理'
   }
-  return map[type] || type
+  return textMap[type] || type
 }
 
-const getEvidenceTypeColor = (type: string) => {
-  const map: Record<string, string> = {
-    FILE_LINE: 'primary',
-    SQL_STATEMENT: 'success',
-    DB_SCHEMA: 'warning',
-    DOC_PARAGRAPH: 'info',
-    API_DOC: 'danger',
-    TEST_RESULT: 'success',
-    AI_REASONING: 'danger'
-  }
-  return map[type] || 'info'
-}
-
-const doSearch = () => {
+const doSearch = async () => {
+  if (!projectId) return
   loading.value = true
-  setTimeout(() => {
+  try {
+    const params: any = {
+      pageNum: pagination.value.page,
+      pageSize: pagination.value.pageSize,
+    }
+    if (filters.value.evidenceType) {
+      params.evidenceType = filters.value.evidenceType
+    }
+    if (filters.value.keyword) {
+      params.keyword = filters.value.keyword
+    }
+    const data: any = await factApi.searchEvidence(projectId, params)
+    if (data) {
+      if (data.list) {
+        evidenceList.value = data.list
+        pagination.value.total = data.total || data.list.length
+      } else if (Array.isArray(data)) {
+        evidenceList.value = data
+        pagination.value.total = data.length
+      } else {
+        evidenceList.value = []
+        pagination.value.total = 0
+      }
+    }
+  } catch (e) {
+    console.error('搜索证据失败', e)
+    evidenceList.value = []
+  } finally {
     loading.value = false
-    ElMessage.success('搜索完成')
-  }, 500)
+  }
 }
 
-const viewContent = (row: any) => {
+const viewContent = async (row: any) => {
   selectedEvidence.value = row
   contentVisible.value = true
+  // 如果有 ID，尝试加载完整证据详情
+  if (row.id && projectId) {
+    try {
+      const detail: any = await factApi.getEvidence(projectId, row.id)
+      if (detail) {
+        selectedEvidence.value = { ...row, ...detail }
+      }
+    } catch (e) {
+      console.error('加载证据详情失败', e)
+    }
+  }
 }
 
 const viewRelated = (row: any) => {
-  ElMessage.info(`查看 ${row.sourceName} 的关联图谱`)
+  if (row.sourceName) {
+    router.push(`/projects/${projectId}/graph/unified?versionId=&keyword=${encodeURIComponent(row.sourceName)}`)
+  } else {
+    router.push(`/projects/${projectId}/graph/unified`)
+  }
 }
+
+onMounted(() => {
+  if (projectId) {
+    doSearch()
+  }
+})
 </script>
 
 <style scoped>
@@ -230,7 +220,7 @@ const viewRelated = (row: any) => {
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 20px;
 }
 
@@ -244,11 +234,20 @@ const viewRelated = (row: any) => {
 .header-actions {
   display: flex;
   gap: 12px;
-  align-items: center;
 }
 
-.evidence-content {
-  padding: 10px 0;
+.code-block {
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: #303133;
+  max-height: 500px;
+  overflow: auto;
 }
 
 .content-section h4 {
@@ -256,18 +255,5 @@ const viewRelated = (row: any) => {
   font-size: 14px;
   font-weight: 500;
   color: #303133;
-}
-
-.code-block {
-  background: #f5f7fa;
-  padding: 16px;
-  border-radius: 4px;
-  font-family: monospace;
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  max-height: 400px;
-  overflow-y: auto;
 }
 </style>

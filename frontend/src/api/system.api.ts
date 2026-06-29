@@ -113,6 +113,7 @@ export const systemApi = {
     pageNum: number
     pageSize: number
     dictType?: string
+    status?: string
   }) => {
     return get<PageResult<Dictionary>>('/lg/system/dicts/list', params)
   },

@@ -11,10 +11,36 @@
         </div>
       </template>
 
-      <test-case-form
-        v-model="formData"
-        :node-options="nodeOptions"
-      />
+      <el-form :model="formData" label-width="120px" v-loading="loadingForm">
+        <el-form-item label="用例编码" required>
+          <el-input v-model="formData.caseCode" placeholder="例如: TC-ORDER-001" />
+        </el-form-item>
+        <el-form-item label="用例名称" required>
+          <el-input v-model="formData.caseName" placeholder="例如: 创建订单-正常流程" />
+        </el-form-item>
+        <el-form-item label="用例类型">
+          <el-select v-model="formData.caseType">
+            <el-option label="API接口测试" value="API" />
+            <el-option label="数据库断言" value="DB_ASSERTION" />
+            <el-option label="权限测试" value="PERMISSION" />
+            <el-option label="E2E测试" value="E2E" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联节点">
+          <el-select v-model="formData.targetNodeId" filterable clearable placeholder="选择关联的图谱节点">
+            <el-option v-for="node in nodeOptions" :key="node.value" :label="node.label" :value="node.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="前置条件">
+          <el-input v-model="formData.preconditions" type="textarea" :rows="2" placeholder="可选，测试的前置条件" />
+        </el-form-item>
+        <el-form-item label="测试步骤">
+          <el-input v-model="formData.steps" type="textarea" :rows="4" placeholder="测试步骤描述" />
+        </el-form-item>
+        <el-form-item label="期望结果">
+          <el-input v-model="formData.expectedResult" type="textarea" :rows="3" placeholder="期望的测试结果" />
+        </el-form-item>
+      </el-form>
     </el-card>
   </div>
 </template>
@@ -22,34 +48,77 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useProjectStore } from '@/stores/project'
-import { testApi } from '@/api'
-import TestCaseForm from '@/components/test/TestCaseForm.vue'
-import type { TestCase } from '@/types'
-import type { GraphNode } from '@/types'
 import { ElMessage } from 'element-plus'
+import { testApi, graphApi } from '@/api'
 
 const router = useRouter()
 const route = useRoute()
-const projectStore = useProjectStore()
 
 const isEdit = computed(() => !!route.params.id)
-const formData = ref<Partial<TestCase>>({
+const projectId = route.params.projectId as string
+const loadingForm = ref(false)
+
+const formData = ref<any>({
   caseCode: '',
   caseName: '',
   caseType: 'API',
   targetNodeId: '',
-  preconditions: [],
-  steps: undefined,
-  expectedResult: undefined,
+  preconditions: '',
+  steps: '',
+  expectedResult: '',
 })
 
 const nodeOptions = ref<{value: string; label: string}[]>([])
 const saving = ref(false)
 
 function goBack() {
-  const projectId = projectStore.currentProjectId
   router.push(`/projects/${projectId}/test-cases`)
+}
+
+async function loadNodeOptions() {
+  if (!projectId) return
+  try {
+    // 从统一图谱获取节点列表，筛选出 API 端点类节点作为关联目标
+    const data: any = await graphApi.getUnifiedGraph(projectId, '', 0.5)
+    if (data && data.nodes) {
+      const apiNodeTypes = ['ApiEndpoint', 'Feature', 'Table']
+      nodeOptions.value = (data.nodes as any[])
+        .filter((n: any) => apiNodeTypes.includes(n.type) || apiNodeTypes.includes(n.nodeType))
+        .slice(0, 200)
+        .map((n: any) => ({
+          value: n.id || n.key,
+          label: `${n.label || n.name || n.key} (${n.type || n.nodeType})`
+        }))
+    }
+  } catch (e) {
+    console.error('加载节点列表失败', e)
+    nodeOptions.value = []
+  }
+}
+
+async function loadTestCaseData() {
+  const caseId = route.params.id as string
+  if (!projectId || !caseId) return
+  loadingForm.value = true
+  try {
+    const data: any = await testApi.getDetail(projectId, caseId)
+    if (data) {
+      formData.value = {
+        caseCode: data.caseCode || '',
+        caseName: data.caseName || '',
+        caseType: data.caseType || 'API',
+        targetNodeId: data.targetNodeId || '',
+        preconditions: data.preconditions || '',
+        steps: data.steps || '',
+        expectedResult: data.expectedResult || '',
+      }
+    }
+  } catch (e) {
+    console.error('加载用例详情失败', e)
+    ElMessage.error('加载测试用例详情失败')
+  } finally {
+    loadingForm.value = false
+  }
 }
 
 async function save() {
@@ -57,15 +126,14 @@ async function save() {
     ElMessage.error('请填写用例编码和名称')
     return
   }
-
   saving.value = true
   try {
-    const projectId = projectStore.currentProjectId
     if (isEdit.value) {
-      // TODO: update
+      const caseId = route.params.id as string
+      await testApi.update(projectId, caseId, formData.value)
       ElMessage.success('更新成功')
     } else {
-      // await testApi.create(projectId, formData.value)
+      await testApi.create(projectId, formData.value)
       ElMessage.success('创建成功')
     }
     goBack()
@@ -75,25 +143,6 @@ async function save() {
   } finally {
     saving.value = false
   }
-}
-
-import { testApi } from '@/api'
-import type { GraphNode } from '@/types'
-
-// 加载节点列表用于选择
-async function loadNodeOptions() {
-  const projectId = projectStore.currentProjectId
-  // TODO: 获取项目节点列表接口
-  // 临时使用空数组，后续实现节点查询API
-  nodeOptions.value = []
-}
-
-async function loadTestCaseData() {
-  const projectId = projectStore.currentProjectId
-  const caseId = route.params.id as string
-  // TODO: 获取测试用例详情接口
-  // const data = await testApi.getDetail(projectId, caseId)
-  // formData.value = data
 }
 
 onMounted(() => {

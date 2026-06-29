@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { ElTable } from 'element-plus'
 
 interface SortInfo {
@@ -59,7 +59,7 @@ const emit = defineEmits<{
   'selection-change': [selection: any[]]
 }>()
 
-const tableRef = ref<InstanceType<typeof ElTable>>()
+const tableRef = ref<any>()
 const currentPage = ref(props.page)
 const pageSize = ref(props.pageSize)
 

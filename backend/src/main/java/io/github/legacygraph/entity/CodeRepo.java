@@ -32,6 +32,16 @@ public class CodeRepo {
 
     private String excludePattern;
 
+    /**
+     * 全栈项目-后端子路径 (仅 repoType=FULLSTACK 时使用)
+     */
+    private String backendSubPath;
+
+    /**
+     * 全栈项目-前端子路径 (仅 repoType=FULLSTACK 时使用)
+     */
+    private String frontendSubPath;
+
     private String localPath;
 
     private String status;

@@ -24,7 +24,7 @@ class VectorControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    private final Long testProjectId = 1L;
+    private final String testProjectId = "1";
 
     @Test
     void testBatchUpsert_Success() throws Exception {
@@ -32,51 +32,51 @@ class VectorControllerTest {
         doc.setContent("Test content for vectorization");
         doc.setChunkType("CODE");
 
-        mockMvc.perform(post("/lg/projects/{projectId}/vector/upsert", testProjectId)
+        mockMvc.perform(post("/lg/vector/projects/{projectId}/upsert", testProjectId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(List.of(doc))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
     void testSemanticSearch_Success() throws Exception {
         String query = "How to handle user authentication";
 
-        mockMvc.perform(post("/lg/projects/{projectId}/vector/search", testProjectId)
+        mockMvc.perform(post("/lg/vector/projects/{projectId}/search", testProjectId)
                         .param("topK", "10")
                         .param("chunkType", "CODE")
                         .contentType(MediaType.TEXT_PLAIN)
                         .content(query))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
     void testSemanticSearch_DefaultTopK() throws Exception {
         String query = "Find similar code";
 
-        mockMvc.perform(post("/lg/projects/{projectId}/vector/search", testProjectId)
+        mockMvc.perform(post("/lg/vector/projects/{projectId}/search", testProjectId)
                         .contentType(MediaType.TEXT_PLAIN)
                         .content(query))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
     void testFindSimilarNodes_Success() throws Exception {
-        mockMvc.perform(get("/lg/projects/{projectId}/vector/similar-nodes", testProjectId)
+        mockMvc.perform(get("/lg/vector/projects/{projectId}/similar-nodes", testProjectId)
                         .param("nodeName", "UserService")
                         .param("threshold", "0.85"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
     void testFindSimilarNodes_DefaultThreshold() throws Exception {
-        mockMvc.perform(get("/lg/projects/{projectId}/vector/similar-nodes", testProjectId)
+        mockMvc.perform(get("/lg/vector/projects/{projectId}/similar-nodes", testProjectId)
                         .param("nodeName", "AuthController"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

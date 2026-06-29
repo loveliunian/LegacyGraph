@@ -155,10 +155,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { get, del, post } from '@/utils/request'
+import { useProjectStore } from '@/stores/project'
+import { testApi } from '@/api'
+
+const route = useRoute()
+const router = useRouter()
+const projectStore = useProjectStore()
+const projectId = route.params.projectId as string || projectStore.currentProjectId
 
 const loading = ref(false)
 const generateDialogVisible = ref(false)
@@ -174,7 +183,7 @@ const filters = ref({
 const pagination = ref({
   page: 1,
   pageSize: 20,
-  total: 156
+  total: 0
 })
 
 const generateForm = ref({
@@ -184,113 +193,31 @@ const generateForm = ref({
   remark: ''
 })
 
-const caseList = ref([
-  {
-    id: '1',
-    caseNo: 'TC-ORDER-001',
-    caseName: '创建订单成功流程测试',
-    caseType: 'E2E',
-    featureName: '订单创建',
-    apiPath: 'POST /api/order/create',
-    assertionCount: 5,
-    generateType: 'AI_GENERATED',
-    status: 'CONFIRMED',
-    lastRunStatus: 'PASSED',
-    lastRunTime: new Date(Date.now() - 3600000).toISOString(),
-    steps: [
-      '用户登录系统',
-      '选择商品加入购物车',
-      '提交订单信息',
-      '完成支付',
-      '验证订单状态为已创建'
-    ],
-    assertions: [
-      '订单ID不为空',
-      '订单状态为CREATED',
-      '库存数量正确扣减',
-      '用户账户余额正确减少',
-      '创建通知已发送'
-    ],
-    relatedNodeIds: ['OrderController', 'OrderService', 't_order', '库存扣减流程']
-  },
-  {
-    id: '2',
-    caseNo: 'TC-ORDER-002',
-    caseName: '库存不足时创建订单失败测试',
-    caseType: 'API',
-    featureName: '订单创建',
-    apiPath: 'POST /api/order/create',
-    assertionCount: 3,
-    generateType: 'AI_GENERATED',
-    status: 'CONFIRMED',
-    lastRunStatus: 'PASSED',
-    lastRunTime: new Date(Date.now() - 7200000).toISOString(),
-    steps: [
-      '设置商品库存为0',
-      '用户提交订单',
-      '验证返回错误信息'
-    ],
-    assertions: [
-      '返回错误码INVALID_STOCK',
-      '订单未被创建',
-      '库存未发生变化'
-    ],
-    relatedNodeIds: ['OrderService', 'InventoryService', 't_inventory']
-  },
-  {
-    id: '3',
-    caseNo: 'TC-PAY-001',
-    caseName: '支付回调通知测试',
-    caseType: 'API',
-    featureName: '支付回调',
-    apiPath: 'POST /api/payment/notify',
-    assertionCount: 4,
-    generateType: 'MANUAL',
-    status: 'CONFIRMED',
-    lastRunStatus: 'FAILED',
-    lastRunTime: new Date(Date.now() - 86400000).toISOString(),
-    steps: [
-      '模拟第三方支付回调',
-      '验证签名正确',
-      '更新订单状态',
-      '发送支付成功通知'
-    ],
-    assertions: [
-      '签名验证通过',
-      '订单状态更新为PAID',
-      '通知记录已创建',
-      '幂等性验证'
-    ],
-    relatedNodeIds: ['PaymentController', 'PaymentService', 't_payment']
-  },
-  {
-    id: '4',
-    caseNo: 'TC-USER-001',
-    caseName: '用户注册数据库断言测试',
-    caseType: 'DB_ASSERTION',
-    featureName: '用户注册',
-    apiPath: null,
-    assertionCount: 4,
-    generateType: 'AI_GENERATED',
-    status: 'DRAFT',
-    lastRunStatus: null,
-    lastRunTime: null,
-    steps: [
-      '提交用户注册信息',
-      '查询数据库验证数据'
-    ],
-    assertions: [
-      't_user表新增一条记录',
-      'username字段正确',
-      'email字段正确',
-      'password字段已加密'
-    ],
-    relatedNodeIds: ['UserController', 'UserService', 't_user']
+const caseList = ref<any[]>([])
+
+async function loadData() {
+  if (!projectId) return
+  loading.value = true
+  try {
+    const res = await get(`/lg/projects/${projectId}/test-cases`, {
+      pageNum: pagination.value.page,
+      pageSize: pagination.value.pageSize
+    })
+    caseList.value = res.list || []
+    pagination.value.total = res.total || 0
+  } catch (err) {
+    console.error('获取测试用例列表失败:', err)
+  } finally {
+    loading.value = false
   }
-])
+}
+
+onMounted(() => {
+  loadData()
+})
 
 const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm')
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
 const getCaseTypeText = (type: string) => {
@@ -327,22 +254,32 @@ const viewDetail = (row: any) => {
   detailVisible.value = true
 }
 
-const runCase = (row: any) => {
-  ElMessage.info(`运行用例: ${row.caseName}`)
+const runCase = async (row: any) => {
+  try {
+    ElMessage.info(`正在运行用例: ${row.caseName || row.caseCode}`)
+    // 调用后端单用例执行接口
+    await post(`/lg/projects/${projectId}/test-cases/${row.id}/run`, null, { params: { env: 'test' } })
+    ElMessage.success('测试用例已提交执行')
+    loadData()
+  } catch (error) {
+    ElMessage.error('运行失败')
+  }
 }
 
 const editCase = (row: any) => {
-  ElMessage.info(`编辑用例: ${row.caseName}`)
+  router.push(`/projects/${projectId}/test-cases/${row.id}/edit`)
 }
 
 const deleteCase = async (row: any) => {
   try {
-    await ElMessageBox.confirm(`确定删除用例 ${row.caseNo} 吗？`, '提示', {
+    await ElMessageBox.confirm(`确定删除用例 ${row.caseNo || row.caseCode} 吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
+    await testApi.delete(projectId!, row.id)
     ElMessage.success('删除成功')
+    loadData()
   } catch {
     // cancelled
   }
@@ -355,9 +292,16 @@ const showGenerateDialog = () => {
 const generateCases = async () => {
   generating.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    ElMessage.success(`已生成 ${generateForm.value.count} 个测试用例`)
+    await testApi.generate({
+      versionId: projectId!,
+      scope: {
+        nodeTypes: generateForm.value.types,
+        priority: ['high']
+      }
+    })
+    ElMessage.success('测试用例生成请求已提交')
     generateDialogVisible.value = false
+    loadData()
   } catch (error) {
     ElMessage.error('生成失败')
   } finally {

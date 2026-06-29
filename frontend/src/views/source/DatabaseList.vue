@@ -110,6 +110,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Coin } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { sourceApi } from '@/api/source.api'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -132,7 +133,7 @@ const dbForm = reactive({
 })
 
 const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm')
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
 const getStatusType = (status: string): string => {
@@ -166,15 +167,22 @@ const createDb = async () => {
     return
   }
   try {
-    const newDb = {
-      id: Date.now().toString(),
-      ...dbForm,
-      status: 'UNKNOWN',
-      createdAt: new Date().toISOString()
+    const payload = {
+      connectionName: dbForm.connectionName,
+      dbType: dbForm.dbType,
+      host: dbForm.host,
+      port: dbForm.port,
+      databaseName: dbForm.database,
+      schemaName: dbForm.schema || undefined,
+      username: dbForm.username,
+      password: dbForm.password,
+      includeTables: dbForm.includeTables || undefined,
+      excludeTables: dbForm.excludeTables || undefined
     }
-    dbList.value.unshift(newDb)
+    await sourceApi.createDbConnection(projectId, payload)
     ElMessage.success('添加成功')
     createDialogVisible.value = false
+    await loadDbList()
   } catch (error) {
     ElMessage.error('添加失败')
   }
@@ -183,11 +191,18 @@ const createDb = async () => {
 const testConnection = async (row: any) => {
   try {
     ElMessage.info('正在测试连接...')
-    setTimeout(() => {
-      row.status = 'SUCCESS'
-      ElMessage.success('连接成功')
-    }, 1000)
+    if (row.id) {
+      const res = await sourceApi.testDbConnection(projectId, row.id)
+      if (res?.success) {
+        row.status = 'SUCCESS'
+        ElMessage.success('连接成功')
+      } else {
+        row.status = 'FAILED'
+        ElMessage.error('连接失败: ' + (res?.message || ''))
+      }
+    }
   } catch (error) {
+    row.status = 'FAILED'
     ElMessage.error('连接失败')
   }
 }
@@ -195,11 +210,13 @@ const testConnection = async (row: any) => {
 const scanSchema = async (row: any) => {
   try {
     ElMessage.info('开始扫描表结构...')
-    setTimeout(() => {
-      row.tableCount = Math.floor(Math.random() * 50) + 20
-      row.lastScanTime = new Date().toISOString()
-      ElMessage.success(`扫描完成，共发现 ${row.tableCount} 张表`)
-    }, 2000)
+    // 调用后端扫描表结构接口
+    if (row.id) {
+      const res = await sourceApi.scanDbSchema(projectId, row.id)
+      row.tableCount = res?.tableCount || 0
+    }
+    row.lastScanTime = new Date().toISOString()
+    ElMessage.success(`扫描完成，共发现 ${row.tableCount} 张表`)
   } catch (error) {
     ElMessage.error('扫描失败')
   }
@@ -212,36 +229,28 @@ const deleteDb = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    const index = dbList.value.findIndex(d => d.id === row.id)
-    if (index > -1) {
-      dbList.value.splice(index, 1)
-    }
+    await sourceApi.deleteDbConnection(projectId, row.id)
     ElMessage.success('删除成功')
+    await loadDbList()
   } catch {
     // cancelled
   }
 }
 
-onMounted(async () => {
+const loadDbList = async () => {
   loading.value = true
-  setTimeout(() => {
-    dbList.value = [
-      {
-        id: '1',
-        connectionName: 'legacy-db',
-        dbType: 'POSTGRESQL',
-        host: 'localhost',
-        port: 5432,
-        database: 'legacy_db',
-        schema: 'public',
-        username: 'postgres',
-        tableCount: 56,
-        lastScanTime: new Date(Date.now() - 86400000).toISOString(),
-        status: 'SUCCESS'
-      }
-    ]
+  try {
+    const res = await sourceApi.listDbConnections(projectId, { pageNum: 1, pageSize: 100 })
+    dbList.value = res.list
+  } catch (error) {
+    ElMessage.error('获取数据库连接列表失败')
+  } finally {
     loading.value = false
-  }, 500)
+  }
+}
+
+onMounted(async () => {
+  await loadDbList()
 })
 </script>
 

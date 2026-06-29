@@ -188,6 +188,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import { exportData } from '@/utils/export'
+import { get } from '@/utils/request'
+import type { PageResult } from '@/types'
 
 interface AuditLog {
   id: string
@@ -262,37 +264,34 @@ function getActionLabel(action: string): string {
   return actionMap[action]?.label || actionMap.default.label
 }
 
-function generateMockData(): AuditLog[] {
-  const modules = ['graph', 'scan', 'report', 'system', 'user']
-  const actions = ['create', 'update', 'delete', 'query', 'export', 'login', 'logout']
-  const users = ['admin', 'user1', 'user2', 'developer']
-  const statuses = ['success', 'success', 'success', 'success', 'failed']
+async function loadData() {
+  loading.value = true
+  try {
+    const params: Record<string, any> = {
+      pageNum: pagination.page,
+      pageSize: pagination.pageSize
+    }
+    if (filters.actionType) params.actionType = filters.actionType
+    if (filters.module) params.module = filters.module
+    if (filters.username) params.username = filters.username
+    if (filters.dateRange && filters.dateRange.length === 2) {
+      params.startTime = filters.dateRange[0].toISOString()
+      params.endTime = filters.dateRange[1].toISOString()
+    }
 
-  return Array.from({ length: 20 }, (_, i) => ({
-    id: String(pagination.page * 20 + i + 1).padStart(6, '0'),
-    module: modules[Math.floor(Math.random() * modules.length)],
-    action: actions[Math.floor(Math.random() * actions.length)],
-    description: `执行了${getActionLabel(actions[Math.floor(Math.random() * actions.length)])}操作`,
-    username: users[Math.floor(Math.random() * users.length)],
-    ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-    status: statuses[Math.floor(Math.random() * statuses.length)],
-    duration: Math.floor(Math.random() * 1000),
-    createdAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toLocaleString('zh-CN'),
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-    method: ['GET', 'POST', 'PUT', 'DELETE'][Math.floor(Math.random() * 4)],
-    url: '/api/v1/graph/query',
-    params: JSON.stringify({ page: 1, pageSize: 20 }, null, 2),
-    result: JSON.stringify({ code: 0, message: 'success' }, null, 2),
-    errorMessage: Math.random() > 0.9 ? '请求超时，请稍后重试' : undefined
-  }))
+    const res = await get<PageResult<AuditLog>>('/lg/audit/list', params)
+    tableData.value = res.list
+    pagination.total = res.total
+  } catch (e) {
+    ElMessage.error('获取操作日志失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 function handleSearch() {
-  loading.value = true
-  setTimeout(() => {
-    tableData.value = generateMockData()
-    loading.value = false
-  }, 500)
+  pagination.page = 1
+  loadData()
 }
 
 function handleReset() {
@@ -319,12 +318,12 @@ async function handleExport() {
 
     const columns = [
       { key: 'id', title: '日志ID' },
-      { key: 'module', title: '操作模块', formatter: (v) => getModuleLabel(v) },
-      { key: 'action', title: '操作类型', formatter: (v) => getActionLabel(v) },
+      { key: 'module', title: '操作模块', formatter: (v: string) => getModuleLabel(v) },
+      { key: 'action', title: '操作类型', formatter: (v: string) => getActionLabel(v) },
       { key: 'description', title: '操作描述' },
       { key: 'username', title: '操作人' },
       { key: 'ip', title: 'IP地址' },
-      { key: 'status', title: '操作结果', formatter: (v) => v === 'success' ? '成功' : '失败' },
+      { key: 'status', title: '操作结果', formatter: (v: string) => v === 'success' ? '成功' : '失败' },
       { key: 'duration', title: '耗时(ms)' },
       { key: 'createdAt', title: '操作时间' }
     ]
@@ -339,7 +338,7 @@ async function handleExport() {
 }
 
 onMounted(() => {
-  handleSearch()
+  loadData()
 })
 </script>
 

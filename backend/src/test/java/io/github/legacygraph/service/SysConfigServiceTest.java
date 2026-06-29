@@ -109,10 +109,7 @@ class SysConfigServiceTest {
 
     @Test
     void testGetByKey_Found() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
 
         SysConfig result = sysConfigService.getByKey("llm.api.key");
 
@@ -122,10 +119,7 @@ class SysConfigServiceTest {
 
     @Test
     void testGetByKey_NotFound() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(null);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
 
         SysConfig result = sysConfigService.getByKey("nonexistent");
 
@@ -134,10 +128,7 @@ class SysConfigServiceTest {
 
     @Test
     void testGetValue_Found() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
 
         String result = sysConfigService.getValue("llm.api.key");
 
@@ -146,10 +137,7 @@ class SysConfigServiceTest {
 
     @Test
     void testGetValue_NotFound() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(null);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
 
         String result = sysConfigService.getValue("nonexistent");
 
@@ -168,10 +156,7 @@ class SysConfigServiceTest {
         config2.setConfigValue("value2");
         config2.setStatus("ACTIVE");
 
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(config1, config2));
+        when(sysConfigRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(config1, config2));
 
         Map<String, String> result = sysConfigService.getAllConfigMap();
 
@@ -235,10 +220,7 @@ class SysConfigServiceTest {
 
     @Test
     void testUpdateValue_Success() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
         when(sysConfigRepository.updateById(any(SysConfig.class))).thenReturn(1);
 
         boolean result = sysConfigService.updateValue("llm.api.key", "new-value");
@@ -250,10 +232,7 @@ class SysConfigServiceTest {
 
     @Test
     void testUpdateValue_NotFound() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(null);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
 
         boolean result = sysConfigService.updateValue("nonexistent", "new-value");
 
@@ -283,11 +262,7 @@ class SysConfigServiceTest {
     @Test
     void testGetBoolean_TrueValue() {
         testConfig.setConfigValue("true");
-
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
 
         Boolean result = sysConfigService.getBoolean("feature.enabled");
 
@@ -297,11 +272,7 @@ class SysConfigServiceTest {
     @Test
     void testGetBoolean_OneValue() {
         testConfig.setConfigValue("1");
-
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
 
         Boolean result = sysConfigService.getBoolean("feature.enabled");
 
@@ -311,11 +282,7 @@ class SysConfigServiceTest {
     @Test
     void testGetBoolean_FalseValue() {
         testConfig.setConfigValue("false");
-
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
 
         Boolean result = sysConfigService.getBoolean("feature.enabled");
 
@@ -324,10 +291,7 @@ class SysConfigServiceTest {
 
     @Test
     void testGetBoolean_NotFound() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(null);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
 
         Boolean result = sysConfigService.getBoolean("feature.enabled");
 
@@ -337,11 +301,7 @@ class SysConfigServiceTest {
     @Test
     void testGetInt_ValidNumber() {
         testConfig.setConfigValue("100");
-
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
 
         Integer result = sysConfigService.getInt("port");
 
@@ -351,11 +311,7 @@ class SysConfigServiceTest {
     @Test
     void testGetInt_InvalidNumber() {
         testConfig.setConfigValue("not-a-number");
-
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(testConfig);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(testConfig);
 
         Integer result = sysConfigService.getInt("port");
 
@@ -364,10 +320,7 @@ class SysConfigServiceTest {
 
     @Test
     void testGetInt_NotFound() {
-        LambdaQueryChainWrapper<SysConfig> chain = new LambdaQueryChainWrapper<>(sysConfigRepository);
-        when(sysConfigRepository.lambdaQuery()).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any())).thenReturn(chain);
-        when(sysConfigRepository.lambdaQuery().eq(any(), any()).getEntity()).thenReturn(null);
+        when(sysConfigRepository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
 
         Integer result = sysConfigService.getInt("port");
 

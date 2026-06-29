@@ -33,14 +33,14 @@
         <span>{{ node.data.evidenceCount }} 条证据</span>
       </div>
     </div>
-    <Handle type="source" position="bottom" :style="{ background: nodeColor }" />
-    <Handle type="target" position="top" :style="{ background: nodeColor }" />
+    <Handle type="source" :position="Position.Bottom" :style="{ background: nodeColor }" />
+    <Handle type="target" :position="Position.Top" :style="{ background: nodeColor }" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Node } from '@vue-flow/core'
+import { Node, Position } from '@vue-flow/core'
 import { Handle } from '@vue-flow/core'
 import {
   Document,

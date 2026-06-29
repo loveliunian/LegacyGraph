@@ -260,8 +260,7 @@ public class BusinessGraphBuilder {
                 .list();
 
         int mappedCount = 0;
-        // 基于名称语义相似度做简单匹配
-        // TODO: 使用向量相似度做更准确匹配（向量服务恢复后替换）
+        // 基于名称语义相似度做简单匹配（向量服务已可用，后续可替换为 semanticSearch 提升精度）
         for (GraphNode feature : docFeatures) {
             String featureName = feature.getNodeName().toLowerCase();
 
@@ -343,13 +342,14 @@ public class BusinessGraphBuilder {
             String sourceType, String sourcePath,
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status) {
-        GraphNode existing = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GraphNode> nodeQuery =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        nodeQuery.eq(GraphNode::getProjectId, projectId)
                 .eq(GraphNode::getVersionId, versionId)
                 .eq(GraphNode::getNodeType, nodeType)
                 .eq(GraphNode::getNodeKey, nodeKey)
-                .oneOpt()
-                .orElse(null);
+                .last("LIMIT 1");
+        GraphNode existing = graphNodeRepository.selectOne(nodeQuery);
 
         if (existing != null) {
             return existing;
@@ -449,9 +449,10 @@ public class BusinessGraphBuilder {
         graphEdgeRepository.insert(edge);
 
         // 从源节点继承证据（创建关联）
-        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.lambdaQuery()
-                .eq(NodeEvidence::getNodeId, fromNodeId)
-                .list();
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NodeEvidence> neQuery =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        neQuery.eq(NodeEvidence::getNodeId, fromNodeId);
+        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.selectList(neQuery);
         for (NodeEvidence ne : nodeEvidences) {
             EdgeEvidence edgeEvidence = new EdgeEvidence();
             edgeEvidence.setId(UUID.randomUUID().toString());

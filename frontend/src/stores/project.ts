@@ -20,7 +20,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   const fetchProjectList = async (params?: { keyword?: string }) => {
-    const result = await projectApi.list({
+    const result: any = await projectApi.list({
       pageNum: 1,
       pageSize: 100,
       ...params
@@ -31,7 +31,7 @@ export const useProjectStore = defineStore('project', () => {
 
   const fetchCurrentProject = async () => {
     if (currentProjectId.value) {
-      const project = await projectApi.detail(currentProjectId.value)
+      const project: any = await projectApi.detail(currentProjectId.value)
       currentProject.value = project
       return project
     }
@@ -39,7 +39,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   const createProject = async (data: any) => {
-    const project = await projectApi.create(data)
+    const project: any = await projectApi.create(data)
     projectList.value.unshift(project)
     return project
   }

@@ -12,7 +12,7 @@
       <el-table-column prop="repoName" label="仓库名称" width="180">
         <template #default="{ row }">
           <div class="repo-name">
-            <el-icon :class="row.repoType === 'BACKEND' ? 'backend' : 'frontend'">
+            <el-icon :class="row.repoType === 'BACKEND' ? 'backend' : row.repoType === 'FULLSTACK' ? 'fullstack' : 'frontend'">
               <FolderOpened />
             </el-icon>
             <span>{{ row.repoName }}</span>
@@ -21,13 +21,13 @@
       </el-table-column>
       <el-table-column prop="repoType" label="类型" width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.repoType === 'BACKEND' ? 'primary' : 'success'">
-            {{ row.repoType === 'BACKEND' ? '后端' : '前端' }}
+          <el-tag size="small" :type="row.repoType === 'BACKEND' ? 'primary' : row.repoType === 'FRONTEND' ? 'success' : 'warning'">
+            {{ row.repoType === 'BACKEND' ? '后端' : row.repoType === 'FRONTEND' ? '前端' : '全栈' }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="gitUrl" label="Git地址" show-overflow-tooltip />
-      <el-table-column prop="branch" label="分支" width="120" />
+      <el-table-column prop="branchName" label="分支" width="120" />
       <el-table-column label="最近拉取" width="180">
         <template #default="{ row }">
           <span v-if="row.lastPullTime">{{ formatTime(row.lastPullTime) }}</span>
@@ -47,10 +47,11 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click="pullRepo(row)">拉取</el-button>
-          <el-button type="success" link size="small" @click="testConnection(row)">测试连接</el-button>
+          <el-button type="success" link size="small" @click="scanRepo(row)">扫描</el-button>
+          <el-button type="warning" link size="small" @click="showEditDialog(row)">修改</el-button>
           <el-button type="danger" link size="small" @click="deleteRepo(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -58,7 +59,8 @@
 
     <el-empty v-if="repoList.length === 0" description="暂无仓库配置" />
 
-    <el-dialog v-model="createDialogVisible" title="添加代码仓库" width="600px">
+    <!-- 新增/编辑对话框 -->
+    <el-dialog v-model="dialogVisible" :title="editingId ? '修改代码仓库' : '添加代码仓库'" width="620px">
       <el-form :model="repoForm" label-width="100px">
         <el-form-item label="仓库名称" required>
           <el-input v-model="repoForm.repoName" placeholder="请输入仓库名称" />
@@ -67,14 +69,27 @@
           <el-radio-group v-model="repoForm.repoType">
             <el-radio label="BACKEND">后端</el-radio>
             <el-radio label="FRONTEND">前端</el-radio>
+            <el-radio label="FULLSTACK">全栈</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="Git地址" required>
-          <el-input v-model="repoForm.gitUrl" placeholder="https://github.com/xxx/xxx.git" />
+          <div style="display: flex; gap: 8px; width: 100%;">
+            <el-input v-model="repoForm.gitUrl" placeholder="https://github.com/xxx/xxx.git" style="flex: 1;" />
+            <el-button type="success" :loading="testingUrl" @click="testRepoUrl">测试连接</el-button>
+          </div>
         </el-form-item>
         <el-form-item label="分支" required>
           <el-input v-model="repoForm.branch" placeholder="main / master" />
         </el-form-item>
+        <!-- 全栈项目：分别指定前后端子路径 -->
+        <template v-if="repoForm.repoType === 'FULLSTACK'">
+          <el-form-item label="后端路径">
+            <el-input v-model="repoForm.backendSubPath" placeholder="backend / server / src" />
+          </el-form-item>
+          <el-form-item label="前端路径">
+            <el-input v-model="repoForm.frontendSubPath" placeholder="frontend / web / client" />
+          </el-form-item>
+        </template>
         <el-form-item label="认证方式" required>
           <el-radio-group v-model="repoForm.authType">
             <el-radio label="NONE">无需认证</el-radio>
@@ -99,8 +114,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="createRepo">保存</el-button>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveRepo">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -112,29 +127,35 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, FolderOpened } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { sourceApi } from '@/api/source.api'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
 
 const loading = ref(false)
-const createDialogVisible = ref(false)
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
 const repoList = ref<any[]>([])
+
+const testingUrl = ref(false)
 
 const repoForm = reactive({
   repoName: '',
-  repoType: 'BACKEND' as 'BACKEND' | 'FRONTEND',
+  repoType: 'BACKEND' as 'BACKEND' | 'FRONTEND' | 'FULLSTACK',
   gitUrl: '',
   branch: 'main',
   authType: 'NONE' as 'NONE' | 'TOKEN' | 'USER_PASSWORD',
   token: '',
   username: '',
   password: '',
+  backendSubPath: '',
+  frontendSubPath: '',
   includePattern: '',
   excludePattern: ''
 })
 
 const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm')
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
 const getStatusType = (status: string): string => {
@@ -147,7 +168,9 @@ const getStatusType = (status: string): string => {
   return map[status] || 'info'
 }
 
-const showCreateDialog = () => {
+/** 重置表单 */
+const resetForm = () => {
+  editingId.value = null
   Object.assign(repoForm, {
     repoName: '',
     repoType: 'BACKEND',
@@ -157,29 +180,91 @@ const showCreateDialog = () => {
     token: '',
     username: '',
     password: '',
+    backendSubPath: '',
+    frontendSubPath: '',
     includePattern: '',
     excludePattern: ''
   })
-  createDialogVisible.value = true
 }
 
-const createRepo = async () => {
+const showCreateDialog = () => {
+  resetForm()
+  dialogVisible.value = true
+}
+
+const showEditDialog = (row: any) => {
+  editingId.value = row.id
+  Object.assign(repoForm, {
+    repoName: row.repoName || '',
+    repoType: row.repoType || 'BACKEND',
+    gitUrl: row.gitUrl || '',
+    branch: row.branchName || 'main',
+    authType: row.authType || 'NONE',
+    token: '',
+    username: row.username || '',
+    password: '',
+    backendSubPath: row.backendSubPath || '',
+    frontendSubPath: row.frontendSubPath || '',
+    includePattern: row.includePattern || '',
+    excludePattern: row.excludePattern || ''
+  })
+  dialogVisible.value = true
+}
+
+const buildPayload = () => ({
+  repoName: repoForm.repoName,
+  repoType: repoForm.repoType,
+  gitUrl: repoForm.gitUrl,
+  branchName: repoForm.branch,
+  authType: repoForm.authType,
+  username: repoForm.authType === 'USER_PASSWORD' ? repoForm.username : undefined,
+  token: repoForm.authType === 'TOKEN' ? repoForm.token : undefined,
+  backendSubPath: repoForm.repoType === 'FULLSTACK' ? repoForm.backendSubPath || undefined : undefined,
+  frontendSubPath: repoForm.repoType === 'FULLSTACK' ? repoForm.frontendSubPath || undefined : undefined,
+  includePattern: repoForm.includePattern || undefined,
+  excludePattern: repoForm.excludePattern || undefined
+})
+
+const saveRepo = async () => {
   if (!repoForm.repoName || !repoForm.gitUrl || !repoForm.branch) {
     ElMessage.warning('请填写必填项')
     return
   }
   try {
-    const newRepo = {
-      id: Date.now().toString(),
-      ...repoForm,
-      status: 'INIT',
-      createdAt: new Date().toISOString()
+    const payload = buildPayload()
+    if (editingId.value) {
+      await sourceApi.updateCodeRepo(projectId, editingId.value, payload)
+      ElMessage.success('修改成功')
+    } else {
+      await sourceApi.createCodeRepo(projectId, payload)
+      ElMessage.success('添加成功')
     }
-    repoList.value.unshift(newRepo)
-    ElMessage.success('添加成功')
-    createDialogVisible.value = false
+    dialogVisible.value = false
+    await loadRepoList()
   } catch (error) {
-    ElMessage.error('添加失败')
+    ElMessage.error(editingId.value ? '修改失败' : '添加失败')
+  }
+}
+
+/** 在对话框中测试 Git URL 连通性 */
+const testRepoUrl = async () => {
+  const url = repoForm.gitUrl.trim()
+  if (!url) {
+    ElMessage.warning('请先填写Git地址')
+    return
+  }
+  testingUrl.value = true
+  try {
+    const res = await sourceApi.testRepoUrl(projectId, url)
+    if (res?.success) {
+      ElMessage.success('连接成功')
+    } else {
+      ElMessage.error('连接失败: ' + (res?.message || '无法连接到仓库'))
+    }
+  } catch {
+    ElMessage.error('连接测试失败')
+  } finally {
+    testingUrl.value = false
   }
 }
 
@@ -187,24 +272,27 @@ const pullRepo = async (row: any) => {
   try {
     ElMessage.info('开始拉取代码...')
     row.status = 'PULLING'
-    setTimeout(() => {
-      row.status = 'READY'
-      row.lastPullTime = new Date().toISOString()
-      ElMessage.success('拉取完成')
-    }, 2000)
+    await sourceApi.pullRepo(projectId, row.id)
+    row.status = 'READY'
+    row.lastPullTime = new Date().toISOString()
+    ElMessage.success('拉取完成')
   } catch (error) {
+    row.status = 'FAILED'
     ElMessage.error('拉取失败')
   }
 }
 
-const testConnection = async (row: any) => {
+const scanRepo = async (row: any) => {
   try {
-    ElMessage.info('正在测试连接...')
-    setTimeout(() => {
-      ElMessage.success('连接成功')
-    }, 1000)
+    ElMessage.info('开始扫描代码...')
+    row.status = 'SCANNING'
+    const res = await sourceApi.scanRepo(projectId, row.id)
+    row.lastScanTime = new Date().toISOString()
+    row.status = 'READY'
+    ElMessage.success('扫描已启动: ' + (res?.message || ''))
   } catch (error) {
-    ElMessage.error('连接失败')
+    row.status = 'FAILED'
+    ElMessage.error('扫描启动失败')
   }
 }
 
@@ -215,43 +303,28 @@ const deleteRepo = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    const index = repoList.value.findIndex(r => r.id === row.id)
-    if (index > -1) {
-      repoList.value.splice(index, 1)
-    }
+    await sourceApi.deleteCodeRepo(projectId, row.id)
     ElMessage.success('删除成功')
+    await loadRepoList()
   } catch {
     // cancelled
   }
 }
 
-onMounted(async () => {
+const loadRepoList = async () => {
   loading.value = true
-  setTimeout(() => {
-    repoList.value = [
-      {
-        id: '1',
-        repoName: 'legacy-backend',
-        repoType: 'BACKEND',
-        gitUrl: 'https://github.com/example/legacy-backend.git',
-        branch: 'main',
-        lastPullTime: new Date().toISOString(),
-        lastScanTime: new Date(Date.now() - 86400000).toISOString(),
-        status: 'READY'
-      },
-      {
-        id: '2',
-        repoName: 'legacy-frontend',
-        repoType: 'FRONTEND',
-        gitUrl: 'https://github.com/example/legacy-frontend.git',
-        branch: 'develop',
-        lastPullTime: new Date().toISOString(),
-        lastScanTime: new Date(Date.now() - 86400000).toISOString(),
-        status: 'READY'
-      }
-    ]
+  try {
+    const result = await sourceApi.listCodeRepo(projectId, { pageNum: 1, pageSize: 100 })
+    repoList.value = result.list
+  } catch (error) {
+    ElMessage.error('获取仓库列表失败')
+  } finally {
     loading.value = false
-  }, 500)
+  }
+}
+
+onMounted(async () => {
+  await loadRepoList()
 })
 </script>
 
@@ -290,6 +363,10 @@ onMounted(async () => {
 
 .repo-name .el-icon.frontend {
   color: #67c23a;
+}
+
+.repo-name .el-icon.fullstack {
+  color: #e6a23c;
 }
 
 .text-gray {

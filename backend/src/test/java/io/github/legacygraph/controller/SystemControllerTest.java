@@ -54,7 +54,7 @@ class SystemControllerTest {
                         .param("pageNum", "1")
                         .param("pageSize", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.list").exists())
                 .andExpect(jsonPath("$.data.total").value(1));
     }
@@ -86,7 +86,7 @@ class SystemControllerTest {
                         .param("pageNum", "1")
                         .param("pageSize", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.total").value(1));
     }
 
@@ -106,7 +106,7 @@ class SystemControllerTest {
 
         mockMvc.perform(get("/lg/system/users/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.username").value("testuser"))
                 .andExpect(jsonPath("$.data.password").doesNotExist());
     }
@@ -124,7 +124,7 @@ class SystemControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(user)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.username").value("newuser"));
     }
 
@@ -150,7 +150,7 @@ class SystemControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(user)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(1))
                 .andExpect(jsonPath("$.message").value("用户名已存在"));
     }
 
@@ -177,7 +177,7 @@ class SystemControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updated)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -196,12 +196,12 @@ class SystemControllerTest {
 
         mockMvc.perform(delete("/lg/system/users/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.code").value(0));
 
         mockMvc.perform(get("/lg/system/users/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     @Test
@@ -221,7 +221,7 @@ class SystemControllerTest {
         mockMvc.perform(put("/lg/system/users/{id}/status", id)
                         .param("status", "DISABLED"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -246,7 +246,7 @@ class SystemControllerTest {
 
         mockMvc.perform(get("/lg/system/users/all"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.length()").value(2));
     }
 }

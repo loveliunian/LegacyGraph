@@ -272,9 +272,18 @@ public class LogAspect {
             auditLog.setErrorStack(stack.toString());
         }
 
-        // TODO: 获取当前登录用户信息
-        // auditLog.setOperatorId(currentUser.getId());
-        // auditLog.setOperatorName(currentUser.getDisplayName());
+        // 从 SecurityContext 获取当前登录用户
+        try {
+            org.springframework.security.core.Authentication auth =
+                    org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof String) {
+                String userId = (String) auth.getPrincipal();
+                auditLog.setOperatorId(userId);
+                auditLog.setOperatorName(userId); // 可后续改为从 DB 查用户名
+            }
+        } catch (Exception e) {
+            log.warn("获取当前用户信息失败", e);
+        }
 
         auditLogRepository.insert(auditLog);
     }

@@ -72,8 +72,9 @@ public class VueRouteExtractor {
         List<ExtractedRoute> routes = new ArrayList<>();
 
         // 尝试匹配数组字面量
-        // 查找 [... 格式的路由定义
-        Pattern arrayPattern = Pattern.compile("\\[(.*)\\]", Pattern.DOTALL);
+        // 查找 [{ ... }] 格式的路由定义；要求方括号内以对象 { 开头，
+        // 避免误匹配类型注解中的空数组（如 RouteConfig[]）
+        Pattern arrayPattern = Pattern.compile("\\[(\\s*\\{.*\\}\\s*)\\]", Pattern.DOTALL);
         Matcher matcher = arrayPattern.matcher(content);
 
         // 简单启发式提取：找到第一个大数组，假设就是路由
@@ -165,13 +166,20 @@ public class VueRouteExtractor {
      * 将JS对象转换为近似JSON
      */
     private String approximateJson(String content) {
-        // 移除注释
+        // 移除单行注释
         content = content.replaceAll("//.*", "");
         // 将单引号换为双引号
         content = content.replace('\'', '"');
         // 给未加引号的键添加引号
         // { key: value } → { "key": value }
         content = content.replaceAll("(^|\\{|,)\\s*(\\w+)\\s*:", "$1\"$2\":");
+        // 给裸标识符 / 动态 import 等非字面量值加引号，使其成为合法 JSON 字符串
+        // 形如  "component": DashboardComponent  →  "component": "DashboardComponent"
+        // 形如  "component": () => import("x")    →  "component": "() => import("x")" 无法可靠转义，
+        //   这类应交由正则降级处理，这里仅处理简单标识符引用
+        content = content.replaceAll(":\\s*([A-Za-z_$][\\w$.]*)\\s*([,}])", ": \"$1\"$2");
+        // 移除对象/数组中的尾随逗号
+        content = content.replaceAll(",\\s*([}\\]])", "$1");
         return "[" + content + "]";
     }
 
@@ -225,7 +233,20 @@ public class VueRouteExtractor {
      * 将ExtractedRoute转换为FrontendPageFact
      */
     private void convertToPageFacts(ExtractedRoute route, String parentPath, List<FrontendPageFact> result) {
-        String fullPath = (parentPath != null ? parentPath : "") + route.getPath();
+        String childPath = route.getPath() != null ? route.getPath() : "";
+        String fullPath;
+        if (parentPath != null && !parentPath.isEmpty()) {
+            // 子路由 path 为相对路径，需用 / 与父路径拼接
+            String normalizedParent = parentPath.endsWith("/")
+                    ? parentPath.substring(0, parentPath.length() - 1)
+                    : parentPath;
+            String normalizedChild = childPath.startsWith("/") ? childPath.substring(1) : childPath;
+            fullPath = normalizedChild.isEmpty()
+                    ? normalizedParent
+                    : normalizedParent + "/" + normalizedChild;
+        } else {
+            fullPath = childPath;
+        }
         if (!fullPath.startsWith("/")) {
             fullPath = "/" + fullPath;
         }
@@ -251,6 +272,8 @@ public class VueRouteExtractor {
         }
 
         result.add(page);
-        result.addAll(page.getChildren());
+        if (page.getChildren() != null) {
+            result.addAll(page.getChildren());
+        }
     }
 }

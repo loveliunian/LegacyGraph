@@ -202,6 +202,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { get, post } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -290,9 +291,14 @@ const nextStep = () => {
 const startScan = async () => {
   submitting.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    ElMessage.success('扫描任务已创建')
-    router.push(`/projects/${projectId}/scans`)
+    const res = await post(`/lg/projects/${projectId}/scan-versions`, {
+      versionNo: scanForm.taskName.replace(/[\s-]/g, '_'),
+      branchName: 'main'
+    })
+    const versionId = typeof res === 'string' ? res : res.id || res
+    await post(`/lg/projects/${projectId}/scan-versions/${versionId}/start`)
+    ElMessage.success('扫描任务已创建并启动')
+    router.push(`/projects/${projectId}/scan-versions`)
   } catch (error) {
     ElMessage.error('创建失败')
   } finally {
@@ -300,21 +306,34 @@ const startScan = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   const now = new Date()
   scanForm.taskName = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} 全量扫描`
 
-  repoList.value = [
-    { id: '1', repoName: 'legacy-backend', repoType: 'BACKEND' },
-    { id: '2', repoName: 'legacy-frontend', repoType: 'FRONTEND' }
-  ]
-  dbList.value = [
-    { id: '1', connectionName: 'legacy-db', dbType: 'POSTGRESQL' }
-  ]
-  docList.value = [
-    { id: '1', docName: '产品需求说明书V2.0', fileType: 'DOCX' },
-    { id: '2', docName: 'RESTful API文档', fileType: 'MD' }
-  ]
+  try {
+    const [reposRes, dbsRes, docsRes] = await Promise.all([
+      get(`/lg/projects/${projectId}/sources/repos`, { pageNum: 1, pageSize: 100 }),
+      get(`/lg/projects/${projectId}/sources/databases`, { pageNum: 1, pageSize: 100 }),
+      get(`/lg/projects/${projectId}/sources/documents`, { pageNum: 1, pageSize: 100 })
+    ])
+    repoList.value = (reposRes.list || reposRes || []).map((r: any) => ({
+      id: r.id,
+      repoName: r.repoName,
+      repoType: r.repoType
+    }))
+    dbList.value = (dbsRes.list || dbsRes || []).map((d: any) => ({
+      id: d.id,
+      connectionName: d.connectionName,
+      dbType: d.dbType
+    }))
+    docList.value = (docsRes.list || docsRes || []).map((d: any) => ({
+      id: d.id,
+      docName: d.docName,
+      fileType: d.fileType || d.docType
+    }))
+  } catch (err) {
+    console.error('获取数据源列表失败:', err)
+  }
 })
 </script>
 

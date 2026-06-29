@@ -5,13 +5,16 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * MyBatis XML Mapper 抽取器
@@ -45,6 +48,11 @@ public class MyBatisXmlExtractor {
 
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            // 禁用外部 DTD/实体加载：MyBatis Mapper 的 DOCTYPE 指向 http://mybatis.org/dtd/...，
+            // 在离线或网络受限环境下会导致解析阻塞甚至失败。同时可防止 XXE 注入。
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(xmlFile);
             doc.getDocumentElement().normalize();
@@ -53,12 +61,15 @@ public class MyBatisXmlExtractor {
             String namespace = doc.getDocumentElement().getAttribute("namespace");
             fact.setNamespace(namespace);
 
+            // 收集可复用的 <sql id="..."> 片段，供 <include refid> 展开
+            Map<String, String> sqlFragments = collectSqlFragments(doc);
+
             // 处理各个statement元素
             List<SqlStatement> statements = new ArrayList<>();
-            statements.addAll(extractStatements(doc, "select"));
-            statements.addAll(extractStatements(doc, "insert"));
-            statements.addAll(extractStatements(doc, "update"));
-            statements.addAll(extractStatements(doc, "delete"));
+            statements.addAll(extractStatements(doc, "select", sqlFragments));
+            statements.addAll(extractStatements(doc, "insert", sqlFragments));
+            statements.addAll(extractStatements(doc, "update", sqlFragments));
+            statements.addAll(extractStatements(doc, "delete", sqlFragments));
 
             fact.setStatements(statements);
 
@@ -80,9 +91,25 @@ public class MyBatisXmlExtractor {
     }
 
     /**
-     * 提取指定类型的SQL语句
+     * 收集所有 <sql id="..."> 片段，key 为 refid，value 为片段文本（已展开嵌套 include）
      */
-    private List<SqlStatement> extractStatements(Document doc, String tagName) {
+    private Map<String, String> collectSqlFragments(Document doc) {
+        Map<String, String> fragments = new HashMap<>();
+        NodeList sqlNodes = doc.getElementsByTagName("sql");
+        for (int i = 0; i < sqlNodes.getLength(); i++) {
+            Element el = (Element) sqlNodes.item(i);
+            String id = el.getAttribute("id");
+            if (id != null && !id.isEmpty()) {
+                fragments.put(id, el.getTextContent().trim());
+            }
+        }
+        return fragments;
+    }
+
+    /**
+     * 提取指定类型的SQL语句，并展开 <include refid> 片段
+     */
+    private List<SqlStatement> extractStatements(Document doc, String tagName, Map<String, String> sqlFragments) {
         List<SqlStatement> result = new ArrayList<>();
         NodeList nodes = doc.getElementsByTagName(tagName);
 
@@ -91,12 +118,38 @@ public class MyBatisXmlExtractor {
             SqlStatement stmt = new SqlStatement();
             stmt.setId(element.getAttribute("id"));
             stmt.setType(tagName);
-            stmt.setSql(element.getTextContent().trim());
-            // TODO: 展开include片段
-            // TODO: 行号解析需要SAX parser，这里简化处理
+            String rawSql = element.getTextContent().trim();
+            stmt.setSql(rawSql);
+            // 展开 include 片段后的 SQL（无 include 时与原 SQL 一致）
+            stmt.setExpandedSql(expandIncludes(element, sqlFragments));
+            // 行号解析需要 SAX/StAX parser 记录 Locator，DOM 不保留位置信息，暂留默认值
             result.add(stmt);
         }
 
         return result;
+    }
+
+    /**
+     * 展开语句内的 &lt;include refid="..."/&gt; 片段。
+     * 遍历子节点，遇到 include 元素时替换为对应 &lt;sql&gt; 片段文本，其余文本原样保留。
+     */
+    private String expandIncludes(Element statement, Map<String, String> sqlFragments) {
+        StringBuilder sb = new StringBuilder();
+        NodeList children = statement.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE && "include".equals(child.getNodeName())) {
+                String refid = ((Element) child).getAttribute("refid");
+                String fragment = sqlFragments.get(refid);
+                if (fragment != null) {
+                    sb.append(' ').append(fragment).append(' ');
+                } else {
+                    log.debug("Unresolved <include refid=\"{}\"> in statement {}", refid, statement.getAttribute("id"));
+                }
+            } else {
+                sb.append(child.getTextContent());
+            }
+        }
+        return sb.toString().replaceAll("\\s+", " ").trim();
     }
 }

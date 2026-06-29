@@ -78,9 +78,7 @@ class ScanVersionServiceTest {
         version.setScanStatus("CREATED");
 
         when(scanVersionRepository.selectById("version-1")).thenReturn(version);
-        when(scanTaskRepository.lambdaQuery()).thenReturn(null);
-        when(scanTaskRepository.lambdaQuery().eq(any(), any())).thenReturn(null);
-        when(scanTaskRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(Collections.emptyList());
+        when(scanTaskRepository.selectList(any())).thenReturn(Collections.emptyList());
 
         ScanProgressResponse response = scanVersionService.getScanProgress("version-1");
 
@@ -114,7 +112,7 @@ class ScanVersionServiceTest {
         tasks.add(task2);
 
         when(scanVersionRepository.selectById("version-1")).thenReturn(version);
-        when(scanTaskRepository.lambdaQuery().eq(ScanTask::getVersionId, "version-1").list()).thenReturn(tasks);
+        when(scanTaskRepository.selectList(any())).thenReturn(tasks);
 
         ScanProgressResponse response = scanVersionService.getScanProgress("version-1");
 
@@ -139,7 +137,7 @@ class ScanVersionServiceTest {
         }
 
         when(scanVersionRepository.selectById("version-1")).thenReturn(version);
-        when(scanTaskRepository.lambdaQuery().eq(ScanTask::getVersionId, "version-1").list()).thenReturn(tasks);
+        when(scanTaskRepository.selectList(any())).thenReturn(tasks);
 
         ScanProgressResponse response = scanVersionService.getScanProgress("version-1");
 

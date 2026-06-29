@@ -3,7 +3,7 @@
  * 基于axios封装，统一处理请求拦截、响应拦截、错误处理、loading提示
  * 支持自动添加Authorization令牌、请求追踪ID生成
  */
-import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { showLoading, hideLoading, forceHideLoading } from '@/utils/loading'
@@ -39,11 +39,11 @@ const request = axios.create({
  * 3. 自动显示loading（除非关闭）
  */
 request.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
+  (config: InternalAxiosRequestConfig) => {
     const userStore = useUserStore()
     // Ensure headers object exists
     if (!config.headers) {
-      config.headers = {}
+      config.headers = {} as any
     }
     if (userStore.accessToken) {
       config.headers['Authorization'] = `Bearer ${userStore.accessToken}`

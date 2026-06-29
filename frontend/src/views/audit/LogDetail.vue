@@ -99,12 +99,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, Download } from '@element-plus/icons-vue'
 import CodePreview from '@/components/code/CodePreview.vue'
+import { get } from '@/utils/request'
 
 const router = useRouter()
 const route = useRoute()
+const projectId = route.params.projectId as string
 
 const logDetail = ref<any>(null)
 
@@ -135,53 +138,27 @@ function goBack() {
 }
 
 function exportLog() {
-  ElMessage.success('导出功能开发中')
+  if (!logDetail.value) return
+  const dataStr = JSON.stringify(logDetail.value, null, 2)
+  const blob = new Blob([dataStr], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `audit-log-${logDetail.value.id || Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success('已导出审计日志')
 }
 
-onMounted(() => {
+onMounted(async () => {
   const logId = route.params.id
-  mockLogDetail(logId)
+  try {
+    const data = await get(`/lg/audit/${logId}`)
+    logDetail.value = data
+  } catch (err) {
+    console.error('获取日志详情失败:', err)
+  }
 })
-
-function mockLogDetail(id: string) {
-  setTimeout(() => {
-    logDetail.value = {
-      id,
-      operationType: 'UPDATE',
-      description: '更新项目配置',
-      createTime: '2024-01-27 14:30:25',
-      operator: '张三',
-      ip: '192.168.1.100',
-      duration: 256,
-      success: true,
-      method: 'POST',
-      url: '/api/project/config',
-      httpStatus: 200,
-      requestParams: {
-        projectId: 'PROJ001',
-        config: {
-          name: 'LegacyGraph',
-          version: '1.0.0',
-          enabled: true,
-          settings: {
-            autoScan: true,
-            scanInterval: 3600,
-            maxDepth: 10
-          }
-        }
-      },
-      responseBody: {
-        code: 200,
-        message: 'success',
-        data: {
-          updated: true,
-          timestamp: 1706339425000
-        }
-      },
-      errorMessage: null
-    }
-  }, 500)
-}
 </script>
 
 <style scoped>

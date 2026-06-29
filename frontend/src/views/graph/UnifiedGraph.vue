@@ -325,8 +325,9 @@ import {
   Link,
   QuestionFilled
 } from '@element-plus/icons-vue'
-import { graphApi, reviewApi } from '@/api'
+import { graphApi, reviewApi, factApi } from '@/api'
 import { projectApi } from '@/api'
+import { get } from '@/utils/request'
 import GraphViewer from '@/components/graph/GraphViewer.vue'
 import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
 import EvidencePanel from '@/components/EvidencePanel.vue'
@@ -388,7 +389,7 @@ const allNodes = ref<Node[]>([])
 const allEdges = ref<Edge[]>([])
 
 const filteredNodes = computed(() => {
-  return allNodes.value.filter(node => {
+  return (allNodes.value as any[]).filter((node: any) => {
     const confidence = node.data?.confidence || 0
     const status = node.data?.status
     const type = node.data?.type
@@ -401,9 +402,9 @@ const filteredNodes = computed(() => {
   })
 })
 
-const filteredEdges = computed(() => {
-  const nodeIds = new Set(filteredNodes.value.map(n => n.id))
-  return allEdges.value.filter(edge => nodeIds.has(edge.source as string) && nodeIds.has(edge.target as string))
+const filteredEdges = computed((): any[] => {
+  const nodeIds = new Set(filteredNodes.value.map((n: any) => n.id))
+  return (allEdges.value as any[]).filter((edge: any) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
 })
 
 const pendingCount = computed(() => {
@@ -422,7 +423,7 @@ const nodeEdges = computed(() => {
     .filter(e => e.source === selectedNode.value!.id || e.target === selectedNode.value!.id)
     .map(e => ({
       ...e,
-      targetName: allNodes.value.find(n => n.id === (e.source === selectedNode.value!.id ? e.target : e.source))?.data?.label || '未知'
+      targetName: (allNodes.value as any[]).find(n => n.id === (e.source === selectedNode.value!.id ? e.target : e.source))?.data?.label || '未知'
     }))
 })
 
@@ -518,11 +519,8 @@ function resetFilters() {
 async function loadVersions() {
   if (!projectId.value) return
   try {
-    const data: any = await projectApi.detail(projectId.value)
-    // 假设 project.detail 返回包含 scanVersions 列表
-    if (data?.scanVersions) {
-      versions.value = data.scanVersions
-    }
+    const data: any = await get(`/lg/projects/${projectId.value}/scan-versions`)
+    versions.value = Array.isArray(data) ? data : (data.list || [])
   } catch (error) {
     console.error('加载版本列表失败', error)
     ElMessage.error('加载版本列表失败')
@@ -633,36 +631,69 @@ async function viewEvidence() {
   evidenceDrawerVisible.value = true
   // 加载选中节点的证据数据
   if (!projectId.value || !selectedNode.value?.data?.id) return
+  const node = selectedNode.value!
   try {
-    const unifiedData: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
-    // 从已有图谱数据中获取证据信息
-    void unifiedData // 已获取但暂未直接使用（有 evidenceCount 时构造示意数据）
-    // 有 evidenceCount 时展示示意数据
-    if (selectedNode.value.data?.evidenceCount) {
-      // 如果节点有 evidenceCount，创建一个示例证据在 EvidencePanel 中展示
-      // 实际完整实现需要后端提供 /api/projects/:id/evidence/node/:nodeId 接口
-      nodeEvidence.value = [{
-        id: selectedNode.value.data.id + '-evidence',
-        evidenceType: 'code',
-        sourceName: selectedNode.value.data.label || '',
-        sourcePath: selectedNode.value.data.sourcePath,
-        summary: '该节点的证据源，来自 ' + (selectedNode.value.data.sourcePath || '代码分析'),
-        createdAt: new Date().toISOString(),
-      }]
+    // 调用后端证据检索接口获取真实证据
+    const searchResult: any = await factApi.searchEvidence(projectId.value, {
+      pageNum: 1,
+      pageSize: 20,
+      evidenceType: undefined,
+      keyword: node.data.label || undefined
+    })
+    if (searchResult && searchResult.list && searchResult.list.length > 0) {
+      nodeEvidence.value = searchResult.list.map((e: any) => ({
+        id: e.id,
+        evidenceType: e.evidenceType || 'CODE',
+        sourceName: e.sourceName || node.data.label,
+        sourcePath: e.sourcePath || e.location,
+        summary: e.summary || e.content,
+        content: e.content,
+        location: e.location,
+        createdAt: e.createdAt,
+      }))
     } else {
-      nodeEvidence.value = []
+      // 回退：从节点属性中构造简单证据
+      const nodeData = node.data
+      if (nodeData.sourcePath || nodeData.description) {
+        nodeEvidence.value = [{
+          id: nodeData.id + '-evidence',
+          evidenceType: 'FILE_LINE',
+          sourceName: nodeData.label || '节点证据',
+          sourcePath: nodeData.sourcePath,
+          summary: nodeData.description || `该节点的证据源，来自 ${nodeData.sourcePath || '代码分析'}`,
+          createdAt: new Date().toISOString(),
+        }]
+      } else {
+        nodeEvidence.value = []
+      }
     }
   } catch (error) {
     console.error('加载证据失败', error)
+    // 出错时也不使用硬编码示例
     nodeEvidence.value = []
   }
 }
 
 function locateNode() {
-  ElMessage.info('定位功能开发中')
+  if (selectedNode.value) {
+    // 触发图谱聚焦到当前选中节点
+    emitFocusNode(selectedNode.value.id)
+  }
+}
+
+function emitFocusNode(nodeId: string) {
+  // 通过自定义事件通知图谱容器聚焦到指定节点
+  const event = new CustomEvent('graph-focus-node', { detail: { nodeId } })
+  window.dispatchEvent(event)
 }
 
 onMounted(() => {
+  // TODO: 当前不自动加载图谱数据，等待用户选择 version 后通过 @change 触发 loadGraph
+  // 后端 GET /lg/projects/{projectId}/graph/unified?versionId=xxx&minConfidence=0
+  // 返回 { nodes, edges, nodeCount, edgeCount }（Map 类型，非 PageResult）
+  // 缺少 versionId 无法查询，因此 onMounted 仅加载版本列表，清空已有数据
+  allNodes.value = []
+  allEdges.value = []
   loadVersions()
 })
 </script>

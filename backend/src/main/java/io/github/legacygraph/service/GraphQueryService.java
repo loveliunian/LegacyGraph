@@ -1,9 +1,15 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.ScanTask;
+import io.github.legacygraph.entity.ScanVersion;
+import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.GraphEdgeRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.repository.ScanTaskRepository;
+import io.github.legacygraph.repository.ScanVersionRepository;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
@@ -11,6 +17,8 @@ import org.neo4j.driver.Session;
 import org.neo4j.driver.types.Path;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
@@ -18,13 +26,22 @@ public class GraphQueryService {
 
     private final GraphNodeRepository graphNodeRepository;
     private final GraphEdgeRepository graphEdgeRepository;
+    private final ScanVersionRepository scanVersionRepository;
+    private final ScanTaskRepository scanTaskRepository;
+    private final FactRepository factRepository;
     private final Driver neo4jDriver;
 
     public GraphQueryService(GraphNodeRepository graphNodeRepository,
                             GraphEdgeRepository graphEdgeRepository,
+                            ScanVersionRepository scanVersionRepository,
+                            ScanTaskRepository scanTaskRepository,
+                            FactRepository factRepository,
                             Driver neo4jDriver) {
         this.graphNodeRepository = graphNodeRepository;
         this.graphEdgeRepository = graphEdgeRepository;
+        this.scanVersionRepository = scanVersionRepository;
+        this.scanTaskRepository = scanTaskRepository;
+        this.factRepository = factRepository;
         this.neo4jDriver = neo4jDriver;
     }
 
@@ -255,12 +272,89 @@ public class GraphQueryService {
     }
 
     /**
-     * 获取项目扫描版本列表，包含节点和边统计
+     * 获取项目扫描版本列表，包含进度、任务统计和节点/边统计
      */
     public List<Map<String, Object>> getScanVersions(String projectId) {
+        List<ScanVersion> versions = scanVersionRepository.lambdaQuery()
+                .eq(ScanVersion::getProjectId, projectId)
+                .orderByDesc(ScanVersion::getCreatedAt)
+                .list();
+
         List<Map<String, Object>> result = new ArrayList<>();
-        // 由于GraphQueryService没有依赖ScanVersionRepository
-        // 这里只返回空列表，实际由projectApi获取版本列表
+        for (ScanVersion v : versions) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", v.getId());
+            map.put("versionNo", v.getVersionNo());
+            map.put("versionNumber", v.getVersionNo());
+            map.put("versionName", v.getVersionNo());
+            map.put("branchName", v.getBranchName());
+            map.put("commitId", v.getCommitId());
+            map.put("scanStatus", v.getScanStatus());
+            map.put("scanType", v.getScanScope());
+            map.put("startedAt", v.getStartedAt() != null ? v.getStartedAt().toString() : null);
+            map.put("finishedAt", v.getFinishedAt() != null ? v.getFinishedAt().toString() : null);
+            map.put("createdAt", v.getCreatedAt() != null ? v.getCreatedAt().toString() : null);
+            map.put("createdBy", "-");
+
+            // 查询该版本的扫描子任务，计算进度和当前阶段
+            List<ScanTask> tasks = scanTaskRepository.lambdaQuery()
+                    .eq(ScanTask::getVersionId, v.getId())
+                    .list();
+
+            int totalTasks = tasks.size();
+            long completedTasks = tasks.stream()
+                    .filter(t -> "SUCCESS".equals(t.getTaskStatus()))
+                    .count();
+            long failedTasks = tasks.stream()
+                    .filter(t -> "FAILED".equals(t.getTaskStatus()))
+                    .count();
+
+            int progress = totalTasks > 0 ? (int) (completedTasks * 100 / totalTasks) : 0;
+
+            // 如果版本已完成，进度为100
+            if ("SUCCESS".equals(v.getScanStatus()) || "COMPLETED".equals(v.getScanStatus())) {
+                progress = 100;
+            }
+
+            map.put("progress", progress);
+            map.put("taskCount", totalTasks);
+            map.put("completedTaskCount", (int) completedTasks);
+            map.put("failedTaskCount", (int) failedTasks);
+
+            // 当前阶段：取第一个非 SUCCESS 的子任务类型
+            String stage = tasks.stream()
+                    .filter(t -> !"SUCCESS".equals(t.getTaskStatus()))
+                    .findFirst()
+                    .map(ScanTask::getTaskType)
+                    .orElse(totalTasks > 0 ? "COMPLETED" : "-");
+            map.put("stage", stage);
+
+            // 耗时计算
+            long duration = 0;
+            if (v.getStartedAt() != null) {
+                LocalDateTime end = v.getFinishedAt() != null ? v.getFinishedAt() : LocalDateTime.now();
+                duration = Duration.between(v.getStartedAt(), end).getSeconds();
+            }
+            map.put("duration", duration);
+
+            // 统计该版本的节点和边数量
+            long nodeCount = graphNodeRepository.lambdaQuery()
+                    .eq(GraphNode::getVersionId, v.getId())
+                    .count();
+            long edgeCount = graphEdgeRepository.lambdaQuery()
+                    .eq(GraphEdge::getVersionId, v.getId())
+                    .count();
+            map.put("nodeCount", nodeCount);
+            map.put("edgeCount", edgeCount);
+
+            // 统计事实数
+            long factCount = factRepository.lambdaQuery()
+                    .eq(Fact::getVersionId, v.getId())
+                    .count();
+            map.put("factCount", factCount);
+
+            result.add(map);
+        }
         return result;
     }
 

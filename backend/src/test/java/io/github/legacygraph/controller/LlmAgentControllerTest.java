@@ -47,7 +47,7 @@ class LlmAgentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
@@ -64,7 +64,7 @@ class LlmAgentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -81,7 +81,7 @@ class LlmAgentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -101,7 +101,7 @@ class LlmAgentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -123,7 +123,7 @@ class LlmAgentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -132,7 +132,7 @@ class LlmAgentControllerTest {
                         .param("projectId", "project-1")
                         .param("nodeType", "ENTITY"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -142,29 +142,35 @@ class LlmAgentControllerTest {
                         .param("nodeAId", "node-1")
                         .param("nodeBId", "node-2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400));
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test
     void testDecideMerge_Success() throws Exception {
         GraphNode nodeA = new GraphNode();
-        nodeA.setId("node-1");
+        nodeA.setId("merge-node-a");
         nodeA.setProjectId("project-1");
+        nodeA.setVersionId("version-2");
         nodeA.setNodeName("NodeA");
+        nodeA.setNodeType("ENTITY");
+        nodeA.setNodeKey("node-key-a");
         nodeRepository.insert(nodeA);
 
         GraphNode nodeB = new GraphNode();
-        nodeB.setId("node-2");
+        nodeB.setId("merge-node-b");
         nodeB.setProjectId("project-1");
+        nodeB.setVersionId("version-2");
         nodeB.setNodeName("NodeB");
+        nodeB.setNodeType("ENTITY");
+        nodeB.setNodeKey("node-key-b");
         nodeRepository.insert(nodeB);
 
         mockMvc.perform(post("/api/agents/graph/merge/decide")
                         .param("projectId", "project-1")
-                        .param("nodeAId", "node-1")
-                        .param("nodeBId", "node-2"))
+                        .param("nodeAId", "merge-node-a")
+                        .param("nodeBId", "merge-node-b"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -174,7 +180,7 @@ class LlmAgentControllerTest {
                         .param("targetNodeId", "target-1")
                         .param("mergeNodeId", "merge-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -191,7 +197,7 @@ class LlmAgentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 
     @Test
@@ -205,10 +211,10 @@ class LlmAgentControllerTest {
         request.setConflictingEvidence(List.of());
         request.setCurrentConfidence(0.8);
 
-        mockMvc.perform(post("/lg/agents/review/suggest")
+        mockMvc.perform(post("/api/agents/review/suggest")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200));
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

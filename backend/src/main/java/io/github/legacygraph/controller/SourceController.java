@@ -15,6 +15,9 @@ import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.DocChunkRepository;
+import io.github.legacygraph.service.ScanVersionService;
+import io.github.legacygraph.task.ProjectScanner;
+import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -51,6 +54,8 @@ public class SourceController {
     private final DbConnectionRepository dbConnectionRepository;
     private final DocumentRepository documentRepository;
     private final DocChunkRepository docChunkRepository;
+    private final ScanVersionService scanVersionService;
+    private final ProjectScanner projectScanner;
 
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -71,11 +76,15 @@ public class SourceController {
     public SourceController(CodeRepoRepository codeRepoRepository,
                             DbConnectionRepository dbConnectionRepository,
                             DocumentRepository documentRepository,
-                            DocChunkRepository docChunkRepository) {
+                            DocChunkRepository docChunkRepository,
+                            ScanVersionService scanVersionService,
+                            ProjectScanner projectScanner) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
         this.docChunkRepository = docChunkRepository;
+        this.scanVersionService = scanVersionService;
+        this.projectScanner = projectScanner;
     }
 
     // ==================== 代码仓库 ====================
@@ -162,6 +171,8 @@ public class SourceController {
         repo.setUsername(request.getUsername());
         repo.setIncludePattern(request.getIncludePattern());
         repo.setExcludePattern(request.getExcludePattern());
+        repo.setBackendSubPath(request.getBackendSubPath());
+        repo.setFrontendSubPath(request.getFrontendSubPath());
         repo.setStatus("PENDING");
         repo.setCreatedBy("currentUser");
         repo.setCreatedAt(LocalDateTime.now());
@@ -204,6 +215,8 @@ public class SourceController {
         repo.setUsername(request.getUsername());
         repo.setIncludePattern(request.getIncludePattern());
         repo.setExcludePattern(request.getExcludePattern());
+        repo.setBackendSubPath(request.getBackendSubPath());
+        repo.setFrontendSubPath(request.getFrontendSubPath());
         repo.setUpdatedAt(LocalDateTime.now());
 
         codeRepoRepository.updateById(repo);
@@ -284,6 +297,46 @@ public class SourceController {
     }
 
     /**
+     * 测试 Git URL 连通性（无需已保存仓库记录）
+     * 在添加代码仓库前，快速验证 Git 地址是否可达
+     * @param projectId 项目ID
+     * @param body 包含 gitUrl 的请求体
+     * @return 测试结果
+     */
+    @PostMapping("/repos/test-url")
+    @Operation(summary = "测试 Git URL 连通性", description = "快速验证 Git 地址是否可达，无需先保存仓库配置")
+    public Result<Map<String, Object>> testRepoUrl(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @RequestBody Map<String, String> body) {
+        String gitUrl = body.get("gitUrl");
+        if (gitUrl == null || gitUrl.isBlank()) {
+            return Result.error("Git地址不能为空");
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        ProcessBuilder pb = new ProcessBuilder("git", "ls-remote", "--exit-code", gitUrl);
+        try {
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                result.put("success", true);
+                result.put("message", "连接测试成功");
+                log.info("Git URL test succeeded: {}", gitUrl);
+            } else {
+                result.put("success", false);
+                result.put("message", "连接测试失败，exit code: " + exitCode);
+                log.warn("Git URL test failed with exit code: {}", exitCode);
+            }
+        } catch (Exception e) {
+            result.put("success", false);
+            result.put("message", "连接测试失败: " + e.getMessage());
+            log.error("Git URL test failed", e);
+        }
+        return Result.success(result);
+    }
+
+    /**
      * 拉取代码仓库
      * 从远程Git仓库拉取最新代码到本地
      * @param projectId 项目ID
@@ -351,6 +404,57 @@ public class SourceController {
         codeRepoRepository.updateById(repo);
 
         return Result.success();
+    }
+
+    /**
+     * 扫描代码仓库
+     * 触发知识图谱扫描，分析仓库中的代码结构和调用关系
+     * @param projectId 项目ID
+     * @param id 代码仓库ID
+     * @return 扫描版本ID
+     */
+    @PostMapping("/repos/{id}/scan")
+    @Operation(summary = "扫描代码仓库", description = "触发知识图谱扫描，对仓库中的代码进行结构化分析")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "扫描已启动"),
+            @ApiResponse(responseCode = "404", description = "代码仓库不存在")
+    })
+    public Result<Map<String, Object>> scanRepo(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "代码仓库ID", required = true)
+            @PathVariable String id) {
+        CodeRepo repo = codeRepoRepository.selectById(id);
+        if (repo == null || !repo.getProjectId().equals(projectId)) {
+            return Result.error("代码仓库不存在");
+        }
+
+        // 确定本地路径
+        String baseDir = repo.getLocalPath();
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = System.getProperty("user.home") + "/.legacygraph/repos/" + projectId + "/" + id;
+        }
+
+        // 创建扫描版本
+        CreateScanVersionRequest scanReq = new CreateScanVersionRequest();
+        scanReq.setVersionNo("scan-" + System.currentTimeMillis());
+        scanReq.setBranchName(repo.getBranchName());
+        scanReq.setScanScope(repo.getRepoType());
+        var version = scanVersionService.createScanVersion(projectId, scanReq);
+
+        // 异步启动扫描
+        projectScanner.startFullScan(projectId, version.getId(), baseDir);
+
+        // 更新仓库扫描时间
+        repo.setLastScanTime(LocalDateTime.now());
+        repo.setUpdatedAt(LocalDateTime.now());
+        codeRepoRepository.updateById(repo);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("versionId", version.getId());
+        result.put("message", "扫描已启动");
+        log.info("Code repo scan started: repoId={}, versionId={}, baseDir={}", id, version.getId(), baseDir);
+        return Result.success(result);
     }
 
     // ==================== 数据库连接 ====================

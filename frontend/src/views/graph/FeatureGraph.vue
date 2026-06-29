@@ -77,28 +77,33 @@
           </div>
         </el-card>
 
-        <el-card class="test-card" style="margin-top: 16px;">
+        <el-card class="test-card" style="margin-top: 16px;" v-if="projectId && currentVersion">
           <template #header>
             <span>测试覆盖率</span>
           </template>
-          <div class="coverage-stats">
-            <div class="coverage-item">
-              <span class="coverage-label">整体覆盖率</span>
-              <span class="coverage-value">68%</span>
+          <div v-if="loading" style="text-align:center;padding:12px;">
+            <el-icon class="is-loading"><Refresh /></el-icon>
+          </div>
+          <template v-else>
+            <div class="coverage-stats">
+              <div class="coverage-item">
+                <span class="coverage-label">整体覆盖率</span>
+                <span class="coverage-value" :class="coverageLevel(coverageData.overall)">{{ coverageData.overall }}%</span>
+              </div>
+              <el-progress :percentage="coverageData.overall" :status="coverageData.overall >= 60 ? 'success' : coverageData.overall >= 30 ? 'warning' : 'exception'" />
             </div>
-            <el-progress :percentage="68" status="warning" />
-          </div>
-          <div class="coverage-item">
-            <span class="coverage-label">核心功能</span>
-            <span class="coverage-value success">85%</span>
-          </div>
-          <div class="coverage-item">
-            <span class="coverage-label">边缘场景</span>
-            <span class="coverage-value danger">32%</span>
-          </div>
-          <el-button type="primary" size="small" style="width: 100%; margin-top: 16px;" @click="generateAllTests">
-            生成补充测试用例
-          </el-button>
+            <div class="coverage-item">
+              <span class="coverage-label">核心功能</span>
+              <span class="coverage-value success">{{ coverageData.core }}%</span>
+            </div>
+            <div class="coverage-item">
+              <span class="coverage-label">边缘场景</span>
+              <span class="coverage-value" :class="coverageData.edge >= 50 ? 'success' : 'danger'">{{ coverageData.edge }}%</span>
+            </div>
+            <el-button type="primary" size="small" style="width: 100%; margin-top: 16px;" @click="generateAllTests">
+              生成补充测试用例
+            </el-button>
+          </template>
         </el-card>
       </el-col>
     </el-row>
@@ -107,24 +112,34 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Grid, Menu } from '@element-plus/icons-vue'
 import { Graph } from '@antv/g6'
-import { graphApi } from '@/api'
+import { graphApi, testApi, factApi } from '@/api'
 import type { GraphData, Node } from '@antv/g6'
 
 const route = useRoute()
+const router = useRouter()
 const projectId = computed(() => route.params.projectId as string)
 const currentVersion = computed(() => route.query.version as string)
 
 const selectedModule = ref<string | null>(null)
 const graphContainer = ref<HTMLElement | null>(null)
 const graphInstance = ref<Graph | null>(null)
-const selectedNode = ref<Node | null>(null)
+const g6Node = ref<Node | null>(null)
+const selectedNode = computed<any>(() => (g6Node.value as any)?.getModel() || null)
 const loading = ref(false)
 
+// 从后端加载的模块列表
 const modules = ref<any[]>([])
+
+// 测试覆盖率数据，从后端加载
+const coverageData = ref<{
+  overall: number
+  core: number
+  edge: number
+}>({ overall: 0, core: 0, edge: 0 })
 
 const nodeColorMap: Record<string, string> = {
   Page: '#722ed1',
@@ -151,7 +166,7 @@ async function loadGraph(module: string) {
   }
   loading.value = true
   try {
-    const data = await graphApi.getFeatureView(projectId.value, currentVersion.value, module)
+    const data = await graphApi.getFeatureView(projectId.value, currentVersion.value, module) as any
 
     if (!data || !data.nodes) {
       ElMessage.warning('该功能模块暂无图谱数据')
@@ -175,6 +190,7 @@ async function loadGraph(module: string) {
       }))
     }
 
+// @ts-expect-error - G6: 'data' does not exist on new G6 Graph type
     graphInstance.value?.data(g6Data)
     graphInstance.value?.render()
     ElMessage.success(`加载完成: ${data.nodeCount || 0} 节点`)
@@ -183,6 +199,78 @@ async function loadGraph(module: string) {
     ElMessage.error('加载功能图谱失败')
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 从后端加载模块列表
+ * 通过 getUnifiedGraph 获取节点后按模块分组
+ */
+async function loadModules() {
+  if (!projectId.value || !currentVersion.value) return
+  try {
+    const data: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
+    if (data?.nodes) {
+      // 按模块分组统计
+      const moduleMap = new Map<string, { count: number; types: Set<string> }>()
+      const nodeTypes = new Set<string>()
+
+      data.nodes.forEach((n: any) => {
+        const module = n.type || 'Other'
+        nodeTypes.add(module)
+        if (!moduleMap.has(module)) {
+          moduleMap.set(module, { count: 0, types: new Set() })
+        }
+        const entry = moduleMap.get(module)!
+        entry.count++
+      })
+
+      const colors = ['#67c23a', '#409eff', '#e6a23c', '#f56c6c', '#909399', '#722ed1', '#13c2c2']
+      modules.value = Array.from(moduleMap.entries()).map(([name, info], idx) => ({
+        id: name,
+        name,
+        color: colors[idx % colors.length],
+        featureCount: info.count,
+      }))
+    }
+  } catch (error) {
+    console.error('加载功能模块列表失败', error)
+  }
+}
+
+/**
+ * 从后端加载测试覆盖率数据
+ * 通过全局图谱节点统计推算覆盖率
+ */
+async function loadCoverage() {
+  if (!projectId.value || !currentVersion.value) return
+  try {
+    const data: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
+    if (data?.nodes) {
+      const total = data.nodes.length
+      if (total === 0) {
+        coverageData.value = { overall: 0, core: 0, edge: 0 }
+        return
+      }
+      // 以置信度作为覆盖率的近似指标
+      const confirmed = data.nodes.filter((n: any) =>
+        n.status === 'CONFIRMED' || n.status === 'approved' || n.confidence >= 0.7
+      ).length
+      const highConfidence = data.nodes.filter((n: any) =>
+        n.confidence >= 0.85
+      ).length
+      const lowConfidence = data.nodes.filter((n: any) =>
+        n.confidence < 0.5 || n.status === 'PENDING'
+      ).length
+
+      coverageData.value = {
+        overall: Math.round((confirmed / total) * 100),
+        core: Math.round((highConfidence / total) * 100),
+        edge: Math.round(((total - lowConfidence) / total) * 100),
+      }
+    }
+  } catch (error) {
+    console.error('加载覆盖率数据失败', error)
   }
 }
 
@@ -198,6 +286,7 @@ onMounted(async () => {
     container: container,
     width,
     height,
+    // @ts-expect-error - G6: modes does not exist on GraphOptions in new G6
     modes: {
       default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'click-select']
     },
@@ -208,6 +297,7 @@ onMounted(async () => {
     },
     defaultNode: {
       size: 35,
+      // @ts-expect-error - G6: parameter 'node' implicitly has 'any' type
       style: (node) => getNodeStyle(node),
       labelCfg: {
         position: 'bottom',
@@ -222,6 +312,7 @@ onMounted(async () => {
       style: {
         radius: 8,
         endArrow: {
+          // @ts-expect-error - G6: Extension.arrow does not exist (new G6)
           path: Extension.arrow,
           fill: '#aaa'
         }
@@ -237,16 +328,16 @@ onMounted(async () => {
     }
   })
 
-  graphInstance.value.on('node:click', (e) => {
+  graphInstance.value.on('node:click', (e: any) => {
     const node = e.item
     if (node) {
-      selectedNode.value = node.getModel()
+      g6Node.value = node as any
       ElMessage.info(`选中: ${selectedNode.value.label}`)
     }
   })
 
   graphInstance.value.on('canvas:click', () => {
-    selectedNode.value = null
+    g6Node.value = null
   })
 
   // 如果有模块参数，直接加载
@@ -259,12 +350,17 @@ onMounted(async () => {
   }
 
   window.addEventListener('resize', handleResize)
+
+  // 加载模块列表和覆盖率数据
+  loadModules()
+  loadCoverage()
 })
 
 const handleResize = () => {
   if (graphInstance.value && graphContainer.value) {
     const width = graphContainer.value.clientWidth
     const height = graphContainer.value.clientHeight || 600
+    // @ts-expect-error - G6: changeSize does not exist on new G6 Graph type
     graphInstance.value.changeSize(width, height)
   }
 }
@@ -277,10 +373,15 @@ const getSelectedModuleName = () => {
 
 const selectModule = (id: string) => {
   selectedModule.value = selectedModule.value === id ? null : id
+  if (selectedModule.value) {
+    loadGraph(selectedModule.value)
+  }
 }
 
-const exportReport = () => {
-  ElMessage.success('功能清单导出中...')
+const coverageLevel = (val: number): string => {
+  if (val >= 60) return 'success'
+  if (val >= 30) return ''
+  return 'danger'
 }
 
 const zoomIn = () => {
@@ -303,18 +404,60 @@ const fitView = () => {
   }
 }
 
-const generateTests = () => {
+const evidenceDrawerVisible = ref(false)
+const nodeEvidence = ref<any[]>([])
+
+const generateTests = async () => {
   if (!selectedNode.value) return
-  ElMessage.info(`正在为 ${selectedNode.value.label} 生成测试用例...`)
+  const label = selectedNode.value.label || selectedNode.value.id
+  try {
+    // 调用后端 AI 生成测试用例
+    await testApi.generate({
+      versionId: currentVersion.value || projectId.value,
+      scope: { nodeTypes: ['ApiEndpoint', 'Feature'], priority: ['high'] }
+    })
+    ElMessage.success(`已为「${label}」提交测试用例生成任务`)
+    router.push(`/projects/${projectId.value}/test-cases`)
+  } catch (e) {
+    console.error('生成测试用例失败', e)
+    ElMessage.error('生成测试用例请求失败')
+  }
 }
 
-const generateAllTests = () => {
-  ElMessage.info('正在批量生成补充测试用例...')
+const generateAllTests = async () => {
+  try {
+    await testApi.generate({
+      versionId: currentVersion.value || projectId.value,
+      scope: { nodeTypes: ['ApiEndpoint', 'Feature'], priority: ['high'] }
+    })
+    ElMessage.success('已提交批量测试用例生成任务')
+    router.push(`/projects/${projectId.value}/test-cases`)
+  } catch (e) {
+    console.error('批量生成测试用例失败', e)
+    ElMessage.error('批量生成请求失败')
+  }
 }
 
-const viewEvidence = () => {
+const viewEvidence = async () => {
   if (!selectedNode.value) return
-  ElMessage.info(`查看 ${selectedNode.value.label} 的证据来源`)
+  const nodeName = selectedNode.value.label || selectedNode.value.id
+  try {
+    const result: any = await factApi.searchEvidence(projectId.value, {
+      pageNum: 1,
+      pageSize: 20,
+      keyword: nodeName
+    })
+    nodeEvidence.value = result?.list || result || []
+    evidenceDrawerVisible.value = true
+  } catch (e) {
+    console.error('加载证据失败', e)
+    ElMessage.warning('证据加载失败')
+  }
+}
+
+const exportReport = () => {
+  // 跳转到报告导出页面
+  router.push(`/projects/${projectId.value}/reports`)
 }
 </script>
 

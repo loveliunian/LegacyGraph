@@ -42,6 +42,9 @@ class Neo4jSyncServiceTest {
     @Mock
     private Transaction transaction;
 
+    @Mock
+    private org.neo4j.driver.Result result;
+
     private Neo4jSyncService neo4jSyncService;
 
     private GraphNode testNode;
@@ -78,24 +81,18 @@ class Neo4jSyncServiceTest {
     @Test
     void testSyncGraph_EmptyGraph() {
         when(neo4jDriver.session()).thenReturn(session);
-        doNothing().when(session).run(anyString(), anyMap());
+        when(session.run(anyString(), anyMap())).thenReturn(result);
 
         // Since we can't easily mock the entire lambda chain, just verify
         // that the method completes without exceptions when repositories return empty
-        LambdaQueryChainWrapper<GraphNode> nodeChain =
-                new LambdaQueryChainWrapper<>(graphNodeRepository);
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
         when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.list()).thenReturn(Collections.emptyList());
 
-        LambdaQueryChainWrapper<GraphEdge> edgeChain =
-                new LambdaQueryChainWrapper<>(graphEdgeRepository);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
         when(edgeChain.list()).thenReturn(Collections.emptyList());
 
         neo4jSyncService.syncGraph("project-1", "version-1");
@@ -107,24 +104,18 @@ class Neo4jSyncServiceTest {
     @Test
     void testSyncGraph_WithSingleNode() {
         when(neo4jDriver.session()).thenReturn(session);
-        doNothing().when(session).run(anyString(), anyMap());
+        when(session.run(anyString(), anyMap())).thenReturn(result);
         when(session.beginTransaction()).thenReturn(transaction);
-        doNothing().when(transaction).run(anyString(), anyMap());
+        when(transaction.run(anyString(), anyMap())).thenReturn(result);
 
-        LambdaQueryChainWrapper<GraphNode> nodeChain =
-                new LambdaQueryChainWrapper<>(graphNodeRepository);
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
         when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.list()).thenReturn(List.of(testNode));
 
-        LambdaQueryChainWrapper<GraphEdge> edgeChain =
-                new LambdaQueryChainWrapper<>(graphEdgeRepository);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
         when(edgeChain.list()).thenReturn(Collections.emptyList());
 
         neo4jSyncService.syncGraph("project-1", "version-1");
@@ -137,9 +128,9 @@ class Neo4jSyncServiceTest {
     @Test
     void testSyncGraph_WithNodeAndEdge() {
         when(neo4jDriver.session()).thenReturn(session);
-        doNothing().when(session).run(anyString(), anyMap());
+        when(session.run(anyString(), anyMap())).thenReturn(result);
         when(session.beginTransaction()).thenReturn(transaction);
-        doNothing().when(transaction).run(anyString(), anyMap());
+        when(transaction.run(anyString(), anyMap())).thenReturn(result);
 
         GraphNode node2 = new GraphNode();
         node2.setId("node-2");
@@ -147,28 +138,25 @@ class Neo4jSyncServiceTest {
         node2.setVersionId("version-1");
         node2.setNodeType("Service");
         node2.setNodeKey("TestService");
+        node2.setNodeName("TestService");
+        node2.setDisplayName("TestService");
+        node2.setConfidence(BigDecimal.ONE);
         node2.setStatus("CONFIRMED");
 
-        LambdaQueryChainWrapper<GraphNode> nodeChain =
-                new LambdaQueryChainWrapper<>(graphNodeRepository);
+        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
         when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
         when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(nodeChain);
         when(nodeChain.list()).thenReturn(List.of(testNode, node2));
 
-        LambdaQueryChainWrapper<GraphEdge> edgeChain =
-                new LambdaQueryChainWrapper<>(graphEdgeRepository);
+        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
         when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
         when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any()).eq(any(), any()).eq(any(), any())).thenReturn(edgeChain);
         when(edgeChain.list()).thenReturn(List.of(testEdge));
 
         neo4jSyncService.syncGraph("project-1", "version-1");
 
-        verify(transaction, times(2)).run(contains("CREATE"), anyMap()); // Two nodes
-        verify(transaction).run(contains("MATCH"), anyMap()); // One edge
+        verify(transaction, times(3)).run(anyString(), anyMap()); // 2 nodes + 1 edge
+        verify(transaction).run(contains("MATCH"), anyMap()); // The edge query specifically
         verify(transaction, times(2)).commit(); // One for nodes, one for edges
         verify(session).close();
     }
@@ -176,7 +164,7 @@ class Neo4jSyncServiceTest {
     @Test
     void testSyncDeleteNode() {
         when(neo4jDriver.session()).thenReturn(session);
-        doNothing().when(session).run(anyString(), anyMap());
+        when(session.run(anyString(), anyMap())).thenReturn(result);
 
         neo4jSyncService.syncDeleteNode("project-1", "version-1", "node-1");
 
@@ -199,7 +187,7 @@ class Neo4jSyncServiceTest {
     void testSyncDeleteNodes_WithMultipleNodes() {
         when(neo4jDriver.session()).thenReturn(session);
         when(session.beginTransaction()).thenReturn(transaction);
-        doNothing().when(transaction).run(anyString(), anyMap());
+        when(transaction.run(anyString(), anyMap())).thenReturn(result);
 
         neo4jSyncService.syncDeleteNodes("project-1", "version-1", List.of("node-1", "node-2", "node-3"));
 
@@ -210,13 +198,10 @@ class Neo4jSyncServiceTest {
 
     @Test
     void testIncrementalSyncNodes_EmptyList() {
-        when(neo4jDriver.session()).thenReturn(session);
-        when(session.beginTransaction()).thenReturn(transaction);
-
         neo4jSyncService.incrementalSyncNodes("project-1", "version-1", Collections.emptyList());
 
-        verify(transaction, never()).run(anyString(), anyMap());
-        verify(session).close();
+        // Method returns early, so session should not have been created
+        verify(neo4jDriver, never()).session();
     }
 
     @Test
@@ -247,7 +232,7 @@ class Neo4jSyncServiceTest {
     @Test
     void testCreateConstraints() {
         when(neo4jDriver.session()).thenReturn(session);
-        doNothing().when(session).run(anyString());
+        when(session.run(anyString())).thenReturn(result);
 
         neo4jSyncService.createConstraints();
 
@@ -258,7 +243,7 @@ class Neo4jSyncServiceTest {
     @Test
     void testCreateIndexes() {
         when(neo4jDriver.session()).thenReturn(session);
-        doNothing().when(session).run(anyString());
+        when(session.run(anyString())).thenReturn(result);
 
         neo4jSyncService.createIndexes();
 

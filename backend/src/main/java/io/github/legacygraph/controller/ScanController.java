@@ -181,4 +181,30 @@ public class ScanController {
             return Result.error(e.getMessage());
         }
     }
+
+    /**
+     * 删除扫描版本
+     * 删除指定的扫描版本及其关联的所有扫描任务数据
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     * @return 成功结果
+     */
+    @DeleteMapping("/{versionId}")
+    @Operation(summary = "删除扫描版本", description = "删除指定的扫描版本及其关联的所有扫描任务数据")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "删除成功"),
+            @ApiResponse(responseCode = "404", description = "扫描版本不存在")
+    })
+    public Result<Void> deleteVersion(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "扫描版本ID", required = true)
+            @PathVariable String versionId) {
+        try {
+            scanVersionService.deleteScanVersion(versionId);
+            return Result.success();
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
 }

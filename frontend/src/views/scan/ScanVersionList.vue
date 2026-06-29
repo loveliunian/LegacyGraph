@@ -92,6 +92,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { t } from '@/locales'
+import { get, del } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -132,7 +133,9 @@ const viewDetail = (row: any) => {
 }
 
 const compareWithPrevious = (row: any) => {
-  ElMessage.info('对比功能开发中...')
+  // 跳转到统一图谱比较两个版本
+  detailDialogVisible.value = false
+  router.push(`/projects/${projectId}/graph/unified?versionId=${row.id}`)
 }
 
 const deleteVersion = async (row: any) => {
@@ -142,11 +145,9 @@ const deleteVersion = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    const index = versionList.value.findIndex(v => v.id === row.id)
-    if (index > -1) {
-      versionList.value.splice(index, 1)
-    }
+    await del(`/lg/projects/${projectId}/scan-versions/${row.id}`)
     ElMessage.success('版本已删除')
+    await loadVersionList()
   } catch {
     // cancelled
   }
@@ -157,55 +158,21 @@ const goToGraph = (version: any) => {
   router.push(`/projects/${projectId}/graph/unified?versionId=${version.id}`)
 }
 
-onMounted(async () => {
+const loadVersionList = async () => {
   loading.value = true
-  setTimeout(() => {
-    versionList.value = [
-      {
-        id: '1',
-        versionNumber: 'v1',
-        versionName: '初始扫描',
-        scanType: 'FULL',
-        status: 'COMPLETED',
-        nodeCount: 256,
-        edgeCount: 412,
-        factCount: 189,
-        confidenceAvg: 0.87,
-        createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-        createdBy: '张三',
-        description: '项目首次全量扫描'
-      },
-      {
-        id: '2',
-        versionNumber: 'v2',
-        versionName: '增量更新',
-        scanType: 'CODE',
-        status: 'COMPLETED',
-        nodeCount: 289,
-        edgeCount: 468,
-        factCount: 215,
-        confidenceAvg: 0.89,
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        createdBy: '李四',
-        description: '新增模块代码扫描'
-      },
-      {
-        id: '3',
-        versionNumber: 'v3',
-        versionName: '数据库结构扫描',
-        scanType: 'DATABASE',
-        status: 'PROCESSING',
-        nodeCount: 0,
-        edgeCount: 0,
-        factCount: 0,
-        confidenceAvg: 0,
-        createdAt: new Date().toISOString(),
-        createdBy: '王五',
-        description: '数据库表结构和关系扫描'
-      }
-    ]
+  try {
+    const data = await get(`/lg/projects/${projectId}/scan-versions`)
+    versionList.value = data
+  } catch (err) {
+    console.error('获取扫描版本列表失败:', err)
+    ElMessage.error('获取扫描版本列表失败')
+  } finally {
     loading.value = false
-  }, 500)
+  }
+}
+
+onMounted(async () => {
+  await loadVersionList()
 })
 </script>
 

@@ -21,6 +21,8 @@ spring:
       pool-name: LegacyGraphHikariCP
       max-lifetime: 1800000
       connection-timeout: 30000
+      data-source-properties:
+        stringtype: unspecified
 
   # Redis 配置
   data:
@@ -82,7 +84,7 @@ mybatis-plus:
 # MinIO 配置
 minio:
   endpoint: http://47.95.208.205:9000
-  access-key: minio
+  access-key: admin
   secret-key: Liucl@157
   bucket-name: legacy-graph
 
