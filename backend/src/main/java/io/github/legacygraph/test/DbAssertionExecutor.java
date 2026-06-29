@@ -1,16 +1,23 @@
 package io.github.legacygraph.test;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.entity.TestCase;
+import io.github.legacygraph.entity.TestResult;
+import io.github.legacygraph.repository.TestResultRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 数据库断言执行器
@@ -21,9 +28,115 @@ import java.util.Map;
 public class DbAssertionExecutor {
 
     private final DataSource dataSource;
+    private final TestResultRepository testResultRepository;
+    private final ObjectMapper objectMapper;
 
-    public DbAssertionExecutor(DataSource dataSource) {
+    public DbAssertionExecutor(DataSource dataSource,
+                              TestResultRepository testResultRepository,
+                              ObjectMapper objectMapper) {
         this.dataSource = dataSource;
+        this.testResultRepository = testResultRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 执行数据库测试用例
+     * 解析测试步骤中的断言定义并逐一执行
+     */
+    @Transactional
+    public TestResult execute(TestCase testCase, String executionId) {
+        log.info("Executing DB test case: {} {}", testCase.getCaseCode(), testCase.getCaseName());
+
+        TestResult result = new TestResult();
+        result.setId(UUID.randomUUID().toString());
+        result.setProjectId(testCase.getProjectId());
+        result.setVersionId(testCase.getVersionId());
+        result.setTestCaseId(testCase.getId());
+        result.setExecutionId(executionId);
+        result.setExecutedAt(LocalDateTime.now());
+
+        long startTime = System.currentTimeMillis();
+
+        try {
+            // 解析测试步骤（多个断言）
+            List<Map<String, Object>> assertions = parseJson(testCase.getSteps(), List.class);
+
+            boolean allPassed = true;
+            List<AssertionResult> assertionResults = new ArrayList<>();
+
+            if (assertions != null) {
+                for (Map<String, Object> assertionDef : assertions) {
+                    String type = (String) assertionDef.get("type");
+                    AssertionResult assertionResult = executeAssertion(type, assertionDef);
+                    assertionResults.add(assertionResult);
+                    if (!assertionResult.isPassed()) {
+                        allPassed = false;
+                    }
+                }
+            }
+
+            result.setResultStatus(allPassed ? "PASSED" : "FAILED");
+            result.setAssertionResult(objectMapper.writeValueAsString(assertionResults));
+            result.setDurationMs(System.currentTimeMillis() - startTime);
+
+            log.info("DB test case {} completed: {}, duration: {}ms",
+                    testCase.getCaseCode(), result.getResultStatus(), result.getDurationMs());
+
+        } catch (Exception e) {
+            log.error("DB test case {} failed with exception", testCase.getCaseCode(), e);
+            result.setResultStatus("ERROR");
+            result.setErrorMessage(e.getMessage());
+            result.setDurationMs(System.currentTimeMillis() - startTime);
+        }
+
+        testResultRepository.insert(result);
+        return result;
+    }
+
+    /**
+     * 根据断言类型执行单个断言
+     */
+    private AssertionResult executeAssertion(String type, Map<String, Object> assertionDef) {
+        switch (type) {
+            case "ROW_COUNT": {
+                String table = (String) assertionDef.get("table");
+                String operator = (String) assertionDef.get("operator");
+                long expected = ((Number) assertionDef.get("expected")).longValue();
+
+                // 构建 count 查询
+                String sql = "SELECT COUNT(*) FROM " + table;
+
+                AssertionResult countResult = executeCount(sql, expected, 0.0);
+
+                // 根据操作符判断是否通过
+                if ("GREATER_THAN".equals(operator)) {
+                    boolean passed = ((Long) expected) < countResult.getScore();
+                    return new AssertionResult(passed,
+                            String.format("预期行数 > %d, 实际 %d", expected, (long) countResult.getScore()),
+                            passed ? 1.0 : 0.0,
+                            null);
+                } else if ("EQUAL".equals(operator)) {
+                    boolean passed = expected == (long) countResult.getScore();
+                    return new AssertionResult(passed,
+                            String.format("预期行数 = %d, 实际 %d", expected, (long) countResult.getScore()),
+                            passed ? 1.0 : 0.0,
+                            null);
+                }
+                return countResult;
+            }
+            default:
+                return new AssertionResult(false, "Unknown assertion type: " + type, 0.0, null);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T parseJson(String json, Class<T> clazz) {
+        if (json == null || json.isEmpty()) return null;
+        try {
+            return objectMapper.readValue(json, clazz);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

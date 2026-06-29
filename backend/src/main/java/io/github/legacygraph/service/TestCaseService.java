@@ -103,87 +103,189 @@ public class TestCaseService {
 
     /**
      * 为API接口生成测试用例
+     * 生成正常场景 + 常见异常场景（参数错误、未授权、空输入）
      */
     private void generateApiTestCase(GraphNode apiNode) {
         String[] parts = apiNode.getNodeKey().split(" ", 2);
         String method = parts.length > 1 ? parts[0] : "GET";
         String path = parts.length > 1 ? parts[1] : apiNode.getNodeKey();
 
-        TestCase testCase = new TestCase();
-        testCase.setId(UUID.randomUUID().toString());
-        testCase.setProjectId(apiNode.getProjectId());
-        testCase.setVersionId(apiNode.getVersionId());
-        testCase.setCaseCode("API_" + Math.abs(apiNode.getNodeKey().hashCode()));
-        testCase.setCaseName(apiNode.getDisplayName() != null ? apiNode.getDisplayName() + " 测试" : "API测试");
-        testCase.setCaseType("API");
-        testCase.setTargetNodeId(apiNode.getId());
-        testCase.setPriority("P2");
-        testCase.setGeneratedBy("AUTO");
-        testCase.setConfidence(BigDecimal.valueOf(0.8));
-        testCase.setStatus("GENERATED");
-        testCase.setCreatedAt(LocalDateTime.now());
-        testCase.setUpdatedAt(LocalDateTime.now());
-
+        // 1. 正常成功场景
+        TestCase normalTestCase = createBaseApiTestCase(apiNode, method, path, "NORMAL", "成功路径", BigDecimal.valueOf(0.8));
         Map<String, Object> preconditions = new HashMap<>();
         preconditions.put("type", "LOGIN");
-        preconditions.put("role", "admin");
+        preconditions.put("role", "user");
 
         List<Map<String, Object>> steps = new ArrayList<>();
         Map<String, Object> step = new HashMap<>();
         step.put("action", "CALL_API");
         step.put("method", method);
         step.put("path", path);
+        // 添加示例请求体（合理默认值根据HTTP方法推断）
+        if (!"GET".equals(method) && !"DELETE".equals(method)) {
+            step.put("body", "{\n  // 根据业务填写实际参数\n}");
+        }
         steps.add(step);
 
         Map<String, Object> expected = new HashMap<>();
         expected.put("httpStatus", 200);
+        expected.put("businessSuccess", true);
+        expected.put("responseContains", "code|status|success");
 
         try {
-            testCase.setPreconditions(objectMapper.writeValueAsString(preconditions));
-            testCase.setSteps(objectMapper.writeValueAsString(steps));
-            testCase.setExpectedResult(objectMapper.writeValueAsString(expected));
+            normalTestCase.setPreconditions(objectMapper.writeValueAsString(preconditions));
+            normalTestCase.setSteps(objectMapper.writeValueAsString(steps));
+            normalTestCase.setExpectedResult(objectMapper.writeValueAsString(expected));
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize test case", e);
         }
+        testCaseRepository.insert(normalTestCase);
 
-        testCaseRepository.insert(testCase);
+        // 2. 未授权场景（未登录访问）
+        TestCase unauthorizedTestCase = createBaseApiTestCase(apiNode, method, path, "UNAUTHORIZED", "未授权访问", BigDecimal.valueOf(0.95));
+        Map<String, Object> preconditionsUnauth = new HashMap<>();
+        preconditionsUnauth.put("type", "NO_LOGIN");
+
+        List<Map<String, Object>> stepsUnauth = new ArrayList<>();
+        Map<String, Object> stepUnauth = new HashMap<>();
+        stepUnauth.put("action", "CALL_API");
+        stepUnauth.put("method", method);
+        stepUnauth.put("path", path);
+        stepsUnauth.add(stepUnauth);
+
+        Map<String, Object> expectedUnauth = new HashMap<>();
+        expectedUnauth.put("httpStatus", 401);
+        expectedUnauth.put("businessSuccess", false);
+
+        try {
+            unauthorizedTestCase.setPreconditions(objectMapper.writeValueAsString(preconditionsUnauth));
+            unauthorizedTestCase.setSteps(objectMapper.writeValueAsString(stepsUnauth));
+            unauthorizedTestCase.setExpectedResult(objectMapper.writeValueAsString(expectedUnauth));
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize test case", e);
+        }
+        testCaseRepository.insert(unauthorizedTestCase);
+
+        // 3. 参数校验失败场景（空必填参数）
+        if (!"GET".equals(method)) {
+            TestCase badParamTestCase = createBaseApiTestCase(apiNode, method, path, "BAD_PARAM", "必填参数为空", BigDecimal.valueOf(0.9));
+            Map<String, Object> preconditionsBad = new HashMap<>();
+            preconditionsBad.put("type", "LOGIN");
+            preconditionsBad.put("role", "user");
+
+            List<Map<String, Object>> stepsBad = new ArrayList<>();
+            Map<String, Object> stepBad = new HashMap<>();
+            stepBad.put("action", "CALL_API");
+            stepBad.put("method", method);
+            stepBad.put("path", path);
+            stepBad.put("body", "{\n  // 缺少必填参数\n}");
+            stepsBad.add(stepBad);
+
+            Map<String, Object> expectedBad = new HashMap<>();
+            expectedBad.put("httpStatus", 400);
+            expectedBad.put("businessSuccess", false);
+            expectedBad.put("errorContains", "parameter|required|invalid");
+
+            try {
+                badParamTestCase.setPreconditions(objectMapper.writeValueAsString(preconditionsBad));
+                badParamTestCase.setSteps(objectMapper.writeValueAsString(stepsBad));
+                badParamTestCase.setExpectedResult(objectMapper.writeValueAsString(expectedBad));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize test case", e);
+            }
+            testCaseRepository.insert(badParamTestCase);
+        }
+    }
+
+    /**
+     * 创建基础 API 测试用例骨架
+     */
+    private TestCase createBaseApiTestCase(GraphNode apiNode, String method, String path, String scenario, String scenarioDesc, BigDecimal confidence) {
+        TestCase testCase = new TestCase();
+        testCase.setId(UUID.randomUUID().toString());
+        testCase.setProjectId(apiNode.getProjectId());
+        testCase.setVersionId(apiNode.getVersionId());
+        testCase.setCaseCode("API_" + Math.abs(apiNode.getNodeKey().hashCode()) + "_" + scenario.toLowerCase());
+        testCase.setCaseName(apiNode.getDisplayName() != null ? apiNode.getDisplayName() + " " + scenarioDesc : "API测试-" + scenarioDesc);
+        testCase.setCaseType("API");
+        testCase.setTargetNodeId(apiNode.getId());
+        // TODO: TestCase 实体缺少 scenario 字段
+        // testCase.setScenario(scenario);
+        testCase.setPriority(scenario.equals("NORMAL") ? "P2" : "P3");
+        testCase.setGeneratedBy("AUTO");
+        testCase.setConfidence(confidence);
+        testCase.setStatus("GENERATED");
+        testCase.setCreatedAt(LocalDateTime.now());
+        testCase.setUpdatedAt(LocalDateTime.now());
+        return testCase;
     }
 
     /**
      * 为数据库表生成断言测试用例
+     * 生成多条断言：
+     * 1. 表非空检查（总行数 > 0）
+     * 2. 如果能找到上游 API 写入，可以生成业务数据存在断言
      */
     private void generateDbAssertionTestCase(GraphNode tableNode) {
-        TestCase testCase = new TestCase();
-        testCase.setId(UUID.randomUUID().toString());
-        testCase.setProjectId(tableNode.getProjectId());
-        testCase.setVersionId(tableNode.getVersionId());
-        testCase.setCaseCode("DB_" + Math.abs(tableNode.getNodeKey().hashCode()));
-        testCase.setCaseName("表 " + tableNode.getNodeName() + " 数据验证");
-        testCase.setCaseType("DB");
-        testCase.setTargetNodeId(tableNode.getId());
-        testCase.setPriority("P3");
-        testCase.setGeneratedBy("AUTO");
-        testCase.setConfidence(BigDecimal.valueOf(0.7));
-        testCase.setStatus("GENERATED");
-        testCase.setCreatedAt(LocalDateTime.now());
-        testCase.setUpdatedAt(LocalDateTime.now());
+        // 1. 基础非空检查
+        TestCase baseTestCase = createBaseDbTestCase(tableNode, "ROW_COUNT", "总行数非空", BigDecimal.valueOf(0.85));
+        List<Map<String, Object>> assertions = new ArrayList<>();
 
         Map<String, Object> assertion = new HashMap<>();
         assertion.put("type", "ROW_COUNT");
         assertion.put("table", tableNode.getNodeName());
         assertion.put("operator", "GREATER_THAN");
         assertion.put("expected", 0);
-
-        List<Map<String, Object>> assertions = new ArrayList<>();
         assertions.add(assertion);
 
         try {
-            testCase.setSteps(objectMapper.writeValueAsString(assertions));
+            baseTestCase.setSteps(objectMapper.writeValueAsString(assertions));
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize DB test case", e);
         }
+        testCaseRepository.insert(baseTestCase);
 
-        testCaseRepository.insert(testCase);
+        // 2. 如果表有描述信息，尝试添加业务数据完整性检查
+        String description = tableNode.getDescription();
+        if (description != null && !description.isEmpty()) {
+            // 添加检查主键列非空约束
+            TestCase constraintTestCase = createBaseDbTestCase(tableNode, "PRIMARY_KEY_NOT_NULL", "主键不为空检查", BigDecimal.valueOf(0.8));
+            List<Map<String, Object>> constraintAssertions = new ArrayList<>();
+            Map<String, Object> pkAssertion = new HashMap<>();
+            pkAssertion.put("type", "COLUMN_NOT_NULL");
+            pkAssertion.put("table", tableNode.getNodeName());
+            pkAssertion.put("column", "id");
+            pkAssertion.put("expected", "NOT NULL");
+            constraintAssertions.add(pkAssertion);
+
+            try {
+                constraintTestCase.setSteps(objectMapper.writeValueAsString(constraintAssertions));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize DB test case", e);
+            }
+            testCaseRepository.insert(constraintTestCase);
+        }
+    }
+
+    /**
+     * 创建基础 DB 测试用例骨架
+     */
+    private TestCase createBaseDbTestCase(GraphNode tableNode, String assertionType, String description, BigDecimal confidence) {
+        TestCase testCase = new TestCase();
+        testCase.setId(UUID.randomUUID().toString());
+        testCase.setProjectId(tableNode.getProjectId());
+        testCase.setVersionId(tableNode.getVersionId());
+        testCase.setCaseCode("DB_" + Math.abs(tableNode.getNodeKey().hashCode()) + "_" + assertionType.toLowerCase());
+        testCase.setCaseName("表 " + tableNode.getNodeName() + " " + description);
+        testCase.setCaseType("DB");
+        testCase.setTargetNodeId(tableNode.getId());
+        testCase.setPriority("P3");
+        testCase.setGeneratedBy("AUTO");
+        testCase.setConfidence(confidence);
+        testCase.setStatus("GENERATED");
+        testCase.setCreatedAt(LocalDateTime.now());
+        testCase.setUpdatedAt(LocalDateTime.now());
+        return testCase;
     }
 
     /**

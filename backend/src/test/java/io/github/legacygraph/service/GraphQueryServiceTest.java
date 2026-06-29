@@ -167,7 +167,7 @@ class GraphQueryServiceTest {
         List<Relationship> relationships = Collections.singletonList(relationship);
         when(path.relationships()).thenReturn(relationships);
         when(relationship.elementId()).thenReturn("rel-1");
-        when(relationship.type()).thenReturn(org.neo4j.driver.types.TypeSystem.getDefault().forRelationshipType("CALLS"));
+        when(relationship.type()).thenReturn("CALLS");
         when(relationship.startNodeElementId()).thenReturn("node-1");
         when(relationship.endNodeElementId()).thenReturn("node-2");
         when(relationship.asMap()).thenReturn(Map.of("confidence", 0.9));

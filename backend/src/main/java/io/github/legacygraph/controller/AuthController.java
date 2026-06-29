@@ -72,6 +72,8 @@ public class AuthController {
                 user.setPassword(passwordEncoder.encode("admin123"));
                 user.setNickname("管理员");
                 user.setEmail("admin@legacygraph.io");
+                user.setRoles("ADMIN");
+                user.setPermissions("*");
                 user.setStatus("ACTIVE");
                 user.setCreatedAt(LocalDateTime.now());
                 user.setUpdatedAt(LocalDateTime.now());
@@ -107,7 +109,7 @@ public class AuthController {
         );
 
         user.setLastLoginAt(LocalDateTime.now());
-        userRepository.updateById(user);
+        userRepository.updateUserById(user);
 
         LoginResponse response = new LoginResponse(
                 accessToken,

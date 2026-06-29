@@ -1,8 +1,10 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import io.github.legacygraph.config.MybatisPlusConfig;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -15,11 +17,13 @@ import java.time.LocalDateTime;
 public class SysDictItem {
 
     @TableId(type = IdType.ASSIGN_UUID)
+    @TableField(typeHandler = MybatisPlusConfig.StringUuidTypeHandler.class)
     private String id;
 
     /**
      * 字典ID
      */
+    @TableField(typeHandler = MybatisPlusConfig.StringUuidTypeHandler.class)
     private String dictId;
 
     /**

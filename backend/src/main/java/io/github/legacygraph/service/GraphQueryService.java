@@ -207,4 +207,76 @@ public class GraphQueryService {
 
         return result;
     }
+
+    /**
+     * 获取统一图谱全量数据
+     * 查询指定扫描版本的所有节点和边，按置信度过滤后返回
+     */
+    public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence) {
+        // 从PostgreSQL查询，获取完整的统一图谱数据
+        List<GraphNode> nodes = graphNodeRepository.lambdaQuery()
+                .eq(GraphNode::getVersionId, versionId)
+                .ge(GraphNode::getConfidence, minConfidence)
+                .list();
+
+        List<GraphEdge> edges = graphEdgeRepository.lambdaQuery()
+                .eq(GraphEdge::getVersionId, versionId)
+                .ge(GraphEdge::getConfidence, minConfidence)
+                .list();
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("versionId", versionId);
+        result.put("nodes", nodes.stream().map(node -> {
+            Map<String, Object> nodeMap = new HashMap<>();
+            nodeMap.put("id", node.getId());
+            nodeMap.put("key", node.getNodeKey());
+            nodeMap.put("label", node.getDisplayName());
+            nodeMap.put("type", node.getNodeType());
+            nodeMap.put("confidence", node.getConfidence());
+            nodeMap.put("status", node.getStatus());
+            nodeMap.put("description", node.getDescription());
+            nodeMap.put("sourcePath", node.getSourcePath());
+            return nodeMap;
+        }).toList());
+        result.put("edges", edges.stream().map(edge -> {
+            Map<String, Object> edgeMap = new HashMap<>();
+            edgeMap.put("id", edge.getId());
+            edgeMap.put("source", edge.getFromNodeId());
+            edgeMap.put("target", edge.getToNodeId());
+            edgeMap.put("type", edge.getEdgeType());
+            edgeMap.put("label", getEdgeLabel(edge.getEdgeType()));
+            edgeMap.put("confidence", edge.getConfidence());
+            return edgeMap;
+        }).toList());
+        result.put("nodeCount", nodes.size());
+        result.put("edgeCount", edges.size());
+
+        return result;
+    }
+
+    /**
+     * 获取项目扫描版本列表，包含节点和边统计
+     */
+    public List<Map<String, Object>> getScanVersions(String projectId) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        // 由于GraphQueryService没有依赖ScanVersionRepository
+        // 这里只返回空列表，实际由projectApi获取版本列表
+        return result;
+    }
+
+    /**
+     * 获取关系类型显示标签
+     */
+    private String getEdgeLabel(String edgeType) {
+        return switch (edgeType) {
+            case "CONTAINS" -> "包含";
+            case "CALLS" -> "调用";
+            case "HANDLED_BY" -> "处理";
+            case "EXECUTES" -> "执行";
+            case "READS" -> "读取";
+            case "WRITES" -> "写入";
+            case "HAS_COLUMN" -> "字段";
+            default -> edgeType;
+        };
+    }
 }

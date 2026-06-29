@@ -47,6 +47,7 @@ public class ReportingService {
     private final io.github.legacygraph.repository.TestCaseRepository testCaseRepository;
     private final MinioClient minioClient;
     private final ObjectMapper objectMapper;
+    private final ReportExportService reportExportService;
 
     private final String bucketName = "legacygraph-reports";
 
@@ -56,7 +57,8 @@ public class ReportingService {
                            TestResultRepository testResultRepository,
                            io.github.legacygraph.repository.TestCaseRepository testCaseRepository,
                            MinioClient minioClient,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           ReportExportService reportExportService) {
         this.reportRepository = reportRepository;
         this.nodeRepository = nodeRepository;
         this.edgeRepository = edgeRepository;
@@ -64,6 +66,7 @@ public class ReportingService {
         this.testCaseRepository = testCaseRepository;
         this.minioClient = minioClient;
         this.objectMapper = objectMapper;
+        this.reportExportService = reportExportService;
     }
 
     /**
@@ -349,8 +352,8 @@ public class ReportingService {
         // 找出高置信度但未覆盖的节点
         List<TestCoverageReport.UncoveredItem> highConfUncovered = new ArrayList<>();
         for (GraphNode node : allNodes) {
-            if (node.getConfidence().compareTo(BigDecimal.valueOf(0.8)) >= 0) {
-                // 假设没有被测试覆盖
+            if (node.getConfidence().compareTo(BigDecimal.valueOf(0.8)) >= 0 && !coveredNodeIds.contains(node.getId())) {
+                // 高置信度且没有被测试覆盖
                 TestCoverageReport.UncoveredItem item = new TestCoverageReport.UncoveredItem();
                 item.setNodeId(node.getId());
                 item.setNodeName(node.getNodeName());
@@ -479,37 +482,36 @@ public class ReportingService {
 
     /**
      * 导出报告到文件
+     * 委托给 ReportExportService 实现多格式导出（MD/PDF/Excel）
+     * @deprecated 请使用 ReportExportService 替代
      */
+    @Deprecated
     public byte[] exportReport(String reportId, String format) throws Exception {
+        log.info("ReportingService.exportReport called (deprecated), delegating to ReportExportService: reportId={}, format={}",
+                reportId, format);
+
         Report report = reportRepository.selectById(reportId);
         if (report == null) {
             throw new IllegalArgumentException("Report not found: " + reportId);
         }
 
-        // 根据报告类型获取对应的报告数据
-        Object reportData = null;
-        switch (report.getReportType()) {
-            case "MIGRATION_READINESS":
-                reportData = generateMigrationReport(report.getProjectId());
-                break;
-            case "CONFIDENCE_TREND":
-                reportData = generateConfidenceTrend(report.getProjectId(), report.getVersionId());
-                break;
-            case "TEST_COVERAGE":
-                reportData = generateTestCoverageReport(report.getProjectId(), report.getVersionId());
-                break;
-            case "GRAPH_QUALITY":
-                reportData = generateGraphQualityReport(report.getProjectId(), report.getVersionId());
-                break;
-            default:
-                throw new IllegalArgumentException("Unknown report type: " + report.getReportType());
-        }
+        // 委托给 ReportExportService
+        ReportExportService.ReportType reportType = switch (report.getReportType()) {
+            case "MIGRATION_READINESS" -> ReportExportService.ReportType.MIGRATION_READINESS;
+            case "CONFIDENCE_TREND" -> ReportExportService.ReportType.CONFIDENCE_TREND;
+            case "TEST_COVERAGE" -> ReportExportService.ReportType.TEST_COVERAGE;
+            case "GRAPH_QUALITY" -> ReportExportService.ReportType.GRAPH_QUALITY;
+            default -> throw new IllegalArgumentException("Unknown report type: " + report.getReportType());
+        };
 
-        if ("JSON".equalsIgnoreCase(format)) {
-            return objectMapper.writeValueAsBytes(reportData);
-        }
-        // TODO: PDF/Excel 导出 - 后续实现
-        return objectMapper.writeValueAsBytes(reportData);
+        ReportExportService.ExportFormat exportFormat = switch (format.toUpperCase()) {
+            case "MD", "MARKDOWN" -> ReportExportService.ExportFormat.MD;
+            case "PDF" -> ReportExportService.ExportFormat.PDF;
+            case "EXCEL", "XLSX" -> ReportExportService.ExportFormat.EXCEL;
+            default -> ReportExportService.ExportFormat.MD;
+        };
+
+        return reportExportService.exportReport(report.getProjectId(), report.getVersionId(), reportType, exportFormat);
     }
 
     /**

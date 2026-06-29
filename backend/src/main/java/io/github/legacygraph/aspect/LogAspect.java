@@ -46,8 +46,8 @@ public class LogAspect {
     @Around("logPointcut()")
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
         long startTime = System.currentTimeMillis();
-        String traceId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        
+        String traceId = UUID.randomUUID().toString().replace("-", "");
+
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
         Log logAnnotation = method.getAnnotation(Log.class);

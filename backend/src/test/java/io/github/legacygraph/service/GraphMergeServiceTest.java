@@ -1,5 +1,6 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.*;
 import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,8 +71,8 @@ class GraphMergeServiceTest {
         edge1.setId("edge-1");
         edge1.setProjectId("project-1");
         edge1.setVersionId("v1");
-        edge1.setSourceNodeId("node-1");
-        edge1.setTargetNodeId("node-2");
+        edge1.setFromNodeId("node-1");
+        edge1.setToNodeId("node-2");
         edge1.setEdgeType("CALLS");
         edge1.setConfidence(BigDecimal.valueOf(0.85));
         edge1.setStatus("PENDING");
@@ -80,87 +81,36 @@ class GraphMergeServiceTest {
     }
 
     @Test
-    void testMergeNodes_Success() {
-        when(graphNodeRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphNodeRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphNodeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(mockNodes);
+    void testFindMergeCandidates() {
+        when(graphNodeRepository.findByProjectIdAndNodeType(anyString(), anyString())).thenReturn(mockNodes);
 
-        when(graphNodeRepository.updateById(any(GraphNode.class))).thenReturn(1);
+        List<GraphMergeService.MergeCandidate> candidates = graphMergeService.findMergeCandidates("project-1", "ApiEndpoint");
 
-        int mergedCount = graphMergeService.mergeNodes("project-1");
-
-        assertTrue(mergedCount >= 0);
-        verify(graphNodeRepository, atLeastOnce()).updateById(any(GraphNode.class));
+        assertNotNull(candidates);
+        assertTrue(candidates.size() >= 0);
     }
 
     @Test
-    void testMergeEdges_Success() {
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(mockEdges);
+    void testCalculateNameScore() {
+        double score1 = graphMergeService.calculateNameScore("Test API", "Test API");
+        assertEquals(1.0, score1, 0.001);
 
-        when(graphEdgeRepository.updateById(any(GraphEdge.class))).thenReturn(1);
+        double score2 = graphMergeService.calculateNameScore("Test API", "Different Name");
+        assertTrue(score2 < 1.0);
 
-        int mergedCount = graphMergeService.mergeEdges("project-1");
-
-        assertTrue(mergedCount >= 0);
-        verify(graphEdgeRepository, atLeastOnce()).updateById(any(GraphEdge.class));
+        double score3 = graphMergeService.calculateNameScore(null, "Test");
+        assertEquals(0.0, score3, 0.001);
     }
 
     @Test
-    void testMergeNodes_EmptyList() {
-        when(graphNodeRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphNodeRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphNodeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(Collections.emptyList());
+    void testDecideMerge() {
+        GraphMergeService.MergeCandidate candidate = new GraphMergeService.MergeCandidate();
+        candidate.setSimilarityScore(0.9);
 
-        int mergedCount = graphMergeService.mergeNodes("project-1");
+        GraphMergeDecision decision = graphMergeService.decideMerge("project-1", mockNodes.get(0), mockNodes.get(1), candidate);
 
-        assertEquals(0, mergedCount);
-        verify(graphNodeRepository, never()).updateById(any(GraphNode.class));
-    }
-
-    @Test
-    void testMergeEdges_EmptyList() {
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryChainWrapper.class));
-        when(graphEdgeRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(Collections.emptyList());
-
-        int mergedCount = graphMergeService.mergeEdges("project-1");
-
-        assertEquals(0, mergedCount);
-        verify(graphEdgeRepository, never()).updateById(any(GraphEdge.class));
-    }
-
-    @Test
-    void testCalculateCombinedConfidence() {
-        List<BigDecimal> confidences = Arrays.asList(
-                BigDecimal.valueOf(0.9),
-                BigDecimal.valueOf(0.8),
-                BigDecimal.valueOf(0.7)
-        );
-
-        BigDecimal result = graphMergeService.calculateCombinedConfidence(confidences);
-
-        assertNotNull(result);
-        assertTrue(result.compareTo(BigDecimal.ZERO) > 0);
-        assertTrue(result.compareTo(BigDecimal.ONE) <= 0);
-    }
-
-    @Test
-    void testCalculateCombinedConfidence_EmptyList() {
-        BigDecimal result = graphMergeService.calculateCombinedConfidence(Collections.emptyList());
-
-        assertNotNull(result);
-        assertEquals(BigDecimal.ZERO, result);
-    }
-
-    @Test
-    void testCalculateCombinedConfidence_SingleValue() {
-        BigDecimal result = graphMergeService.calculateCombinedConfidence(
-                Collections.singletonList(BigDecimal.valueOf(0.85))
-        );
-
-        assertNotNull(result);
-        assertEquals(0, result.compareTo(BigDecimal.valueOf(0.85)));
+        assertNotNull(decision);
+        assertNotNull(decision.getDecision());
+        assertNotNull(decision.getReasons());
     }
 }

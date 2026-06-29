@@ -89,16 +89,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { reportApi } from '@/api'
-import { Refresh, Download } from '@element-plus/icons-vue'
+import { Download } from '@element-plus/icons-vue'
 import type { MigrationReadinessReport, RiskItem } from '@/types'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
-const route = useRoute()
 const projectStore = useProjectStore()
 
 const loading = ref(false)
@@ -141,7 +140,7 @@ function getOverallScoreType(score: number) {
 }
 
 async function refreshDetection() {
-  const projectId = projectStore.currentProjectId
+  const projectId = projectStore.currentProjectId as string
   loading.value = true
   try {
     const data = await reportApi.generateMigrationReport(projectId)
@@ -158,12 +157,12 @@ async function refreshDetection() {
 }
 
 function goToNode(nodeId: string) {
-  // TODO: 跳转到图谱页面定位到该节点
-  console.log('go to node', nodeId)
+  const pid = projectStore.currentProjectId as string
+  router.push(`/projects/${pid}/graph/code?nodeId=${nodeId}`)
 }
 
 function exportReport() {
-  const projectId = projectStore.currentProjectId
+  const projectId = projectStore.currentProjectId as string
   reportApi.generateMigrationReport(projectId)
     .then(data => {
       // 导出JSON

@@ -116,96 +116,94 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, Share, MagicStick } from '@element-plus/icons-vue'
 import { Graph, Extension, registerFontAwesomeIcons } from '@antv/g6'
 import { icons } from '@antv/g6-plugin-icons/dist/font-awesome-4-7'
-
-import { useGraphStore } from '@/stores/graph'
+import { graphApi } from '@/api'
 import type { GraphData, Node } from '@antv/g6'
 
-const graphStore = useGraphStore()
+const route = useRoute()
+const projectId = computed(() => route.params.projectId as string)
+const currentVersion = computed(() => route.query.version as string)
 
 const showAiView = ref(false)
 const graphContainer = ref<HTMLElement | null>(null)
 const graphInstance = ref<Graph | null>(null)
 const selectedNode = ref<Node | null>(null)
+const loading = ref(false)
 
-// 示例数据 - 工单派发案例 (来自详细设计文档)
-const graphData: GraphData = {
-  nodes: [
-    { id: 'domain-ticket', label: '工单域', type: 'domain', x: 100, y: 200 },
-    { id: 'bp.ticket.dispatch', label: '工单派发', type: 'process', x: 300, y: 100 },
-    { id: 'feature.ticket.dispatch', label: '派发功能', type: 'feature', x: 500, y: 150 },
-    { id: 'page.ticket.detail', label: '工单详情页', type: 'page', x: 650, y: 100 },
-    { id: 'api.post.ticket.dispatch', label: 'POST /ticket/dispatch', type: 'api', x: 650, y: 250 },
-    { id: 'table.t-ticket', label: 't_ticket', type: 'table', x: 500, y: 300 },
-    { id: 'role.dispatcher', label: '调度员', type: 'role', x: 300, y: 300 }
-  ],
-  edges: [
-    { source: 'domain-ticket', target: 'bp.ticket.dispatch', label: 'CONTAINS' },
-    { source: 'bp.ticket.dispatch', target: 'feature.ticket.dispatch', label: 'IMPLEMENTED_BY' },
-    { source: 'feature.ticket.dispatch', target: 'page.ticket.detail', label: 'EXPOSED_BY' },
-    { source: 'page.ticket.detail', target: 'api.post.ticket.dispatch', label: 'CALLS' },
-    { source: 'feature.ticket.dispatch', target: 'api.post.ticket.dispatch', label: 'EXPOSED_BY' },
-    { source: 'api.post.ticket.dispatch', target: 'table.t-ticket', label: 'WRITES' },
-    { source: 'bp.ticket.dispatch', target: 'role.dispatcher', label: 'INVOLVES' }
-  ]
-}
-
-const domainTree = ref([
-  {
-    id: '1',
-    name: '工单管理',
-    confidence: 0.95,
-    children: [
-      { id: '1-1', name: '工单创建', confidence: 0.92 },
-      { id: '1-2', name: '工单派发', confidence: 0.90 },
-      { id: '1-3', name: '工单处理', confidence: 0.88 },
-      { id: '1-4', name: '工单完成', confidence: 0.87 }
-    ]
-  },
-  {
-    id: '2',
-    name: '用户管理',
-    confidence: 0.90,
-    children: [
-      { id: '2-1', name: '用户注册', confidence: 0.85 },
-      { id: '2-2', name: '实名认证', confidence: 0.82 }
-    ]
-  }
-])
+const domainTree = ref<any[]>([])
 
 const graphStats = {
-  autoMergeRate: 42,
-  pendingReview: 8,
-  avgConfidence: 0.86,
-  testPassRate: 78
-}
-
-const businessStats = {
-  domains: 5,
-  processes: 18,
-  rules: 42
+  autoMergeRate: 0,
+  pendingReview: 0,
+  avgConfidence: 0,
+  testPassRate: 0
 }
 
 const nodeColorMap: Record<string, string> = {
-  domain: '#1890ff',
-  process: '#52c41a',
-  feature: '#faad14',
-  page: '#722ed1',
-  api: '#eb2f96',
-  table: '#13c2c2',
-  role: '#fa8c16'
+  BusinessDomain: '#1890ff',
+  BusinessProcess: '#52c41a',
+  FeatureModule: '#faad14',
+  Feature: '#722ed1',
+  Page: '#722ed1',
+  ApiEndpoint: '#eb2f96',
+  Controller: '#ebb563',
+  Service: '#f5d76e',
+  Mapper: '#909399',
+  SqlStatement: '#f56c6c',
+  Table: '#13c2c2',
+  Role: '#fa8c16'
 }
 
-const getNodeStyle = (node: Node) => {
+const getNodeStyle = (node: any) => {
   const color = nodeColorMap[node.type as string] || '#999'
   return {
     fill: color + '20',
     stroke: color,
     lineWidth: 2
+  }
+}
+
+async function loadGraph(domain: string) {
+  if (!projectId.value || !currentVersion.value) return
+  loading.value = true
+  try {
+    const data = await graphApi.getBusinessView(projectId.value, currentVersion.value, domain)
+
+    if (!data || !data.nodes) {
+      ElMessage.warning('该业务域暂无图谱数据')
+      graphInstance.value?.clear()
+      return
+    }
+
+    // 转换为G6格式
+    const g6Data: GraphData = {
+      nodes: data.nodes.map((node: any) => ({
+        id: node.id,
+        label: node.properties.label || node.properties.displayName || node.properties.nodeName,
+        type: node.properties.nodeType,
+        x: Math.random() * 800,
+        y: Math.random() * 600,
+      })),
+      edges: (data.edges || []).map((edge: any) => ({
+        source: edge.startNodeId,
+        target: edge.endNodeId,
+        label: edge.properties.type,
+      }))
+    }
+
+    graphInstance.value?.data(g6Data)
+    graphInstance.value?.render()
+    ElMessage.success(`加载完成: ${data.nodeCount || 0} 节点`)
+  } catch (error) {
+    console.error('加载业务图谱失败', error)
+    ElMessage.error('加载业务图谱失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -284,8 +282,14 @@ onMounted(async () => {
     selectedNode.value = null
   })
 
-  graphInstance.value.data(graphData)
-  graphInstance.value.render()
+  // If we have a domain from query, load it
+  const domainQuery = route.query.domain as string
+  if (domainQuery) {
+    loadGraph(domainQuery)
+  } else {
+    // Show empty state
+    graphInstance.value.render()
+  }
 
   // Handle resize
   window.addEventListener('resize', handleResize)

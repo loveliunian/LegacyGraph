@@ -28,7 +28,7 @@ public class VectorController {
     @PostMapping("/vector/upsert")
     @Operation(summary = "批量upsert向量文档", description = "批量向量化并存储文档/代码片段")
     public Result<Void> batchUpsert(
-            @PathVariable Long projectId,
+            @PathVariable String projectId,
             @RequestBody List<VectorDocument> documents) {
         vectorRetrievalService.batchUpsertVectors(projectId, documents);
         return Result.success();
@@ -37,12 +37,12 @@ public class VectorController {
     @PostMapping("/vector/search")
     @Operation(summary = "语义相似度检索", description = "根据查询文本检索语义相似的文档片段")
     public Result<List<VectorDocument>> semanticSearch(
-            @PathVariable Long projectId,
+            @PathVariable String projectId,
             @RequestParam(defaultValue = "10") int topK,
             @RequestParam(required = false) String chunkType,
             @RequestBody String query) {
         List<VectorDocument> results = vectorRetrievalService.semanticSearch(
-            projectId, query, topK, chunkType
+            projectId, null, query, topK, chunkType
         );
         return Result.success(results);
     }
@@ -50,12 +50,11 @@ public class VectorController {
     @GetMapping("/vector/similar-nodes")
     @Operation(summary = "查找相似节点", description = "根据节点名称查找可能重复的节点")
     public Result<List<GraphNode>> findSimilarNodes(
-            @PathVariable Long projectId,
+            @PathVariable String projectId,
             @RequestParam String nodeName,
             @RequestParam(defaultValue = "0.85") double threshold) {
-        // Convert to String since GraphNode stores projectId as String
         List<GraphNode> results = vectorRetrievalService.findSimilarNodes(
-            String.valueOf(projectId), nodeName, threshold
+            projectId, null, nodeName, threshold
         );
         return Result.success(results);
     }

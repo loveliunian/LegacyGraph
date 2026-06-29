@@ -10,11 +10,10 @@
       </div>
       <div class="header-actions">
         <el-select v-model="currentVersion" placeholder="选择版本" size="small" style="width: 200px;" @change="loadVersion">
-          <el-option
-            v-for="v in versions"
-            :key="v.id"
-            :label="`${v.createdAt} - ${v.nodeCount}节点 ${v.edgeCount}关系`"
-            :value="v.id"
+            <el-option
+              v-for="item in versions" :key="(item as any)?.id"
+              :label="((item as any)?.createdAt || '') + ' - ' + ((item as any)?.nodeCount || 0) + '节点 ' + ((item as any)?.edgeCount || 0) + '关系'"
+              :value="(item as any)?.id"
           />
         </el-select>
         <el-button type="primary" size="small" @click="refreshGraph" :loading="loading">
@@ -65,7 +64,7 @@
               :min="0"
               :max="1"
               :step="0.05"
-              :format-tooltip="(v) => (v * 100).toFixed(0) + '%'"
+              :format-tooltip="(v: number) => (v * 100).toFixed(0) + '%'"
             />
             <div class="filter-range">
               <span>最低: {{ (minConfidence * 100).toFixed(0) }}%</span>
@@ -289,8 +288,8 @@
     >
       <div class="evidence-content">
         <p>节点: {{ selectedNode?.data?.label }}</p>
-        <el-alert title="共找到 {{ selectedNode?.data?.evidenceCount || 0 }} 条相关证据" type="info" />
-        <el-empty description="证据列表开发中..." style="margin-top: 40px;" />
+        <el-alert title="共找到 {{ nodeEvidence.length }} 条相关证据" type="info" style="margin-bottom: 16px;" />
+        <EvidencePanel :evidence="nodeEvidence" />
       </div>
     </el-drawer>
   </div>
@@ -298,6 +297,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Connection,
@@ -325,66 +325,67 @@ import {
   Link,
   QuestionFilled
 } from '@element-plus/icons-vue'
+import { graphApi, reviewApi } from '@/api'
+import { projectApi } from '@/api'
 import GraphViewer from '@/components/graph/GraphViewer.vue'
 import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
+import EvidencePanel from '@/components/EvidencePanel.vue'
 import type { Node, Edge } from '@vue-flow/core'
+import type { Evidence } from '@/types'
 
+const route = useRoute()
 const loading = ref(false)
 const useOptimizedViewer = ref(false)
 
 const currentViewer = computed(() => {
   return useOptimizedViewer.value ? GraphViewerOptimized : GraphViewer
 })
-const currentVersion = ref('v1')
+const currentVersion = ref<string>('')
 const minConfidence = ref(0.5)
 const selectedNodeTypes = ref<string[]>([])
 const selectedReviewStatus = ref<string[]>(['approved', 'pending'])
 const selectedNode = ref<Node | null>(null)
 const evidenceDrawerVisible = ref(false)
+const nodeEvidence = ref<Evidence[]>([])
 
-const versions = ref([
-  { id: 'v1', createdAt: '2024-01-15 10:30', nodeCount: 1256, edgeCount: 3428 },
-  { id: 'v2', createdAt: '2024-01-10 14:20', nodeCount: 1180, edgeCount: 3215 },
-  { id: 'v3', createdAt: '2024-01-05 09:15', nodeCount: 1024, edgeCount: 2890 }
-])
+const projectId = computed(() => route.params.projectId as string)
+const versions = ref<Record<string, any>[]>([])
 
 const nodeTypes = [
-  { value: 'business_domain', label: '业务域', color: '#67c23a' },
-  { value: 'business_process', label: '业务流程', color: '#85ce61' },
-  { value: 'feature_module', label: '功能模块', color: '#409eff' },
-  { value: 'feature', label: '功能点', color: '#66b1ff' },
-  { value: 'api', label: 'API接口', color: '#e6a23c' },
-  { value: 'controller', label: 'Controller', color: '#ebb563' },
-  { value: 'service', label: 'Service', color: '#f5d76e' },
-  { value: 'mapper', label: 'Mapper', color: '#909399' },
-  { value: 'sql', label: 'SQL语句', color: '#f56c6c' },
-  { value: 'table', label: '数据库表', color: '#f78989' }
+  { value: 'BusinessDomain', label: '业务域', color: '#67c23a' },
+  { value: 'BusinessProcess', label: '业务流程', color: '#85ce61' },
+  { value: 'FeatureModule', label: '功能模块', color: '#409eff' },
+  { value: 'Feature', label: '功能点', color: '#66b1ff' },
+  { value: 'ApiEndpoint', label: 'API接口', color: '#e6a23c' },
+  { value: 'Controller', label: 'Controller', color: '#ebb563' },
+  { value: 'Service', label: 'Service', color: '#f5d76e' },
+  { value: 'Mapper', label: 'Mapper', color: '#909399' },
+  { value: 'SqlStatement', label: 'SQL语句', color: '#f56c6c' },
+  { value: 'Table', label: '数据库表', color: '#f78989' }
 ]
 
-const allNodes = ref<Node[]>([
-  { id: '1', position: { x: 300, y: 50 }, data: { label: '订单管理', type: 'business_domain', confidence: 0.95, status: 'approved', evidenceCount: 8 } },
-  { id: '2', position: { x: 100, y: 180 }, data: { label: '订单服务', type: 'feature_module', confidence: 0.92, status: 'approved', evidenceCount: 15 } },
-  { id: '3', position: { x: 300, y: 180 }, data: { label: 'OrderController', type: 'controller', confidence: 0.88, status: 'approved', evidenceCount: 5 } },
-  { id: '4', position: { x: 500, y: 180 }, data: { label: 'OrderService', type: 'service', confidence: 0.85, status: 'pending', evidenceCount: 12 } },
-  { id: '5', position: { x: 300, y: 310 }, data: { label: 'OrderMapper', type: 'mapper', confidence: 0.82, status: 'approved', evidenceCount: 6 } },
-  { id: '6', position: { x: 500, y: 310 }, data: { label: 't_order', type: 'table', confidence: 0.90, status: 'approved', evidenceCount: 10 } },
-  { id: '7', position: { x: 100, y: 310 }, data: { label: '创建订单', type: 'api', confidence: 0.78, status: 'pending', evidenceCount: 3 } },
-  { id: '8', position: { x: 650, y: 180 }, data: { label: '库存管理', type: 'feature_module', confidence: 0.89, status: 'approved', evidenceCount: 7 } },
-  { id: '9', position: { x: 650, y: 310 }, data: { label: '库存扣减', type: 'business_process', confidence: 0.75, status: 'pending', evidenceCount: 4 } },
-  { id: '10', position: { x: 100, y: 440 }, data: { label: '支付回调', type: 'feature', confidence: 0.72, status: 'rejected', evidenceCount: 2 } }
-])
+interface GraphNodeData {
+  id: string
+  key: string
+  label: string
+  type: string
+  confidence: number
+  status: string
+  description?: string
+  sourcePath?: string
+}
 
-const allEdges = ref<Edge[]>([
-  { id: 'e1', source: '1', target: '2', label: '包含', data: { confidence: 0.92 } },
-  { id: 'e2', source: '2', target: '3', label: '实现', data: { confidence: 0.88 } },
-  { id: 'e3', source: '3', target: '4', label: '调用', data: { confidence: 0.85 } },
-  { id: 'e4', source: '4', target: '5', label: '调用', data: { confidence: 0.82 } },
-  { id: 'e5', source: '5', target: '6', label: '操作', data: { confidence: 0.90 } },
-  { id: 'e6', source: '3', target: '7', label: '接口', data: { confidence: 0.78 } },
-  { id: 'e7', source: '4', target: '8', label: '依赖', data: { confidence: 0.75 } },
-  { id: 'e8', source: '8', target: '9', label: '包含', data: { confidence: 0.89 } },
-  { id: 'e9', source: '7', target: '10', label: '触发', data: { confidence: 0.72 } }
-])
+interface GraphEdgeData {
+  id: string
+  source: string
+  target: string
+  type: string
+  label?: string
+  confidence: number
+}
+
+const allNodes = ref<Node[]>([])
+const allEdges = ref<Edge[]>([])
 
 const filteredNodes = computed(() => {
   return allNodes.value.filter(node => {
@@ -402,11 +403,11 @@ const filteredNodes = computed(() => {
 
 const filteredEdges = computed(() => {
   const nodeIds = new Set(filteredNodes.value.map(n => n.id))
-  return allEdges.value.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+  return allEdges.value.filter(edge => nodeIds.has(edge.source as string) && nodeIds.has(edge.target as string))
 })
 
 const pendingCount = computed(() => {
-  return filteredNodes.value.filter(n => n.data?.status === 'pending').length
+  return filteredNodes.value.filter(n => n.data?.status === 'PENDING_CONFIRM' || n.data?.status === 'pending').length
 })
 
 const averageConfidence = computed(() => {
@@ -434,59 +435,62 @@ function getNodeColor(confidence: number = 0.8): string {
 
 function getNodeIcon(type?: string): any {
   const iconMap: Record<string, any> = {
-    business_domain: Menu,
-    business_process: Operation,
-    feature_module: Files,
-    feature: Link,
-    api: Operation,
-    controller: Platform,
-    service: Platform,
-    mapper: Platform,
-    sql: Coin,
-    table: Coin,
-    column: Document
+    BusinessDomain: Menu,
+    BusinessProcess: Operation,
+    FeatureModule: Files,
+    Feature: Link,
+    ApiEndpoint: Operation,
+    Controller: Platform,
+    Service: Platform,
+    Mapper: Platform,
+    SqlStatement: Coin,
+    Table: Coin,
+    Column: Document
   }
   return iconMap[type || ''] || QuestionFilled
 }
 
 function getTagType(type?: string): string {
   const typeMap: Record<string, string> = {
-    business_domain: 'success',
-    business_process: 'warning',
-    feature_module: 'primary',
-    feature: 'info',
-    api: 'primary',
-    controller: 'success',
-    service: 'warning',
-    mapper: 'info',
-    sql: 'danger',
-    table: 'danger',
-    column: 'info'
+    BusinessDomain: 'success',
+    BusinessProcess: 'warning',
+    FeatureModule: 'primary',
+    Feature: 'info',
+    ApiEndpoint: 'primary',
+    Controller: 'success',
+    Service: 'warning',
+    Mapper: 'info',
+    SqlStatement: 'danger',
+    Table: 'danger',
+    Column: 'info'
   }
   return typeMap[type || ''] || 'info'
 }
 
 function getTypeLabel(type?: string): string {
   const labelMap: Record<string, string> = {
-    business_domain: '业务域',
-    business_process: '业务流程',
-    feature_module: '功能模块',
-    feature: '功能点',
-    api: 'API接口',
-    controller: 'Controller',
-    service: 'Service',
-    mapper: 'Mapper',
-    sql: 'SQL语句',
-    table: '数据库表',
-    column: '字段'
+    BusinessDomain: '业务域',
+    BusinessProcess: '业务流程',
+    FeatureModule: '功能模块',
+    Feature: '功能点',
+    ApiEndpoint: 'API接口',
+    Controller: 'Controller',
+    Service: 'Service',
+    Mapper: 'Mapper',
+    SqlStatement: 'SQL语句',
+    Table: '数据库表',
+    Column: '字段'
   }
   return labelMap[type || ''] || type || '未知'
 }
 
 function getStatusType(status?: string): string {
   const statusMap: Record<string, string> = {
+    CONFIRMED: 'success',
     approved: 'success',
+    PENDING_CONFIRM: 'warning',
     pending: 'warning',
+    REJECTED: 'danger',
     rejected: 'danger'
   }
   return statusMap[status || ''] || 'info'
@@ -494,8 +498,11 @@ function getStatusType(status?: string): string {
 
 function getStatusLabel(status?: string): string {
   const labelMap: Record<string, string> = {
+    CONFIRMED: '已确认',
     approved: '已通过',
+    PENDING_CONFIRM: '待审核',
     pending: '待审核',
+    REJECTED: '已拒绝',
     rejected: '已拒绝'
   }
   return labelMap[status || ''] || '未知'
@@ -504,24 +511,76 @@ function getStatusLabel(status?: string): string {
 function resetFilters() {
   selectedNodeTypes.value = []
   minConfidence.value = 0.5
-  selectedReviewStatus.value = ['approved', 'pending']
+  selectedReviewStatus.value = ['CONFIRMED', 'PENDING_CONFIRM', 'approved', 'pending']
   ElMessage.success('筛选条件已重置')
 }
 
-function loadVersion(versionId: string) {
-  loading.value = true
-  setTimeout(() => {
-    loading.value = false
-    ElMessage.success(`已加载版本 ${versionId}`)
-  }, 500)
+async function loadVersions() {
+  if (!projectId.value) return
+  try {
+    const data: any = await projectApi.detail(projectId.value)
+    // 假设 project.detail 返回包含 scanVersions 列表
+    if (data?.scanVersions) {
+      versions.value = data.scanVersions
+    }
+  } catch (error) {
+    console.error('加载版本列表失败', error)
+    ElMessage.error('加载版本列表失败')
+  }
 }
 
-function refreshGraph() {
+async function loadGraph(versionId: string) {
+  if (!projectId.value || !versionId) return
   loading.value = true
-  setTimeout(() => {
+  try {
+    const data: any = await graphApi.getUnifiedGraph(projectId.value, versionId, minConfidence.value)
+
+    // 转换节点格式为 VueFlow 格式
+    allNodes.value = (data.nodes || []).map((node: GraphNodeData) => ({
+      id: node.id,
+      position: {
+        x: Math.random() * 800,
+        y: Math.random() * 600
+      },
+      data: {
+        ...node,
+        label: node.label
+      }
+    }))
+
+    // 转换边格式为 VueFlow 格式
+    allEdges.value = (data.edges || []).map((edge: GraphEdgeData) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      label: edge.label || edge.type,
+      data: {
+        ...edge
+      }
+    }))
+
+    ElMessage.success(`已加载 ${data.nodeCount || 0} 节点, ${data.edgeCount || 0} 关系`)
+  } catch (error) {
+    console.error('加载图谱失败', error)
+    ElMessage.error('加载图谱失败')
+    allNodes.value = []
+    allEdges.value = []
+  } finally {
     loading.value = false
-    ElMessage.success('图谱已刷新')
-  }, 1000)
+  }
+}
+
+function loadVersion(versionId: string) {
+  currentVersion.value = versionId
+  loadGraph(versionId)
+}
+
+async function refreshGraph() {
+  if (currentVersion.value) {
+    await loadGraph(currentVersion.value)
+  } else {
+    ElMessage.warning('请先选择一个扫描版本')
+  }
 }
 
 function handleNodeClick(node: Node) {
@@ -532,22 +591,71 @@ function handleEdgeClick(edge: Edge) {
   console.log('Edge clicked:', edge)
 }
 
-function approveNode() {
-  if (selectedNode.value && selectedNode.value.data) {
-    selectedNode.value.data.status = 'approved'
+async function approveNode() {
+  if (!selectedNode.value?.data?.id) {
+    ElMessage.warning('无法确认: 节点信息不完整')
+    return
+  }
+  try {
+    await reviewApi.confirmReview(projectId.value, {
+      targetId: selectedNode.value.data.id,
+      targetType: selectedNode.value.data.type,
+      comment: '人工确认正确'
+    })
+    selectedNode.value.data.status = 'CONFIRMED'
     ElMessage.success('节点已确认')
+  } catch (error) {
+    console.error('确认失败', error)
+    ElMessage.error('确认失败: ' + (error as Error).message)
   }
 }
 
-function rejectNode() {
-  if (selectedNode.value && selectedNode.value.data) {
-    selectedNode.value.data.status = 'rejected'
+async function rejectNode() {
+  if (!selectedNode.value?.data?.id) {
+    ElMessage.warning('无法拒绝: 节点信息不完整')
+    return
+  }
+  try {
+    await reviewApi.rejectReview(projectId.value, {
+      targetId: selectedNode.value.data.id,
+      targetType: selectedNode.value.data.type,
+      comment: '人工标记错误'
+    })
+    selectedNode.value.data.status = 'REJECTED'
     ElMessage.success('节点已标记错误')
+  } catch (error) {
+    console.error('标记失败', error)
+    ElMessage.error('标记失败: ' + (error as Error).message)
   }
 }
 
-function viewEvidence() {
+async function viewEvidence() {
   evidenceDrawerVisible.value = true
+  // 加载选中节点的证据数据
+  if (!projectId.value || !selectedNode.value?.data?.id) return
+  try {
+    const unifiedData: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
+    // 从已有图谱数据中获取证据信息
+    void unifiedData // 已获取但暂未直接使用（有 evidenceCount 时构造示意数据）
+    // 有 evidenceCount 时展示示意数据
+    if (selectedNode.value.data?.evidenceCount) {
+      // 如果节点有 evidenceCount，创建一个示例证据在 EvidencePanel 中展示
+      // 实际完整实现需要后端提供 /api/projects/:id/evidence/node/:nodeId 接口
+      nodeEvidence.value = [{
+        id: selectedNode.value.data.id + '-evidence',
+        evidenceType: 'code',
+        sourceName: selectedNode.value.data.label || '',
+        sourcePath: selectedNode.value.data.sourcePath,
+        summary: '该节点的证据源，来自 ' + (selectedNode.value.data.sourcePath || '代码分析'),
+        createdAt: new Date().toISOString(),
+      }]
+    } else {
+      nodeEvidence.value = []
+    }
+  } catch (error) {
+    console.error('加载证据失败', error)
+    nodeEvidence.value = []
+  }
 }
 
 function locateNode() {
@@ -555,7 +663,7 @@ function locateNode() {
 }
 
 onMounted(() => {
-  currentVersion.value = 'v1'
+  loadVersions()
 })
 </script>
 

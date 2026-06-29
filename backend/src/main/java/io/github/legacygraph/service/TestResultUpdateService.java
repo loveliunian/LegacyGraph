@@ -2,14 +2,22 @@ package io.github.legacygraph.service;
 
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.ReviewRecord;
+import io.github.legacygraph.entity.TestCase;
+import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.repository.GraphEdgeRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.repository.ReviewRecordRepository;
+import io.github.legacygraph.repository.TestCaseRepository;
+import io.github.legacygraph.repository.TestResultRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * 测试结果回写服务
@@ -24,16 +32,28 @@ import java.math.BigDecimal;
 @Service
 public class TestResultUpdateService {
 
-    @Autowired
-    private GraphNodeRepository nodeRepository;
-
-    @Autowired
-    private GraphEdgeRepository edgeRepository;
+    private final GraphNodeRepository nodeRepository;
+    private final GraphEdgeRepository edgeRepository;
+    private final TestResultRepository testResultRepository;
+    private final TestCaseRepository testCaseRepository;
+    private final ReviewRecordRepository reviewRecordRepository;
 
     private static final BigDecimal PASS_EDGE_INCREMENT = new BigDecimal("0.10");
     private static final BigDecimal PASS_NODE_INCREMENT = new BigDecimal("0.05");
     private static final BigDecimal FAIL_EDGE_DECREMENT = new BigDecimal("0.20");
     private static final BigDecimal VERIFIED_THRESHOLD = new BigDecimal("0.85");
+
+    public TestResultUpdateService(GraphNodeRepository nodeRepository,
+                                  GraphEdgeRepository edgeRepository,
+                                  TestResultRepository testResultRepository,
+                                  TestCaseRepository testCaseRepository,
+                                  ReviewRecordRepository reviewRecordRepository) {
+        this.nodeRepository = nodeRepository;
+        this.edgeRepository = edgeRepository;
+        this.testResultRepository = testResultRepository;
+        this.testCaseRepository = testCaseRepository;
+        this.reviewRecordRepository = reviewRecordRepository;
+    }
 
     /**
      * 回写测试通过结果
@@ -73,10 +93,10 @@ public class TestResultUpdateService {
     }
 
     /**
-     * 回写测试失败结果
+     * 回写测试失败结果 - 完整实现，自动创建审核任务
      */
     @Transactional
-    public void onTestFail(String nodeId, String edgeId) {
+    public void onTestFail(String nodeId, String edgeId, String testResultId, String failureMessage) {
         if (edgeId != null) {
             GraphEdge edge = edgeRepository.selectById(edgeId);
             if (edge != null && edge.getVerifiedScore() != null) {
@@ -90,9 +110,36 @@ public class TestResultUpdateService {
             }
         }
 
-        // TODO: 创建 review task 记录失败上下文
+        // 创建审核任务记录失败上下文
+        if (nodeId != null) {
+            GraphNode node = nodeRepository.selectById(nodeId);
+            if (node != null) {
+                ReviewRecord review = new ReviewRecord();
+                review.setId(UUID.randomUUID().toString());
+                review.setProjectId(node.getProjectId());
+                review.setTargetType(node.getNodeType());
+                review.setTargetId(node.getId());
+                review.setTargetName(node.getDisplayName());
+                review.setGraphType("code");
+                review.setConfidence(node.getConfidence().doubleValue());
+                review.setPriority("medium");
+                review.setStatus("pending");
+                review.setComment("测试失败: " + (failureMessage != null ? failureMessage : "验证未通过"));
+                review.setCreatedAt(LocalDateTime.now());
+                reviewRecordRepository.insert(review);
+                log.info("Created review task for failed test: projectId={}, targetId={}", node.getProjectId(), node.getId());
+            }
+        }
 
         log.info("Test FAIL result written: nodeId={}, edgeId={}", nodeId, edgeId);
+    }
+
+    /**
+     * 回写测试失败结果（无上下文版本，保持向后兼容）
+     */
+    @Transactional
+    public void onTestFail(String nodeId, String edgeId) {
+        onTestFail(nodeId, edgeId, null, null);
     }
 
     /**
@@ -109,5 +156,33 @@ public class TestResultUpdateService {
             return BigDecimal.ZERO;
         }
         return total;
+    }
+
+    /**
+     * 根据一次测试执行的所有结果批量更新节点置信度
+     * 遍历所有测试结果，根据测试通过/失败回写置信度到对应的图谱节点
+     */
+    @Transactional
+    public void updateConfidenceByTestResults(String executionId) {
+        List<TestResult> allResults = testResultRepository.findByExecutionId(executionId);
+        log.info("Updating confidence for {} test results in execution {}", allResults.size(), executionId);
+
+        for (TestResult result : allResults) {
+            TestCase testCase = testCaseRepository.getById(result.getTestCaseId());
+            if (testCase == null) {
+                continue;
+            }
+
+            String targetNodeId = testCase.getTargetNodeId();
+            String status = result.getResultStatus();
+
+            if ("PASSED".equals(status)) {
+                onTestPass(targetNodeId, null);
+            } else if ("FAILED".equals(status) || "ERROR".equals(status)) {
+                onTestFail(targetNodeId, null, result.getId(), result.getErrorMessage());
+            }
+        }
+
+        log.info("Confidence update completed for execution {}", executionId);
     }
 }

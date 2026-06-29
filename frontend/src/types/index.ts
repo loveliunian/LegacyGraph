@@ -103,12 +103,16 @@ export interface ReviewRecord {
 // 证据
 export interface Evidence {
   id: string
-  projectId: string
+  projectId?: string
   evidenceType: string
   sourceName: string
-  summary: string
-  content: string
-  relatedNodeIds: string
+  sourcePath?: string
+  summary?: string
+  content?: string
+  location?: string
+  relatedNodeIds?: string
+  startLine?: number
+  endLine?: number
   createdAt: string
 }
 

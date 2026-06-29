@@ -107,61 +107,82 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Grid, Menu } from '@element-plus/icons-vue'
 import { Graph, Extension } from '@antv/g6'
+import { graphApi } from '@/api'
 import type { GraphData, Node } from '@antv/g6'
+
+const route = useRoute()
+const projectId = computed(() => route.params.projectId as string)
+const currentVersion = computed(() => route.query.version as string)
 
 const selectedModule = ref<string | null>(null)
 const graphContainer = ref<HTMLElement | null>(null)
 const graphInstance = ref<Graph | null>(null)
 const selectedNode = ref<Node | null>(null)
+const loading = ref(false)
 
-const modules = ref([
-  { id: '1', name: '用户模块', color: '#409eff', featureCount: 15 },
-  { id: '2', name: '订单模块', color: '#67c23a', featureCount: 22 },
-  { id: '3', name: '支付模块', color: '#e6a23c', featureCount: 12 },
-  { id: '4', name: '商品模块', color: '#f56c6c', featureCount: 18 },
-  { id: '5', name: '库存模块', color: '#909399', featureCount: 10 }
-])
-
-// 示例数据 - 工单派发功能图谱 (来自详细设计文档)
-const graphData: GraphData = {
-  nodes: [
-    { id: 'page.ticket.detail', label: '工单详情页', type: 'page', x: 200, y: 100, confidence: 0.95 },
-    { id: 'button.dispatch', label: '派发按钮', type: 'button', x: 350, y: 150, confidence: 0.95 },
-    { id: 'action.dispatch', label: 'dispatch 动作', type: 'action', x: 350, y: 250, confidence: 0.92 },
-    { id: 'api.post.ticket.dispatch', label: 'POST /ticket/dispatch', type: 'api', x: 500, y: 200, confidence: 0.98 },
-    { id: 'perm.ticket.dispatch', label: 'ticket:dispatch', type: 'permission', x: 650, y: 200, confidence: 0.88 },
-  ],
-  edges: [
-    { source: 'page.ticket.detail', target: 'button.dispatch', label: 'CONTAINS' },
-    { source: 'button.dispatch', target: 'action.dispatch', label: 'TRIGGERS' },
-    { source: 'action.dispatch', target: 'api.post.ticket.dispatch', label: 'CALLS' },
-    { source: 'api.post.ticket.dispatch', target: 'perm.ticket.dispatch', label: 'REQUIRES' },
-  ]
-}
-
-const totalFeatures = computed(() =>
-  modules.value.reduce((sum, m) => sum + m.featureCount, 0)
-)
-const totalPages = 45
+const modules = ref<any[]>([])
 
 const nodeColorMap: Record<string, string> = {
-  page: '#722ed1',
-  button: '#eb2f96',
-  action: '#faad14',
-  api: '#52c41a',
-  permission: '#1890ff',
-  feature: '#13c2c2',
+  Page: '#722ed1',
+  Button: '#eb2f96',
+  ApiEndpoint: '#52c41a',
+  Permission: '#1890ff',
+  Feature: '#13c2c2',
+  FeatureModule: '#409eff',
 }
 
-const getNodeStyle = (node: Node) => {
+const getNodeStyle = (node: any) => {
   const color = nodeColorMap[node.type as string] || '#999'
   return {
     fill: color + '20',
     stroke: color,
     lineWidth: 2
+  }
+}
+
+async function loadGraph(module: string) {
+  if (!projectId.value || !currentVersion.value) {
+    ElMessage.warning('缺少项目ID或版本ID')
+    return
+  }
+  loading.value = true
+  try {
+    const data = await graphApi.getFeatureView(projectId.value, currentVersion.value, module)
+
+    if (!data || !data.nodes) {
+      ElMessage.warning('该功能模块暂无图谱数据')
+      graphInstance.value?.clear()
+      return
+    }
+
+    // 转换为G6格式
+    const g6Data: GraphData = {
+      nodes: data.nodes.map((node: any) => ({
+        id: node.id,
+        label: node.properties.label || node.properties.displayName || node.properties.nodeName,
+        type: node.properties.nodeType,
+        x: Math.random() * 800,
+        y: Math.random() * 600,
+      })),
+      edges: (data.edges || []).map((edge: any) => ({
+        source: edge.startNodeId,
+        target: edge.endNodeId,
+        label: edge.properties.type,
+      }))
+    }
+
+    graphInstance.value?.data(g6Data)
+    graphInstance.value?.render()
+    ElMessage.success(`加载完成: ${data.nodeCount || 0} 节点`)
+  } catch (error) {
+    console.error('加载功能图谱失败', error)
+    ElMessage.error('加载功能图谱失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -228,8 +249,14 @@ onMounted(async () => {
     selectedNode.value = null
   })
 
-  graphInstance.value.data(graphData)
-  graphInstance.value.render()
+  // 如果有模块参数，直接加载
+  const moduleQuery = route.query.module as string
+  if (moduleQuery) {
+    selectedModule.value = moduleQuery
+    loadGraph(moduleQuery)
+  } else {
+    graphInstance.value.render()
+  }
 
   window.addEventListener('resize', handleResize)
 })

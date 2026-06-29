@@ -186,4 +186,48 @@ public class GraphQueryController {
         graphMergeService.executeMerge(projectId, targetNodeId, mergeNodeId);
         return Result.success();
     }
+
+    /**
+     * 获取统一图谱全量数据
+     * 查询指定扫描版本的所有节点和边，用于统一图谱完整展示
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     * @param minConfidence 最低置信度过滤
+     * @return 统一图谱数据，包含所有节点和边
+     */
+    @GetMapping("/graph/unified")
+    @Operation(summary = "获取统一图谱全量数据", description = "查询指定扫描版本的所有节点和边，过滤后返回用于可视化")
+    public Result<Map<String, Object>> getUnifiedGraph(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam String versionId,
+            @Parameter(description = "最低置信度", required = false)
+            @RequestParam(defaultValue = "0.0") Double minConfidence) {
+        try {
+            Map<String, Object> result = graphQueryService.getUnifiedGraph(versionId, minConfidence);
+            return Result.success(result);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
+     * 获取项目扫描版本列表
+     * 查询项目的所有扫描版本，用于选择展示哪个版本的图谱
+     * @param projectId 项目ID
+     * @return 扫描版本列表，包含节点和边数量统计
+     */
+    @GetMapping("/scan-versions")
+    @Operation(summary = "获取扫描版本列表", description = "查询项目的所有扫描版本，包含统计信息")
+    public Result<List<Map<String, Object>>> getScanVersions(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId) {
+        try {
+            List<Map<String, Object>> result = graphQueryService.getScanVersions(projectId);
+            return Result.success(result);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
 }

@@ -10,6 +10,7 @@ import io.github.legacygraph.extractors.DatabaseMetadataExtractor;
 import io.github.legacygraph.extractors.FrontendApiExtractor;
 import io.github.legacygraph.extractors.JavaControllerExtractor;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
+import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
 import io.github.legacygraph.extractors.VueRouteExtractor;
 import io.github.legacygraph.model.ApiFact;
@@ -92,6 +93,12 @@ public class ProjectScanner {
             int apiCount = scanJavaControllers(projectId, versionId, baseDir, javaTask);
             completeTask(javaTask, "Scanned " + apiCount + " APIs", null);
             log.info("Completed Java controller scan, found {} APIs", apiCount);
+
+            // 1.5 扫描Service调用关系
+            ScanTask serviceCallTask = createTask(projectId, versionId, "SERVICE_CALL_SCAN", "Service调用关系扫描");
+            int callCount = scanServiceCalls(projectId, versionId, baseDir, serviceCallTask);
+            completeTask(serviceCallTask, "Scanned " + callCount + " service call relations", null);
+            log.info("Completed service call scan, found {} call relations", callCount);
 
             // 2. 扫描MyBatis XML文件
             ScanTask mapperTask = createTask(projectId, versionId, "MAPPER_SCAN", "MyBatis XML扫描");
@@ -351,6 +358,47 @@ public class ProjectScanner {
     }
 
     /**
+     * 扫描Service调用关系
+     */
+    private int scanServiceCalls(String projectId, String versionId, String baseDir, ScanTask task) {
+        ServiceCallExtractor extractor = new ServiceCallExtractor();
+        int totalCount = 0;
+
+        try {
+            List<Path> javaFiles = Files.walk(Paths.get(baseDir))
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> isServiceOrMapperFile(p))
+                    .collect(Collectors.toList());
+
+            for (Path javaFile : javaFiles) {
+                try {
+                    List<ServiceCallExtractor.CallRelation> calls = extractor.extractFromFile(javaFile);
+                    if (!calls.isEmpty()) {
+                        // 保存事实并构建图谱调用关系边
+                        for (ServiceCallExtractor.CallRelation call : calls) {
+                            saveFact(projectId, versionId, "SERVICE_CALL", call.getCallerClass() + "." + call.getCallerMethod(),
+                                    call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod(),
+                                    javaFile.toString(), call.getLineNumber(), call.getLineNumber(),
+                                    call, BigDecimal.ONE, "EXTRACTED");
+                        }
+                        // 构建调用关系图谱
+                        graphBuilder.buildServiceCallGraph(projectId, versionId, calls);
+                        totalCount += calls.size();
+                    }
+                } catch (IOException e) {
+                    log.warn("Failed to parse Java file for service call: {}", javaFile, e);
+                }
+            }
+
+        } catch (IOException e) {
+            log.error("Failed to walk directory for service call scan", e);
+        }
+
+        return totalCount;
+    }
+
+    /**
      * 判断是否是MyBatis Mapper XML文件
      */
     private boolean isMyBatisMapperFile(Path path) {
@@ -359,6 +407,16 @@ public class ProjectScanner {
         return fileName.endsWith("Mapper.xml") ||
                fileName.contains("Mapper") && fileName.endsWith(".xml") ||
                fileName.contains("mapper") && fileName.endsWith(".xml");
+    }
+
+    /**
+     * 判断是否是Service或Mapper类文件
+     */
+    private boolean isServiceOrMapperFile(Path path) {
+        String fileName = path.getFileName().toString();
+        return fileName.endsWith("Service.java") || fileName.contains("Service") ||
+               fileName.endsWith("Mapper.java") || fileName.contains("Mapper") ||
+               fileName.endsWith("Dao.java") || fileName.contains("Dao");
     }
 
     /**

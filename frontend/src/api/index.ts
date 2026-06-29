@@ -212,6 +212,19 @@ export const graphApi = {
     return request.post(`/lg/projects/${projectId}/graph/merge/execute`, null, {
       params: { targetNodeId, mergeNodeId }
     })
+  },
+
+  /**
+   * 获取统一图谱全量数据
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   * @param minConfidence 最低置信度过滤
+   * @returns 统一图谱数据，包含所有节点和边
+   */
+  getUnifiedGraph: (projectId: string, versionId: string, minConfidence: number = 0) => {
+    return request.get(`/lg/projects/${projectId}/graph/unified`, {
+      params: { versionId, minConfidence }
+    })
   }
 }
 

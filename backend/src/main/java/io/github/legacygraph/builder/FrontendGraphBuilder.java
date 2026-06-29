@@ -4,11 +4,17 @@ import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
+import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.NodeEvidence;
+import io.github.legacygraph.entity.EdgeEvidence;
 import io.github.legacygraph.model.FrontendPageFact;
+import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.GraphEdgeRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.repository.NodeEvidenceRepository;
+import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,11 +33,20 @@ public class FrontendGraphBuilder {
 
     private final GraphNodeRepository graphNodeRepository;
     private final GraphEdgeRepository graphEdgeRepository;
+    private final EvidenceRepository evidenceRepository;
+    private final NodeEvidenceRepository nodeEvidenceRepository;
+    private final EdgeEvidenceRepository edgeEvidenceRepository;
 
     public FrontendGraphBuilder(GraphNodeRepository graphNodeRepository,
-                               GraphEdgeRepository graphEdgeRepository) {
+                               GraphEdgeRepository graphEdgeRepository,
+                               EvidenceRepository evidenceRepository,
+                               NodeEvidenceRepository nodeEvidenceRepository,
+                               EdgeEvidenceRepository edgeEvidenceRepository) {
         this.graphNodeRepository = graphNodeRepository;
         this.graphEdgeRepository = graphEdgeRepository;
+        this.evidenceRepository = evidenceRepository;
+        this.nodeEvidenceRepository = nodeEvidenceRepository;
+        this.edgeEvidenceRepository = edgeEvidenceRepository;
     }
 
     /**
@@ -250,12 +265,57 @@ public class FrontendGraphBuilder {
 
     /**
      * 构建前端API与后端API的关联图谱
+     * 处理独立抽取出来的前端API调用，匹配后端ApiEndpoint并创建调用关系
      */
     @Transactional
     public void buildFrontendApiGraph(String projectId, String versionId,
             java.util.List<io.github.legacygraph.model.FrontendPageFact.FrontendApiCall> apiCalls) {
-        log.info("buildFrontendApiGraph placeholder: projectId={}, versionId={}, apiCalls={}",
+        log.info("Building frontend API graph: projectId={}, versionId={}, apiCalls={}",
                 projectId, versionId, apiCalls.size());
+
+        for (io.github.legacygraph.model.FrontendPageFact.FrontendApiCall apiCall : apiCalls) {
+            // 规范化API key用于匹配
+            String httpMethod = apiCall.getMethod() != null ? apiCall.getMethod().toUpperCase() : "GET";
+            String normalizedPath = GraphBuilder.normalizePath(apiCall.getUrl());
+            String apiKey = GraphBuilder.normalizeApiKey(httpMethod, normalizedPath);
+
+            // 创建前端API节点
+            String displayName = httpMethod + " " + apiCall.getUrl();
+            GraphNode frontendApiNode = findOrCreateNode(
+                    projectId, versionId,
+                    NodeType.ApiEndpoint.name(),
+                    "frontend:" + apiKey,
+                    displayName,
+                    displayName,
+                    "前端调用API: " + displayName,
+                    SourceType.FRONTEND_AST.name(),
+                    apiCall.getSourceFile(),
+                    apiCall.getLineNumber(),
+                    apiCall.getLineNumber(),
+                    BigDecimal.ONE,
+                    NodeStatus.PENDING_CONFIRM
+            );
+
+            // 查找后端匹配的ApiEndpoint
+            Optional<GraphNode> backendApiOpt = findBackendApi(projectId, versionId, apiKey);
+            double score = calculateMatchScore(apiCall, backendApiOpt);
+
+            if (backendApiOpt.isPresent() && score >= 0.6) {
+                GraphNode backendApi = backendApiOpt.get();
+                // 前端API -CALLS-> 后端API
+                createEdge(projectId, versionId,
+                        frontendApiNode.getId(), backendApi.getId(),
+                        EdgeType.CALLS.name(),
+                        "frontend:" + apiKey + "->calls->" + apiKey,
+                        SourceType.FRONTEND_AST.name(),
+                        BigDecimal.valueOf(score),
+                        score >= 0.8 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
+                );
+                log.debug("Matched frontend API {} to backend with score {}", apiKey, score);
+            }
+        }
+
+        log.info("Completed building frontend API graph, processed {} API calls", apiCalls.size());
     }
 
     /**
@@ -384,7 +444,55 @@ public class FrontendGraphBuilder {
         node.setUpdatedAt(LocalDateTime.now());
 
         graphNodeRepository.insert(node);
+
+        // 创建证据并关联
+        if (sourcePath != null && !sourcePath.isEmpty()) {
+            createEvidenceForNode(node, sourceType, sourcePath, startLine, endLine);
+        }
+
         return node;
+    }
+
+    /**
+     * 为节点创建证据记录并建立关联
+     */
+    private void createEvidenceForNode(GraphNode node, String sourceType, String sourcePath,
+            Integer startLine, Integer endLine) {
+        Evidence evidence = new Evidence();
+        evidence.setId(UUID.randomUUID().toString());
+        evidence.setProjectId(node.getProjectId());
+        evidence.setVersionId(node.getVersionId());
+        evidence.setEvidenceType(mapSourceTypeToEvidenceType(sourceType));
+        evidence.setSourcePath(sourcePath);
+        evidence.setSourceName(node.getDisplayName());
+        evidence.setStartLine(startLine);
+        evidence.setEndLine(endLine);
+        evidence.setCreatedAt(LocalDateTime.now());
+        evidenceRepository.insert(evidence);
+
+        // 创建节点-证据关联
+        NodeEvidence nodeEvidence = new NodeEvidence();
+        nodeEvidence.setId(UUID.randomUUID().toString());
+        nodeEvidence.setNodeId(node.getId());
+        nodeEvidence.setEvidenceId(evidence.getId());
+        nodeEvidence.setRelationType("PRIMARY_SOURCE");
+        nodeEvidence.setCreatedAt(LocalDateTime.now());
+        nodeEvidenceRepository.insert(nodeEvidence);
+    }
+
+    /**
+     * 将源码类型映射为证据类型
+     */
+    private String mapSourceTypeToEvidenceType(String sourceType) {
+        if (sourceType == null) return "unknown";
+        return switch (sourceType) {
+            case "CODE_AST" -> "code";
+            case "MYBATIS_XML", "SQL_PARSE" -> "sql";
+            case "FRONTEND_AST" -> "ui";
+            case "DB_METADATA" -> "db";
+            case "DOCUMENT" -> "doc";
+            default -> sourceType.toLowerCase();
+        };
     }
 
     /**
@@ -410,6 +518,21 @@ public class FrontendGraphBuilder {
         edge.setUpdatedAt(LocalDateTime.now());
 
         graphEdgeRepository.insert(edge);
+
+        // 从源节点继承证据关联
+        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.lambdaQuery()
+                .eq(NodeEvidence::getNodeId, fromNodeId)
+                .list();
+        for (NodeEvidence ne : nodeEvidences) {
+            EdgeEvidence edgeEvidence = new EdgeEvidence();
+            edgeEvidence.setId(UUID.randomUUID().toString());
+            edgeEvidence.setEdgeId(edge.getId());
+            edgeEvidence.setEvidenceId(ne.getEvidenceId());
+            edgeEvidence.setRelationType("INHERITED");
+            edgeEvidence.setCreatedAt(LocalDateTime.now());
+            edgeEvidenceRepository.insert(edgeEvidence);
+        }
+
         return edge;
     }
 

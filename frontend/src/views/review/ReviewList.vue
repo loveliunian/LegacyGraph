@@ -115,13 +115,25 @@ const reviewComment = ref('')
 const loadData = async () => {
   loading.value = true
   try {
-    // TODO: API 调用返回分页列表
-    // 这里简化，实际调用 reviewApi.listPending
-    const data = await reviewApi.listPending(query.versionId, query.minConfidence, query.pageNum, query.pageSize)
-    // list.value = data.list
-    // total.value = data.total
+    // 调用 reviewApi 获取待审核列表
+    const data: any = await reviewApi.listPending(query.versionId, {
+      targetType: undefined,
+      graphType: undefined,
+      minConfidence: query.minConfidence,
+      pageNum: query.pageNum,
+      pageSize: query.pageSize,
+    })
+    if (data && data.list) {
+      list.value = data.list
+      total.value = data.total || data.list.length
+    } else {
+      list.value = []
+      total.value = 0
+    }
   } catch (e) {
     console.error(e)
+    list.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

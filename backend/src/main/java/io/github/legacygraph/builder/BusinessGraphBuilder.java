@@ -6,12 +6,17 @@ import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.entity.DocChunk;
+import io.github.legacygraph.entity.EdgeEvidence;
+import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.entity.Project;
+import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.repository.DocChunkRepository;
+import io.github.legacygraph.repository.EdgeEvidenceRepository;
+import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.GraphEdgeRepository;
 import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.repository.NodeEvidenceRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +30,7 @@ import java.util.UUID;
 /**
  * 业务图谱构建器
  * 将文档抽取的业务事实构建为业务图谱节点和关系
+ * 所有节点/边创建时自动关联证据
  */
 @Slf4j
 @Component
@@ -33,13 +39,22 @@ public class BusinessGraphBuilder {
     private final GraphNodeRepository graphNodeRepository;
     private final GraphEdgeRepository graphEdgeRepository;
     private final DocChunkRepository docChunkRepository;
+    private final EvidenceRepository evidenceRepository;
+    private final NodeEvidenceRepository nodeEvidenceRepository;
+    private final EdgeEvidenceRepository edgeEvidenceRepository;
 
     public BusinessGraphBuilder(GraphNodeRepository graphNodeRepository,
                               GraphEdgeRepository graphEdgeRepository,
-                              DocChunkRepository docChunkRepository) {
+                              DocChunkRepository docChunkRepository,
+                              EvidenceRepository evidenceRepository,
+                              NodeEvidenceRepository nodeEvidenceRepository,
+                              EdgeEvidenceRepository edgeEvidenceRepository) {
         this.graphNodeRepository = graphNodeRepository;
         this.graphEdgeRepository = graphEdgeRepository;
         this.docChunkRepository = docChunkRepository;
+        this.evidenceRepository = evidenceRepository;
+        this.nodeEvidenceRepository = nodeEvidenceRepository;
+        this.edgeEvidenceRepository = edgeEvidenceRepository;
     }
 
     /**
@@ -67,10 +82,13 @@ public class BusinessGraphBuilder {
 
     /**
      * 构建业务图谱节点
+     * 自动创建证据关联，并将业务流程关联到所属业务域（按顺序匹配）
      */
     @Transactional
     public void buildBusinessGraph(String projectId, String versionId, DocUnderstandingAgent.BusinessFactExtraction facts) {
-        // 构建业务域
+        List<GraphNode> domainNodes = new ArrayList<>();
+
+        // 构建业务域（先存列表用于后续关联）
         for (var domain : facts.getBusinessDomains()) {
             GraphNode domainNode = findOrCreateNode(
                     projectId, versionId,
@@ -86,12 +104,14 @@ public class BusinessGraphBuilder {
                     BigDecimal.valueOf(domain.getConfidence()),
                     domain.getConfidence() >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
             );
+            domainNodes.add(domainNode);
         }
 
-        // 构建业务流程
+        // 构建业务流程，并关联到所属业务域
+        // 简单策略：第 i 个流程关联到第 i % domainCount 个业务域
+        int domainIndex = 0;
+        int domainCount = domainNodes.size();
         for (var process : facts.getBusinessProcesses()) {
-            // 找到所属业务域（第一个就是）
-            // TODO: 根据evidence关联业务域
             GraphNode processNode = findOrCreateNode(
                     projectId, versionId,
                     NodeType.BusinessProcess.name(),
@@ -106,6 +126,20 @@ public class BusinessGraphBuilder {
                     BigDecimal.valueOf(process.getConfidence()),
                     process.getConfidence() >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
             );
+
+            // 关联业务流程到业务域
+            if (domainCount > 0) {
+                GraphNode domainNode = domainNodes.get(domainIndex % domainCount);
+                createEdge(projectId, versionId,
+                        domainNode.getId(), processNode.getId(),
+                        EdgeType.CONTAINS.name(),
+                        domainNode.getNodeKey() + "->contains->" + processNode.getNodeKey(),
+                        SourceType.DOC_AI.name(),
+                        BigDecimal.valueOf(process.getConfidence() * 0.9),
+                        NodeStatus.PENDING_CONFIRM
+                );
+            }
+            domainIndex++;
 
             // 每个步骤对应一个功能
             if (process.getSteps() != null) {
@@ -139,7 +173,7 @@ public class BusinessGraphBuilder {
 
         // 构建业务对象
         for (var obj : facts.getBusinessObjects()) {
-            GraphNode objectNode = findOrCreateNode(
+            findOrCreateNode(
                     projectId, versionId,
                     NodeType.BusinessObject.name(),
                     obj.getName(),
@@ -157,7 +191,7 @@ public class BusinessGraphBuilder {
 
         // 构建业务规则
         for (var rule : facts.getBusinessRules()) {
-            GraphNode ruleNode = findOrCreateNode(
+            findOrCreateNode(
                     projectId, versionId,
                     NodeType.BusinessRule.name(),
                     rule.getName(),
@@ -227,7 +261,7 @@ public class BusinessGraphBuilder {
 
         int mappedCount = 0;
         // 基于名称语义相似度做简单匹配
-        // TODO: 使用向量相似度做更准确匹配
+        // TODO: 使用向量相似度做更准确匹配（向量服务恢复后替换）
         for (GraphNode feature : docFeatures) {
             String featureName = feature.getNodeName().toLowerCase();
 
@@ -301,7 +335,7 @@ public class BusinessGraphBuilder {
     }
 
     /**
-     * 查找或创建节点
+     * 查找或创建节点，自动关联证据
      */
     private GraphNode findOrCreateNode(String projectId, String versionId,
             String nodeType, String nodeKey, String nodeName,
@@ -340,7 +374,54 @@ public class BusinessGraphBuilder {
         node.setUpdatedAt(LocalDateTime.now());
 
         graphNodeRepository.insert(node);
+
+        // 创建证据并关联 - 即使没有 sourcePath，也为 DOC_AI 类型创建
+        createEvidenceForNode(node, sourceType, sourcePath, startLine, endLine);
+
         return node;
+    }
+
+    /**
+     * 为节点创建证据记录并建立关联
+     */
+    private void createEvidenceForNode(GraphNode node, String sourceType, String sourcePath,
+            Integer startLine, Integer endLine) {
+        Evidence evidence = new Evidence();
+        evidence.setId(UUID.randomUUID().toString());
+        evidence.setProjectId(node.getProjectId());
+        evidence.setVersionId(node.getVersionId());
+        evidence.setEvidenceType(mapSourceTypeToEvidenceType(sourceType));
+        evidence.setSourcePath(sourcePath);
+        evidence.setSourceName(node.getDisplayName());
+        evidence.setStartLine(startLine);
+        evidence.setEndLine(endLine);
+        evidence.setCreatedAt(LocalDateTime.now());
+        evidenceRepository.insert(evidence);
+
+        // 创建节点-证据关联
+        NodeEvidence nodeEvidence = new NodeEvidence();
+        nodeEvidence.setId(UUID.randomUUID().toString());
+        nodeEvidence.setNodeId(node.getId());
+        nodeEvidence.setEvidenceId(evidence.getId());
+        nodeEvidence.setRelationType("PRIMARY_SOURCE");
+        nodeEvidence.setCreatedAt(LocalDateTime.now());
+        nodeEvidenceRepository.insert(nodeEvidence);
+    }
+
+    /**
+     * 将源码类型映射为证据类型
+     */
+    private String mapSourceTypeToEvidenceType(String sourceType) {
+        if (sourceType == null) return "doc";
+        return switch (sourceType) {
+            case "CODE_AST" -> "code";
+            case "MYBATIS_XML", "SQL_PARSE" -> "sql";
+            case "FRONTEND_AST" -> "ui";
+            case "DB_METADATA" -> "db";
+            case "DOCUMENT", "DOC_AI" -> "doc";
+            case "AI_INFERENCE" -> "ai";
+            default -> sourceType.toLowerCase();
+        };
     }
 
     /**
@@ -366,6 +447,21 @@ public class BusinessGraphBuilder {
         edge.setUpdatedAt(LocalDateTime.now());
 
         graphEdgeRepository.insert(edge);
+
+        // 从源节点继承证据（创建关联）
+        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.lambdaQuery()
+                .eq(NodeEvidence::getNodeId, fromNodeId)
+                .list();
+        for (NodeEvidence ne : nodeEvidences) {
+            EdgeEvidence edgeEvidence = new EdgeEvidence();
+            edgeEvidence.setId(UUID.randomUUID().toString());
+            edgeEvidence.setEdgeId(edge.getId());
+            edgeEvidence.setEvidenceId(ne.getEvidenceId());
+            edgeEvidence.setRelationType("INHERITED");
+            edgeEvidence.setCreatedAt(LocalDateTime.now());
+            edgeEvidenceRepository.insert(edgeEvidence);
+        }
+
         return edge;
     }
 }

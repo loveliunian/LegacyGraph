@@ -74,6 +74,30 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'menu.unifiedGraph' }
       },
       {
+        path: 'graph/business',
+        name: 'BusinessGraph',
+        component: () => import('@/views/graph/BusinessGraph.vue'),
+        meta: { title: 'menu.businessGraph' }
+      },
+      {
+        path: 'graph/feature',
+        name: 'FeatureGraph',
+        component: () => import('@/views/graph/FeatureGraph.vue'),
+        meta: { title: 'menu.featureGraph' }
+      },
+      {
+        path: 'graph/lineage',
+        name: 'DataLineageGraph',
+        component: () => import('@/views/graph/DataLineageGraph.vue'),
+        meta: { title: 'menu.dataLineage', badge: '建设中' }
+      },
+      {
+        path: 'graph/runtime',
+        name: 'RuntimeGraph',
+        component: () => import('@/views/graph/RuntimeGraph.vue'),
+        meta: { title: 'menu.runtimeGraph', badge: '建设中' }
+      },
+      {
         path: 'reviews',
         name: 'Reviews',
         component: () => import('@/views/review/ReviewList.vue'),

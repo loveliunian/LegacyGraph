@@ -6,6 +6,7 @@ import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.entity.*;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
+import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
 import io.github.legacygraph.model.ApiFact;
 import io.github.legacygraph.model.MapperSqlFact;
@@ -379,7 +380,55 @@ public class GraphBuilder {
         node.setUpdatedAt(LocalDateTime.now());
 
         graphNodeRepository.insert(node);
+
+        // 创建证据并关联
+        if (sourcePath != null && !sourcePath.isEmpty()) {
+            createEvidenceForNode(node, sourceType, sourcePath, startLine, endLine);
+        }
+
         return node;
+    }
+
+    /**
+     * 为节点创建证据记录并建立关联
+     */
+    private void createEvidenceForNode(GraphNode node, String sourceType, String sourcePath,
+            Integer startLine, Integer endLine) {
+        Evidence evidence = new Evidence();
+        evidence.setId(UUID.randomUUID().toString());
+        evidence.setProjectId(node.getProjectId());
+        evidence.setVersionId(node.getVersionId());
+        evidence.setEvidenceType(mapSourceTypeToEvidenceType(sourceType));
+        evidence.setSourcePath(sourcePath);
+        evidence.setSourceName(node.getDisplayName());
+        evidence.setStartLine(startLine);
+        evidence.setEndLine(endLine);
+        evidence.setCreatedAt(LocalDateTime.now());
+        evidenceRepository.insert(evidence);
+
+        // 创建节点-证据关联
+        NodeEvidence nodeEvidence = new NodeEvidence();
+        nodeEvidence.setId(UUID.randomUUID().toString());
+        nodeEvidence.setNodeId(node.getId());
+        nodeEvidence.setEvidenceId(evidence.getId());
+        nodeEvidence.setRelationType("PRIMARY_SOURCE");
+        nodeEvidence.setCreatedAt(LocalDateTime.now());
+        nodeEvidenceRepository.insert(nodeEvidence);
+    }
+
+    /**
+     * 将源码类型映射为证据类型
+     */
+    private String mapSourceTypeToEvidenceType(String sourceType) {
+        if (sourceType == null) return "unknown";
+        return switch (sourceType) {
+            case "CODE_AST" -> "code";
+            case "MYBATIS_XML", "SQL_PARSE" -> "sql";
+            case "FRONTEND_AST" -> "ui";
+            case "DB_METADATA" -> "db";
+            case "DOCUMENT" -> "doc";
+            default -> sourceType.toLowerCase();
+        };
     }
 
     /**
@@ -425,6 +474,22 @@ public class GraphBuilder {
         edge.setUpdatedAt(LocalDateTime.now());
 
         graphEdgeRepository.insert(edge);
+
+        // 从源节点继承证据（创建关联）
+        // 找到源节点的证据，关联到这条边
+        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.lambdaQuery()
+                .eq(NodeEvidence::getNodeId, fromNodeId)
+                .list();
+        for (NodeEvidence ne : nodeEvidences) {
+            EdgeEvidence edgeEvidence = new EdgeEvidence();
+            edgeEvidence.setId(UUID.randomUUID().toString());
+            edgeEvidence.setEdgeId(edge.getId());
+            edgeEvidence.setEvidenceId(ne.getEvidenceId());
+            edgeEvidence.setRelationType("INHERITED");
+            edgeEvidence.setCreatedAt(LocalDateTime.now());
+            edgeEvidenceRepository.insert(edgeEvidence);
+        }
+
         return edge;
     }
 
@@ -447,6 +512,127 @@ public class GraphBuilder {
         normalized = normalized.replaceAll("/\\$\\{[^}]+\\}", "/{id}");
         // 数字路径段保留，不做归一化，因为可能不是参数
         return normalized;
+    }
+
+    /**
+     * 构建Service调用关系图谱
+     * 根据抽取的调用关系创建 CALLS 边连接调用方和被调用方节点
+     */
+    @Transactional
+    public void buildServiceCallGraph(String projectId, String versionId, List<ServiceCallExtractor.CallRelation> calls) {
+        for (ServiceCallExtractor.CallRelation call : calls) {
+            // 查找或创建调用方节点
+            String callerClassKey = call.getCallerClass();
+            NodeType callerNodeType = inferNodeType(call.getCallerClass());
+            GraphNode callerNode = findOrCreateNodeByClass(
+                    projectId, versionId, callerNodeType, callerClassKey, call.getSourcePath());
+
+            // 查找或创建被调用方节点
+            String targetClassKey = call.getTargetClass();
+            NodeType targetNodeType = inferNodeType(call.getTargetClass());
+            GraphNode targetNode = findOrCreateNodeByClass(
+                    projectId, versionId, targetNodeType, targetClassKey, call.getSourcePath());
+
+            // 如果调用方和被调用方都存在，创建 CALLS 边
+            if (callerNode != null && targetNode != null) {
+                String edgeKey = callerClassKey + "->calls->" + targetClassKey + "." + call.getTargetMethod();
+                createEdge(projectId, versionId,
+                        callerNode.getId(), targetNode.getId(),
+                        EdgeType.CALLS.name(),
+                        edgeKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE,
+                        NodeStatus.CONFIRMED
+                );
+
+                // 如果能找到具体方法，也创建方法级别的调用边
+                if (call.getCallerMethod() != null && !call.getCallerMethod().isEmpty()) {
+                    String callerMethodKey = callerClassKey + "." + call.getCallerMethod();
+                    GraphNode callerMethodNode = findExistingNode(projectId, versionId, NodeType.Method.name(), callerMethodKey);
+                    String targetMethodKey = targetClassKey + "." + call.getTargetMethod();
+                    GraphNode targetMethodNode = findExistingNode(projectId, versionId, NodeType.Method.name(), targetMethodKey);
+                    if (callerMethodNode != null && targetMethodNode != null) {
+                        String methodEdgeKey = callerMethodKey + "->calls->" + targetMethodKey;
+                        createEdge(projectId, versionId,
+                                callerMethodNode.getId(), targetMethodNode.getId(),
+                                EdgeType.CALLS.name(),
+                                methodEdgeKey,
+                                SourceType.CODE_AST.name(),
+                                BigDecimal.ONE,
+                                NodeStatus.CONFIRMED
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 根据类名推断节点类型
+     */
+    private NodeType inferNodeType(String className) {
+        if (className.contains("Controller") || className.contains("controller")) {
+            return NodeType.Controller;
+        }
+        if (className.contains("Service") || className.contains("service")) {
+            return NodeType.Service;
+        }
+        if (className.contains("Mapper") || className.contains("mapper") || className.contains("Dao") || className.contains("dao")) {
+            return NodeType.Mapper;
+        }
+        return NodeType.Service; // 默认作为服务类
+    }
+
+    /**
+     * 根据类全限定名查找或创建节点
+     */
+    private GraphNode findOrCreateNodeByClass(String projectId, String versionId,
+            NodeType nodeType, String classFullName, String sourcePath) {
+        // 先查找是否已存在
+        GraphNode existing = graphNodeRepository.lambdaQuery()
+                .eq(GraphNode::getProjectId, projectId)
+                .eq(GraphNode::getVersionId, versionId)
+                .eq(GraphNode::getNodeType, nodeType.name())
+                .eq(GraphNode::getNodeKey, classFullName)
+                .oneOpt()
+                .orElse(null);
+
+        if (existing != null) {
+            return existing;
+        }
+
+        // 创建新节点
+        String simpleName = classFullName.contains(".") ?
+                classFullName.substring(classFullName.lastIndexOf('.') + 1) :
+                classFullName;
+
+        return findOrCreateNode(
+                projectId, versionId,
+                nodeType.name(),
+                classFullName,
+                simpleName,
+                simpleName,
+                null,
+                SourceType.CODE_AST.name(),
+                sourcePath,
+                null,
+                null,
+                BigDecimal.ONE,
+                NodeStatus.CONFIRMED
+        );
+    }
+
+    /**
+     * 查找已存在的节点
+     */
+    private GraphNode findExistingNode(String projectId, String versionId, String nodeType, String nodeKey) {
+        return graphNodeRepository.lambdaQuery()
+                .eq(GraphNode::getProjectId, projectId)
+                .eq(GraphNode::getVersionId, versionId)
+                .eq(GraphNode::getNodeType, nodeType)
+                .eq(GraphNode::getNodeKey, nodeKey)
+                .oneOpt()
+                .orElse(null);
     }
 
     /**
