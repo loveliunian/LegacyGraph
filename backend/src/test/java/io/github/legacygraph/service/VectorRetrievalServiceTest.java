@@ -112,6 +112,48 @@ class VectorRetrievalServiceTest {
         assertEquals("订单节点", results.get(0).getNodeName());
     }
 
+    @Test
+    void testSemanticSearch_CacheHit_SkipsEmbedding() {
+        // 注入 CacheService 并命中缓存：不应触发 embedding 与 pgvector 查询
+        CacheService cacheService = mock(CacheService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                vectorRetrievalService, "cacheService", cacheService);
+
+        VectorDocument cachedDoc = new VectorDocument();
+        cachedDoc.setContent("缓存命中文档");
+        when(cacheService.get(anyString(), eq(List.class)))
+                .thenReturn(Collections.singletonList(cachedDoc));
+
+        List<VectorDocument> results = vectorRetrievalService.semanticSearch(
+                "p1", "v1", "重复问题", 5, "DOC_CHUNK");
+
+        assertEquals(1, results.size());
+        assertEquals("缓存命中文档", results.get(0).getContent());
+        verify(embeddingModel, never()).embed(anyString());
+        verify(vectorDocumentRepository, never()).findSimilar(any(), any(), anyList(), anyInt(), any());
+    }
+
+    @Test
+    void testSemanticSearch_CacheMiss_QueriesAndBackfills() {
+        CacheService cacheService = mock(CacheService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                vectorRetrievalService, "cacheService", cacheService);
+        when(cacheService.get(anyString(), eq(List.class))).thenReturn(null);
+
+        when(embeddingModel.embed(anyString())).thenReturn(new float[]{0.1f, 0.2f});
+        VectorDocument doc = new VectorDocument();
+        doc.setContent("新查询结果");
+        when(vectorDocumentRepository.findSimilar(anyString(), anyString(), anyList(), anyInt(), anyString()))
+                .thenReturn(Collections.singletonList(doc));
+
+        List<VectorDocument> results = vectorRetrievalService.semanticSearch(
+                "p1", "v1", "新问题", 5, "DOC_CHUNK");
+
+        assertEquals(1, results.size());
+        // 未命中时回填缓存
+        verify(cacheService).put(anyString(), anyList(), any());
+    }
+
     /**
      * P1-4 端到端链路：长文档分片 -> 逐片 embedding 存储 -> 语义检索召回。
      * 使用真实 VectorizationService（仅 mock embedding 模型与持久层），验证整条链路打通。

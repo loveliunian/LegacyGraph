@@ -7,7 +7,9 @@ import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ReviewConfirmRequest;
 import io.github.legacygraph.entity.ReviewRecord;
+import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.ReviewRecordRepository;
+import io.github.legacygraph.repository.ScanVersionRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.util.StringUtils;
@@ -17,6 +19,7 @@ import io.github.legacygraph.util.JwtUtil;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/lg/projects/{projectId}/reviews")
@@ -24,11 +27,35 @@ import java.util.List;
 public class ReviewController {
 
     private final ReviewRecordRepository reviewRecordRepository;
+    private final ScanVersionRepository scanVersionRepository;
     private final JwtUtil jwtUtil;
 
-    public ReviewController(ReviewRecordRepository reviewRecordRepository, JwtUtil jwtUtil) {
+    public ReviewController(ReviewRecordRepository reviewRecordRepository,
+                            ScanVersionRepository scanVersionRepository,
+                            JwtUtil jwtUtil) {
         this.reviewRecordRepository = reviewRecordRepository;
+        this.scanVersionRepository = scanVersionRepository;
         this.jwtUtil = jwtUtil;
+    }
+
+    /**
+     * 解析审核操作的 versionId：
+     * 优先用请求中携带的；未提供时查项目最新扫描版本。
+     */
+    private String resolveVersionId(String projectId, String requestVersionId) {
+        if (StringUtils.hasText(requestVersionId)) {
+            return requestVersionId;
+        }
+        LambdaQueryWrapper<ScanVersion> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ScanVersion::getProjectId, projectId)
+                .orderByDesc(ScanVersion::getCreatedAt)
+                .last("LIMIT 1");
+        ScanVersion latest = scanVersionRepository.selectOne(wrapper);
+        if (latest != null) {
+            return latest.getId();
+        }
+        // 兜底：用零 UUID 避免违反 NOT NULL 约束
+        return "00000000-0000-0000-0000-000000000000";
     }
 
     @GetMapping
@@ -134,20 +161,25 @@ public class ReviewController {
             }
         }
 
+        String versionId = resolveVersionId(projectId, request.getVersionId());
+
         LambdaQueryWrapper<ReviewRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ReviewRecord::getProjectId, projectId)
                 .eq(ReviewRecord::getTargetId, request.getTargetId())
                 .eq(ReviewRecord::getTargetType, request.getTargetType());
 
         ReviewRecord record = reviewRecordRepository.selectOne(wrapper);
+        boolean isNew = false;
         if (record == null) {
             record = new ReviewRecord();
-            record.setId("new-" + System.currentTimeMillis());
+            record.setId(UUID.randomUUID().toString());
             record.setProjectId(projectId);
+            record.setVersionId(versionId);
             record.setTargetId(request.getTargetId());
             record.setTargetType(request.getTargetType());
             record.setTargetName("节点审核");
             record.setCreatedAt(LocalDateTime.now());
+            isNew = true;
         }
 
         record.setStatus("CONFIRMED");
@@ -155,7 +187,7 @@ public class ReviewController {
         record.setReviewedBy(reviewedBy);
         record.setReviewedAt(LocalDateTime.now());
 
-        if (record.getCreatedAt() == null) {
+        if (isNew) {
             reviewRecordRepository.insert(record);
         } else {
             reviewRecordRepository.updateById(record);
@@ -184,20 +216,25 @@ public class ReviewController {
             }
         }
 
+        String versionId = resolveVersionId(projectId, request.getVersionId());
+
         LambdaQueryWrapper<ReviewRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ReviewRecord::getProjectId, projectId)
                 .eq(ReviewRecord::getTargetId, request.getTargetId())
                 .eq(ReviewRecord::getTargetType, request.getTargetType());
 
         ReviewRecord record = reviewRecordRepository.selectOne(wrapper);
+        boolean isNew = false;
         if (record == null) {
             record = new ReviewRecord();
-            record.setId("new-" + System.currentTimeMillis());
+            record.setId(UUID.randomUUID().toString());
             record.setProjectId(projectId);
+            record.setVersionId(versionId);
             record.setTargetId(request.getTargetId());
             record.setTargetType(request.getTargetType());
             record.setTargetName("节点审核");
             record.setCreatedAt(LocalDateTime.now());
+            isNew = true;
         }
 
         record.setStatus("REJECTED");
@@ -205,7 +242,7 @@ public class ReviewController {
         record.setReviewedBy(reviewedBy);
         record.setReviewedAt(LocalDateTime.now());
 
-        if (record.getCreatedAt() == null) {
+        if (isNew) {
             reviewRecordRepository.insert(record);
         } else {
             reviewRecordRepository.updateById(record);

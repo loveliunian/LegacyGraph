@@ -122,10 +122,28 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateMigrationReport_Success() {
-        when(neo4jGraphDao.queryNodes(eq("project-1"), isNull(), isNull(), isNull(), isNull(), isNull(), eq(0)))
-                .thenReturn(mockNodes);
-        when(neo4jGraphDao.queryEdges(eq("project-1"), isNull(), isNull(), isNull(), eq(0)))
-                .thenReturn(mockEdges);
+        // 重构后使用聚合 API：graphStats + nodeTypeStats + 风险节点查询
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalNodes", 3L);
+        stats.put("confirmedNodes", 2L);
+        stats.put("pendingNodes", 1L);
+        stats.put("totalEdges", 2L);
+        stats.put("confirmedEdges", 1L);
+        stats.put("pendingEdges", 1L);
+        stats.put("avgConfidence", 0.8);
+        when(neo4jGraphDao.graphStats("project-1")).thenReturn(stats);
+
+        Map<String, Object> typeRow = new HashMap<>();
+        typeRow.put("nodeType", "ApiEndpoint");
+        typeRow.put("total", 2L);
+        typeRow.put("confirmed", 2L);
+        typeRow.put("avgConfidence", 0.9);
+        when(neo4jGraphDao.nodeTypeStats("project-1")).thenReturn(List.of(typeRow));
+
+        when(neo4jGraphDao.queryLowConfidenceNodes(eq("project-1"), anyInt()))
+                .thenReturn(Collections.emptyList());
+        when(neo4jGraphDao.queryDisconnectedNodes(eq("project-1"), anyInt()))
+                .thenReturn(Collections.emptyList());
 
         MigrationReadinessReport report = reportingService.generateMigrationReport("project-1");
 
@@ -144,9 +162,9 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateMigrationReport_EmptyNodes() {
-        when(neo4jGraphDao.queryNodes(eq("project-1"), isNull(), isNull(), isNull(), isNull(), isNull(), eq(0)))
-                .thenReturn(Collections.emptyList());
-        when(neo4jGraphDao.queryEdges(eq("project-1"), isNull(), isNull(), isNull(), eq(0)))
+        when(neo4jGraphDao.graphStats("project-1")).thenReturn(Collections.emptyMap());
+        when(neo4jGraphDao.nodeTypeStats("project-1")).thenReturn(Collections.emptyList());
+        when(neo4jGraphDao.queryLowConfidenceNodes(eq("project-1"), anyInt()))
                 .thenReturn(Collections.emptyList());
 
         MigrationReadinessReport report = reportingService.generateMigrationReport("project-1");
@@ -158,15 +176,20 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateTestCoverageReport_Success() {
-        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("v1"), isNull(), isNull(), isNull(), isNull(), eq(0)))
-                .thenReturn(mockNodes);
-        when(neo4jGraphDao.queryEdges(eq("project-1"), eq("v1"), isNull(), isNull(), eq(0)))
-                .thenReturn(mockEdges);
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalNodes", 3L);
+        stats.put("totalEdges", 2L);
+        stats.put("avgConfidence", 0.8);
+        when(neo4jGraphDao.versionGraphStats("project-1", "v1")).thenReturn(stats);
 
         when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
         when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
         when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
         when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).list()).thenReturn(Collections.emptyList());
+
+        when(neo4jGraphDao.countEdgesConnectedToNodes(eq("project-1"), eq("v1"), anyList())).thenReturn(0L);
+        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("v1"), isNull(), isNull(), isNull(), isNull(), eq(300)))
+                .thenReturn(mockNodes);
 
         TestCoverageReport report = reportingService.generateTestCoverageReport("project-1", "v1");
 
@@ -179,23 +202,16 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateGraphMetrics_ComputesAllRatios() {
-        GraphNode confirmed = new GraphNode();
-        confirmed.setId("n-confirmed");
-        confirmed.setStatus("CONFIRMED");
-        confirmed.setVerifiedScore(BigDecimal.valueOf(0.8));
-
-        GraphNode pending = new GraphNode();
-        pending.setId("n-pending");
-        pending.setStatus("PENDING_CONFIRM");
-
-        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("v1"), isNull(), isNull(), isNull(), isNull(), eq(0)))
-                .thenReturn(Arrays.asList(confirmed, pending));
-        when(neo4jGraphDao.countEdges(eq("project-1"), eq("v1"), isNull()))
-                .thenReturn(1L);
-
-        io.github.legacygraph.entity.NodeEvidence ne = new io.github.legacygraph.entity.NodeEvidence();
-        ne.setNodeId("n-confirmed");
-        when(nodeEvidenceRepository.selectList(any())).thenReturn(Collections.singletonList(ne));
+        // 重构后使用 versionGraphStats 聚合：total=2, confirmed=1, pending=1, runtimeVerified=1, withEvidence=1
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalNodes", 2L);
+        stats.put("totalEdges", 1L);
+        stats.put("confirmedNodes", 1L);
+        stats.put("pendingNodes", 1L);
+        stats.put("runtimeVerifiedCount", 1L);
+        stats.put("withEvidenceCount", 1L);
+        stats.put("avgConfidence", 0.6);
+        when(neo4jGraphDao.versionGraphStats("project-1", "v1")).thenReturn(stats);
 
         TestResult pass = new TestResult();
         pass.setResultStatus("PASSED");
@@ -218,10 +234,7 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateGraphMetrics_EmptyGraph() {
-        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("v1"), isNull(), isNull(), isNull(), isNull(), eq(0)))
-                .thenReturn(Collections.emptyList());
-        when(neo4jGraphDao.countEdges(eq("project-1"), eq("v1"), isNull()))
-                .thenReturn(0L);
+        when(neo4jGraphDao.versionGraphStats("project-1", "v1")).thenReturn(Collections.emptyMap());
         when(testResultRepository.selectList(any())).thenReturn(Collections.emptyList());
 
         io.github.legacygraph.dto.report.GraphMetricsReport report =

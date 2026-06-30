@@ -194,6 +194,16 @@ export const graphApi = {
   },
 
   /**
+   * 获取数据库表节点列表（仅Table节点，轻量查询）
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   * @returns Table节点列表
+   */
+  getTables: (projectId: string, versionId: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/tables`, { params: { versionId } })
+  },
+
+  /**
    * 获取项目扫描版本列表
    * 查询项目的所有扫描版本，用于选择展示哪个版本的图谱
    * @param projectId 项目ID

@@ -40,13 +40,16 @@
         <el-card class="graph-card">
           <div class="graph-toolbar">
             <span>模块: {{ getSelectedModuleName() }}</span>
-            <el-button-group>
-              <el-button size="small" @click="zoomIn">放大</el-button>
-              <el-button size="small" @click="zoomOut">缩小</el-button>
-              <el-button size="small" @click="fitView">适应</el-button>
-            </el-button-group>
+            <el-tag type="info">{{ flowNodes.length }} 节点 / {{ flowEdges.length }} 关系</el-tag>
           </div>
-          <div class="graph-container" ref="graphContainer"></div>
+          <GraphViewer
+            v-loading="loading"
+            :nodes="flowNodes"
+            :edges="flowEdges"
+            height="600px"
+            :editable="false"
+            @node-click="handleGraphNodeClick"
+          />
         </el-card>
       </el-col>
 
@@ -111,55 +114,66 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Download, Grid, Menu } from '@element-plus/icons-vue'
-import { Graph } from '@antv/g6'
+import { Download, Grid, Refresh } from '@element-plus/icons-vue'
+import type { Node as FlowNode, Edge as FlowEdge } from '@vue-flow/core'
+import GraphViewer from '@/components/graph/GraphViewer.vue'
 import { graphApi, testApi, factApi } from '@/api'
-import type { GraphData, Node } from '@antv/g6'
+import { loadScanVersions } from '@/utils/versionsCache'
+
+interface FlowNodeData {
+  label: string
+  type: string
+  confidence: number
+  status: string
+  evidenceCount: number
+  page?: string
+  api?: string
+  properties?: Record<string, any>
+}
 
 const route = useRoute()
 const router = useRouter()
 const projectId = computed(() => route.params.projectId as string)
-const currentVersion = computed(() => route.query.version as string)
+const currentVersion = ref<string>('')
+const versions = ref<any[]>([])
 
-const selectedModule = ref<string | null>(null)
-const graphContainer = ref<HTMLElement | null>(null)
-const graphInstance = ref<Graph | null>(null)
-const g6Node = ref<Node | null>(null)
-const selectedNode = computed<any>(() => (g6Node.value as any)?.getModel() || null)
+const selectedModule = ref<string>('__all__')
+const selectedNode = ref<any | null>(null)
 const loading = ref(false)
+const allFlowNodes = ref<FlowNode<FlowNodeData>[]>([])
+const allFlowEdges = ref<FlowEdge[]>([])
 
-// 从后端加载的模块列表
+const flowNodes = computed(() => {
+  if (selectedModule.value === '__all__') return allFlowNodes.value
+  return allFlowNodes.value.filter(node => {
+    const props = node.data?.properties || {}
+    return props.module === selectedModule.value || node.data?.type === selectedModule.value
+  })
+})
+
+const flowEdges = computed(() => {
+  const nodeIds = new Set(flowNodes.value.map(node => node.id))
+  return allFlowEdges.value.filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+})
+
 const modules = ref<any[]>([])
 
-// 测试覆盖率数据，从后端加载
 const coverageData = ref<{
   overall: number
   core: number
   edge: number
 }>({ overall: 0, core: 0, edge: 0 })
 
-const nodeColorMap: Record<string, string> = {
-  Page: '#722ed1',
-  Button: '#eb2f96',
-  ApiEndpoint: '#52c41a',
-  Permission: '#1890ff',
-  Feature: '#13c2c2',
-  FeatureModule: '#409eff',
+async function loadVersions() {
+  const pid = projectId.value
+  if (!pid) return
+  versions.value = await loadScanVersions(pid)
 }
 
-const getNodeStyle = (node: any) => {
-  const color = nodeColorMap[node.type as string] || '#999'
-  return {
-    fill: color + '20',
-    stroke: color,
-    lineWidth: 2
-  }
-}
-
-async function loadGraph(module: string) {
+async function loadGraph(module = '') {
   if (!projectId.value || !currentVersion.value) {
     ElMessage.warning('缺少项目ID或版本ID')
     return
@@ -167,241 +181,178 @@ async function loadGraph(module: string) {
   loading.value = true
   try {
     const data = await graphApi.getFeatureView(projectId.value, currentVersion.value, module) as any
+    const nodes = Array.isArray(data?.nodes) ? data.nodes : []
+    const edges = Array.isArray(data?.edges) ? data.edges : []
 
-    if (!data || !data.nodes) {
-      ElMessage.warning('该功能模块暂无图谱数据')
-      graphInstance.value?.clear()
-      return
+    selectedNode.value = null
+    allFlowNodes.value = nodes.map(toFlowNode)
+    allFlowEdges.value = edges.map(toFlowEdge).filter((edge: FlowEdge) => edge.source && edge.target)
+    rebuildModules()
+
+    // 首次加载时一并计算覆盖率（module 为空表示全量加载）
+    if (!module) {
+      computeCoverage(nodes)
     }
 
-    // 转换为G6格式
-    const g6Data: GraphData = {
-      nodes: data.nodes.map((node: any) => ({
-        id: node.id,
-        label: node.properties.label || node.properties.displayName || node.properties.nodeName,
-        type: node.properties.nodeType,
-        x: Math.random() * 800,
-        y: Math.random() * 600,
-      })),
-      edges: (data.edges || []).map((edge: any) => ({
-        source: edge.startNodeId,
-        target: edge.endNodeId,
-        label: edge.properties.type,
-      }))
+    if (nodes.length === 0) {
+      ElMessage.info(module ? '该功能模块暂无图谱数据' : '当前版本暂无功能图谱数据')
+    } else {
+      ElMessage.success(`加载完成: ${nodes.length} 节点`)
     }
-
-// @ts-expect-error - G6: 'data' does not exist on new G6 Graph type
-    graphInstance.value?.data(g6Data)
-    graphInstance.value?.render()
-    ElMessage.success(`加载完成: ${data.nodeCount || 0} 节点`)
   } catch (error) {
     console.error('加载功能图谱失败', error)
+    allFlowNodes.value = []
+    allFlowEdges.value = []
+    modules.value = []
     ElMessage.error('加载功能图谱失败')
   } finally {
     loading.value = false
   }
 }
 
-/**
- * 从后端加载模块列表
- * 通过 getUnifiedGraph 获取节点后按模块分组
- */
-async function loadModules() {
-  if (!projectId.value || !currentVersion.value) return
-  try {
-    const data: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
-    if (data?.nodes) {
-      // 按模块分组统计
-      const moduleMap = new Map<string, { count: number; types: Set<string> }>()
-      const nodeTypes = new Set<string>()
+function rebuildModules() {
+  const colors = ['#67c23a', '#409eff', '#e6a23c', '#f56c6c', '#909399', '#722ed1', '#13c2c2']
+  const moduleMap = new Map<string, number>()
+  allFlowNodes.value.forEach(node => {
+    const props = node.data?.properties || {}
+    const moduleName = props.module || node.data?.type || '未分组'
+    moduleMap.set(moduleName, (moduleMap.get(moduleName) || 0) + 1)
+  })
 
-      data.nodes.forEach((n: any) => {
-        const module = n.type || 'Other'
-        nodeTypes.add(module)
-        if (!moduleMap.has(module)) {
-          moduleMap.set(module, { count: 0, types: new Set() })
-        }
-        const entry = moduleMap.get(module)!
-        entry.count++
-      })
+  modules.value = [
+    {
+      id: '__all__',
+      name: '全部功能图谱',
+      color: '#409eff',
+      featureCount: allFlowNodes.value.length
+    },
+    ...Array.from(moduleMap.entries()).map(([name, count], idx) => ({
+      id: name,
+      name,
+      color: colors[idx % colors.length],
+      featureCount: count,
+    }))
+  ]
+}
 
-      const colors = ['#67c23a', '#409eff', '#e6a23c', '#f56c6c', '#909399', '#722ed1', '#13c2c2']
-      modules.value = Array.from(moduleMap.entries()).map(([name, info], idx) => ({
-        id: name,
-        name,
-        color: colors[idx % colors.length],
-        featureCount: info.count,
-      }))
+function toFlowNode(node: any, index: number): FlowNode<FlowNodeData> {
+  const props = node.properties || node
+  const labels = normalizeLabels(node.labels)
+  const id = normalizeId(node.id || node.elementId || props.id || props.nodeKey || props.key || `node-${index}`)
+  const type = props.nodeType || node.type || labels[0] || 'Node'
+  const label = props.displayName || props.label || props.nodeName || props.name || props.nodeKey || props.key || id
+  return {
+    id,
+    type: 'custom',
+    position: gridPosition(index),
+    data: {
+      label,
+      type,
+      confidence: toNumber(props.confidence ?? node.confidence, 0.8),
+      status: props.status || node.status || 'PENDING_CONFIRM',
+      evidenceCount: toNumber(props.evidenceCount ?? node.evidenceCount, 0),
+      page: props.page || props.pagePath,
+      api: props.api || props.apiPath || (type === 'ApiEndpoint' ? props.nodeKey : undefined),
+      properties: props
     }
-  } catch (error) {
-    console.error('加载功能模块列表失败', error)
   }
 }
 
-/**
- * 从后端加载测试覆盖率数据
- * 通过全局图谱节点统计推算覆盖率
- */
+function toFlowEdge(edge: any, index: number): FlowEdge {
+  const props = edge.properties || edge.data || {}
+  const source = normalizeId(edge.source || edge.startNodeId || edge.startNodeElementId || edge.fromNodeId || edge.from)
+  const target = normalizeId(edge.target || edge.endNodeId || edge.endNodeElementId || edge.toNodeId || edge.to)
+  return {
+    id: normalizeId(edge.id || `${source}-${target}-${index}`),
+    source,
+    target,
+    label: edge.label || edge.type || props.type || '',
+    data: {
+      confidence: toNumber(edge.confidence ?? props.confidence, 0.8),
+      ...props
+    }
+  }
+}
+
+function normalizeLabels(labels: any): string[] {
+  if (Array.isArray(labels)) return labels.map(String)
+  if (labels && typeof labels[Symbol.iterator] === 'function') return Array.from(labels, String)
+  return labels ? [String(labels)] : []
+}
+
+function normalizeId(value: any): string {
+  return value == null ? '' : String(value)
+}
+
+function toNumber(value: any, fallback: number): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function gridPosition(index: number) {
+  const cols = 5
+  return {
+    x: 80 + (index % cols) * 230,
+    y: 100 + Math.floor(index / cols) * 150
+  }
+}
+
+function handleGraphNodeClick(node: FlowNode<FlowNodeData>) {
+  selectedNode.value = {
+    id: node.id,
+    ...node.data
+  }
+}
+
 async function loadCoverage() {
-  if (!projectId.value || !currentVersion.value) return
-  try {
-    const data: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
-    if (data?.nodes) {
-      const total = data.nodes.length
-      if (total === 0) {
-        coverageData.value = { overall: 0, core: 0, edge: 0 }
-        return
-      }
-      // 以置信度作为覆盖率的近似指标
-      const confirmed = data.nodes.filter((n: any) =>
-        n.status === 'CONFIRMED' || n.status === 'approved' || n.confidence >= 0.7
-      ).length
-      const highConfidence = data.nodes.filter((n: any) =>
-        n.confidence >= 0.85
-      ).length
-      const lowConfidence = data.nodes.filter((n: any) =>
-        n.confidence < 0.5 || n.status === 'PENDING'
-      ).length
-
-      coverageData.value = {
-        overall: Math.round((confirmed / total) * 100),
-        core: Math.round((highConfidence / total) * 100),
-        edge: Math.round(((total - lowConfidence) / total) * 100),
-      }
-    }
-  } catch (error) {
-    console.error('加载覆盖率数据失败', error)
-  }
+  // 不再独立请求，由 loadGraph 一并计算
+  await loadGraph('')
 }
 
-onMounted(async () => {
-  await nextTick()
-  if (!graphContainer.value) return
-
-  const container = graphContainer.value
-  const width = container.clientWidth
-  const height = container.clientHeight || 600
-
-  graphInstance.value = new Graph({
-    container: container,
-    width,
-    height,
-    // @ts-expect-error - G6: modes does not exist on GraphOptions in new G6
-    modes: {
-      default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'click-select']
-    },
-    layout: {
-      type: 'force',
-      linkDistance: 120,
-      nodeStrength: -200,
-    },
-    defaultNode: {
-      size: 35,
-      // @ts-expect-error - G6: parameter 'node' implicitly has 'any' type
-      style: (node) => getNodeStyle(node),
-      labelCfg: {
-        position: 'bottom',
-        style: {
-          fontSize: 11,
-          fill: '#333'
-        }
-      }
-    },
-    defaultEdge: {
-      type: 'polyline',
-      style: {
-        radius: 8,
-        endArrow: {
-          // @ts-expect-error - G6: Extension.arrow does not exist (new G6)
-          path: Extension.arrow,
-          fill: '#aaa'
-        }
-      },
-      labelCfg: {
-        autoRotate: true,
-        style: {
-          fill: '#aaa',
-          fontSize: 10,
-          background: { fill: '#fff' }
-        }
-      }
+function computeCoverage(rawNodes: any[]) {
+  const nodes = rawNodes.map((n: any) => {
+    const props = n.properties || n
+    return {
+      confidence: Number(props.confidence ?? 0.5),
+      status: props.status || 'PENDING_CONFIRM',
     }
   })
-
-  graphInstance.value.on('node:click', (e: any) => {
-    const node = e.item
-    if (node) {
-      g6Node.value = node as any
-      ElMessage.info(`选中: ${selectedNode.value.label}`)
-    }
-  })
-
-  graphInstance.value.on('canvas:click', () => {
-    g6Node.value = null
-  })
-
-  // 如果有模块参数，直接加载
-  const moduleQuery = route.query.module as string
-  if (moduleQuery) {
-    selectedModule.value = moduleQuery
-    loadGraph(moduleQuery)
-  } else {
-    graphInstance.value.render()
+  const total = nodes.length
+  if (total === 0) {
+    coverageData.value = { overall: 0, core: 0, edge: 0 }
+    return
   }
+  const confirmed = nodes.filter((n: any) =>
+    n.status === 'CONFIRMED' || n.status === 'approved' || n.confidence >= 0.7
+  ).length
+  const highConfidence = nodes.filter((n: any) =>
+    n.confidence >= 0.85
+  ).length
+  const lowConfidence = nodes.filter((n: any) =>
+    n.confidence < 0.5 || n.status === 'PENDING'
+  ).length
 
-  window.addEventListener('resize', handleResize)
-
-  // 加载模块列表和覆盖率数据
-  loadModules()
-  loadCoverage()
-})
-
-const handleResize = () => {
-  if (graphInstance.value && graphContainer.value) {
-    const width = graphContainer.value.clientWidth
-    const height = graphContainer.value.clientHeight || 600
-    // @ts-expect-error - G6: changeSize does not exist on new G6 Graph type
-    graphInstance.value.changeSize(width, height)
+  coverageData.value = {
+    overall: Math.round((confirmed / total) * 100),
+    core: Math.round((highConfidence / total) * 100),
+    edge: Math.round(((total - lowConfidence) / total) * 100),
   }
 }
 
 const getSelectedModuleName = () => {
-  if (!selectedModule.value) return '全部'
   const module = modules.value.find(m => m.id === selectedModule.value)
   return module ? module.name : '全部'
 }
 
 const selectModule = (id: string) => {
-  selectedModule.value = selectedModule.value === id ? null : id
-  if (selectedModule.value) {
-    loadGraph(selectedModule.value)
-  }
+  selectedModule.value = selectedModule.value === id ? '__all__' : id
+  selectedNode.value = null
 }
 
 const coverageLevel = (val: number): string => {
   if (val >= 60) return 'success'
   if (val >= 30) return ''
   return 'danger'
-}
-
-const zoomIn = () => {
-  if (graphInstance.value) {
-    const zoom = graphInstance.value.getZoom()
-    graphInstance.value.zoomTo(zoom * 1.2)
-  }
-}
-
-const zoomOut = () => {
-  if (graphInstance.value) {
-    const zoom = graphInstance.value.getZoom()
-    graphInstance.value.zoomTo(zoom / 1.2)
-  }
-}
-
-const fitView = () => {
-  if (graphInstance.value) {
-    graphInstance.value.fitView()
-  }
 }
 
 const evidenceDrawerVisible = ref(false)
@@ -459,6 +410,21 @@ const exportReport = () => {
   // 跳转到报告导出页面
   router.push(`/projects/${projectId.value}/reports`)
 }
+
+onMounted(async () => {
+  await loadVersions()
+  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+  const urlVersion = (route.query.version as string) || ''
+  if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
+    currentVersion.value = urlVersion
+  } else if (versions.value.length > 0) {
+    currentVersion.value = versions.value[0].id
+  }
+  if (currentVersion.value) {
+    const moduleQuery = route.query.module as string
+    await loadGraph(moduleQuery || '')
+  }
+})
 </script>
 
 <style scoped>

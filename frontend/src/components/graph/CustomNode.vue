@@ -1,8 +1,7 @@
 <template>
   <div
-    v-if="node"
     class="custom-node"
-    :class="[`node-${node.data?.type || 'default'}`, { 'node-selected': selected, 'node-pending': node.data?.status === 'pending' }]"
+    :class="[`node-${nodeTypeClass}`, { 'node-selected': isSelected, 'node-pending': isPending }]"
     :style="{ borderColor: nodeColor }"
   >
     <div class="node-header" :style="{ backgroundColor: nodeColor + '20' }">
@@ -11,27 +10,27 @@
           <component :is="nodeIcon" />
         </el-icon>
       </div>
-      <div class="node-title" :title="node.data?.label">{{ node.data?.label || '未命名' }}</div>
+      <div class="node-title" :title="nodeLabel">{{ nodeLabel }}</div>
     </div>
     <div class="node-body">
       <div class="node-type">
-        <el-tag size="small" :type="getTagType(node.data?.type)" effect="plain">
-          {{ getTypeLabel(node.data?.type) }}
+        <el-tag size="small" :type="getTagType(nodeType)" effect="plain">
+          {{ getTypeLabel(nodeType) }}
         </el-tag>
       </div>
       <div class="node-confidence">
         <span class="confidence-label">置信度</span>
         <el-progress
-          :percentage="(node.data?.confidence || 0) * 100"
+          :percentage="confidence * 100"
           :color="nodeColor"
           :stroke-width="6"
           :show-text="false"
         />
-        <span class="confidence-value">{{ ((node.data?.confidence || 0) * 100).toFixed(0) }}%</span>
+        <span class="confidence-value">{{ (confidence * 100).toFixed(0) }}%</span>
       </div>
-      <div class="node-evidence" v-if="node.data?.evidenceCount">
+      <div class="node-evidence" v-if="evidenceCount">
         <el-icon size="12" color="#909399"><Document /></el-icon>
-        <span>{{ node.data.evidenceCount }} 条证据</span>
+        <span>{{ evidenceCount }} 条证据</span>
       </div>
     </div>
     <Handle type="source" :position="Position.Bottom" :style="{ background: nodeColor }" />
@@ -41,8 +40,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Node, Position } from '@vue-flow/core'
-import { Handle } from '@vue-flow/core'
+import { Handle, Position } from '@vue-flow/core'
+import type { Node } from '@vue-flow/core'
 import {
   Document,
   Files,
@@ -54,26 +53,43 @@ import {
   QuestionFilled
 } from '@element-plus/icons-vue'
 
-/**
- * 组件属性定义
- */
 const props = defineProps<{
-  /** VueFlow节点对象 */
-  node: Node<any>
-  /** 是否选中 */
+  /** 兼容旧调用方直接传入完整 VueFlow 节点对象 */
+  node?: Node<any>
+  /** Vue Flow 自定义节点标准 props */
+  id?: string
+  data?: Record<string, any>
   selected?: boolean
 }>()
 
+const nodeData = computed<Record<string, any>>(() => props.node?.data ?? props.data ?? {})
+
+const nodeLabel = computed(() => nodeData.value.label || '未命名')
+
+const nodeType = computed(() => nodeData.value.type || 'default')
+
+const normalizedType = computed(() => normalizeType(nodeType.value))
+
+const nodeTypeClass = computed(() => normalizedType.value.replace(/[^a-z0-9_-]/gi, '-').toLowerCase())
+
+const nodeStatus = computed(() => String(nodeData.value.status || ''))
+
+const isSelected = computed(() => props.selected === true)
+
+const isPending = computed(() => ['pending', 'pending_confirm'].includes(nodeStatus.value.toLowerCase()))
+
+const confidence = computed(() => Number(nodeData.value.confidence ?? 0))
+
+const evidenceCount = computed(() => Number(nodeData.value.evidenceCount ?? 0))
+
 const nodeColor = computed(() => {
-  const confidence = props.node.data?.confidence || 0.8
-  if (confidence >= 0.9) return '#67c23a'
-  if (confidence >= 0.7) return '#409eff'
-  if (confidence >= 0.5) return '#e6a23c'
+  if (confidence.value >= 0.9) return '#67c23a'
+  if (confidence.value >= 0.7) return '#409eff'
+  if (confidence.value >= 0.5) return '#e6a23c'
   return '#f56c6c'
 })
 
 const nodeIcon = computed(() => {
-  const type = props.node.data?.type
   const iconMap: Record<string, any> = {
     business_domain: Menu,
     business_process: Operation,
@@ -87,10 +103,11 @@ const nodeIcon = computed(() => {
     table: Coin,
     column: Document
   }
-  return iconMap[type] || QuestionFilled
+  return iconMap[normalizedType.value] || QuestionFilled
 })
 
 function getTagType(type?: string): string {
+  const normalized = normalizeType(type)
   const typeMap: Record<string, string> = {
     business_domain: 'success',
     business_process: 'warning',
@@ -104,10 +121,11 @@ function getTagType(type?: string): string {
     table: 'danger',
     column: 'info'
   }
-  return typeMap[type || ''] || 'info'
+  return typeMap[normalized] || 'info'
 }
 
 function getTypeLabel(type?: string): string {
+  const normalized = normalizeType(type)
   const labelMap: Record<string, string> = {
     business_domain: '业务域',
     business_process: '业务流程',
@@ -121,7 +139,25 @@ function getTypeLabel(type?: string): string {
     table: '数据库表',
     column: '字段'
   }
-  return labelMap[type || ''] || type || '未知'
+  return labelMap[normalized] || type || '未知'
+}
+
+function normalizeType(type?: string): string {
+  const value = String(type || '').trim()
+  const aliasMap: Record<string, string> = {
+    BusinessDomain: 'business_domain',
+    BusinessProcess: 'business_process',
+    FeatureModule: 'feature_module',
+    Feature: 'feature',
+    ApiEndpoint: 'api',
+    Controller: 'controller',
+    Service: 'service',
+    Mapper: 'mapper',
+    SqlStatement: 'sql',
+    Table: 'table',
+    Column: 'column'
+  }
+  return aliasMap[value] || value
 }
 </script>
 

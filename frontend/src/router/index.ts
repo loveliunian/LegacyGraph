@@ -67,6 +67,12 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'menu.scanVersions' }
           },
           {
+            path: 'scan-versions/create',
+            name: 'CreateScan',
+            component: () => import('@/views/scan/CreateScan.vue'),
+            meta: { title: '新建扫描' }
+          },
+          {
             path: 'graph/code',
             name: 'CodeGraph',
             component: () => import('@/views/graph/CodeGraph.vue'),
@@ -185,32 +191,38 @@ const routes: RouteRecordRaw[] = [
             name: 'AuditLogDetail',
             component: () => import('@/views/audit/LogDetail.vue'),
             meta: { title: 'menu.logDetail' }
-          },
-          {
-            path: 'system/users',
-            name: 'SystemUserList',
-            component: () => import('@/views/system/UserList.vue'),
-            meta: { title: 'menu.systemUsers' }
-          },
-          {
-            path: 'system/dictionaries',
-            name: 'SystemDictionaryList',
-            component: () => import('@/views/system/DictionaryList.vue'),
-            meta: { title: 'menu.systemDictionaries' }
-          },
-          {
-            path: 'system/settings',
-            name: 'SystemSettings',
-            component: () => import('@/views/system/Settings.vue'),
-            meta: { title: 'menu.systemSettings' }
-          },
-          {
-            path: 'system/llm',
-            name: 'LlmProviderSettings',
-            component: () => import('@/views/system/LlmProviderSettings.vue'),
-            meta: { title: 'LLM 提供商' }
           }
         ]
+      },
+      {
+        path: 'system/users',
+        name: 'SystemUserList',
+        component: () => import('@/views/system/UserList.vue'),
+        meta: { title: 'menu.systemUsers' }
+      },
+      {
+        path: 'system/dictionaries',
+        name: 'SystemDictionaryList',
+        component: () => import('@/views/system/DictionaryList.vue'),
+        meta: { title: 'menu.systemDictionaries' }
+      },
+      {
+        path: 'system/settings',
+        name: 'SystemSettings',
+        component: () => import('@/views/system/Settings.vue'),
+        meta: { title: 'menu.systemSettings' }
+      },
+      {
+        path: 'system/llm',
+        name: 'LlmProviderSettings',
+        component: () => import('@/views/system/LlmProviderSettings.vue'),
+        meta: { title: 'LLM 提供商' }
+      },
+      {
+        path: 'system/prompts',
+        name: 'PromptTemplateList',
+        component: () => import('@/views/system/PromptList.vue'),
+        meta: { title: '提示词管理' }
       }
     ]
   },

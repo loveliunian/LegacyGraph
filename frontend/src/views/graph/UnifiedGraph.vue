@@ -23,9 +23,73 @@
       </div>
     </div>
 
-    <el-row :gutter="16">
-      <!-- 左侧过滤器 -->
-      <el-col :span="3">
+    <div class="top-stat-bar">
+      <div class="stat-item">
+        <div class="stat-meta">
+          <el-icon><DataLine /></el-icon>
+          <span>显示节点</span>
+        </div>
+        <div class="stat-value primary">{{ filteredNodes.length }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-meta">
+          <el-icon><Connection /></el-icon>
+          <span>显示关系</span>
+        </div>
+        <div class="stat-value success">{{ filteredEdges.length }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-meta">
+          <el-icon><CircleCheck /></el-icon>
+          <span>待审核</span>
+        </div>
+        <div class="stat-value warning">{{ pendingCount }}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-meta">
+          <el-icon><Odometer /></el-icon>
+          <span>平均置信度</span>
+        </div>
+        <div class="stat-value info">{{ averageConfidence }}%</div>
+      </div>
+    </div>
+
+    <el-row :gutter="16" class="graph-layout">
+      <!-- 主图谱区域 -->
+      <el-col :span="18">
+        <el-card class="graph-card" shadow="hover" :body-style="{ padding: 0 }">
+          <template #header>
+            <div class="graph-header">
+              <span>图谱视图</span>
+              <div class="graph-actions">
+                <el-switch
+                  v-model="useOptimizedViewer"
+                  active-text="高性能模式"
+                  inactive-text="标准模式"
+                  size="small"
+                />
+                <el-tooltip content="大数据量时建议使用高性能模式">
+                  <el-icon><InfoFilled /></el-icon>
+                </el-tooltip>
+              </div>
+            </div>
+          </template>
+
+          <component
+            :is="currentViewer"
+            :nodes="filteredNodes"
+            :edges="filteredEdges"
+            height="calc(100vh - 255px)"
+            :aggregation-threshold="500"
+            :worker-enabled="true"
+            @node-click="handleNodeClick"
+            @edge-click="handleEdgeClick"
+          />
+        </el-card>
+      </el-col>
+
+      <!-- 右侧控制栏 -->
+      <el-col :span="6" class="side-panel">
         <el-card class="filter-card" shadow="hover">
           <template #header>
             <div class="card-header">
@@ -101,69 +165,6 @@
           </div>
         </el-card>
 
-        <el-card class="stat-card" shadow="hover">
-          <template #header>
-            <span>
-              <el-icon><DataLine /></el-icon>
-              图谱统计
-            </span>
-          </template>
-          <div class="stat-grid">
-            <div class="stat-item">
-              <div class="stat-value primary">{{ filteredNodes.length }}</div>
-              <div class="stat-label">显示节点</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value success">{{ filteredEdges.length }}</div>
-              <div class="stat-label">显示关系</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value warning">{{ pendingCount }}</div>
-              <div class="stat-label">待审核</div>
-            </div>
-            <div class="stat-item">
-              <div class="stat-value info">{{ averageConfidence }}%</div>
-              <div class="stat-label">平均置信度</div>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- 中间图谱区域 -->
-      <el-col :span="15">
-        <el-card class="graph-card" shadow="hover" :body-style="{ padding: 0 }">
-          <template #header>
-            <div class="graph-header">
-              <span>图谱视图</span>
-              <div class="graph-actions">
-                <el-switch
-                  v-model="useOptimizedViewer"
-                  active-text="高性能模式"
-                  inactive-text="标准模式"
-                  size="small"
-                />
-                <el-tooltip content="大数据量时建议使用高性能模式">
-                  <el-icon><InfoFilled /></el-icon>
-                </el-tooltip>
-              </div>
-            </div>
-          </template>
-          
-          <component
-            :is="currentViewer"
-            :nodes="filteredNodes"
-            :edges="filteredEdges"
-            height="660px"
-            :aggregation-threshold="500"
-            :worker-enabled="true"
-            @node-click="handleNodeClick"
-            @edge-click="handleEdgeClick"
-          />
-        </el-card>
-      </el-col>
-
-      <!-- 右侧详情面板 -->
-      <el-col :span="6">
         <el-card class="detail-card" shadow="hover" v-if="selectedNode">
           <template #header>
             <div class="card-header">
@@ -239,43 +240,6 @@
             </el-table>
           </div>
         </el-card>
-
-        <el-card class="help-card" shadow="hover" v-else>
-          <template #header>
-            <span>
-              <el-icon><InfoFilled /></el-icon>
-              操作说明
-            </span>
-          </template>
-          <div class="help-list">
-            <div class="help-item">
-              <el-icon color="#409eff"><Pointer /></el-icon>
-              <span>点击节点查看详情</span>
-            </div>
-            <div class="help-item">
-              <el-icon color="#67c23a"><ZoomIn /></el-icon>
-              <span>滚轮缩放图谱</span>
-            </div>
-            <div class="help-item">
-              <el-icon color="#e6a23c"><Aim /></el-icon>
-              <span>拖拽移动节点位置</span>
-            </div>
-            <div class="help-item">
-              <el-icon color="#f56c6c"><Rank /></el-icon>
-              <span>拖拽空白平移视图</span>
-            </div>
-          </div>
-
-          <div class="legend-section">
-            <h4>图例说明</h4>
-            <div class="legend-list">
-              <div class="legend-item" v-for="type in nodeTypes" :key="type.value">
-                <span class="legend-color" :style="{ backgroundColor: type.color }"></span>
-                <span class="legend-label">{{ type.label }}</span>
-              </div>
-            </div>
-          </div>
-        </el-card>
       </el-col>
     </el-row>
 
@@ -312,10 +276,6 @@ import {
   Document,
   Location,
   InfoFilled,
-  Pointer,
-  ZoomIn,
-  Aim,
-  Rank,
   CircleClose,
   Files,
   Operation,
@@ -327,7 +287,7 @@ import {
 } from '@element-plus/icons-vue'
 import { graphApi, reviewApi, factApi } from '@/api'
 import { projectApi } from '@/api'
-import { get } from '@/utils/request'
+import { loadScanVersions } from '@/utils/versionsCache'
 import GraphViewer from '@/components/graph/GraphViewer.vue'
 import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
 import EvidencePanel from '@/components/EvidencePanel.vue'
@@ -344,6 +304,7 @@ const urlMinConfidence = route.query.minConfidence ? Number(route.query.minConfi
 
 const loading = ref(false)
 const useOptimizedViewer = ref(false)
+const defaultVisibleStatusGroups = ['approved', 'pending']
 
 const currentViewer = computed(() => {
   return useOptimizedViewer.value ? GraphViewerOptimized : GraphViewer
@@ -351,7 +312,7 @@ const currentViewer = computed(() => {
 const currentVersion = ref<string>('')
 const minConfidence = ref(urlMinConfidence ?? 0.5)
 const selectedNodeTypes = ref<string[]>([])
-const selectedReviewStatus = ref<string[]>(['CONFIRMED', 'PENDING_CONFIRM', 'approved', 'pending'])
+const selectedReviewStatus = ref<string[]>([...defaultVisibleStatusGroups])
 const selectedNode = ref<Node | null>(null)
 const evidenceDrawerVisible = ref(false)
 const nodeEvidence = ref<Evidence[]>([])
@@ -396,7 +357,7 @@ const allEdges = ref<Edge[]>([])
 const filteredNodes = computed(() => {
   return (allNodes.value as any[]).filter((node: any) => {
     const confidence = node.data?.confidence || 0
-    const status = node.data?.status
+    const status = normalizeStatusGroup(node.data?.status)
     const type = node.data?.type
 
     if (confidence < minConfidence.value) return false
@@ -414,7 +375,7 @@ const filteredEdges = computed((): any[] => {
 })
 
 const pendingCount = computed(() => {
-  return filteredNodes.value.filter(n => n.data?.status === 'PENDING_CONFIRM' || n.data?.status === 'pending').length
+  return filteredNodes.value.filter(n => normalizeStatusGroup(n.data?.status) === 'pending').length
 })
 
 const averageConfidence = computed(() => {
@@ -492,45 +453,44 @@ function getTypeLabel(type?: string): string {
 }
 
 function getStatusType(status?: string): string {
+  const group = normalizeStatusGroup(status)
   const statusMap: Record<string, string> = {
-    CONFIRMED: 'success',
     approved: 'success',
-    PENDING_CONFIRM: 'warning',
     pending: 'warning',
-    REJECTED: 'danger',
     rejected: 'danger'
   }
-  return statusMap[status || ''] || 'info'
+  return statusMap[group] || 'info'
 }
 
 function getStatusLabel(status?: string): string {
+  const group = normalizeStatusGroup(status)
   const labelMap: Record<string, string> = {
-    CONFIRMED: '已确认',
     approved: '已通过',
-    PENDING_CONFIRM: '待审核',
     pending: '待审核',
-    REJECTED: '已拒绝',
     rejected: '已拒绝'
   }
-  return labelMap[status || ''] || '未知'
+  return labelMap[group] || '未知'
+}
+
+function normalizeStatusGroup(status?: string): string {
+  const value = String(status || '').toUpperCase()
+  if (value === 'CONFIRMED' || value === 'APPROVED') return 'approved'
+  if (value === 'PENDING_CONFIRM' || value === 'PENDING') return 'pending'
+  if (value === 'REJECTED') return 'rejected'
+  return status || ''
 }
 
 function resetFilters() {
   selectedNodeTypes.value = []
   minConfidence.value = 0.5
-  selectedReviewStatus.value = ['CONFIRMED', 'PENDING_CONFIRM', 'approved', 'pending']
+  selectedReviewStatus.value = [...defaultVisibleStatusGroups]
   ElMessage.success('筛选条件已重置')
 }
 
 async function loadVersions() {
-  if (!projectId.value) return
-  try {
-    const data: any = await get(`/lg/projects/${projectId.value}/scan-versions`)
-    versions.value = Array.isArray(data) ? data : (data.list || [])
-  } catch (error) {
-    console.error('加载版本列表失败', error)
-    ElMessage.error('加载版本列表失败')
-  }
+  const pid = projectId.value
+  if (!pid) return
+  versions.value = await loadScanVersions(pid)
 }
 
 async function loadGraph(versionId: string) {
@@ -708,14 +668,14 @@ onMounted(async () => {
 
 <style scoped>
 .unified-graph {
-  padding: 20px;
+  padding: 16px;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .header-left h3 {
@@ -740,11 +700,53 @@ onMounted(async () => {
   align-items: center;
 }
 
+.top-stat-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.top-stat-bar .stat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.stat-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.graph-layout {
+  align-items: stretch;
+}
+
 .filter-card,
-.stat-card,
-.detail-card,
-.help-card {
+.detail-card {
   margin-bottom: 16px;
+}
+
+.filter-card :deep(.el-card__body),
+.detail-card :deep(.el-card__body) {
+  padding: 14px;
+}
+
+.filter-card :deep(.el-divider--horizontal) {
+  margin: 14px 0;
+}
+
+.side-panel {
+  max-height: calc(100vh - 255px);
+  overflow-y: auto;
 }
 
 .card-header {
@@ -815,20 +817,10 @@ onMounted(async () => {
   text-align: right;
 }
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.stat-item {
-  text-align: center;
-}
-
 .stat-value {
   font-size: 24px;
   font-weight: 600;
-  margin-bottom: 4px;
+  line-height: 1;
 }
 
 .stat-value.primary {
@@ -854,6 +846,10 @@ onMounted(async () => {
 
 .graph-card {
   height: 100%;
+}
+
+.graph-card :deep(.el-card__header) {
+  padding: 10px 16px;
 }
 
 .node-detail-header {
@@ -894,46 +890,6 @@ onMounted(async () => {
   font-size: 14px;
   font-weight: 500;
   color: #303133;
-}
-
-.help-list {
-  margin-bottom: 20px;
-}
-
-.help-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  font-size: 13px;
-  color: #606266;
-}
-
-.legend-section h4 {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
-}
-
-.legend-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #606266;
-}
-
-.legend-color {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
 }
 
 .evidence-content {

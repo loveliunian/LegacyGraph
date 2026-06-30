@@ -6,6 +6,25 @@
 
 ---
 
+## ✅ 实施进度（2026-06-30 落地）
+
+| 项 | 场景 | 状态 | 落地内容 | 测试 |
+|----|------|------|---------|------|
+| 基础 | Phase A 基础设施 | ✅ | `RedisConfig`（`@EnableCaching` + `lg:` 前缀 + JSON 序列化 + 容错 `CacheErrorHandler`）；`CacheService` 编程式容错封装 | `CacheServiceTest`（10） |
+| 5 | 配置/字典缓存 | ✅ | `SysConfigService`/`SysDictService` `@Cacheable` + 写时 `@CacheEvict` | 既有 `SysConfigServiceTest`(24)/`SysDictServiceTest`(17) 通过 |
+| 1 | LLM 结果缓存 | ✅ | `LlmGateway` 调用前查 `lg:llm:result:{template}:{inputHash}`，命中跳过 LLM；成功后回填，TTL 7d | `LlmGatewayTest#testCallWithTemplate_CacheHit_SkipsLlmCall` |
+| 2 | JWT 登出黑名单 | ✅ | `TokenBlacklistService`：`logout` 写黑名单（TTL=token 剩余有效期），`JwtAuthenticationFilter` 校验黑名单 | `TokenBlacklistServiceTest`（6） |
+| 3 | 扫描进度缓存 | ✅ | `ScanVersionService.getScanProgress` 缓存优先（运行 3s / 终态 30min），状态变更/删除时失效 | 既有 `ScanVersionServiceTest`(9) 通过 |
+| 4 | 图谱/报告结果缓存 | ✅ | `GraphQueryService` 5 个只读视图按版本缓存（`getOrLoad`）；`ReportingService` 4 类报告 `@Cacheable`；`GraphCacheInvalidator` 在合并/审核/重扫时按版本失效 | `GraphCacheInvalidatorTest`(2)、既有 `GraphQueryServiceTest`(6) 通过 |
+
+> 截至本轮：Redis 相关单测全部通过；连同既有 AI 单测合计 168 个通过。
+> 设计要点贯穿全程：**缓存层全程容错，Redis 不可用时静默降级回源，绝不阻断业务**。
+
+---
+
+
+---
+
 ## 📊 一、现状结论
 
 **结论：项目已"接好水管，但没接龙头" —— 依赖与配置就绪，代码零使用。**
@@ -286,3 +305,20 @@ Redis 在本项目**已配未用**。最该先做的三件事：
 3. **扫描进度缓存** —— 给高频轮询减压。
 
 建议从**配置缓存**这个最小场景先打通 Redis 缓存栈，再推进上述三项高价值业务接入。
+
+---
+
+## 🎉 八、本轮落地总结
+
+场景 **1 / 2 / 3 / 4 / 5** 已全部实现并通过测试：
+
+- **基础设施**：`RedisConfig`（声明式缓存 + JSON 序列化 + `lg:` 前缀 + 容错错误处理器）与 `CacheService`（编程式读写/回源回填/按前缀失效，全程容错降级）。
+- **场景 5 配置/字典缓存**：`SysConfigService`、`SysDictService` 读热点 `@Cacheable`，写操作 `@CacheEvict`。
+- **场景 1 LLM 结果缓存**：`LlmGateway` 以 `inputHash` 为键命中即跳过 LLM 调用，7 天 TTL，Redis 故障自动降级直连 LLM。
+- **场景 2 JWT 登出黑名单**：`TokenBlacklistService` + `AuthController.logout` + `JwtAuthenticationFilter`，实现真正登出。
+- **场景 3 扫描进度缓存**：`ScanVersionService.getScanProgress` 缓存优先，吸收前端高频轮询；状态变更即时失效。
+- **场景 4 图谱/报告缓存**：`GraphQueryService` 只读视图与 `ReportingService` 报告按版本缓存；`GraphCacheInvalidator` 在节点/边合并、审核确认/驳回、置信度更新、重新扫描时统一失效，保证读不到陈旧数据。
+
+**未实现（按文档优先级后置）**：场景 6（Provider 多实例一致性，单实例部署暂不需要）、7（扫描分布式锁）、8（接口限流）、9（向量检索缓存）。
+
+**新增产物**：`config/RedisConfig`、`service/CacheService`、`service/TokenBlacklistService`、`service/GraphCacheInvalidator`，以及 4 个测试类。

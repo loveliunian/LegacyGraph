@@ -188,6 +188,7 @@ import { graphApi } from '@/api'
 import { useRoute } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
+import { loadScanVersions } from '@/utils/versionsCache'
 
 interface TableColumn {
   columnName: string
@@ -234,7 +235,8 @@ interface VueFlowEdge {
 
 const route = useRoute()
 const projectId = computed(() => route.params.projectId as string)
-const currentVersion = computed(() => route.query.version as string)
+const currentVersion = ref<string>('')
+const versions = ref<any[]>([])
 
 const viewMode = ref<'lineage' | 'downstream' | 'upstream'>('lineage')
 const searchKeyword = ref('')
@@ -278,30 +280,32 @@ function getSelectedTable(): TableListItem | undefined {
   return tables.value.find(t => t.id === selectedTable.value)
 }
 
+async function loadVersions() {
+  const pid = projectId.value
+  if (!pid) return
+  versions.value = await loadScanVersions(pid)
+}
+
 async function loadTablesFromBackend() {
   if (!projectId.value || !currentVersion.value) return
   loading.value = true
   try {
-    // 从后端获取数据库中已扫描到的表列表 — 使用 getUnifiedGraph 中的 Table 节点
-    const data: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
-    if (data && data.nodes) {
-      const tableNodes = (data.nodes || []).filter((n: any) =>
-        n.type === 'Table' || n.type === 'table'
-      )
-      if (tableNodes.length > 0) {
-        tables.value = tableNodes.map((n: any, idx: number) => ({
-          id: n.id || n.key || `table-${idx}`,
-          name: n.label || n.key || n.name || `table-${idx}`,
-          type: 'table',
-          columnCount: 0,
-          relationCount: 0,
-          upstreamCount: 0,
-          downstreamCount: 0,
-          apiCount: 0,
-        }))
-      } else {
-        tables.value = []
-      }
+    // 使用轻量 Table 节点查询接口，避免加载全量统一图谱
+    const data: any = await graphApi.getTables(projectId.value, currentVersion.value)
+    const tableNodes = Array.isArray(data) ? data : (data?.list || [])
+    if (tableNodes.length > 0) {
+      tables.value = tableNodes.map((n: any, idx: number) => ({
+        id: n.id || n.key || `table-${idx}`,
+        name: n.label || n.key || n.name || `table-${idx}`,
+        type: 'table',
+        columnCount: n.columnCount || 0,
+        relationCount: n.relationCount || 0,
+        upstreamCount: 0,
+        downstreamCount: 0,
+        apiCount: 0,
+      }))
+    } else {
+      tables.value = []
     }
   } catch (error) {
     console.error('加载后端表列表失败', error)
@@ -330,23 +334,39 @@ async function loadLineageData(tableName: string) {
       const edgeList: any[] = []
 
       impact.forEach((path: any) => {
-        // 处理路径中的节点
-        if (path.nodes) {
-          path.nodes.forEach((node: any) => {
-            const nodeId = node.id || node.elementId
-            if (nodeId && !nodeMap.has(nodeId)) {
-              nodeMap.set(nodeId, {
-                id: nodeId,
-                labels: node.labels || ['Node'],
-                properties: node.properties || {},
-              })
-            }
-          })
-        }
-        // 处理邻接关系（针对 API 返回格式：{api: {...}, p: {nodes, relationships}}）
+        const pathNodes = path.nodes || path.p?.nodes || []
+        const pathEdges = path.edges || path.relationships || path.p?.edges || path.p?.relationships || []
+
+        pathNodes.forEach((node: any) => {
+          const nodeId = normalizeGraphId(node.id || node.elementId || node.properties?.nodeKey || node.properties?.key)
+          if (nodeId && !nodeMap.has(nodeId)) {
+            nodeMap.set(nodeId, {
+              id: nodeId,
+              labels: node.labels || ['Node'],
+              properties: node.properties || {},
+            })
+          }
+        })
+
+        pathEdges.forEach((edge: any, idx: number) => {
+          const source = normalizeGraphId(edge.source || edge.startNodeId || edge.startNodeElementId || edge.fromNodeId || edge.from)
+          const target = normalizeGraphId(edge.target || edge.endNodeId || edge.endNodeElementId || edge.toNodeId || edge.to)
+          if (!source || !target) return
+          const edgeId = normalizeGraphId(edge.id || `${source}-${target}-${idx}`)
+          if (!edgeList.find(e => e.id === edgeId || (e.source === source && e.target === target))) {
+            edgeList.push({
+              id: edgeId,
+              source,
+              target,
+              type: edge.type || edge.label || edge.properties?.type || '',
+            })
+          }
+        })
+
+        // 兼容旧格式：{start, end, relationship}
         if (path.start && path.end) {
-          const startId = path.start.id || path.start.elementId
-          const endId = path.end.id || path.end.elementId
+          const startId = normalizeGraphId(path.start.id || path.start.elementId)
+          const endId = normalizeGraphId(path.end.id || path.end.elementId)
           if (startId && endId) {
             edgeList.push({
               id: `${startId}-${endId}`,
@@ -356,13 +376,13 @@ async function loadLineageData(tableName: string) {
             })
           }
         }
-        // 处理 p 路径（返回 paths 格式）
+        // 兼容只返回节点序列的路径
         if (path.p && path.p.nodes) {
           for (let i = 0; i < path.p.nodes.length - 1; i++) {
             const from = path.p.nodes[i]
             const to = path.p.nodes[i + 1]
-            const fromId = from.id || from.elementId
-            const toId = to.id || to.elementId
+            const fromId = normalizeGraphId(from.id || from.elementId)
+            const toId = normalizeGraphId(to.id || to.elementId)
             if (fromId && toId && !edgeList.find(e => e.source === fromId && e.target === toId)) {
               edgeList.push({
                 id: `${fromId}-${toId}`,
@@ -468,6 +488,10 @@ function convertToVueFlow() {
   vueFlowEdges.value = edges
 }
 
+function normalizeGraphId(value: any): string {
+  return value == null ? '' : String(value)
+}
+
 async function selectTable(id: string) {
   selectedTable.value = selectedTable.value === id ? null : id
   if (!selectedTable.value) {
@@ -495,6 +519,14 @@ async function refreshGraph() {
 }
 
 onMounted(async () => {
+  await loadVersions()
+  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+  const urlVersion = (route.query.version as string) || ''
+  if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
+    currentVersion.value = urlVersion
+  } else if (versions.value.length > 0) {
+    currentVersion.value = versions.value[0].id
+  }
   if (projectId.value && currentVersion.value) {
     await loadTablesFromBackend()
   }

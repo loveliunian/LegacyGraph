@@ -83,8 +83,24 @@ public class RedisConfig implements CachingConfigurer {
                 .entryTtl(Duration.ofHours(1))
                 .disableCachingNullValues()
                 .serializeValuesWith(SerializationPair.fromSerializer(jsonSerializer()));
+
+        java.util.Map<String, RedisCacheConfiguration> perCache = new java.util.HashMap<>();
+        // 易变视图：短 TTL 兜底（写时已显式失效，TTL 仅防漏失效）
+        perCache.put("project-overview", base.entryTtl(Duration.ofMinutes(1)));
+        perCache.put("validation-report", base.entryTtl(Duration.ofMinutes(5)));
+        // 稳定数据：长 TTL
+        perCache.put("llm-provider-default", base.entryTtl(Duration.ofHours(6)));
+        perCache.put("prompt-templates", base.entryTtl(Duration.ofHours(6)));
+        perCache.put("config-value", base.entryTtl(Duration.ofHours(1)));
+        perCache.put("config-all", base.entryTtl(Duration.ofHours(1)));
+        perCache.put("dict-items", base.entryTtl(Duration.ofHours(6)));
+        perCache.put("dict-map", base.entryTtl(Duration.ofHours(6)));
+        // 报告：版本内稳定，写时失效
+        perCache.put("report-migration-readiness", base.entryTtl(Duration.ofHours(1)));
+
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(base)
+                .withInitialCacheConfigurations(perCache)
                 .build();
     }
 

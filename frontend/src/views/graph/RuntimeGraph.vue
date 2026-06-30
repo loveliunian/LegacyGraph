@@ -175,17 +175,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Connection } from '@element-plus/icons-vue'
 import { graphApi, traceApi } from '@/api'
+import { loadScanVersions } from '@/utils/versionsCache'
 import { useRoute } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 
 const route = useRoute()
 const projectId = computed(() => route.params.projectId as string)
-import { computed } from 'vue'
 
 const selectedEnv = ref('prod')
 const viewType = ref('topology')
@@ -254,12 +254,13 @@ async function loadTraces() {
         time: t.startedAt || t.createdAt || '',
         serviceCount: 1,
       }))
+      selectInitialTrace()
       return
     }
 
     // 2) 回退：扫描版本 + 统一图谱近似
     hasRealTrace.value = false
-    const versions = await graphApi.getScanVersions(projectId.value) as any
+    const versions = await loadScanVersions(projectId.value)
     if (versions && Array.isArray(versions) && versions.length > 0) {
       traces.value = versions.map((v: any, idx: number) => ({
         id: v.id || `trace-${idx}`,
@@ -295,11 +296,27 @@ async function loadTraces() {
         ).length
       }
     }
+    selectInitialTrace()
   } catch (error) {
     console.error('加载运行链路数据失败', error)
     ElMessage.warning('加载运行链路数据失败')
   } finally {
     loading.value = false
+  }
+}
+
+function selectInitialTrace() {
+  if (selectedTrace.value) return
+  if (traces.value.length > 0) {
+    const traceId = String(traces.value[0].id)
+    selectedTrace.value = traceId
+    loadTraceDetail(traceId)
+    return
+  }
+  if (services.value.length > 0) {
+    const traceId = 'topology'
+    selectedTrace.value = traceId
+    loadTraceDetail(traceId)
   }
 }
 

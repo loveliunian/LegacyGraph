@@ -22,6 +22,7 @@ import java.util.List;
 public class GraphMergeService {
 
     private final Neo4jGraphDao neo4jGraphDao;
+    private final GraphCacheInvalidator graphCacheInvalidator;
 
     /**
      * 合并候选对
@@ -206,5 +207,8 @@ public class GraphMergeService {
         }
 
         log.info("Merged node {} into {} in project {}", mergeNodeId, targetNodeId, projectId);
+        // 合并改写节点/边结构，失效受影响版本的图谱/报告只读缓存与项目概览
+        graphCacheInvalidator.invalidateVersion(mergeNode != null ? mergeNode.getVersionId() : null);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
     }
 }

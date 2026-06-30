@@ -25,6 +25,13 @@ public class VectorRetrievalService {
     private final Neo4jGraphDao neo4jGraphDao;
     private final VectorizationService vectorizationService;
 
+    /** 语义检索结果缓存（可选）：相同问题复用，短 TTL（向量库随扫描更新） */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CacheService cacheService;
+
+    /** 语义检索缓存 TTL */
+    private static final java.time.Duration SEARCH_CACHE_TTL = java.time.Duration.ofMinutes(3);
+
     public VectorRetrievalService(EmbeddingModel embeddingModel,
                                VectorDocumentRepository vectorDocumentRepository,
                                Neo4jGraphDao neo4jGraphDao,
@@ -33,6 +40,26 @@ public class VectorRetrievalService {
         this.vectorDocumentRepository = vectorDocumentRepository;
         this.neo4jGraphDao = neo4jGraphDao;
         this.vectorizationService = vectorizationService;
+    }
+
+    private String searchCacheKey(String projectId, String versionId, String query, int topK, String chunkType) {
+        String raw = projectId + "|" + versionId + "|" + topK + "|" + chunkType + "|" + query;
+        return "vec:search:" + sha256(raw);
+    }
+
+    private String sha256(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(input.hashCode());
+        }
     }
 
     /**
@@ -63,6 +90,22 @@ public class VectorRetrievalService {
     public List<VectorDocument> semanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
         log.info("Semantic search: projectId={}, query={}, topK={}", projectId, query, topK);
 
+        // 缓存优先：相同 (project, version, query, topK, chunkType) 复用
+        if (cacheService != null) {
+            String cacheKey = searchCacheKey(projectId, versionId, query, topK, chunkType);
+            @SuppressWarnings("unchecked")
+            List<VectorDocument> cached = cacheService.get(cacheKey, List.class);
+            if (cached != null) {
+                return cached;
+            }
+            List<VectorDocument> fresh = doSemanticSearch(projectId, versionId, query, topK, chunkType);
+            cacheService.put(cacheKey, fresh, SEARCH_CACHE_TTL);
+            return fresh;
+        }
+        return doSemanticSearch(projectId, versionId, query, topK, chunkType);
+    }
+
+    private List<VectorDocument> doSemanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
         try {
             // 对查询进行向量化 - Spring AI 1.0+ API
             float[] embedding = embeddingModel.embed(query);

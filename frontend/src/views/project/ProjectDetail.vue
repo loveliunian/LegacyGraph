@@ -33,6 +33,7 @@
               <span>扫描任务</span>
             </template>
             <el-menu-item :index="`/projects/${projectId}/scan-versions`">任务列表</el-menu-item>
+            <el-menu-item :index="`/projects/${projectId}/scan-versions/create`">新建扫描</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="graph">

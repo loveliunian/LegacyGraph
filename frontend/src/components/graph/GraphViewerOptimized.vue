@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, shallowRef } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, shallowRef, markRaw } from 'vue'
 import {
   VueFlow,
   useVueFlow,
@@ -115,7 +115,7 @@ const vueFlowRef = ref()
 const { fitView, zoomIn, zoomOut, setCenter, getZoom } = useVueFlow()
 
 const nodeTypes = {
-  custom: CustomNode as any
+  custom: markRaw(CustomNode) as any
 }
 
 const currentLayout = ref('力导向')
@@ -290,10 +290,11 @@ function getEdgeColor(confidence: number): string {
 }
 
 function handleNodeClick(event: any) {
-  if (event.data?.isAggregated) {
-    expandAggregatedNode(event)
+  const node = event.node ?? event
+  if (node.data?.isAggregated) {
+    expandAggregatedNode(node)
   } else {
-    emit('nodeClick', event)
+    emit('nodeClick', node)
   }
 }
 
@@ -316,11 +317,11 @@ function expandAggregatedNode(node: any) {
 }
 
 function handleEdgeClick(event: any) {
-  emit('edgeClick', event)
+  emit('edgeClick', event.edge ?? event)
 }
 
 function handleNodeDragStop(event: any) {
-  emit('nodeDrag', event)
+  emit('nodeDrag', event.node ?? event)
 }
 
 function handleConnect(params: { source: string; target: string }) {

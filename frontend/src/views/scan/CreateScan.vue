@@ -15,7 +15,12 @@
       <div class="step-content">
         <!-- 步骤 1: 选择扫描范围 -->
         <div v-if="currentStep === 0" class="step-panel">
-          <h4>选择代码仓库</h4>
+          <div class="section-header">
+            <h4>选择代码仓库</h4>
+            <el-button type="primary" link size="small" @click="toggleSelectAll('repo')">
+              {{ repoIdsAllSelected ? '取消全选' : '全选' }}
+            </el-button>
+          </div>
           <el-checkbox-group v-model="scanForm.repoIds">
             <div class="checkbox-group">
               <el-checkbox v-for="repo in repoList" :key="repo.id" :label="repo.id">
@@ -27,7 +32,12 @@
             </div>
           </el-checkbox-group>
 
-          <h4 style="margin-top: 24px;">选择数据库</h4>
+          <div class="section-header" style="margin-top: 24px;">
+            <h4>选择数据库</h4>
+            <el-button type="primary" link size="small" @click="toggleSelectAll('db')">
+              {{ dbIdsAllSelected ? '取消全选' : '全选' }}
+            </el-button>
+          </div>
           <el-checkbox-group v-model="scanForm.dbIds">
             <div class="checkbox-group">
               <el-checkbox v-for="db in dbList" :key="db.id" :label="db.id">
@@ -39,7 +49,12 @@
             </div>
           </el-checkbox-group>
 
-          <h4 style="margin-top: 24px;">选择文档</h4>
+          <div class="section-header" style="margin-top: 24px;">
+            <h4>选择文档</h4>
+            <el-button type="primary" link size="small" @click="toggleSelectAll('doc')">
+              {{ docIdsAllSelected ? '取消全选' : '全选' }}
+            </el-button>
+          </div>
           <el-checkbox-group v-model="scanForm.docIds">
             <div class="checkbox-group">
               <el-checkbox v-for="doc in docList" :key="doc.id" :label="doc.id">
@@ -199,7 +214,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { get, post } from '@/utils/request'
@@ -264,6 +279,40 @@ const canProceed = () => {
     return !!scanForm.taskName
   }
   return true
+}
+
+// 全选状态计算
+const repoIdsAllSelected = computed(() =>
+  repoList.value.length > 0 && scanForm.repoIds.length === repoList.value.length
+)
+const dbIdsAllSelected = computed(() =>
+  dbList.value.length > 0 && scanForm.dbIds.length === dbList.value.length
+)
+const docIdsAllSelected = computed(() =>
+  docList.value.length > 0 && scanForm.docIds.length === docList.value.length
+)
+
+// 全选/取消全选切换
+const toggleSelectAll = (type: 'repo' | 'db' | 'doc') => {
+  if (type === 'repo') {
+    if (repoIdsAllSelected.value) {
+      scanForm.repoIds = []
+    } else {
+      scanForm.repoIds = repoList.value.map(r => r.id)
+    }
+  } else if (type === 'db') {
+    if (dbIdsAllSelected.value) {
+      scanForm.dbIds = []
+    } else {
+      scanForm.dbIds = dbList.value.map(d => d.id)
+    }
+  } else if (type === 'doc') {
+    if (docIdsAllSelected.value) {
+      scanForm.docIds = []
+    } else {
+      scanForm.docIds = docList.value.map(d => d.id)
+    }
+  }
 }
 
 const prevStep = () => {
@@ -373,10 +422,21 @@ onMounted(async () => {
 }
 
 .step-panel h4 {
-  margin: 0 0 16px 0;
+  margin: 0;
   font-size: 16px;
   font-weight: 500;
   color: #303133;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-header h4 {
+  margin: 0;
 }
 
 .checkbox-group {

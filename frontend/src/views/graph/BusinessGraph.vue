@@ -37,16 +37,16 @@
         <el-card class="graph-card">
           <div class="graph-toolbar">
             <span>当前视图: {{ showAiView ? 'AI归纳' : '原始数据' }}</span>
-            <el-button-group>
-              <el-button size="small" @click="zoomIn">放大</el-button>
-              <el-button size="small" @click="zoomOut">缩小</el-button>
-              <el-button size="small" @click="fitView">适应</el-button>
-              <el-button size="small" @click="refreshLayout">刷新</el-button>
-            </el-button-group>
+            <el-tag type="info">{{ graphNodeCount }} 节点 / {{ graphEdgeCount }} 关系</el-tag>
           </div>
-          <div class="graph-container" ref="graphContainer">
-            <!-- G6 画布 will be mounted here -->
-          </div>
+          <GraphViewer
+            v-loading="loading"
+            :nodes="flowNodes"
+            :edges="flowEdges"
+            height="600px"
+            :editable="false"
+            @node-click="handleGraphNodeClick"
+          />
         </el-card>
       </el-col>
 
@@ -116,28 +116,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { View, Share, MagicStick } from '@element-plus/icons-vue'
-import { Graph } from '@antv/g6'
-import { graphApi, reviewApi } from '@/api'
-import type { GraphData, Node } from '@antv/g6'
+import { View, MagicStick } from '@element-plus/icons-vue'
+import type { Node as FlowNode, Edge as FlowEdge } from '@vue-flow/core'
+import GraphViewer from '@/components/graph/GraphViewer.vue'
+import { graphApi } from '@/api'
+import { loadScanVersions } from '@/utils/versionsCache'
+
+interface FlowNodeData {
+  label: string
+  type: string
+  confidence: number
+  status: string
+  evidenceCount: number
+  description?: string
+  properties?: Record<string, any>
+}
 
 const route = useRoute()
 const router = useRouter()
 const projectId = computed(() => route.params.projectId as string)
-const currentVersion = computed(() => route.query.version as string)
+const currentVersion = ref<string>('')
+const versions = ref<any[]>([])
 
 const showAiView = ref(false)
-const graphContainer = ref<HTMLElement | null>(null)
-const graphInstance = ref<Graph | null>(null)
-const g6Node = ref<Node | null>(null)
-// @ts-expect-error - G6: getModel does not exist on new Node type
-const selectedNode = computed(() => g6Node.value?.getModel() as any || null)
+const selectedNode = ref<any | null>(null)
+const selectedDomain = ref('')
 const loading = ref(false)
-
+const flowNodes = ref<FlowNode<FlowNodeData>[]>([])
+const flowEdges = ref<FlowEdge[]>([])
 const domainTree = ref<any[]>([])
+
+const graphNodeCount = computed(() => flowNodes.value.length)
+const graphEdgeCount = computed(() => flowEdges.value.length)
 
 const graphStats = ref({
   autoMergeRate: 0,
@@ -146,246 +159,177 @@ const graphStats = ref({
   testPassRate: 0
 })
 
-/** 从统一图谱加载领域树和统计信息 */
+async function loadVersions() {
+  const pid = projectId.value
+  if (!pid) return
+  versions.value = await loadScanVersions(pid)
+}
+
 async function loadDomainTree() {
-  if (!projectId.value || !currentVersion.value) return
-  try {
-    const data: any = await graphApi.getUnifiedGraph(projectId.value, currentVersion.value, 0)
-    if (data?.nodes) {
-      const nodes = data.nodes as any[]
-      // 按领域分组构建树
-      const domainMap = new Map<string, any[]>()
-      nodes.forEach((n: any) => {
-        const domain = n.type || n.nodeType || 'Other'
-        if (!domainMap.has(domain)) domainMap.set(domain, [])
-        domainMap.get(domain)!.push(n)
-      })
-      const colors = ['#1890ff', '#52c41a', '#faad14', '#722ed1', '#eb2f96', '#13c2c2']
-      domainTree.value = Array.from(domainMap.entries()).map(([name, items], idx) => ({
-        id: name,
-        name,
-        confidence: items.reduce((s: number, n: any) => s + (n.confidence || 0.5), 0) / items.length,
-        children: [],
-      }))
+  // 不再独立请求，由 loadGraph 一并填充
+  // 保留函数签名以兼容 handleDomainClick 调用
+  await loadGraph('')
+}
 
-      // 统计信息
-      const confirmed = nodes.filter(n => n.status === 'CONFIRMED' || n.status === 'approved').length
-      graphStats.value = {
-        autoMergeRate: nodes.length > 0 ? Math.round(confirmed / nodes.length * 100) : 0,
-        pendingReview: nodes.filter(n => n.status === 'PENDING_CONFIRM' || n.status === 'pending').length,
-        avgConfidence: nodes.length > 0
-          ? nodes.reduce((s, n) => s + (n.confidence || 0.5), 0) / nodes.length
-          : 0,
-        testPassRate: 0,
-      }
+function buildDomainTree(rawNodes: any[]) {
+  const nodes = rawNodes.map((n: any) => {
+    const props = n.properties || n
+    return {
+      id: n.id || n.elementId || props.id,
+      key: props.nodeKey || props.key || n.elementId || n.id,
+      label: props.displayName || props.label || props.nodeName || props.name || n.id,
+      type: props.nodeType || (Array.isArray(n.labels) ? n.labels[0] : 'Node'),
+      confidence: Number(props.confidence ?? 0.5),
+      status: props.status || 'PENDING_CONFIRM',
     }
-  } catch (e) {
-    console.error('加载领域树失败', e)
+  })
+  const domainNodes = nodes.filter((n: any) => n.type === 'BusinessDomain')
+  const seen = new Set<string>()
+  const domains = domainNodes
+    .map((n: any) => ({
+      id: n.key || n.id,
+      name: n.label || n.name || n.key || n.id,
+      confidence: Number(n.confidence ?? 0.5),
+      children: []
+    }))
+    .filter((n: any) => {
+      if (!n.name || seen.has(n.name)) return false
+      seen.add(n.name)
+      return true
+    })
+
+  domainTree.value = [
+    {
+      id: '__all__',
+      name: '全部业务图谱',
+      confidence: nodes.length
+        ? nodes.reduce((s: number, n: any) => s + Number(n.confidence ?? 0.5), 0) / nodes.length
+        : 0,
+      children: []
+    },
+    ...domains
+  ]
+
+  const confirmed = nodes.filter((n: any) => n.status === 'CONFIRMED' || n.status === 'approved').length
+  graphStats.value = {
+    autoMergeRate: nodes.length > 0 ? Math.round(confirmed / nodes.length * 100) : 0,
+    pendingReview: nodes.filter((n: any) => n.status === 'PENDING_CONFIRM' || n.status === 'pending').length,
+    avgConfidence: nodes.length > 0
+      ? nodes.reduce((s: number, n: any) => s + Number(n.confidence ?? 0.5), 0) / nodes.length
+      : 0,
+    testPassRate: 0,
   }
 }
 
-const nodeColorMap: Record<string, string> = {
-  BusinessDomain: '#1890ff',
-  BusinessProcess: '#52c41a',
-  FeatureModule: '#faad14',
-  Feature: '#722ed1',
-  Page: '#722ed1',
-  ApiEndpoint: '#eb2f96',
-  Controller: '#ebb563',
-  Service: '#f5d76e',
-  Mapper: '#909399',
-  SqlStatement: '#f56c6c',
-  Table: '#13c2c2',
-  Role: '#fa8c16'
-}
-
-const getNodeStyle = (node: any) => {
-  const color = nodeColorMap[node.type as string] || '#999'
-  return {
-    fill: color + '20',
-    stroke: color,
-    lineWidth: 2
-  }
-}
-
-async function loadGraph(domain: string) {
+async function loadGraph(domain = '') {
   if (!projectId.value || !currentVersion.value) return
   loading.value = true
   try {
     const data = await graphApi.getBusinessView(projectId.value, currentVersion.value, domain) as any
+    const nodes = Array.isArray(data?.nodes) ? data.nodes : []
+    const edges = Array.isArray(data?.edges) ? data.edges : []
 
-    if (!data || !data.nodes) {
-      ElMessage.warning('该业务域暂无图谱数据')
-      graphInstance.value?.clear()
-      return
+    selectedDomain.value = domain
+    selectedNode.value = null
+    flowNodes.value = nodes.map(toFlowNode)
+    flowEdges.value = edges.map(toFlowEdge).filter((edge: FlowEdge) => edge.source && edge.target)
+
+    // 首次加载时一并构建领域树（domain 为空表示全量加载）
+    if (!domain) {
+      buildDomainTree(nodes)
     }
 
-    // 转换为G6格式
-    const g6Data: GraphData = {
-      nodes: data.nodes.map((node: any) => ({
-        id: node.id,
-        label: node.properties.label || node.properties.displayName || node.properties.nodeName,
-        type: node.properties.nodeType,
-        x: Math.random() * 800,
-        y: Math.random() * 600,
-      })),
-      edges: (data.edges || []).map((edge: any) => ({
-        source: edge.startNodeId,
-        target: edge.endNodeId,
-        label: edge.properties.type,
-      }))
+    if (nodes.length === 0) {
+      ElMessage.info(domain ? '该业务域暂无图谱数据' : '当前版本暂无业务图谱数据')
+    } else {
+      ElMessage.success(`加载完成: ${nodes.length} 节点`)
     }
-
-// @ts-expect-error - G6: 'data' does not exist on new G6 Graph type
-    graphInstance.value?.data(g6Data)
-    graphInstance.value?.render()
-    ElMessage.success(`加载完成: ${data.nodeCount || 0} 节点`)
   } catch (error) {
     console.error('加载业务图谱失败', error)
+    flowNodes.value = []
+    flowEdges.value = []
     ElMessage.error('加载业务图谱失败')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(async () => {
-  await nextTick()
-  if (!graphContainer.value) return
-
-  // No icons import needed - relies on Element Plus icons
-  loading.value = true
-  // Create G6 graph
-  const container = graphContainer.value
-  const width = container.clientWidth
-  const height = container.clientHeight || 600
-
-  graphInstance.value = new Graph({
-    container: container,
-    width,
-    height,
-    // @ts-expect-error - G6: modes does not exist on GraphOptions in new G6
-    modes: {
-      default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'click-select']
-    },
-    layout: {
-      type: 'force',
-      linkDistance: 150,
-      nodeStrength: -300,
-      edgeStrength: 0.1
-    },
-    defaultNode: {
-      size: 40,
-      // @ts-expect-error - G6: parameter 'node' implicitly has 'any' type
-      style: (node) => getNodeStyle(node),
-      labelCfg: {
-        position: 'bottom',
-        style: {
-          fontSize: 12,
-          fill: '#333'
-        }
-      }
-    },
-    defaultEdge: {
-      type: 'polyline',
-      style: {
-        radius: 10,
-        offset: 15,
-        endArrow: {
-          // @ts-expect-error - G6: Extension.arrow does not exist (new G6)
-          path: Extension.arrow,
-          fill: '#aaa'
-        }
-      },
-      labelCfg: {
-        autoRotate: true,
-        style: {
-          fill: '#aaa',
-          fontSize: 10,
-          background: {
-            fill: '#ffffff',
-            padding: [2, 2, 2, 2],
-            radius: 2
-          }
-        }
-      }
+function toFlowNode(node: any, index: number): FlowNode<FlowNodeData> {
+  const props = node.properties || node
+  const labels = normalizeLabels(node.labels)
+  const id = normalizeId(node.id || node.elementId || props.id || props.nodeKey || props.key || `node-${index}`)
+  const type = props.nodeType || node.type || labels[0] || 'Node'
+  const label = props.displayName || props.label || props.nodeName || props.name || props.nodeKey || props.key || id
+  return {
+    id,
+    type: 'custom',
+    position: gridPosition(index),
+    data: {
+      label,
+      type,
+      confidence: toNumber(props.confidence ?? node.confidence, 0.8),
+      status: props.status || node.status || 'PENDING_CONFIRM',
+      evidenceCount: toNumber(props.evidenceCount ?? node.evidenceCount, 0),
+      description: props.description || node.description,
+      properties: props
     }
-  })
-
-  // 节点点击事件
-  graphInstance.value.on('node:click', (e: any) => {
-    const node = e.item
-    if (node) {
-      g6Node.value = node as any
-      ElMessage.info(`选中: ${selectedNode.value.label}`)
-    }
-  })
-
-  // 空白点击
-  graphInstance.value.on('canvas:click', () => {
-    g6Node.value = null
-  })
-
-  // If we have a domain from query, load it
-  const domainQuery = route.query.domain as string
-  if (domainQuery) {
-    loadGraph(domainQuery)
-  } else {
-    // Show empty state
-    graphInstance.value.render()
   }
+}
 
-  // Handle resize
-  window.addEventListener('resize', handleResize)
+function toFlowEdge(edge: any, index: number): FlowEdge {
+  const props = edge.properties || edge.data || {}
+  const source = normalizeId(edge.source || edge.startNodeId || edge.startNodeElementId || edge.fromNodeId || edge.from)
+  const target = normalizeId(edge.target || edge.endNodeId || edge.endNodeElementId || edge.toNodeId || edge.to)
+  return {
+    id: normalizeId(edge.id || `${source}-${target}-${index}`),
+    source,
+    target,
+    label: edge.label || edge.type || props.type || '',
+    data: {
+      confidence: toNumber(edge.confidence ?? props.confidence, 0.8),
+      ...props
+    }
+  }
+}
 
-  // 加载领域树和统计信息
-  loadDomainTree()
-})
+function normalizeLabels(labels: any): string[] {
+  if (Array.isArray(labels)) return labels.map(String)
+  if (labels && typeof labels[Symbol.iterator] === 'function') return Array.from(labels, String)
+  return labels ? [String(labels)] : []
+}
 
-const handleResize = () => {
-  if (graphInstance.value && graphContainer.value) {
-    const width = graphContainer.value.clientWidth
-    const height = graphContainer.value.clientHeight || 600
-    // @ts-expect-error - G6: changeSize does not exist on new G6 Graph type
-    graphInstance.value.changeSize(width, height)
+function normalizeId(value: any): string {
+  return value == null ? '' : String(value)
+}
+
+function toNumber(value: any, fallback: number): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function gridPosition(index: number) {
+  const cols = 5
+  return {
+    x: 80 + (index % cols) * 230,
+    y: 100 + Math.floor(index / cols) * 150
+  }
+}
+
+function handleGraphNodeClick(node: FlowNode<FlowNodeData>) {
+  selectedNode.value = {
+    id: node.id,
+    ...node.data
   }
 }
 
 const handleDomainClick = (data: any) => {
-  if (data.name) {
-    loadGraph(data.name)
-  }
+  const domain = data.id === '__all__' ? '' : data.name
+  loadGraph(domain)
 }
 
 const toggleAiView = () => {
   showAiView.value = !showAiView.value
   ElMessage.success(showAiView.value ? '已切换到AI归纳视图' : '已切换到原始视图')
-  // In real implementation, this would filter nodes based on confidence
-}
-
-const zoomIn = () => {
-  if (graphInstance.value) {
-    const zoom = graphInstance.value.getZoom()
-    graphInstance.value.zoomTo(zoom * 1.2)
-  }
-}
-
-const zoomOut = () => {
-  if (graphInstance.value) {
-    const zoom = graphInstance.value.getZoom()
-    graphInstance.value.zoomTo(zoom / 1.2)
-  }
-}
-
-const fitView = () => {
-  if (graphInstance.value) {
-    graphInstance.value.fitView()
-  }
-}
-
-const refreshLayout = () => {
-  if (graphInstance.value) {
-    graphInstance.value.layout()
-  }
 }
 
 const generateTestCases = () => {
@@ -397,6 +341,21 @@ const goToReview = () => {
   if (!selectedNode.value) return
   router.push(`/projects/${projectId.value}/reviews?nodeId=${selectedNode.value.id}`)
 }
+
+onMounted(async () => {
+  await loadVersions()
+  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+  const urlVersion = (route.query.version as string) || ''
+  if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
+    currentVersion.value = urlVersion
+  } else if (versions.value.length > 0) {
+    currentVersion.value = versions.value[0].id
+  }
+  if (currentVersion.value) {
+    const domainQuery = route.query.domain as string
+    await loadGraph(domainQuery || '')
+  }
+})
 </script>
 
 <style scoped>

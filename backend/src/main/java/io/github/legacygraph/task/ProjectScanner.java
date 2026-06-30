@@ -1,7 +1,9 @@
 package io.github.legacygraph.task;
 
+import io.github.legacygraph.agent.DbSchemaAnalysisAgent;
 import io.github.legacygraph.builder.FrontendGraphBuilder;
 import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.dto.DbSchemaAnalysis;
 import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.DbConnection;
 import io.github.legacygraph.entity.Document;
@@ -66,6 +68,11 @@ public class ProjectScanner {
     private final FrontendGraphBuilder frontendGraphBuilder;
     private final ObjectMapper objectMapper;
     private final AiScanOrchestrator aiScanOrchestrator;
+    private final DbSchemaAnalysisAgent dbSchemaAnalysisAgent;
+
+    /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator;
 
     /** 后端项目标志文件 */
     private static final List<String> BACKEND_INDICATORS = List.of(
@@ -95,7 +102,8 @@ public class ProjectScanner {
                          GraphBuilder graphBuilder,
                          FrontendGraphBuilder frontendGraphBuilder,
                          ObjectMapper objectMapper,
-                         AiScanOrchestrator aiScanOrchestrator) {
+                         AiScanOrchestrator aiScanOrchestrator,
+                         DbSchemaAnalysisAgent dbSchemaAnalysisAgent) {
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
@@ -106,6 +114,7 @@ public class ProjectScanner {
         this.frontendGraphBuilder = frontendGraphBuilder;
         this.objectMapper = objectMapper;
         this.aiScanOrchestrator = aiScanOrchestrator;
+        this.dbSchemaAnalysisAgent = dbSchemaAnalysisAgent;
     }
 
     /**
@@ -114,6 +123,12 @@ public class ProjectScanner {
     @Async
     public void startFullScan(String projectId, String versionId, String baseDir) {
         log.info("Starting full scan: projectId={}, versionId={}, baseDir={}", projectId, versionId, baseDir);
+
+        // 重新扫描会重建图谱，先失效该版本的图谱/报告只读缓存、进度缓存与项目概览
+        if (graphCacheInvalidator != null) {
+            graphCacheInvalidator.invalidateVersion(versionId);
+            graphCacheInvalidator.invalidateProjectOverview(projectId);
+        }
 
         ScanVersion version = scanVersionRepository.getById(versionId);
         if (version != null) {
@@ -130,7 +145,7 @@ public class ProjectScanner {
             );
             String backendDir = baseDir;
             String frontendDir = baseDir;
-            if (!repos.isEmpty()) {
+            if (!repos.isEmpty() && baseDir != null) {
                 CodeRepo repo = repos.get(0);
                 if (repo.getBackendSubPath() != null && !repo.getBackendSubPath().isBlank()) {
                     backendDir = Paths.get(baseDir, repo.getBackendSubPath()).toString();
@@ -198,14 +213,25 @@ public class ProjectScanner {
                 for (DbConnection conn : dbConnections) {
                     try {
                         DataSource dataSource = createDataSource(conn);
-                        scanDatabaseMetadata(projectId, versionId, dataSource, conn.getSchemaName());
-                        totalTables += conn.getTableCount() != null ? conn.getTableCount() : 0;
+                        totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn.getSchemaName());
                     } catch (Exception e) {
                         log.warn("Failed to scan database connection {}: {}", conn.getId(), e.getMessage());
                     }
                 }
                 completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables + " tables", null);
                 log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables);
+
+                // LLM 语义增强：从 Neo4j 构建 Schema 摘要，调用 LLM 分析
+                if (totalTables > 0) {
+                    try {
+                        String schemaText = graphBuilder.buildDbSchemaSummary(projectId, versionId);
+                        if (schemaText != null && !schemaText.isBlank()) {
+                            enrichDbGraphWithLLM(projectId, versionId, schemaText);
+                        }
+                    } catch (Exception e) {
+                        log.warn("DB schema LLM enrichment failed (non-blocking): {}", e.getMessage());
+                    }
+                }
             }
 
             // 5. 图谱已由各 Builder 在扫描过程中直写 Neo4j，无需额外同步步骤
@@ -251,6 +277,7 @@ public class ProjectScanner {
      * @return 新创建或更新的数据库连接数量
      */
     private int discoverDbConnections(String projectId, String baseDir) {
+        if (baseDir == null) return 0;
         int count = 0;
         try {
             Path basePath = Paths.get(baseDir);
@@ -523,6 +550,7 @@ public class ProjectScanner {
      * @return 更新的仓库数量
      */
     private int discoverSubPaths(String projectId, String baseDir) {
+        if (baseDir == null) return 0;
         int count = 0;
         try {
             Path basePath = Paths.get(baseDir);
@@ -609,6 +637,7 @@ public class ProjectScanner {
      * @return 发现的文档数量
      */
     private int discoverDocuments(String projectId, String versionId, String baseDir) {
+        if (baseDir == null) return 0;
         int count = 0;
         try {
             Path basePath = Paths.get(baseDir);
@@ -750,6 +779,7 @@ public class ProjectScanner {
     // ==================== 代码扫描 ====================
 
     private int scanJavaControllers(String projectId, String versionId, String baseDir, ScanTask task) {
+        if (baseDir == null) return 0;
         JavaControllerExtractor extractor = new JavaControllerExtractor();
         int totalCount = 0;
         try {
@@ -781,6 +811,7 @@ public class ProjectScanner {
     }
 
     private int scanMyBatisXml(String projectId, String versionId, String baseDir, ScanTask task) {
+        if (baseDir == null) return 0;
         MyBatisXmlExtractor extractor = new MyBatisXmlExtractor();
         int mapperCount = 0;
         try {
@@ -806,18 +837,21 @@ public class ProjectScanner {
         return mapperCount;
     }
 
-    public void scanDatabaseMetadata(String projectId, String versionId, DataSource dataSource, String schema) {
+    public int scanDatabaseMetadata(String projectId, String versionId, DataSource dataSource, String schema) {
         DatabaseMetadataExtractor extractor = new DatabaseMetadataExtractor();
         try {
             var tables = extractor.extractFromSchema(dataSource, schema);
             graphBuilder.buildDatabaseGraph(projectId, versionId, tables);
             log.info("Extracted {} tables from database schema {}", tables.size(), schema);
+            return tables.size();
         } catch (Exception e) {
             log.error("Failed to extract database metadata", e);
+            return 0;
         }
     }
 
     private int scanFrontendFiles(String projectId, String versionId, String baseDir, ScanTask task) {
+        if (baseDir == null) return 0;
         VueRouteExtractor vueExtractor = new VueRouteExtractor();
         FrontendApiExtractor apiExtractor = new FrontendApiExtractor();
         int totalCount = 0;
@@ -866,6 +900,7 @@ public class ProjectScanner {
     }
 
     private int scanServiceCalls(String projectId, String versionId, String baseDir, ScanTask task) {
+        if (baseDir == null) return 0;
         ServiceCallExtractor extractor = new ServiceCallExtractor();
         int totalCount = 0;
         try {
@@ -1005,6 +1040,22 @@ public class ProjectScanner {
                 version.setFinishedAt(LocalDateTime.now());
                 scanVersionRepository.updateById(version);
             }
+        }
+    }
+
+    /**
+     * 调用 LLM 对数据库 Schema 进行语义分析，并丰富图谱。
+     */
+    private void enrichDbGraphWithLLM(String projectId, String versionId, String schemaText) {
+        log.info("Starting LLM DB schema analysis: projectId={}, versionId={}", projectId, versionId);
+        try {
+            DbSchemaAnalysis analysis = dbSchemaAnalysisAgent.analyze(projectId, schemaText);
+            if (analysis != null) {
+                graphBuilder.enrichDbGraphWithLLM(projectId, versionId, analysis);
+                log.info("LLM DB schema enrichment completed: projectId={}", projectId);
+            }
+        } catch (Exception e) {
+            log.warn("LLM DB schema analysis failed: {}", e.getMessage());
         }
     }
 }

@@ -30,11 +30,17 @@ public class GraphCacheInvalidator {
     public void invalidateVersion(String versionId) {
         if (versionId != null) {
             cacheService.evictByPrefix("graph:" + versionId.replace("-", "") + ":");
+            // 验证报告以传入 versionId 原样为键；写点可能传入带/不带横线两种格式，均失效
+            cacheService.evictByPrefix("validation-report::" + versionId);
+            cacheService.evictByPrefix("validation-report::" + versionId.replace("-", ""));
         } else {
             cacheService.evictByPrefix("graph:");
+            cacheService.evictByPrefix("validation-report");
         }
         // 报告缓存键形如 lg:report-xxx::projectId:versionId，按 report- 前缀整体失效
         cacheService.evictByPrefix("report-");
+        // 语义检索结果缓存（向量库随扫描更新；短 TTL + 此处兜底失效）
+        cacheService.evictByPrefix("vec:search:");
         log.debug("Graph/report cache invalidated for version={}", versionId);
     }
 
@@ -43,5 +49,17 @@ public class GraphCacheInvalidator {
      */
     public void invalidateAll() {
         invalidateVersion(null);
+    }
+
+    /**
+     * 失效指定项目的概览缓存（仪表盘）。
+     * 在扫描、审核、源接入变更后调用。
+     */
+    public void invalidateProjectOverview(String projectId) {
+        if (projectId == null) {
+            cacheService.evictByPrefix("project-overview");
+        } else {
+            cacheService.evictByPrefix("project-overview::" + projectId);
+        }
     }
 }

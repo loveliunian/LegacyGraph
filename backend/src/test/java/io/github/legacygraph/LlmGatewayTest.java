@@ -8,6 +8,7 @@ import io.github.legacygraph.llm.LlmGateway;
 import io.github.legacygraph.llm.PiiMaskingService;
 import io.github.legacygraph.llm.PromptTemplateLoader;
 import io.github.legacygraph.repository.PromptRunRepository;
+import io.github.legacygraph.service.CacheService;
 import io.github.legacygraph.service.LlmProviderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Map;
 
 import java.util.Map;
 
@@ -41,8 +44,12 @@ class LlmGatewayTest {
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
-        // 使用真实的模板加载器与脱敏服务，更贴近生产路径
-        PromptTemplateLoader templateLoader = new PromptTemplateLoader();
+        // 模板加载器：DB 无模板时回退到 classpath 文件
+        io.github.legacygraph.service.PromptTemplateService promptTemplateService =
+                org.mockito.Mockito.mock(io.github.legacygraph.service.PromptTemplateService.class);
+        org.mockito.Mockito.lenient().when(promptTemplateService.getActiveByCode(
+                org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+        PromptTemplateLoader templateLoader = new PromptTemplateLoader(promptTemplateService);
         PiiMaskingService piiMaskingService = new PiiMaskingService();
         llmGateway = new LlmGateway(objectMapper, promptRunRepository, templateLoader,
                 piiMaskingService, llmProviderService);
@@ -85,5 +92,31 @@ class LlmGatewayTest {
         assertEquals("FAILED", audited.getStatus());
         assertNotNull(audited.getInputHash(), "应写入 inputHash 用于缓存/去重");
         assertEquals(64, audited.getInputHash().length(), "SHA-256 十六进制应为 64 位");
+    }
+
+    @Test
+    void testCallWithTemplate_CacheHit_SkipsLlmCall() {
+        // given: 注入 CacheService 并命中缓存
+        CacheService cacheService = org.mockito.Mockito.mock(CacheService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(llmGateway, "cacheService", cacheService);
+
+        Map<String, String> vars = Map.of(
+                "candidateAKey", "a", "candidateAInfo", "infoA",
+                "candidateBKey", "b", "candidateBInfo", "infoB",
+                "nameScore", "0.9", "semanticScore", "0.8", "structScore", "0.7",
+                "neighborScore", "0.6", "evidenceScore", "0.5");
+        String cachedJson = "{\"candidateA\":\"a\",\"candidateB\":\"b\",\"decision\":\"REVIEW\",\"score\":0.7}";
+        when(cacheService.getString(org.mockito.ArgumentMatchers.startsWith("llm:result:")))
+                .thenReturn(cachedJson);
+
+        // when: 命中缓存，不应触发提供商获取 / ChatModel 调用 / PromptRun 写入
+        GraphMergeDecision result = llmGateway.callWithTemplate("proj-1", "graph-merge-decision",
+                vars, GraphMergeDecision.class);
+
+        // then
+        assertNotNull(result);
+        assertEquals(GraphMergeDecision.Decision.REVIEW, result.getDecision());
+        verifyNoInteractions(llmProviderService);
+        verifyNoInteractions(promptRunRepository);
     }
 }

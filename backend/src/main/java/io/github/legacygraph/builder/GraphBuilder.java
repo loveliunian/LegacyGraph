@@ -21,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -222,7 +224,7 @@ public class GraphBuilder {
 
             // 解析SQL表关系
             SqlTableExtractor.SqlTableResult tableResult = new SqlTableExtractor().extractTables(stmt.getSql());
-            analyzeSqlAndCreateReview(projectId, sqlKey, sqlNode, stmt, tableResult);
+            analyzeSqlAndCreateReview(projectId, versionId, sqlKey, sqlNode, stmt, tableResult);
 
             // 建立读写关系
             for (String readTable : tableResult.getReadTables()) {
@@ -276,7 +278,7 @@ public class GraphBuilder {
         }
     }
 
-    private void analyzeSqlAndCreateReview(String projectId, String sqlKey, GraphNode sqlNode,
+    private void analyzeSqlAndCreateReview(String projectId, String versionId, String sqlKey, GraphNode sqlNode,
                                            MyBatisXmlExtractor.SqlStatement stmt,
                                            SqlTableExtractor.SqlTableResult tableResult) {
         if (sqlAdvisorAgent == null || stmt.getSql() == null || stmt.getSql().isBlank()) {
@@ -301,6 +303,7 @@ public class GraphBuilder {
             ReviewRecord review = new ReviewRecord();
             review.setId(UUID.randomUUID().toString());
             review.setProjectId(projectId);
+            review.setVersionId(versionId);
             review.setTargetType(NodeType.SqlStatement.name());
             review.setTargetId(sqlNode.getId());
             review.setTargetName(sqlNode.getDisplayName());
@@ -527,13 +530,19 @@ public class GraphBuilder {
     }
 
     /**
-     * 创建边
+     * 创建边（去重：按 fromNodeId+toNodeId+edgeType+edgeKey 查找，已存在则直接返回）
      */
     private GraphEdge createEdge(String projectId, String versionId,
             String fromNodeId, String toNodeId,
             String edgeType, String edgeKey,
             String sourceType, BigDecimal confidence,
             NodeStatus status) {
+        // 先去重检查
+        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(fromNodeId, toNodeId, edgeType, edgeKey);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
         GraphEdge edge = new GraphEdge();
         edge.setId(UUID.randomUUID().toString());
         edge.setProjectId(projectId);
@@ -551,7 +560,6 @@ public class GraphBuilder {
         neo4jGraphDao.createEdge(edge);
 
         // 从源节点继承证据（创建关联）
-        // 找到源节点的证据，关联到这条边
         com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NodeEvidence> neQuery =
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
         neQuery.eq(NodeEvidence::getNodeId, fromNodeId);
@@ -707,5 +715,204 @@ public class GraphBuilder {
      */
     private GraphNode findExistingNode(String projectId, String versionId, String nodeType, String nodeKey) {
         return neo4jGraphDao.findNode(projectId, versionId, nodeType, nodeKey).orElse(null);
+    }
+
+    /**
+     * 从 Neo4j 构建数据库 Schema 文本摘要，用于 LLM 分析。
+     * 包含表名、注释、列名和列注释。
+     */
+    public String buildDbSchemaSummary(String projectId, String versionId) {
+        StringBuilder sb = new StringBuilder();
+        List<GraphNode> tables = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Table.name(),
+                null, null, null, 500);
+        if (tables.isEmpty()) {
+            return null;
+        }
+
+        sb.append("数据库 Schema 信息：\n");
+        sb.append("共 ").append(tables.size()).append(" 张表\n\n");
+
+        for (GraphNode tableNode : tables) {
+            sb.append("- 表: ").append(tableNode.getNodeName());
+            if (tableNode.getDescription() != null && !tableNode.getDescription().isBlank()) {
+                sb.append(" (").append(tableNode.getDescription()).append(")");
+            }
+            sb.append("\n");
+
+            // 查询该表的列节点
+            List<GraphEdge> columnEdges = neo4jGraphDao.queryEdges(
+                    projectId, versionId,
+                    EdgeType.HAS_COLUMN.name(),
+                    null, tableNode.getId(),
+                    null, null, 200);
+            for (GraphEdge edge : columnEdges) {
+                GraphNode colNode = neo4jGraphDao.findNodeById(edge.getToNodeId()).orElse(null);
+                if (colNode != null) {
+                    sb.append("  - ").append(colNode.getNodeName());
+                    if (colNode.getDescription() != null && !colNode.getDescription().isBlank()) {
+                        sb.append(" -- ").append(colNode.getDescription());
+                    }
+                    sb.append("\n");
+                }
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 用 LLM 分析结果丰富数据库图谱节点。
+     * 更新 Table 节点的描述信息，创建 BusinessDomain 节点和关系。
+     */
+    @Transactional
+    public void enrichDbGraphWithLLM(String projectId, String versionId,
+                                      io.github.legacygraph.dto.DbSchemaAnalysis analysis) {
+        if (analysis == null) {
+            return;
+        }
+
+        // 一次性构建表名→nodeKey 映射
+        Map<String, String> tableNameToKey = buildTableNameKeyMap(projectId, versionId);
+
+        // 1. 更新 Table 节点的业务描述和域标签
+        if (analysis.getTables() != null) {
+            for (var tableInsight : analysis.getTables()) {
+                String tableKey = buildTableKey(tableNameToKey, tableInsight.getTableName());
+                if (tableKey == null) continue;
+
+                GraphNode tableNode = findExistingNode(projectId, versionId,
+                        NodeType.Table.name(), tableKey);
+                if (tableNode != null) {
+                    boolean updated = false;
+                    if (tableInsight.getBusinessLabel() != null
+                            && !tableInsight.getBusinessLabel().isBlank()) {
+                        tableNode.setDisplayName(
+                                tableInsight.getBusinessLabel() + " (" + tableNode.getNodeName() + ")");
+                        updated = true;
+                    }
+                    if (tableInsight.getBusinessDescription() != null
+                            && !tableInsight.getBusinessDescription().isBlank()) {
+                        String desc = tableInsight.getBusinessDescription();
+                        if (tableInsight.getDomain() != null) {
+                            desc = "[" + tableInsight.getDomain() + "] " + desc;
+                        }
+                        tableNode.setDescription(desc);
+                        updated = true;
+                    }
+                    if (updated) {
+                        tableNode.setUpdatedAt(LocalDateTime.now());
+                        neo4jGraphDao.updateNode(tableNode);
+                    }
+                }
+            }
+        }
+
+        // 2. 创建 BusinessDomain 节点
+        if (analysis.getDomains() != null) {
+            for (var domain : analysis.getDomains()) {
+                if (domain.getName() == null || domain.getName().isBlank()) continue;
+
+                GraphNode domainNode = findOrCreateNode(
+                        projectId, versionId,
+                        NodeType.BusinessDomain.name(),
+                        domain.getName(),
+                        domain.getName(),
+                        domain.getName(),
+                        domain.getDescription(),
+                        SourceType.DB_METADATA.name(),
+                        null, null, null,
+                        java.math.BigDecimal.valueOf(0.85),
+                        NodeStatus.PENDING_CONFIRM
+                );
+
+                // 将属于该域的表关联到 BusinessDomain
+                if (domain.getTables() != null) {
+                    for (String tableName : domain.getTables()) {
+                        String tableKey = buildTableKey(tableNameToKey, tableName);
+                        if (tableKey == null) continue;
+                        GraphNode tableNode = findExistingNode(projectId, versionId,
+                                NodeType.Table.name(), tableKey);
+                        if (tableNode != null) {
+                            createEdge(projectId, versionId,
+                                    domainNode.getId(), tableNode.getId(),
+                                    EdgeType.CONTAINS.name(),
+                                    domain.getName() + "->contains->" + tableKey,
+                                    SourceType.DB_METADATA.name(),
+                                    java.math.BigDecimal.valueOf(0.85),
+                                    NodeStatus.PENDING_CONFIRM
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. 创建隐式关系
+        if (analysis.getImplicitRelations() != null) {
+            for (var rel : analysis.getImplicitRelations()) {
+                if (rel.getFromTable() == null || rel.getToTable() == null) continue;
+
+                String fromKey = buildTableKey(tableNameToKey, rel.getFromTable());
+                String toKey = buildTableKey(tableNameToKey, rel.getToTable());
+                if (fromKey == null || toKey == null) continue;
+
+                GraphNode fromNode = findExistingNode(projectId, versionId,
+                        NodeType.Table.name(), fromKey);
+                GraphNode toNode = findExistingNode(projectId, versionId,
+                        NodeType.Table.name(), toKey);
+                if (fromNode != null && toNode != null) {
+                    createEdge(projectId, versionId,
+                            fromNode.getId(), toNode.getId(),
+                            EdgeType.REFERENCES.name(),
+                            fromKey + "->references->" + toKey,
+                            "LLM_SCHEMA_ANALYSIS",
+                            java.math.BigDecimal.valueOf(0.7),
+                            NodeStatus.PENDING_CONFIRM
+                    );
+                }
+            }
+        }
+
+        log.info("LLM DB schema enrichment completed: {} tables, {} domains, {} implicit relations",
+                analysis.getTables() != null ? analysis.getTables().size() : 0,
+                analysis.getDomains() != null ? analysis.getDomains().size() : 0,
+                analysis.getImplicitRelations() != null ? analysis.getImplicitRelations().size() : 0);
+    }
+
+    /**
+     * 根据表名查找 tableKey（通过表名模糊匹配 Neo4j 中的 Table 节点）。
+     */
+    private String buildTableKey(Map<String, String> tableNameToKey, String tableName) {
+        if (tableName == null || tableName.isBlank()) return null;
+        // 精确匹配
+        String key = tableNameToKey.get(tableName);
+        if (key != null) return key;
+        // 表名已包含 schema 前缀，直接使用
+        if (tableName.contains(".")) return tableName;
+        // 模糊匹配（去掉前缀如 t_ 等）
+        for (Map.Entry<String, String> entry : tableNameToKey.entrySet()) {
+            if (entry.getKey().endsWith("." + tableName) || entry.getKey().endsWith(tableName)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 构建表名 → nodeKey 映射（nodeName 为不带 schema 前缀的表名）。
+     */
+    private Map<String, String> buildTableNameKeyMap(String projectId, String versionId) {
+        Map<String, String> map = new java.util.HashMap<>();
+        List<GraphNode> tables = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Table.name(),
+                null, null, null, 500);
+        for (GraphNode node : tables) {
+            String nodeName = node.getNodeName();
+            if (nodeName != null && !nodeName.isBlank()) {
+                map.put(nodeName, node.getNodeKey());
+            }
+        }
+        return map;
     }
 }

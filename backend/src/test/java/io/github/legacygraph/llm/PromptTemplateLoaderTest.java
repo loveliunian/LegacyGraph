@@ -20,7 +20,12 @@ class PromptTemplateLoaderTest {
 
     @BeforeEach
     void setUp() {
-        loader = new PromptTemplateLoader();
+        // DB 中无模板时回退到 classpath 文件（测试用 src/test/resources/prompts 下的模板）
+        io.github.legacygraph.service.PromptTemplateService svc =
+                org.mockito.Mockito.mock(io.github.legacygraph.service.PromptTemplateService.class);
+        org.mockito.Mockito.lenient().when(svc.getActiveByCode(
+                org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+        loader = new PromptTemplateLoader(svc);
     }
 
     /**

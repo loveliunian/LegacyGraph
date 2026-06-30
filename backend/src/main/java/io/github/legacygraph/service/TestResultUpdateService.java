@@ -118,6 +118,7 @@ public class TestResultUpdateService {
                 ReviewRecord review = new ReviewRecord();
                 review.setId(UUID.randomUUID().toString());
                 review.setProjectId(node.getProjectId());
+                review.setVersionId(node.getVersionId());
                 review.setTargetType(node.getNodeType());
                 review.setTargetId(node.getId());
                 review.setTargetName(node.getDisplayName());

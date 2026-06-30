@@ -104,6 +104,25 @@ public class GraphQueryController {
     }
 
     /**
+     * 获取版本中所有数据库表节点（仅节点，不含边，轻量查询）
+     * 用于数据血缘页面快速加载表列表
+     */
+    @GetMapping("/graph/tables")
+    @Operation(summary = "获取数据库表节点列表", description = "查询指定版本的所有Table类型节点，仅返回节点不返回边，用于轻量表列表展示")
+    public Result<List<Map<String, Object>>> getTablesNodes(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam String versionId) {
+        try {
+            List<Map<String, Object>> result = graphQueryService.getTablesNodes(projectId, versionId);
+            return Result.success(result);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /**
      * 查询功能图谱视图
      * 按功能模块展示知识图谱，输出该模块下的所有节点和边关系
      * @param projectId 项目ID

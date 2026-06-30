@@ -96,17 +96,7 @@ public class GraphQueryService {
             while (result.hasNext()) {
                 Record record = result.next();
                 Path path = record.get("p").asPath();
-                Map<String, Object> pathMap = new HashMap<>();
-                List<Map<String, Object>> nodes = new ArrayList<>();
-                for (var node : path.nodes()) {
-                    Map<String, Object> nodeMap = new HashMap<>();
-                    nodeMap.put("id", node.id());
-                    nodeMap.put("labels", node.labels());
-                    nodeMap.put("properties", node.asMap());
-                    nodes.add(nodeMap);
-                }
-                pathMap.put("nodes", nodes);
-                response.add(pathMap);
+                response.add(pathToMap(path));
             }
             return response;
         }
@@ -141,7 +131,8 @@ public class GraphQueryService {
             List<Map<String, Object>> response = new ArrayList<>();
             while (result.hasNext()) {
                 Record record = result.next();
-                response.add(record.asMap());
+                Path path = record.get("p").asPath();
+                response.add(pathToMap(path));
             }
             return response;
         }
@@ -370,6 +361,36 @@ public class GraphQueryService {
     }
 
     /**
+     * 获取版本中所有数据库表节点（仅节点，不含边，轻量查询）
+     * 用于数据血缘页面快速加载表列表，避免加载全量统一图谱。
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getTablesNodes(String projectId, String versionId) {
+        String key = graphKey(versionId, "tables", projectId);
+        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
+                () -> getTablesNodesUncached(projectId, versionId));
+    }
+
+    private List<Map<String, Object>> getTablesNodesUncached(String projectId, String versionId) {
+        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        List<GraphNode> tableNodes = neo4jGraphDao.queryNodes(
+                projectId, normalizedVersionId, "Table", null, null, null, 0);
+
+        return tableNodes.stream().map(node -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", node.getId());
+            m.put("key", node.getNodeKey());
+            m.put("label", node.getDisplayName());
+            m.put("type", node.getNodeType());
+            m.put("confidence", node.getConfidence());
+            m.put("status", node.getStatus());
+            m.put("columnCount", 0);       // 前端自行扩展
+            m.put("relationCount", 0);
+            return m;
+        }).toList();
+    }
+
+    /**
      * 获取统一图谱全量数据（支持按状态过滤、返回空视图结构化原因）
      * 从 Neo4j 查询指定扫描版本的所有节点和边，按置信度+状态过滤后返回
      */
@@ -580,6 +601,66 @@ public class GraphQueryService {
             case "HAS_COLUMN" -> "字段";
             default -> edgeType;
         };
+    }
+
+    private Map<String, Object> pathToMap(Path path) {
+        Map<String, Object> pathMap = new HashMap<>();
+        List<Map<String, Object>> nodes = new ArrayList<>();
+        List<Map<String, Object>> relationships = new ArrayList<>();
+
+        Iterable<org.neo4j.driver.types.Node> pathNodes = path.nodes();
+        if (pathNodes != null) {
+            for (var node : pathNodes) {
+                nodes.add(neo4jNodeToMap(node));
+            }
+        }
+        Iterable<org.neo4j.driver.types.Relationship> pathRelationships = path.relationships();
+        if (pathRelationships != null) {
+            for (var rel : pathRelationships) {
+                relationships.add(neo4jRelationshipToMap(rel));
+            }
+        }
+
+        pathMap.put("nodes", nodes);
+        pathMap.put("edges", relationships);
+        pathMap.put("relationships", relationships);
+        return pathMap;
+    }
+
+    private Map<String, Object> neo4jNodeToMap(org.neo4j.driver.types.Node node) {
+        Map<String, Object> nodeMap = new HashMap<>();
+        nodeMap.put("id", neo4jNodeId(node));
+        nodeMap.put("labels", node.labels());
+        nodeMap.put("properties", node.asMap());
+        return nodeMap;
+    }
+
+    private Map<String, Object> neo4jRelationshipToMap(org.neo4j.driver.types.Relationship rel) {
+        Map<String, Object> relMap = new HashMap<>();
+        relMap.put("id", neo4jRelationshipId(rel));
+        relMap.put("type", rel.type());
+        relMap.put("source", rel.startNodeElementId());
+        relMap.put("target", rel.endNodeElementId());
+        relMap.put("startNodeId", rel.startNodeElementId());
+        relMap.put("endNodeId", rel.endNodeElementId());
+        relMap.put("properties", rel.asMap());
+        return relMap;
+    }
+
+    private String neo4jNodeId(org.neo4j.driver.types.Node node) {
+        String elementId = node.elementId();
+        if (elementId != null && !elementId.isBlank()) {
+            return elementId;
+        }
+        return String.valueOf(node.id());
+    }
+
+    private String neo4jRelationshipId(org.neo4j.driver.types.Relationship rel) {
+        String elementId = rel.elementId();
+        if (elementId != null && !elementId.isBlank()) {
+            return elementId;
+        }
+        return String.valueOf(rel.id());
     }
 
     /**

@@ -31,6 +31,7 @@ import java.io.File;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -296,7 +297,7 @@ public class AiScanOrchestrator {
             } catch (Exception e) {
                 log.warn("Failed to persist AI feature mapping edge {}: {}", targetId, e.getMessage());
             }
-            if (createMappingReviewRecord(projectId, mapping, targetId)) {
+            if (createMappingReviewRecord(projectId, versionId, mapping, targetId)) {
                 persisted++;
             }
         }
@@ -316,6 +317,15 @@ public class AiScanOrchestrator {
         if (page == null || api == null) {
             return null;
         }
+
+        String edgeKey = "ai-feature:" + mapping.getPageKey() + "->" + mapping.getApiKey();
+        // 去重：已存在则直接返回
+        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(
+                page.getId(), api.getId(), EdgeType.CALLS.name(), edgeKey);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
         GraphEdge edge = new GraphEdge();
         edge.setId(UUID.randomUUID().toString());
         edge.setProjectId(projectId);
@@ -323,7 +333,7 @@ public class AiScanOrchestrator {
         edge.setFromNodeId(page.getId());
         edge.setToNodeId(api.getId());
         edge.setEdgeType(EdgeType.CALLS.name());
-        edge.setEdgeKey("ai-feature:" + mapping.getPageKey() + "->" + mapping.getApiKey());
+        edge.setEdgeKey(edgeKey);
         edge.setSourceType("AI_FEATURE_MAPPING");
         edge.setConfidence(BigDecimal.valueOf(normalizeConfidence(mapping.getConfidence())));
         edge.setStatus("PENDING_CONFIRM");
@@ -437,7 +447,7 @@ public class AiScanOrchestrator {
                 if (conf >= minConfidence) {
                     continue;
                 }
-                if (createReviewRecord(projectId, node, conf)) {
+                if (createReviewRecord(projectId, versionId, node, conf)) {
                     created++;
                 }
             }
@@ -448,7 +458,7 @@ public class AiScanOrchestrator {
         }
     }
 
-    private boolean createReviewRecord(String projectId, GraphNode node, double confidence) {
+    private boolean createReviewRecord(String projectId, String versionId, GraphNode node, double confidence) {
         try {
             // 去重：同一目标已有待审核记录则跳过
             long exists = reviewRecordRepository.selectCount(
@@ -462,6 +472,7 @@ public class AiScanOrchestrator {
             ReviewRecord record = new ReviewRecord();
             record.setId(UUID.randomUUID().toString());
             record.setProjectId(projectId);
+            record.setVersionId(versionId);
             record.setTargetType("NODE");
             record.setTargetId(node.getId());
             record.setTargetName(node.getNodeName());
@@ -479,7 +490,7 @@ public class AiScanOrchestrator {
         }
     }
 
-    private boolean createMappingReviewRecord(String projectId, FeatureMappingAgent.Mapping mapping, String targetId) {
+    private boolean createMappingReviewRecord(String projectId, String versionId, FeatureMappingAgent.Mapping mapping, String targetId) {
         try {
             long exists = reviewRecordRepository.selectCount(
                     new LambdaQueryWrapper<ReviewRecord>()
@@ -492,6 +503,7 @@ public class AiScanOrchestrator {
             ReviewRecord record = new ReviewRecord();
             record.setId(UUID.randomUUID().toString());
             record.setProjectId(projectId);
+            record.setVersionId(versionId);
             record.setTargetType("EDGE");
             record.setTargetId(targetId);
             record.setTargetName(mappingTargetId(mapping));

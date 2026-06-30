@@ -21,8 +21,25 @@ public class Neo4jGraphDao {
 
     private final Driver neo4jDriver;
 
+    /** 节点详情缓存（可选）：findNodeById 高频单点查；写时失效，短 TTL 兜底。Redis 不可用时为 null。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.CacheService cacheService;
+
+    /** 节点详情缓存 TTL（短，作为写时失效的兜底） */
+    private static final java.time.Duration NODE_CACHE_TTL = java.time.Duration.ofSeconds(60);
+
     public Neo4jGraphDao(Driver neo4jDriver) {
         this.neo4jDriver = neo4jDriver;
+    }
+
+    private String nodeCacheKey(String nodeId) {
+        return "graph:node:" + nodeId;
+    }
+
+    private void evictNodeCache(String nodeId) {
+        if (cacheService != null && nodeId != null) {
+            cacheService.evict(nodeCacheKey(nodeId));
+        }
     }
 
     // ==================== Node CRUD ====================
@@ -69,12 +86,22 @@ public class Neo4jGraphDao {
 
     /** 按 ID 查找节点 */
     public Optional<GraphNode> findNodeById(String nodeId) {
+        if (cacheService != null && nodeId != null) {
+            GraphNode cached = cacheService.get(nodeCacheKey(nodeId), GraphNode.class);
+            if (cached != null) {
+                return Optional.of(cached);
+            }
+        }
         try (Session session = neo4jDriver.session()) {
             Result result = session.run(
                     "MATCH (n) WHERE n.id = $id RETURN n LIMIT 1",
                     Map.of("id", nodeId));
             if (result.hasNext()) {
-                return Optional.of(recordToNode(result.next().get("n").asNode()));
+                GraphNode node = recordToNode(result.next().get("n").asNode());
+                if (cacheService != null && nodeId != null) {
+                    cacheService.put(nodeCacheKey(nodeId), node, NODE_CACHE_TTL);
+                }
+                return Optional.of(node);
             }
         }
         return Optional.empty();
@@ -231,6 +258,7 @@ public class Neo4jGraphDao {
                     "updatedAt", LocalDateTime.now().toString()
             ));
         }
+        evictNodeCache(node.getId());
     }
 
     // ==================== Edge CRUD ====================
@@ -265,13 +293,39 @@ public class Neo4jGraphDao {
         }
     }
 
+    /**
+     * 查找已存在的边（用于去重）。
+     * 按 (fromNodeId, toNodeId, edgeType, edgeKey) 唯一标识一条边。
+     */
+    public Optional<GraphEdge> findEdge(String fromNodeId, String toNodeId, String edgeType, String edgeKey) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher = "MATCH (from {id: $fromId})-[r]->(to {id: $toId}) " +
+                    "WHERE type(r) = $edgeType AND r.edgeKey = $edgeKey " +
+                    "RETURN r, from, to LIMIT 1";
+            Map<String, Object> params = new HashMap<>();
+            params.put("fromId", fromNodeId);
+            params.put("toId", toNodeId);
+            params.put("edgeType", edgeType);
+            params.put("edgeKey", edgeKey != null ? edgeKey : "");
+            Result result = session.run(cypher, params);
+            if (result.hasNext()) {
+                org.neo4j.driver.Record record = result.next();
+                return Optional.of(recordToEdge(
+                        record.get("r").asRelationship(),
+                        record.get("from").asNode(),
+                        record.get("to").asNode()));
+            }
+            return Optional.empty();
+        }
+    }
+
     /** 条件查询边列表 */
     public List<GraphEdge> queryEdges(String projectId, String versionId,
                                        Double minConfidence, String status,
                                        int limit) {
         try (Session session = neo4jDriver.session()) {
             StringBuilder cypher = new StringBuilder(
-                    "MATCH ()-[r]->() WHERE r.projectId = $projectId");
+                    "MATCH (from)-[r]->(to) WHERE r.projectId = $projectId");
             Map<String, Object> params = new HashMap<>();
             params.put("projectId", projectId);
             if (versionId != null) {
@@ -286,14 +340,17 @@ public class Neo4jGraphDao {
                 cypher.append(" AND r.status = $status");
                 params.put("status", status);
             }
-            cypher.append(" RETURN r");
+            cypher.append(" RETURN r, from, to");
             if (limit > 0) {
                 cypher.append(" LIMIT ").append(limit);
             }
             Result result = session.run(cypher.toString(), params);
             List<GraphEdge> edges = new ArrayList<>();
             while (result.hasNext()) {
-                edges.add(recordToEdge(result.next().get("r").asRelationship()));
+                org.neo4j.driver.Record record = result.next();
+                edges.add(recordToEdge(record.get("r").asRelationship(),
+                        record.get("from").asNode(),
+                        record.get("to").asNode()));
             }
             return edges;
         }
@@ -351,6 +408,73 @@ public class Neo4jGraphDao {
             "avgConfidence", 0.0, "withEvidenceCount", 0L,
             "totalEdges", 0L, "confirmedEdges", 0L, "pendingEdges", 0L
         );
+    }
+
+    /**
+     * 按节点类型聚合统计（用于迁移就绪度报告）。
+     * 单次 Cypher 聚合替代全量节点加载，避免超时。
+     * @return [{nodeType, displayName, total, confirmed, avgConfidence}]
+     */
+    public List<Map<String, Object>> nodeTypeStats(String projectId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId " +
+                "UNWIND labels(n) AS label " +
+                "WITH label AS nodeType, " +
+                "     count(*) AS total, " +
+                "     count(CASE WHEN n.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmed, " +
+                "     coalesce(avg(n.confidence), 0.0) AS avgConfidence " +
+                "RETURN nodeType, total, confirmed, avgConfidence " +
+                "ORDER BY total DESC";
+            Result result = session.run(cypher, Map.of("projectId", projectId));
+            List<Map<String, Object>> stats = new ArrayList<>();
+            while (result.hasNext()) {
+                stats.add(result.next().asMap());
+            }
+            return stats;
+        }
+    }
+
+    /**
+     * 查询低置信度节点（置信度 < 0.5），限制返回数量避免超时。
+     */
+    public List<GraphNode> queryLowConfidenceNodes(String projectId, int limit) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId " +
+                "AND coalesce(n.confidence, 0.0) < $threshold " +
+                "RETURN n ORDER BY n.confidence ASC LIMIT $limit";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "threshold", 0.5,
+                    "limit", (long) limit));
+            List<GraphNode> nodes = new ArrayList<>();
+            while (result.hasNext()) {
+                nodes.add(recordToNode(result.next().get("n").asNode()));
+            }
+            return nodes;
+        }
+    }
+
+    /**
+     * 查询无连接关系的孤立节点，限制返回数量避免超时。
+     */
+    public List<GraphNode> queryDisconnectedNodes(String projectId, int limit) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId " +
+                "OPTIONAL MATCH (n)-[r]-() WHERE r.projectId = $projectId " +
+                "WITH n, count(r) AS edgeCount WHERE edgeCount = 0 " +
+                "RETURN n LIMIT $limit";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "limit", (long) limit));
+            List<GraphNode> nodes = new ArrayList<>();
+            while (result.hasNext()) {
+                nodes.add(recordToNode(result.next().get("n").asNode()));
+            }
+            return nodes;
+        }
     }
 
     /** 更新边 */
@@ -430,6 +554,153 @@ public class Neo4jGraphDao {
         }
     }
 
+    // ==================== 报告聚合查询（避免全量加载节点/边导致超时） ====================
+
+    /**
+     * 版本维度的图统计（类似 graphStats，但限定 versionId）。
+     */
+    public Map<String, Object> versionGraphStats(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "WITH count(n) AS totalNodes, " +
+                "     count(CASE WHEN n.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedNodes, " +
+                "     count(CASE WHEN n.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingNodes, " +
+                "     coalesce(avg(n.confidence), 0.0) AS avgConfidence, " +
+                "     count(CASE WHEN n.evidenceIds IS NOT NULL AND n.evidenceIds <> '' THEN 1 END) AS withEvidenceCount, " +
+                "     count(CASE WHEN coalesce(n.verifiedScore, 0.0) > 0 THEN 1 END) AS runtimeVerifiedCount " +
+                "OPTIONAL MATCH ()-[r]->() WHERE r.projectId = $projectId AND r.versionId = $versionId " +
+                "RETURN totalNodes, confirmedNodes, pendingNodes, avgConfidence, withEvidenceCount, runtimeVerifiedCount, " +
+                "       count(r) AS totalEdges, " +
+                "       count(CASE WHEN r.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedEdges, " +
+                "       count(CASE WHEN r.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingEdges";
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            if (result.hasNext()) return result.next().asMap();
+        }
+        return Map.of("totalNodes", 0L, "confirmedNodes", 0L, "pendingNodes", 0L,
+                "avgConfidence", 0.0, "withEvidenceCount", 0L, "runtimeVerifiedCount", 0L,
+                "totalEdges", 0L, "confirmedEdges", 0L, "pendingEdges", 0L);
+    }
+
+    /**
+     * 每日置信度趋势聚合（按节点创建日期分组）。
+     */
+    public List<Map<String, Object>> confidenceTrendDaily(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "RETURN date(n.createdAt) AS date, " +
+                "       coalesce(avg(n.confidence), 0.0) AS avgConfidence, " +
+                "       count(*) AS newNodes, " +
+                "       count(CASE WHEN n.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedNodes " +
+                "ORDER BY date";
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) rows.add(result.next().asMap());
+            return rows;
+        }
+    }
+
+    /**
+     * 置信度分布直方图（5 个区间: 0-0.2, 0.2-0.4, 0.4-0.6, 0.6-0.8, 0.8-1.0）。
+     */
+    public List<Map<String, Object>> confidenceDistribution(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "WITH coalesce(n.confidence, 0.0) AS c " +
+                "RETURN " +
+                "  sum(CASE WHEN c >= 0.0 AND c < 0.2 THEN 1 ELSE 0 END) AS bin0, " +
+                "  sum(CASE WHEN c >= 0.2 AND c < 0.4 THEN 1 ELSE 0 END) AS bin1, " +
+                "  sum(CASE WHEN c >= 0.4 AND c < 0.6 THEN 1 ELSE 0 END) AS bin2, " +
+                "  sum(CASE WHEN c >= 0.6 AND c < 0.8 THEN 1 ELSE 0 END) AS bin3, " +
+                "  sum(CASE WHEN c >= 0.8 AND c <= 1.0 THEN 1 ELSE 0 END) AS bin4";
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            if (result.hasNext()) {
+                List<Map<String, Object>> list = new ArrayList<>();
+                list.add(result.next().asMap());
+                return list;
+            }
+            return List.of(Map.of("bin0", 0L, "bin1", 0L, "bin2", 0L, "bin3", 0L, "bin4", 0L));
+        }
+    }
+
+    /**
+     * 版本限定：低置信度节点（threshold 以下），按置信度升序。
+     */
+    public List<GraphNode> queryLowConfidenceNodes(String projectId, String versionId,
+                                                    double threshold, int limit) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "AND coalesce(n.confidence, 0.0) < $threshold " +
+                "RETURN n ORDER BY n.confidence ASC LIMIT $limit";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId, "versionId", versionId,
+                    "threshold", threshold, "limit", (long) limit));
+            List<GraphNode> nodes = new ArrayList<>();
+            while (result.hasNext()) nodes.add(recordToNode(result.next().get("n").asNode()));
+            return nodes;
+        }
+    }
+
+    /**
+     * 版本限定：孤立节点。
+     */
+    public List<GraphNode> queryDisconnectedNodes(String projectId, String versionId, int limit) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "OPTIONAL MATCH (n)-[r]-() WHERE r.projectId = $projectId " +
+                "WITH n, count(r) AS edgeCount WHERE edgeCount = 0 " +
+                "RETURN n LIMIT $limit";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId, "versionId", versionId,
+                    "limit", (long) limit));
+            List<GraphNode> nodes = new ArrayList<>();
+            while (result.hasNext()) nodes.add(recordToNode(result.next().get("n").asNode()));
+            return nodes;
+        }
+    }
+
+    /**
+     * 平均节点度数（版本维度）。
+     */
+    public double averageNodeDegree(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n)-[r]-() WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "AND r.projectId = $projectId AND r.versionId = $versionId " +
+                "WITH n, count(r) AS degree " +
+                "RETURN coalesce(avg(degree), 0.0) AS avgDegree";
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            if (result.hasNext()) {
+                Object v = result.next().get("avgDegree");
+                if (v instanceof Number n) return n.doubleValue();
+            }
+        }
+        return 0.0;
+    }
+
+    /**
+     * 通过测试覆盖的边计数（连接已覆盖节点的边数）。
+     * 用于计算边覆盖率，避免全量边加载。
+     */
+    public long countEdgesConnectedToNodes(String projectId, String versionId, List<String> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) return 0L;
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (from)-[r]->(to) WHERE r.projectId = $projectId AND r.versionId = $versionId " +
+                "AND (from.id IN $nodeIds OR to.id IN $nodeIds) " +
+                "RETURN count(DISTINCT r) AS cnt";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId, "versionId", versionId,
+                    "nodeIds", nodeIds));
+            if (result.hasNext()) return result.next().get("cnt").asLong();
+        }
+        return 0L;
+    }
+
     // ==================== 批量操作 ====================
 
     /** 删除指定版本的整个子图（DETACH DELETE） */
@@ -449,6 +720,7 @@ public class Neo4jGraphDao {
                     "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId AND n.id = $nodeId DETACH DELETE n",
                     Map.of("projectId", projectId, "versionId", versionId, "nodeId", nodeId));
         }
+        evictNodeCache(nodeId);
     }
 
     /**

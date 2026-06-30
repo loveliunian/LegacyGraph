@@ -16,6 +16,8 @@ public class ReviewRecord {
 
     private String projectId;
 
+    private String versionId;
+
     private String targetType;
 
     private String targetId;
@@ -39,6 +41,12 @@ public class ReviewRecord {
     private String reviewedBy;
 
     private LocalDateTime reviewedAt;
+
+    /** JSONB 字段 — 审核前数据快照 */
+    private String beforeData;
+
+    /** JSONB 字段 — 审核后数据快照 */
+    private String afterData;
 
     private LocalDateTime createdAt;
 }

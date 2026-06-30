@@ -42,7 +42,7 @@
       </el-table-column>
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="getStatusType(row.status)">
+          <el-tag v-if="row.status !== 'INIT'" size="small" :type="getStatusType(row.status)">
             {{ row.status }}
           </el-tag>
         </template>
@@ -178,8 +178,7 @@ const getStatusType = (status: string): string => {
   const map: Record<string, string> = {
     READY: 'success',
     PULLING: 'warning',
-    FAILED: 'danger',
-    INIT: 'info'
+    FAILED: 'danger'
   }
   return map[status] || 'info'
 }

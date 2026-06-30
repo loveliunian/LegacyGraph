@@ -44,6 +44,10 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const fetchCurrentUser = async () => {
+    // 已缓存用户信息，不重复请求 /lg/auth/me
+    if (userInfo.value) {
+      return userInfo.value
+    }
     if (accessToken.value) {
       const user = await authApi.getCurrentUser()
       setUserInfo(user)
@@ -74,6 +78,8 @@ export const useUserStore = defineStore('user', () => {
   persist: {
     key: 'legacy-graph-user',
     storage: localStorage,
-    paths: ['accessToken', 'refreshToken']
+    // userInfo 和 permissions 缓存到浏览器，避免每次刷新都请求 /lg/auth/me
+    // 退出登录时 clearAuth() 将它们置空，localStorage 同步清除
+    paths: ['accessToken', 'refreshToken', 'userInfo', 'permissions']
   }
 })

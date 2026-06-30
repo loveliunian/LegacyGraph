@@ -144,12 +144,30 @@ class GraphQueryServiceTest {
         when(session.run(anyString(), anyMap())).thenReturn(result);
         when(result.hasNext()).thenReturn(true, false);
         when(result.next()).thenReturn(record);
-        when(record.asMap()).thenReturn(Map.of("api", "POST /api/test", "path", "some-path"));
+        when(record.get("p")).thenReturn(mock(org.neo4j.driver.Value.class));
+        when(record.get("p").asPath()).thenReturn(path);
+
+        when(path.nodes()).thenReturn(Arrays.asList(node1, node2));
+        when(node1.elementId()).thenReturn("node-1");
+        when(node1.labels()).thenReturn(Collections.singletonList("ApiEndpoint"));
+        when(node1.asMap()).thenReturn(Map.of("nodeKey", "POST /api/test", "displayName", "测试接口"));
+        when(node2.elementId()).thenReturn("node-2");
+        when(node2.labels()).thenReturn(Collections.singletonList("Table"));
+        when(node2.asMap()).thenReturn(Map.of("nodeName", "t_user", "displayName", "用户表"));
+
+        when(path.relationships()).thenReturn(Collections.singletonList(relationship));
+        when(relationship.elementId()).thenReturn("rel-1");
+        when(relationship.type()).thenReturn("WRITES");
+        when(relationship.startNodeElementId()).thenReturn("node-1");
+        when(relationship.endNodeElementId()).thenReturn("node-2");
+        when(relationship.asMap()).thenReturn(Map.of("confidence", 0.9));
 
         List<Map<String, Object>> resultList = graphQueryService.getTableImpact("p1", "v1", "t_user");
 
         assertNotNull(resultList);
         assertEquals(1, resultList.size());
+        assertEquals(2, ((List<?>) resultList.get(0).get("nodes")).size());
+        assertEquals(1, ((List<?>) resultList.get(0).get("edges")).size());
     }
 
     @Test

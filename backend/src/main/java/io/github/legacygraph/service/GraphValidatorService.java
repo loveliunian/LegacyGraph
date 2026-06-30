@@ -53,6 +53,8 @@ public class GraphValidatorService {
             }
         }
         log.info("Updated confidence for {} relations based on test results for version {}", updated, versionId);
+        graphCacheInvalidator.invalidateVersion(versionId);
+        graphCacheInvalidator.invalidateProjectOverview(null);
     }
 
     private int updateByPassedResult(TestResult result) {
@@ -147,6 +149,8 @@ public class GraphValidatorService {
             node.setConfidence(BigDecimal.ONE);
             neo4jGraphDao.updateNode(node);
             log.info("Node confirmed: {} by {}", nodeId, reviewer);
+            graphCacheInvalidator.invalidateVersion(node.getVersionId());
+            graphCacheInvalidator.invalidateProjectOverview(node.getProjectId());
         }
     }
 
@@ -158,6 +162,8 @@ public class GraphValidatorService {
             node.setStatus("REJECTED");
             neo4jGraphDao.updateNode(node);
             log.info("Node rejected: {} by {}", nodeId, reviewer);
+            graphCacheInvalidator.invalidateVersion(node.getVersionId());
+            graphCacheInvalidator.invalidateProjectOverview(node.getProjectId());
         }
     }
 
@@ -170,6 +176,7 @@ public class GraphValidatorService {
                 edge.setConfidence(BigDecimal.ONE);
                 neo4jGraphDao.updateEdge(edge);
                 log.info("Edge confirmed: {} by {}", edgeId, reviewer);
+                graphCacheInvalidator.invalidateAll();
                 return;
             }
         }
@@ -183,11 +190,13 @@ public class GraphValidatorService {
                 edge.setStatus("REJECTED");
                 neo4jGraphDao.updateEdge(edge);
                 log.info("Edge rejected: {} by {}", edgeId, reviewer);
+                graphCacheInvalidator.invalidateAll();
                 return;
             }
         }
     }
 
+    @org.springframework.cache.annotation.Cacheable(cacheNames = "validation-report", key = "#versionId")
     public ValidationReport getValidationReport(String versionId) {
         long totalNodes = neo4jGraphDao.countNodes(null, versionId, null);
         long confirmedNodes = neo4jGraphDao.countNodes(null, versionId, "CONFIRMED");

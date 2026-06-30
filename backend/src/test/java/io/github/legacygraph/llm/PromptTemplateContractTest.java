@@ -23,7 +23,15 @@ class PromptTemplateContractTest {
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([a-zA-Z][a-zA-Z0-9_]*)\\}");
 
-    private final PromptTemplateLoader loader = new PromptTemplateLoader();
+    private final PromptTemplateLoader loader = newLoader();
+
+    private static PromptTemplateLoader newLoader() {
+        // DB 中无模板时回退到 classpath 文件（契约测试针对生产 .txt 模板）
+        io.github.legacygraph.service.PromptTemplateService svc =
+                org.mockito.Mockito.mock(io.github.legacygraph.service.PromptTemplateService.class);
+        org.mockito.Mockito.when(svc.getActiveByCode(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+        return new PromptTemplateLoader(svc);
+    }
 
     /** 提取模板中出现的所有占位符变量名（基于 classpath 直接读取生产模板文件） */
     private Set<String> placeholdersOf(String templateName) {

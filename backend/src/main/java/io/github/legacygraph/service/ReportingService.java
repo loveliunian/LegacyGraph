@@ -8,9 +8,7 @@ import io.github.legacygraph.dto.report.GraphMetricsReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
-import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.entity.Report;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
@@ -78,31 +76,26 @@ public class ReportingService {
     /**
      * 生成迁移就绪度报告
      */
+    private static final int RISK_ITEMS_LIMIT = 200;
+
     @Transactional
+    @Cacheable(cacheNames = "report-migration-readiness", key = "#projectId")
     public MigrationReadinessReport generateMigrationReport(String projectId) {
         log.info("Generating migration readiness report for project: {}", projectId);
 
-        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, null, null, null, null, null, 0);
-        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, null, null, null, 0);
+        // ① 聚合统计：单次 Cypher 替代全量节点+边加载，避免超时
+        Map<String, Object> stats = neo4jGraphDao.graphStats(projectId);
+        long totalNodes = toLong(stats.get("totalNodes"));
+        long confirmedNodes = toLong(stats.get("confirmedNodes"));
+        long pendingNodes = toLong(stats.get("pendingNodes"));
+        long totalEdges = toLong(stats.get("totalEdges"));
+        long confirmedEdges = toLong(stats.get("confirmedEdges"));
+        long pendingEdges = toLong(stats.get("pendingEdges"));
+        double avgConfidence = toDouble(stats.get("avgConfidence"));
 
         MigrationReadinessReport report = new MigrationReadinessReport();
         report.setProjectId(projectId);
         report.setGeneratedAt(LocalDateTime.now());
-
-        // 统计节点
-        long totalNodes = allNodes.size();
-        long confirmedNodes = allNodes.stream()
-                .filter(n -> "CONFIRMED".equals(n.getStatus()))
-                .count();
-        long pendingNodes = totalNodes - confirmedNodes;
-
-        // 统计边
-        long totalEdges = allEdges.size();
-        long confirmedEdges = allEdges.stream()
-                .filter(e -> "CONFIRMED".equals(e.getStatus()))
-                .count();
-        long pendingEdges = totalEdges - confirmedEdges;
-
         report.setTotalNodes(totalNodes);
         report.setConfirmedNodes(confirmedNodes);
         report.setPendingNodes(pendingNodes);
@@ -110,59 +103,35 @@ public class ReportingService {
         report.setConfirmedEdges(confirmedEdges);
         report.setPendingEdges(pendingEdges);
 
-        // 按类型统计
-        Map<String, List<GraphNode>> nodesByType = new HashMap<>();
-        for (GraphNode node : allNodes) {
-            nodesByType.computeIfAbsent(node.getNodeType(), k -> new ArrayList<>()).add(node);
-        }
-
+        // ② 按节点类型统计：Cypher 聚合查询
+        List<Map<String, Object>> typeRows = neo4jGraphDao.nodeTypeStats(projectId);
         List<MigrationReadinessReport.NodeTypeStat> typeStats = new ArrayList<>();
-        for (Map.Entry<String, List<GraphNode>> entry : nodesByType.entrySet()) {
+        for (Map<String, Object> row : typeRows) {
             MigrationReadinessReport.NodeTypeStat stat = new MigrationReadinessReport.NodeTypeStat();
-            stat.setNodeType(entry.getKey());
-            stat.setDisplayName(getNodeTypeDisplayName(entry.getKey()));
-            stat.setTotal(entry.getValue().size());
-            long confirmed = entry.getValue().stream()
-                    .filter(n -> "CONFIRMED".equals(n.getStatus()))
-                    .count();
-            stat.setConfirmed(confirmed);
-            BigDecimal avgConf = entry.getValue().stream()
-                    .map(n -> n.getConfidence() != null ? n.getConfidence() : BigDecimal.ZERO)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(entry.getValue().size()), 4, RoundingMode.HALF_UP);
-            stat.setAverageConfidence(avgConf);
+            String nodeType = Objects.toString(row.get("nodeType"), "");
+            stat.setNodeType(nodeType);
+            stat.setDisplayName(getNodeTypeDisplayName(nodeType));
+            stat.setTotal(toLong(row.get("total")));
+            stat.setConfirmed(toLong(row.get("confirmed")));
+            stat.setAverageConfidence(BigDecimal.valueOf(toDouble(row.get("avgConfidence"))));
             typeStats.add(stat);
         }
         report.setNodeTypeStats(typeStats);
 
-        // 计算整体置信度
-        BigDecimal overallConfidence = calculateOverallConfidence(allNodes);
-        report.setConfidenceLevel(overallConfidence);
-
-        // 识别风险
+        // ③ 风险项：限制返回数量，避免全量扫描
         List<MigrationReadinessReport.RiskItem> risks = new ArrayList<>();
-
-        // 低置信度节点
-        for (GraphNode node : allNodes) {
-            if (node.getConfidence() != null && node.getConfidence().compareTo(BigDecimal.valueOf(0.5)) < 0) {
-                MigrationReadinessReport.RiskItem risk = new MigrationReadinessReport.RiskItem();
-                risk.setRiskType("LOW_CONFIDENCE");
-                risk.setDescription("节点置信度低于 0.5，需要人工审核");
-                risk.setAffectedNodeId(node.getId());
-                risk.setAffectedNodeName(node.getNodeName());
-                risk.setRiskLevel(BigDecimal.ONE.subtract(node.getConfidence()));
-                risks.add(risk);
-            }
+        for (GraphNode node : neo4jGraphDao.queryLowConfidenceNodes(projectId, RISK_ITEMS_LIMIT)) {
+            MigrationReadinessReport.RiskItem risk = new MigrationReadinessReport.RiskItem();
+            risk.setRiskType("LOW_CONFIDENCE");
+            risk.setDescription("节点置信度低于 0.5，需要人工审核");
+            risk.setAffectedNodeId(node.getId());
+            risk.setAffectedNodeName(node.getNodeName());
+            risk.setRiskLevel(node.getConfidence() != null
+                    ? BigDecimal.ONE.subtract(node.getConfidence()) : BigDecimal.ONE);
+            risks.add(risk);
         }
-
-        // 孤立节点（没有边连接）
-        Set<String> connectedNodes = new HashSet<>();
-        for (GraphEdge edge : allEdges) {
-            connectedNodes.add(edge.getFromNodeId());
-            connectedNodes.add(edge.getToNodeId());
-        }
-        for (GraphNode node : allNodes) {
-            if (!connectedNodes.contains(node.getId()) && totalNodes > 1) {
+        if (totalNodes > 1) {
+            for (GraphNode node : neo4jGraphDao.queryDisconnectedNodes(projectId, RISK_ITEMS_LIMIT)) {
                 MigrationReadinessReport.RiskItem risk = new MigrationReadinessReport.RiskItem();
                 risk.setRiskType("DISCONNECTED");
                 risk.setDescription("节点孤立，没有连接关系");
@@ -172,20 +141,19 @@ public class ReportingService {
                 risks.add(risk);
             }
         }
-
         report.setRiskItems(risks);
 
-        // 计算各项得分
+        // ④ 计算得分（avgConfidence 来自 graphStats 聚合）
+        BigDecimal overallConfidence = BigDecimal.valueOf(avgConfidence);
+        report.setConfidenceLevel(overallConfidence.multiply(BigDecimal.valueOf(100)));
+
         BigDecimal architectureScore = BigDecimal.valueOf(confirmedNodes)
                 .divide(BigDecimal.valueOf(totalNodes == 0 ? 1 : totalNodes), 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100));
         BigDecimal businessScore = overallConfidence.multiply(BigDecimal.valueOf(100));
         report.setArchitectureUnderstandingScore(architectureScore);
         report.setBusinessKnowledgeScore(businessScore);
-
-        // 测试覆盖率得分（后续计算）
         report.setTestCoverageScore(BigDecimal.ZERO);
-        report.setConfidenceLevel(overallConfidence.multiply(BigDecimal.valueOf(100)));
 
         // 整体得分加权
         BigDecimal overallScore = architectureScore.multiply(BigDecimal.valueOf(0.4))
@@ -193,17 +161,35 @@ public class ReportingService {
                 .add(report.getConfidenceLevel().multiply(BigDecimal.valueOf(0.2)));
         report.setOverallScore(overallScore);
 
-        // 生成建议
+        // ⑤ 建议
         List<String> recommendations = generateRecommendations(report);
         report.setRecommendations(recommendations);
 
         // 保存报告记录
         saveReport(projectId, "MIGRATION_READINESS", "迁移就绪度报告");
 
-        log.info("Migration readiness report generated for project {}: overall score {}",
-                projectId, overallScore);
+        log.info("Migration readiness report generated for project {}: overall score {}, nodes={}, edges={}",
+                projectId, overallScore, totalNodes, totalEdges);
 
         return report;
+    }
+
+    private long toLong(Object val) {
+        if (val instanceof Number n) return n.longValue();
+        return 0L;
+    }
+
+    private double toDouble(Object val) {
+        if (val instanceof Number n) return n.doubleValue();
+        return 0.0;
+    }
+
+    private LocalDate toLocalDate(Object val) {
+        if (val instanceof LocalDate d) return d;
+        if (val instanceof String s) {
+            try { return LocalDate.parse(s); } catch (Exception ignored) {}
+        }
+        return LocalDate.now();
     }
 
     /**
@@ -217,9 +203,10 @@ public class ReportingService {
         report.setProjectId(projectId);
         report.setVersionId(versionId);
 
-        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
+        // 使用 Cypher 聚合查询替代全量节点加载
+        List<Map<String, Object>> dailyRows = neo4jGraphDao.confidenceTrendDaily(projectId, versionId);
 
-        if (allNodes.isEmpty()) {
+        if (dailyRows.isEmpty()) {
             report.setDailyData(Collections.emptyList());
             report.setStartingAverageConfidence(BigDecimal.ZERO);
             report.setEndingAverageConfidence(BigDecimal.ZERO);
@@ -228,38 +215,22 @@ public class ReportingService {
             return report;
         }
 
-        // 按日期分组计算每日平均置信度
-        Map<LocalDate, List<GraphNode>> nodesByDate = new TreeMap<>();
-        for (GraphNode node : allNodes) {
-            LocalDate date = node.getCreatedAt() != null ?
-                    node.getCreatedAt().toLocalDate() : LocalDate.now();
-            nodesByDate.computeIfAbsent(date, k -> new ArrayList<>()).add(node);
-        }
-
         List<ConfidenceTrendReport.DailyData> dailyDataList = new ArrayList<>();
         BigDecimal startConfidence = null;
         BigDecimal endConfidence = null;
 
-        for (Map.Entry<LocalDate, List<GraphNode>> entry : nodesByDate.entrySet()) {
-            LocalDate date = entry.getKey();
-            List<GraphNode> dailyNodes = entry.getValue();
-
-            BigDecimal avgConf = calculateOverallConfidence(dailyNodes);
-            long confirmedCount = dailyNodes.stream()
-                    .filter(n -> "CONFIRMED".equals(n.getStatus()))
-                    .count();
-
+        for (Map<String, Object> row : dailyRows) {
             ConfidenceTrendReport.DailyData dailyData = new ConfidenceTrendReport.DailyData();
-            dailyData.setDate(date);
-            dailyData.setAverageConfidence(avgConf);
-            dailyData.setConfirmedNodes(confirmedCount);
-            dailyData.setNewNodes((long) dailyNodes.size());
+            dailyData.setDate(toLocalDate(row.get("date")));
+            dailyData.setAverageConfidence(BigDecimal.valueOf(toDouble(row.get("avgConfidence"))));
+            dailyData.setConfirmedNodes(toLong(row.get("confirmedNodes")));
+            dailyData.setNewNodes(toLong(row.get("newNodes")));
             dailyDataList.add(dailyData);
 
             if (startConfidence == null) {
-                startConfidence = avgConf;
+                startConfidence = dailyData.getAverageConfidence();
             }
-            endConfidence = avgConf;
+            endConfidence = dailyData.getAverageConfidence();
         }
 
         report.setDailyData(dailyDataList);
@@ -295,13 +266,12 @@ public class ReportingService {
         report.setProjectId(projectId);
         report.setVersionId(versionId);
 
-        // 获取所有节点
-        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
-
-        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 0);
-
-        report.setTotalNodes(allNodes.size());
-        report.setTotalEdges(allEdges.size());
+        // 总量统计：聚合查询替代全量加载
+        Map<String, Object> stats = neo4jGraphDao.versionGraphStats(projectId, versionId);
+        long totalNodes = toLong(stats.get("totalNodes"));
+        long totalEdges = toLong(stats.get("totalEdges"));
+        report.setTotalNodes(totalNodes);
+        report.setTotalEdges(totalEdges);
 
         // 统计：有通过测试结果关联到目标节点的算覆盖
         Set<String> coveredNodeIds = new HashSet<>();
@@ -309,7 +279,6 @@ public class ReportingService {
                 .eq(TestResult::getVersionId, versionId)
                 .eq(TestResult::getResultStatus, "PASSED")
                 .list();
-
         for (TestResult result : testResults) {
             TestCase testCase = testCaseRepository.selectById(result.getTestCaseId());
             if (testCase != null && testCase.getTargetNodeId() != null) {
@@ -318,35 +287,32 @@ public class ReportingService {
         }
 
         long coveredNodes = coveredNodeIds.size();
-        // 对于边：和覆盖节点相连的边也算覆盖
-        Set<String> coveredEdgeIds = new HashSet<>();
-        for (GraphEdge edge : allEdges) {
-            if (coveredNodeIds.contains(edge.getFromNodeId()) || coveredNodeIds.contains(edge.getToNodeId())) {
-                coveredEdgeIds.add(edge.getId());
-            }
-        }
-        long coveredEdges = coveredEdgeIds.size();
+        // 边覆盖率：通过 Cypher 直接统计连接已覆盖节点的边数
+        long coveredEdges = neo4jGraphDao.countEdgesConnectedToNodes(
+                projectId, versionId, new ArrayList<>(coveredNodeIds));
 
         report.setCoveredNodes(coveredNodes);
         report.setCoveredEdges(coveredEdges);
 
-        BigDecimal nodeCoverage = allNodes.isEmpty() ? BigDecimal.ZERO :
+        BigDecimal nodeCoverage = totalNodes == 0 ? BigDecimal.ZERO :
                 BigDecimal.valueOf(coveredNodes)
-                        .divide(BigDecimal.valueOf(allNodes.size()), 4, RoundingMode.HALF_UP)
+                        .divide(BigDecimal.valueOf(totalNodes), 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100));
-        BigDecimal edgeCoverage = allEdges.isEmpty() ? BigDecimal.ZERO :
+        BigDecimal edgeCoverage = totalEdges == 0 ? BigDecimal.ZERO :
                 BigDecimal.valueOf(coveredEdges)
-                        .divide(BigDecimal.valueOf(allEdges.size()), 4, RoundingMode.HALF_UP)
+                        .divide(BigDecimal.valueOf(totalEdges), 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100));
 
         report.setCoveragePercentage(nodeCoverage);
         report.setEdgeCoveragePercentage(edgeCoverage);
 
-        // 找出高置信度但未覆盖的节点
+        // 高置信度但未覆盖的节点：限制返回数量
         List<TestCoverageReport.UncoveredItem> highConfUncovered = new ArrayList<>();
-        for (GraphNode node : allNodes) {
-            if (node.getConfidence().compareTo(BigDecimal.valueOf(0.8)) >= 0 && !coveredNodeIds.contains(node.getId())) {
-                // 高置信度且没有被测试覆盖
+        List<String> coveredList = new ArrayList<>(coveredNodeIds);
+        for (GraphNode node : neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 300)) {
+            if (node.getConfidence() != null
+                    && node.getConfidence().compareTo(BigDecimal.valueOf(0.8)) >= 0
+                    && !coveredNodeIds.contains(node.getId())) {
                 TestCoverageReport.UncoveredItem item = new TestCoverageReport.UncoveredItem();
                 item.setNodeId(node.getId());
                 item.setNodeName(node.getNodeName());
@@ -373,72 +339,49 @@ public class ReportingService {
         report.setProjectId(projectId);
         report.setVersionId(versionId);
 
-        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
+        // 聚合统计替代全量加载
+        Map<String, Object> stats = neo4jGraphDao.versionGraphStats(projectId, versionId);
+        long totalNodes = toLong(stats.get("totalNodes"));
+        long totalEdges = toLong(stats.get("totalEdges"));
+        report.setTotalNodes(totalNodes);
+        report.setTotalEdges(totalEdges);
 
-        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 0);
-
-        report.setTotalNodes(allNodes.size());
-        report.setTotalEdges(allEdges.size());
-
-        // 计算平均置信度
-        BigDecimal avgConfidence = calculateOverallConfidence(allNodes);
+        // 平均置信度
+        BigDecimal avgConfidence = BigDecimal.valueOf(toDouble(stats.get("avgConfidence")));
         report.setAverageConfidence(avgConfidence);
 
-        // 计算平均节点度数
-        int totalDegrees = 0;
-        Map<String, Integer> degreeMap = new HashMap<>();
-        for (GraphEdge edge : allEdges) {
-            degreeMap.merge(edge.getFromNodeId(), 1, Integer::sum);
-            degreeMap.merge(edge.getToNodeId(), 1, Integer::sum);
-        }
-        for (Integer degree : degreeMap.values()) {
-            totalDegrees += degree;
-        }
-        BigDecimal avgDegree = allNodes.isEmpty() ? BigDecimal.ZERO :
-                BigDecimal.valueOf(totalDegrees)
-                        .divide(BigDecimal.valueOf(allNodes.size()), 2, RoundingMode.HALF_UP);
-        report.setAverageNodeDegree(avgDegree);
+        // 平均节点度数：Cypher 聚合
+        report.setAverageNodeDegree(BigDecimal.valueOf(neo4jGraphDao.averageNodeDegree(projectId, versionId)));
 
-        // 置信度分布
+        // 置信度分布：Cypher 聚合
+        List<Map<String, Object>> distRows = neo4jGraphDao.confidenceDistribution(projectId, versionId);
         List<GraphQualityReport.ConfidenceBin> bins = new ArrayList<>();
-        for (double lower = 0.0; lower < 1.0; lower += 0.2) {
-            final double lowerFinal = lower;
-            double upper = lower + 0.2;
-            final double upperFinal = upper;
-            long count = allNodes.stream()
-                    .filter(n -> n.getConfidence().compareTo(BigDecimal.valueOf(lowerFinal)) >= 0
-                            && n.getConfidence().compareTo(BigDecimal.valueOf(upperFinal)) < 0)
-                    .count();
-            GraphQualityReport.ConfidenceBin bin = new GraphQualityReport.ConfidenceBin();
-            bin.setLowerBound(BigDecimal.valueOf(lowerFinal));
-            bin.setUpperBound(BigDecimal.valueOf(upperFinal));
-            bin.setNodeCount(count);
-            bins.add(bin);
+        if (!distRows.isEmpty()) {
+            Map<String, Object> row = distRows.get(0);
+            double[] bounds = {0.0, 0.2, 0.4, 0.6, 0.8};
+            for (int i = 0; i < bounds.length; i++) {
+                GraphQualityReport.ConfidenceBin bin = new GraphQualityReport.ConfidenceBin();
+                bin.setLowerBound(BigDecimal.valueOf(bounds[i]));
+                bin.setUpperBound(BigDecimal.valueOf(bounds[i] + 0.2));
+                bin.setNodeCount(toLong(row.get("bin" + i)));
+                bins.add(bin);
+            }
         }
         report.setConfidenceDistribution(bins);
 
-        // 收集质量问题
+        // 质量问题：限制返回数量
         List<GraphQualityReport.QualityIssue> issues = new ArrayList<>();
-        for (GraphNode node : allNodes) {
-            if (node.getConfidence().compareTo(BigDecimal.valueOf(0.3)) < 0) {
-                GraphQualityReport.QualityIssue issue = new GraphQualityReport.QualityIssue();
-                issue.setIssueType("LOW_CONFIDENCE");
-                issue.setDescription("节点置信度极低 (" + node.getConfidence() + ")");
-                issue.setNodeId(node.getId());
-                issue.setNodeName(node.getNodeName());
-                issue.setImpact(BigDecimal.ONE.subtract(node.getConfidence()));
-                issues.add(issue);
-            }
+        for (GraphNode node : neo4jGraphDao.queryLowConfidenceNodes(projectId, versionId, 0.3, 200)) {
+            GraphQualityReport.QualityIssue issue = new GraphQualityReport.QualityIssue();
+            issue.setIssueType("LOW_CONFIDENCE");
+            issue.setDescription("节点置信度极低 (" + (node.getConfidence() != null ? node.getConfidence() : "N/A") + ")");
+            issue.setNodeId(node.getId());
+            issue.setNodeName(node.getNodeName());
+            issue.setImpact(node.getConfidence() != null ? BigDecimal.ONE.subtract(node.getConfidence()) : BigDecimal.ONE);
+            issues.add(issue);
         }
-
-        // 孤立节点检测
-        Set<String> connectedNodes = new HashSet<>();
-        for (GraphEdge edge : allEdges) {
-            connectedNodes.add(edge.getFromNodeId());
-            connectedNodes.add(edge.getToNodeId());
-        }
-        for (GraphNode node : allNodes) {
-            if (!connectedNodes.contains(node.getId()) && allNodes.size() > 1) {
+        if (totalNodes > 1) {
+            for (GraphNode node : neo4jGraphDao.queryDisconnectedNodes(projectId, versionId, 200)) {
                 GraphQualityReport.QualityIssue issue = new GraphQualityReport.QualityIssue();
                 issue.setIssueType("ISOLATED");
                 issue.setDescription("节点孤立，没有任何连接关系");
@@ -450,9 +393,9 @@ public class ReportingService {
         }
         report.setQualityIssues(issues);
 
-        // 计算质量评级
+        // 质量评级
         BigDecimal qualityScore = avgConfidence.multiply(BigDecimal.valueOf(100))
-                .subtract(BigDecimal.valueOf(issues.size() * 2));
+                .subtract(BigDecimal.valueOf(issues.size() * 2L));
         if (qualityScore.compareTo(BigDecimal.valueOf(80)) >= 0) {
             report.setQualityRating("A");
         } else if (qualityScore.compareTo(BigDecimal.valueOf(60)) >= 0) {
@@ -474,7 +417,8 @@ public class ReportingService {
      */
     @org.springframework.cache.annotation.CacheEvict(cacheNames = {
             "report-confidence-trend", "report-test-coverage",
-            "report-graph-quality", "report-graph-metrics"}, allEntries = true)
+            "report-graph-quality", "report-graph-metrics",
+            "report-migration-readiness"}, allEntries = true)
     public void evictReportCaches() {
         log.debug("Report caches evicted due to graph mutation");
     }
@@ -491,12 +435,11 @@ public class ReportingService {
         report.setProjectId(projectId);
         report.setVersionId(versionId);
 
-        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
-        long edgeCount = neo4jGraphDao.countEdges(projectId, versionId, null);
-
-        long total = nodes.size();
+        // 使用聚合查询替代全量节点加载
+        Map<String, Object> stats = neo4jGraphDao.versionGraphStats(projectId, versionId);
+        long total = toLong(stats.get("totalNodes"));
         report.setTotalNodes(total);
-        report.setTotalEdges(edgeCount);
+        report.setTotalEdges(toLong(stats.get("totalEdges")));
 
         if (total == 0) {
             report.setCoverageRatio(BigDecimal.ZERO);
@@ -507,25 +450,15 @@ public class ReportingService {
             return report;
         }
 
-        long confirmed = nodes.stream().filter(n -> "CONFIRMED".equals(n.getStatus())).count();
-        long pending = nodes.stream().filter(n -> "PENDING_CONFIRM".equals(n.getStatus())).count();
-        long runtimeVerified = nodes.stream()
-                .filter(n -> n.getVerifiedScore() != null && n.getVerifiedScore().signum() > 0)
-                .count();
-
-        // 证据完备度：拥有至少一条 NodeEvidence 关联的节点
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NodeEvidence> neQuery =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-        neQuery.in(NodeEvidence::getNodeId, nodes.stream().map(GraphNode::getId).toList());
-        Set<String> nodesWithEvidence = new HashSet<>();
-        for (NodeEvidence ne : nodeEvidenceRepository.selectList(neQuery)) {
-            nodesWithEvidence.add(ne.getNodeId());
-        }
+        long confirmed = toLong(stats.get("confirmedNodes"));
+        long pending = toLong(stats.get("pendingNodes"));
+        long runtimeVerified = toLong(stats.get("runtimeVerifiedCount"));
+        long withEvidence = toLong(stats.get("withEvidenceCount"));
 
         report.setCoverageRatio(ratio(confirmed, total));
         report.setPendingReviewRatio(ratio(pending, total));
         report.setRuntimeVerifiedRatio(ratio(runtimeVerified, total));
-        report.setEvidenceCompletenessRatio(ratio(nodesWithEvidence.size(), total));
+        report.setEvidenceCompletenessRatio(ratio(withEvidence, total));
         report.setTestPassRatio(computeTestPassRatio(projectId, versionId));
 
         return report;
@@ -536,40 +469,45 @@ public class ReportingService {
      * 将图谱指标、低置信节点、孤立节点、高置信未覆盖节点整理为 LLM 输入。
      */
     public ReportInsight generateReportInsights(String projectId, String versionId) {
-        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
-        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 0);
+        // 使用聚合查询替代全量节点/边加载
+        Map<String, Object> stats = neo4jGraphDao.versionGraphStats(projectId, versionId);
+        long totalNodes = toLong(stats.get("totalNodes"));
+        long totalEdges = toLong(stats.get("totalEdges"));
+        long pending = toLong(stats.get("pendingNodes"));
 
         Set<String> coveredNodeIds = findCoveredNodeIds(projectId, versionId);
-        Set<String> connectedNodeIds = new HashSet<>();
-        for (GraphEdge edge : edges) {
-            connectedNodeIds.add(edge.getFromNodeId());
-            connectedNodeIds.add(edge.getToNodeId());
-        }
 
+        // 高置信未覆盖节点：限制查询数量
         List<Map<String, Object>> highConfidenceUncovered = new ArrayList<>();
-        List<Map<String, Object>> lowConfidenceNodes = new ArrayList<>();
-        List<Map<String, Object>> isolatedNodes = new ArrayList<>();
-        for (GraphNode node : nodes) {
-            BigDecimal confidence = node.getConfidence() != null ? node.getConfidence() : BigDecimal.ZERO;
-            if (confidence.compareTo(BigDecimal.valueOf(0.8)) >= 0 && !coveredNodeIds.contains(node.getId())) {
+        for (GraphNode node : neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 100)) {
+            if (node.getConfidence() != null
+                    && node.getConfidence().compareTo(BigDecimal.valueOf(0.8)) >= 0
+                    && !coveredNodeIds.contains(node.getId())) {
+                if (highConfidenceUncovered.size() >= 50) break;
                 highConfidenceUncovered.add(nodeSummary(node));
             }
-            if (confidence.compareTo(BigDecimal.valueOf(0.5)) < 0) {
-                lowConfidenceNodes.add(nodeSummary(node));
-            }
-            if (nodes.size() > 1 && !connectedNodeIds.contains(node.getId())) {
+        }
+
+        // 低置信节点
+        List<Map<String, Object>> lowConfidenceNodes = new ArrayList<>();
+        for (GraphNode node : neo4jGraphDao.queryLowConfidenceNodes(projectId, versionId, 0.5, 50)) {
+            lowConfidenceNodes.add(nodeSummary(node));
+        }
+
+        // 孤立节点
+        List<Map<String, Object>> isolatedNodes = new ArrayList<>();
+        if (totalNodes > 1) {
+            for (GraphNode node : neo4jGraphDao.queryDisconnectedNodes(projectId, versionId, 50)) {
                 isolatedNodes.add(nodeSummary(node));
             }
         }
 
         Map<String, Object> metrics = new LinkedHashMap<>();
-        metrics.put("totalNodes", nodes.size());
-        metrics.put("totalEdges", edges.size());
-        metrics.put("averageConfidence", calculateOverallConfidence(nodes));
+        metrics.put("totalNodes", totalNodes);
+        metrics.put("totalEdges", totalEdges);
+        metrics.put("averageConfidence", stats.get("avgConfidence"));
         metrics.put("coveredNodeCount", coveredNodeIds.size());
-        metrics.put("pendingReviewRatio", ratio(
-                nodes.stream().filter(n -> "PENDING_CONFIRM".equals(n.getStatus()) || "PENDING".equals(n.getStatus())).count(),
-                nodes.size()));
+        metrics.put("pendingReviewRatio", ratio(pending, totalNodes));
         metrics.put("testPassRatio", computeTestPassRatio(projectId, versionId));
 
         Map<String, Object> gaps = new LinkedHashMap<>();
@@ -757,16 +695,6 @@ public class ReportingService {
     }
 
     // ========== 辅助方法 ==========
-
-    private BigDecimal calculateOverallConfidence(List<GraphNode> nodes) {
-        if (nodes.isEmpty()) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal total = nodes.stream()
-                .map(GraphNode::getConfidence)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        return total.divide(BigDecimal.valueOf(nodes.size()), 4, RoundingMode.HALF_UP);
-    }
 
     private String getNodeTypeDisplayName(String nodeType) {
         return switch (nodeType) {

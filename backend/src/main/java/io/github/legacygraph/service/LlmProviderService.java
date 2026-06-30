@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,8 +43,9 @@ public class LlmProviderService {
     }
 
     /**
-     * 获取当前激活的默认提供商
+     * 获取当前激活的默认提供商（缓存：每次 LLM 调用都会读取，配置极少变更）
      */
+    @Cacheable(cacheNames = "llm-provider-default", key = "'default'")
     public LlmProvider getActiveDefault() {
         List<LlmProvider> all = llmProviderRepository.findAll();
         return all.stream()
@@ -58,6 +61,7 @@ public class LlmProviderService {
      * 保存或更新提供商配置
      */
     @Transactional
+    @CacheEvict(cacheNames = "llm-provider-default", allEntries = true)
     public LlmProvider save(LlmProvider provider) {
         LlmProvider existing = llmProviderRepository.findByCode(provider.getProviderCode());
         if (existing != null) {
@@ -74,6 +78,7 @@ public class LlmProviderService {
      * 切换默认提供商
      */
     @Transactional
+    @CacheEvict(cacheNames = "llm-provider-default", allEntries = true)
     public void setDefault(String providerCode) {
         List<LlmProvider> all = llmProviderRepository.findAll();
         for (LlmProvider p : all) {
@@ -95,6 +100,7 @@ public class LlmProviderService {
      * 启用/禁用提供商
      */
     @Transactional
+    @CacheEvict(cacheNames = "llm-provider-default", allEntries = true)
     public void toggleActive(String providerCode, boolean active) {
         LlmProvider provider = llmProviderRepository.findByCode(providerCode);
         if (provider != null) {
@@ -107,6 +113,7 @@ public class LlmProviderService {
      * 删除提供商
      */
     @Transactional
+    @CacheEvict(cacheNames = "llm-provider-default", allEntries = true)
     public void delete(String providerCode) {
         LlmProvider provider = llmProviderRepository.findByCode(providerCode);
         if (provider != null) {

@@ -2,11 +2,15 @@
   <div class="scan-version-list">
     <div class="page-header">
       <h3>{{ t('menu.scanVersions') }}</h3>
+      <el-button type="primary" @click="goToCreate">
+        <el-icon><Plus /></el-icon>
+        新建扫描
+      </el-button>
     </div>
 
     <el-table :data="versionList" v-loading="loading" border stripe>
       <el-table-column prop="versionNumber" label="版本号" width="100" />
-      <el-table-column prop="versionName" label="版本名称" width="200" />
+      <el-table-column prop="versionName" label="版本名称" min-width="180" />
       <el-table-column prop="scanType" label="扫描类型" width="120">
         <template #default="{ row }">
           <el-tag size="small">{{ getScanTypeText(row.scanType) }}</el-tag>
@@ -15,8 +19,31 @@
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="getStatusType(row.status)">
-            {{ row.status }}
+            {{ getStatusText(row.status) }}
           </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="进度" width="200">
+        <template #default="{ row }">
+          <div class="progress-wrapper">
+            <el-progress
+              :percentage="row.progress || 0"
+              :status="row.status === 'FAILED' ? 'exception' : (row.progress === 100 ? 'success' : undefined)"
+              :stroke-width="14"
+            />
+            <span v-if="row.taskCount > 0" class="progress-text">
+              {{ row.completedTaskCount }}/{{ row.taskCount }} 任务
+            </span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="stage" label="当前阶段" width="140">
+        <template #default="{ row }">
+          <span v-if="row.stage && row.stage !== '-'" class="stage-text">
+            <el-icon class="is-loading" v-if="row.status === 'RUNNING'"><Loading /></el-icon>
+            {{ getStageText(row.stage) }}
+          </span>
+          <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
       <el-table-column prop="nodeCount" label="节点数" width="80" align="center">
@@ -37,23 +64,23 @@
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="confidenceAvg" label="平均置信度" width="120">
+      <el-table-column prop="duration" label="耗时" width="100">
         <template #default="{ row }">
-          <span v-if="row.confidenceAvg">{{ (row.confidenceAvg * 100).toFixed(1) }}%</span>
+          <span v-if="row.duration">{{ formatDuration(row.duration) }}</span>
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="创建时间" width="180">
+      <el-table-column prop="createdAt" label="创建时间" width="170">
         <template #default="{ row }">
           <span v-if="row.createdAt">{{ formatTime(row.createdAt) }}</span>
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="createdBy" label="创建人" width="120" />
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="viewDetail(row)">查看详情</el-button>
+          <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
           <el-button type="warning" link size="small" @click="compareWithPrevious(row)">对比</el-button>
+          <el-button v-if="row.status === 'RUNNING'" type="danger" link size="small" @click="stopScan(row)">停止</el-button>
           <el-button type="danger" link size="small" @click="deleteVersion(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -80,15 +107,20 @@
         <el-descriptions-item label="版本名称">{{ currentVersion.versionName }}</el-descriptions-item>
         <el-descriptions-item label="扫描类型">{{ getScanTypeText(currentVersion.scanType) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag size="small" :type="getStatusType(currentVersion.status)">{{ currentVersion.status }}</el-tag>
+          <el-tag size="small" :type="getStatusType(currentVersion.status)">{{ getStatusText(currentVersion.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="进度">
+          <el-progress :percentage="currentVersion.progress || 0" :stroke-width="14" style="width: 200px;" />
+        </el-descriptions-item>
+        <el-descriptions-item label="任务进度">
+          {{ currentVersion.completedTaskCount || 0 }} / {{ currentVersion.taskCount || 0 }}
         </el-descriptions-item>
         <el-descriptions-item label="节点数">{{ currentVersion.nodeCount || 0 }}</el-descriptions-item>
         <el-descriptions-item label="关系数">{{ currentVersion.edgeCount || 0 }}</el-descriptions-item>
         <el-descriptions-item label="事实数">{{ currentVersion.factCount || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="平均置信度">{{ currentVersion.confidenceAvg ? (currentVersion.confidenceAvg * 100).toFixed(1) + '%' : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="耗时">{{ currentVersion.duration ? formatDuration(currentVersion.duration) : '-' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ formatTime(currentVersion.createdAt) }}</el-descriptions-item>
         <el-descriptions-item label="创建人">{{ currentVersion.createdBy || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="描述" :span="2">{{ currentVersion.description || '-' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
@@ -99,12 +131,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Loading } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { t } from '@/locales'
-import { get, del } from '@/utils/request'
+import { get, del, post } from '@/utils/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -118,28 +151,90 @@ const total = ref(0)
 const detailDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
 
+// 轮询定时器
+let pollTimer: ReturnType<typeof setInterval> | null = null
+const POLL_INTERVAL = 3000 // 3秒轮询一次
+
+// 是否有运行中的任务
+const hasRunningTasks = computed(() =>
+  versionList.value.some(v => v.status === 'RUNNING')
+)
+
 const formatTime = (time: string) => {
+  if (!time) return '-'
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
+const formatDuration = (seconds: number) => {
+  if (!seconds || seconds <= 0) return '-'
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+}
+
 const getScanTypeText = (type: string) => {
-  const map: Record<string, string> = {
-    CODE: '代码扫描',
-    DATABASE: '数据库扫描',
-    DOCUMENT: '文档扫描',
-    FULL: '全量扫描'
-  }
-  return map[type] || type
+  if (!type) return '-'
+  // type可能是JSON字符串，尝试提取可读信息
+  try {
+    const parsed = JSON.parse(type)
+    if (parsed.scanTypes && Array.isArray(parsed.scanTypes)) {
+      const map: Record<string, string> = {
+        CODE_SCAN: '代码扫描',
+        DB_SCAN: '数据库扫描',
+        DOC_PARSE: '文档解析',
+        GRAPH_BUILD: '图谱构建',
+        TEST_GENERATE: '测试生成'
+      }
+      return parsed.scanTypes.map((t: string) => map[t] || t).join('+') || '全量扫描'
+    }
+  } catch {}
+  return type.length > 30 ? '全量扫描' : type
 }
 
 const getStatusType = (status: string): string => {
   const map: Record<string, string> = {
+    CREATED: 'info',
     PENDING: 'info',
+    RUNNING: 'warning',
     PROCESSING: 'warning',
+    SUCCESS: 'success',
     COMPLETED: 'success',
-    FAILED: 'danger'
+    FAILED: 'danger',
+    CANCELLED: 'info',
+    PAUSED: 'warning'
   }
   return map[status] || 'info'
+}
+
+const getStatusText = (status: string): string => {
+  const map: Record<string, string> = {
+    CREATED: '已创建',
+    PENDING: '等待中',
+    RUNNING: '运行中',
+    PROCESSING: '处理中',
+    SUCCESS: '已完成',
+    COMPLETED: '已完成',
+    FAILED: '失败',
+    CANCELLED: '已取消',
+    PAUSED: '已暂停'
+  }
+  return map[status] || status || '-'
+}
+
+const getStageText = (stage: string): string => {
+  const map: Record<string, string> = {
+    CODE_SCAN: '代码扫描中',
+    DB_SCAN: '数据库扫描中',
+    DOC_PARSE: '文档解析中',
+    GRAPH_BUILD: '图谱构建中',
+    TEST_GENERATE: '测试生成中',
+    COMPLETED: '已完成'
+  }
+  return map[stage] || stage
+}
+
+const goToCreate = () => {
+  router.push(`/projects/${projectId}/scan-versions/create`)
 }
 
 const viewDetail = (row: any) => {
@@ -148,9 +243,23 @@ const viewDetail = (row: any) => {
 }
 
 const compareWithPrevious = (row: any) => {
-  // 跳转到统一图谱比较两个版本
   detailDialogVisible.value = false
   router.push(`/projects/${projectId}/graph/unified?versionId=${row.id}`)
+}
+
+const stopScan = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(`确定停止扫描「${row.versionName}」吗？`, '提示', {
+      confirmButtonText: '确定停止',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await post(`/lg/projects/${projectId}/scan-versions/${row.id}/cancel`)
+    ElMessage.success('扫描已停止')
+    await loadVersionList()
+  } catch {
+    // cancelled
+  }
 }
 
 const deleteVersion = async (row: any) => {
@@ -181,11 +290,30 @@ const loadVersionList = async (page?: number) => {
       pageNum: pageNum.value,
       pageSize: pageSize.value
     })
-    versionList.value = res.list || []
+    const list = res.list || []
     total.value = res.total || 0
+    versionList.value = list.map((v: any) => ({
+      id: v.id,
+      versionNumber: v.versionNumber || v.versionNo || '-',
+      versionName: v.versionName || v.versionNo || '未知版本',
+      scanType: v.scanType || v.scanScope || '-',
+      status: v.scanStatus || v.status || 'CREATED',
+      progress: v.progress != null ? v.progress : (v.scanStatus === 'SUCCESS' || v.scanStatus === 'COMPLETED' ? 100 : 0),
+      stage: v.stage || '-',
+      taskCount: v.taskCount || 0,
+      completedTaskCount: v.completedTaskCount || 0,
+      nodeCount: v.nodeCount || 0,
+      edgeCount: v.edgeCount || 0,
+      factCount: v.factCount || 0,
+      duration: v.duration || 0,
+      createdAt: v.createdAt,
+      createdBy: v.createdBy || '-'
+    }))
+
+    // 管理轮询：有运行中任务则启动，否则停止
+    managePolling()
   } catch (err) {
     console.error('获取扫描版本列表失败:', err)
-    ElMessage.error('获取扫描版本列表失败')
   } finally {
     loading.value = false
   }
@@ -195,8 +323,35 @@ const handlePageChange = (page: number) => {
   loadVersionList(page)
 }
 
+// 轮询管理
+const startPolling = () => {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    loadVersionList()
+  }, POLL_INTERVAL)
+}
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+const managePolling = () => {
+  if (hasRunningTasks.value) {
+    startPolling()
+  } else {
+    stopPolling()
+  }
+}
+
 onMounted(async () => {
   await loadVersionList()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
@@ -227,5 +382,24 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.progress-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-wrapper .progress-text {
+  font-size: 11px;
+  color: #909399;
+  text-align: right;
+}
+
+.stage-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
 }
 </style>

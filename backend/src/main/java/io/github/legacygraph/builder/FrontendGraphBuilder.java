@@ -500,13 +500,19 @@ public class FrontendGraphBuilder {
     }
 
     /**
-     * 创建边
+     * 创建边（去重：按 fromNodeId+toNodeId+edgeType+edgeKey 查找，已存在则直接返回）
      */
     private GraphEdge createEdge(String projectId, String versionId,
             String fromNodeId, String toNodeId,
             String edgeType, String edgeKey,
             String sourceType, BigDecimal confidence,
             NodeStatus status) {
+        // 先去重检查
+        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(fromNodeId, toNodeId, edgeType, edgeKey);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
         GraphEdge edge = new GraphEdge();
         edge.setId(UUID.randomUUID().toString());
         edge.setProjectId(projectId);

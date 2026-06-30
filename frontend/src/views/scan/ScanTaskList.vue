@@ -170,7 +170,7 @@ const getStatusType = (status: string): string => {
 }
 
 const goToCreate = () => {
-  router.push(`/projects/${projectId}/scan-versions`)
+  router.push(`/projects/${projectId}/scan-versions/create`)
 }
 
 const viewLogs = async (row: any) => {

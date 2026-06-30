@@ -59,6 +59,7 @@ public class SourceController {
     private final DocChunkRepository docChunkRepository;
     private final ScanVersionService scanVersionService;
     private final ProjectScanner projectScanner;
+    private final io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator;
 
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -81,13 +82,15 @@ public class SourceController {
                             DocumentRepository documentRepository,
                             DocChunkRepository docChunkRepository,
                             ScanVersionService scanVersionService,
-                            ProjectScanner projectScanner) {
+                            ProjectScanner projectScanner,
+                            io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
         this.docChunkRepository = docChunkRepository;
         this.scanVersionService = scanVersionService;
         this.projectScanner = projectScanner;
+        this.graphCacheInvalidator = graphCacheInvalidator;
     }
 
     // ==================== 代码仓库 ====================
@@ -182,6 +185,7 @@ public class SourceController {
         repo.setUpdatedAt(LocalDateTime.now());
 
         codeRepoRepository.insert(repo);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success(repo.getId());
     }
 

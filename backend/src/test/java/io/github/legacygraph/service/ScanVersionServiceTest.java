@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,6 +30,9 @@ class ScanVersionServiceTest {
 
     @Mock
     private ScanVersionRepository scanVersionRepository;
+
+    @Mock
+    private CacheService cacheService;
 
     @InjectMocks
     private ScanVersionService scanVersionService;
@@ -43,6 +47,8 @@ class ScanVersionServiceTest {
         createRequest.setBranchName("main");
         createRequest.setCommitId("abc123");
         createRequest.setScanScope("src/");
+        // 进度缓存默认未命中，回源 DB
+        lenient().when(cacheService.get(anyString(), any())).thenReturn(null);
     }
 
     @Test

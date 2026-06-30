@@ -80,12 +80,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { graphApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
+import { loadScanVersions } from '@/utils/versionsCache'
 
 interface GraphNode {
   id: string
@@ -105,9 +107,14 @@ interface GraphEdge {
   label: string
 }
 
+const route = useRoute()
+const projectId = computed(() => route.params.projectId as string)
+const currentVersion = ref<string>('')
+const versions = ref<any[]>([])
+
 const query = reactive({
-  versionId: '',
-  method: ''
+  versionId: currentVersion.value || '',
+  method: (route.query.api as string) || (route.query.method as string) || ''
 })
 
 const graphData = ref<any>(null)
@@ -115,26 +122,40 @@ const nodes = ref<GraphNode[]>([])
 const edges = ref<GraphEdge[]>([])
 const resultList = ref<any[]>([])
 
-// 查询调用链：有版本/方法时调用后端真实接口，否则提示输入条件
-const loadExample = () => {
-  // 调用后端 getApiChain 接口查询真实的调用链数据
-  if (query.versionId && query.method) {
-    queryGraph()
+async function loadVersions() {
+  const pid = projectId.value
+  if (!pid) return
+  versions.value = await loadScanVersions(pid)
+}
+
+const loadExample = async () => {
+  if (!projectId.value || !query.versionId) {
+    ElMessage.warning('缺少项目ID或版本ID')
     return
   }
-  // 没有查询条件时提示
-  ElMessage.info('请输入版本ID和方法名后查询，或留空后查看全部链路')
+  if (!query.method) {
+    ElMessage.info('请先输入 API 方法名（如 /api/user/login）再点击示例查询')
+    return
+  }
+  if (query.method) {
+    await queryGraph()
+  } else {
+    ElMessage.info('当前版本未找到可用于示例查询的 API 节点')
+  }
 }
 
 const queryGraph = async () => {
+  if (!projectId.value) {
+    ElMessage.warning('缺少项目ID')
+    return
+  }
   if (!query.versionId || !query.method) {
     ElMessage.warning('请输入版本ID和方法名')
     return
   }
   try {
-    const data = await graphApi.getApiChain('', query.versionId, query.method) as any
+    const data = await graphApi.getApiChain(projectId.value, query.versionId, query.method) as any
     graphData.value = data
-    // 解析图谱数据转换为VueFlow格式
     processGraphData(data)
   } catch (e) {
     console.error(e)
@@ -142,68 +163,111 @@ const queryGraph = async () => {
 }
 
 const processGraphData = (data: any[]) => {
+  const paths = Array.isArray(data) ? data : []
   const processedNodes = new Map<string, GraphNode>()
   const processedEdges: GraphEdge[] = []
   let x = 50
   let y = 50
 
-  data.forEach(path => {
-    if (path.nodes) {
-      path.nodes.forEach((node: any) => {
-        if (!processedNodes.has(node.id)) {
-          const labels = node.labels ? node.labels[0] : 'Node'
-          processedNodes.set(node.id, {
-            id: node.id,
+  paths.forEach(path => {
+    const pathNodes = path.nodes || path.p?.nodes || []
+    pathNodes.forEach((node: any) => {
+      const nodeId = normalizeGraphId(node.id || node.elementId || node.properties?.nodeKey)
+      if (!nodeId) return
+      if (!processedNodes.has(nodeId)) {
+        const labels = node.labels ? node.labels[0] : 'Node'
+        const props = node.properties || {}
+        processedNodes.set(nodeId, {
+          id: nodeId,
+          type: labels,
+          position: { x, y },
+          data: {
+            label: props.displayName || props.nodeName || props.nodeKey || nodeId,
             type: labels,
-            position: { x, y },
-            data: {
-              label: node.properties.nodeName || node.id,
-              type: labels,
-              confidence: node.properties.confidence || 1
-            }
-          })
-          x += 180
-          if (x > 900) {
-            x = 50
-            y += 100
+            confidence: props.confidence || 1
           }
+        })
+        x += 180
+        if (x > 900) {
+          x = 50
+          y += 100
         }
-      })
-    }
+      }
+    })
   })
 
-  // 提取边 (从路径中)
-  data.forEach(path => {
-    if (path.nodes && path.nodes.length >= 2) {
-      for (let i = 0; i < path.nodes.length - 1; i++) {
-        const from = path.nodes[i]
-        const to = path.nodes[i + 1]
-        const edgeId = `${from.id}-${to.id}`
-        if (!processedEdges.find(e => e.id === edgeId)) {
-          processedEdges.push({
-            id: edgeId,
-            source: from.id,
-            target: to.id,
-            label: getEdgeType(from, to)
-          })
-        }
+  paths.forEach(path => {
+    const pathEdges = path.edges || path.relationships || path.p?.edges || path.p?.relationships || []
+    pathEdges.forEach((edge: any, idx: number) => {
+      const source = normalizeGraphId(edge.source || edge.startNodeId || edge.startNodeElementId)
+      const target = normalizeGraphId(edge.target || edge.endNodeId || edge.endNodeElementId)
+      const edgeId = normalizeGraphId(edge.id || `${source}-${target}-${idx}`)
+      if (!source || !target || processedEdges.find(e => e.id === edgeId)) return
+      processedEdges.push({
+        id: edgeId,
+        source,
+        target,
+        label: edge.label || edge.type || edge.properties?.type || 'RELATED'
+      })
+    })
+
+    const pathNodes = path.nodes || path.p?.nodes || []
+    if (pathEdges.length === 0 && pathNodes.length >= 2) {
+      for (let i = 0; i < pathNodes.length - 1; i++) {
+        const fromId = normalizeGraphId(pathNodes[i].id || pathNodes[i].elementId)
+        const toId = normalizeGraphId(pathNodes[i + 1].id || pathNodes[i + 1].elementId)
+        const edgeId = `${fromId}-${toId}`
+        if (!fromId || !toId || processedEdges.find(e => e.id === edgeId)) continue
+        processedEdges.push({
+          id: edgeId,
+          source: fromId,
+          target: toId,
+          label: 'RELATED'
+        })
       }
     }
   })
 
   nodes.value = Array.from(processedNodes.values())
   edges.value = processedEdges
-  resultList.value = data
+  resultList.value = nodes.value.map(node => ({
+    labels: node.data.type,
+    properties: {
+      nodeName: node.data.label,
+      displayName: node.data.label,
+      confidence: node.data.confidence,
+      status: ''
+    }
+  }))
+  if (nodes.value.length === 0) {
+    ElMessage.info('未查询到调用链数据')
+  }
 }
 
-const getEdgeType = (from: any, to: any) => {
-  // 从properties中获取关系类型
-  return 'RELATED'
+const normalizeGraphId = (value: any): string => {
+  return value == null ? '' : String(value)
 }
 
 const handleExport = (cmd: string) => {
   ElMessage.info(`导出图谱为 ${cmd} 格式`)
 }
+
+onMounted(async () => {
+  await loadVersions()
+  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+  const urlVersion = (route.query.version as string) || ''
+  if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
+    currentVersion.value = urlVersion
+  } else if (versions.value.length > 0) {
+    currentVersion.value = versions.value[0].id
+  }
+  if (currentVersion.value) {
+    query.versionId = currentVersion.value
+  }
+  if (query.versionId && query.method) {
+    queryGraph()
+  }
+})
 </script>
 
 <style scoped>

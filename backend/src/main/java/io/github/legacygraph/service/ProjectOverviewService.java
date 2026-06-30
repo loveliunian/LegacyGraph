@@ -5,6 +5,8 @@ import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.ProjectOverviewResponse;
 import io.github.legacygraph.entity.*;
 import io.github.legacygraph.repository.*;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -38,6 +40,10 @@ public class ProjectOverviewService {
         this.reviewRecordRepository = reviewRecordRepository;
     }
 
+    /**
+     * 项目概览（缓存：仪表盘首屏，5+ 查询 + Neo4j 聚合；短 TTL 容忍轻微陈旧）
+     */
+    @Cacheable(cacheNames = "project-overview", key = "#projectId")
     public ProjectOverviewResponse getOverview(String projectId) {
         ProjectOverviewResponse response = new ProjectOverviewResponse();
 

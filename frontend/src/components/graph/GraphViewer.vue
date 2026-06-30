@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, markRaw } from 'vue'
 import {
   VueFlow,
   useVueFlow,
@@ -109,7 +109,7 @@ const vueFlowRef = ref()
 const { fitView, zoomIn, zoomOut, setCenter } = useVueFlow()
 
 const nodeTypes = {
-  custom: CustomNode as any
+  custom: markRaw(CustomNode) as any
 }
 
 const currentLayout = ref('力导向')
@@ -170,15 +170,15 @@ function nodeColor(node: Node<GraphNodeData>): string {
 }
 
 function handleNodeClick(event: any) {
-  emit('nodeClick', event)
+  emit('nodeClick', event.node ?? event)
 }
 
 function handleEdgeClick(event: any) {
-  emit('edgeClick', event)
+  emit('edgeClick', event.edge ?? event)
 }
 
 function handleNodeDragStop(event: any) {
-  emit('nodeDrag', event)
+  emit('nodeDrag', event.node ?? event)
 }
 
 function handleConnect(params: { source: string; target: string }) {

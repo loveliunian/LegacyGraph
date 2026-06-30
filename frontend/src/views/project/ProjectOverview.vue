@@ -302,7 +302,7 @@ const goToReviews = () => {
 }
 
 const startNewScan = () => {
-  router.push(`/projects/${projectId}/scan-versions`)
+  router.push(`/projects/${projectId}/scan-versions/create`)
 }
 
 const generateTestCases = () => {

@@ -1,0 +1,48 @@
+# 数据库 Schema 语义分析
+
+你是一位资深数据库架构师和业务分析师。请分析以下数据库表结构，从业务角度理解每张表的含义。
+
+## 数据库 Schema 信息
+{schemaInfo}
+
+## 分析要求
+
+### 1. 表级分析
+对每张表，推断：
+- **businessLabel**: 业务中文名称（如 `t_order` → "订单表"）
+- **businessDescription**: 业务描述（一句话说明该表的作用，如果原表已有注释则以此为基础增强）
+- **domain**: 所属业务域（如：用户、订单、商品、权限、系统配置）
+- **importance**: 重要程度（CORE=核心业务表 / SUPPORT=支撑表 / LOOKUP=字典/配置表）
+
+### 2. 业务域
+归纳出所有业务域，每个域包含：
+- **name**: 域名
+- **description**: 域说明
+- **tables**: 属于该域的表名列表
+
+### 3. 隐式关系
+识别命名规则无法推断的跨表关系：
+- 关注列名不包含 `_id` 后缀但仍然引用其他表的字段
+- 关注通过中间表（如 `user_role`）形成的多对多关系
+- 关注状态字段引用的字典/枚举表
+- 每个关系给出 fromTable、toTable、relationType（ONE_TO_MANY / MANY_TO_MANY / REFERENCE）、description
+
+## 输出格式
+请以严格 JSON 格式输出：
+
+```json
+{
+  "tables": [
+    { "tableName": "t_user", "businessLabel": "用户表", "businessDescription": "存储系统用户基本信息...", "domain": "用户", "importance": "CORE" }
+  ],
+  "domains": [
+    { "name": "用户", "description": "用户注册、登录、权限相关", "tables": ["t_user", "t_role", "t_user_role"] }
+  ],
+  "implicitRelations": [
+    { "fromTable": "t_user_role", "toTable": "t_user", "relationType": "MANY_TO_MANY", "description": "用户-角色多对多关联" }
+  ],
+  "schemaSummary": "该数据库是一个电商系统的核心库，包含用户、订单、商品等6个业务域的23张表..."
+}
+```
+
+只输出 JSON，不要其他解释内容。

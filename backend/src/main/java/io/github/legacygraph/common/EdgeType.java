@@ -23,7 +23,9 @@ public enum EdgeType {
     CALLS_EXTERNAL("调用外部系统"),
     VERIFIED_BY("由...验证"),
     ASSERTS("断言"),
-    HAS_EVIDENCE("拥有证据");
+    HAS_EVIDENCE("拥有证据"),
+    REFERENCES("外键引用"),
+    BELONGS_TO("属于");
 
     private final String description;
 

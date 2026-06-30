@@ -21,11 +21,14 @@ class GraphMergeServiceTest {
     @Mock
     private Neo4jGraphDao neo4jGraphDao;
 
+    @Mock
+    private GraphCacheInvalidator graphCacheInvalidator;
+
     private GraphMergeService graphMergeService;
 
     @Test
     void testConstruction() {
-        graphMergeService = new GraphMergeService(neo4jGraphDao);
+        graphMergeService = new GraphMergeService(neo4jGraphDao, graphCacheInvalidator);
         assertNotNull(graphMergeService);
     }
 }

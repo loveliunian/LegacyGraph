@@ -118,7 +118,7 @@ const handleUserCommand = async (command: string) => {
       router.push('/dashboard')
       break
     case 'settings':
-      router.push('/dashboard')
+      router.push('/system/prompts')
       break
   }
 }
