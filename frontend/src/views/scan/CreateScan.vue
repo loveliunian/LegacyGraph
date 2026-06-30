@@ -58,7 +58,7 @@
           <el-checkbox-group v-model="scanForm.scanTypes">
             <el-row :gutter="20">
               <el-col :span="12">
-                <el-checkbox label="CODE_SCAN">
+                <el-checkbox value="CODE_SCAN">
                   <div class="scan-type-item">
                     <span class="type-name">代码扫描</span>
                     <span class="type-desc">解析 Controller、Service、Mapper、SQL 等，提取代码结构和调用关系</span>
@@ -66,7 +66,7 @@
                 </el-checkbox>
               </el-col>
               <el-col :span="12">
-                <el-checkbox label="DB_SCAN">
+                <el-checkbox value="DB_SCAN">
                   <div class="scan-type-item">
                     <span class="type-name">数据库扫描</span>
                     <span class="type-desc">扫描数据库表结构、字段、索引、约束，提取数据血缘关系</span>
@@ -74,7 +74,7 @@
                 </el-checkbox>
               </el-col>
               <el-col :span="12">
-                <el-checkbox label="DOC_PARSE">
+                <el-checkbox value="DOC_PARSE">
                   <div class="scan-type-item">
                     <span class="type-name">文档解析</span>
                     <span class="type-desc">解析产品文档、API 文档，提取业务规则、流程、接口定义</span>
@@ -82,7 +82,7 @@
                 </el-checkbox>
               </el-col>
               <el-col :span="12">
-                <el-checkbox label="GRAPH_BUILD">
+                <el-checkbox value="GRAPH_BUILD">
                   <div class="scan-type-item">
                     <span class="type-name">图谱构建</span>
                     <span class="type-desc">基于已有的事实构建知识图谱，生成节点和关系</span>
@@ -90,7 +90,7 @@
                 </el-checkbox>
               </el-col>
               <el-col :span="12">
-                <el-checkbox label="TEST_GENERATE">
+                <el-checkbox value="TEST_GENERATE">
                   <div class="scan-type-item">
                     <span class="type-name">测试生成</span>
                     <span class="type-desc">基于图谱和 API 信息，自动生成接口测试用例</span>

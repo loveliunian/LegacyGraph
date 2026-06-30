@@ -6,7 +6,7 @@ import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.service.GraphMergeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -35,7 +35,7 @@ import java.util.Map;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/agents")
+@RequestMapping("/agents")
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 @Tag(name = "LLM Agent API", description = "大语言模型驱动的各类智能Agent执行接口")
 public class LlmAgentController {
@@ -47,7 +47,7 @@ public class LlmAgentController {
     private final TestCaseAgent testCaseAgent;
     private final ReviewAgent reviewAgent;
     private final GraphMergeService graphMergeService;
-    private final GraphNodeRepository nodeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
 
     /**
      * 通用运行指定Agent
@@ -133,8 +133,8 @@ public class LlmAgentController {
             @RequestParam String nodeAId,
             @Parameter(description = "第二个节点ID", required = true)
             @RequestParam String nodeBId) {
-        GraphNode nodeA = nodeRepository.selectById(nodeAId);
-        GraphNode nodeB = nodeRepository.selectById(nodeBId);
+        GraphNode nodeA = neo4jGraphDao.findNodeById(nodeAId).orElse(null);
+        GraphNode nodeB = neo4jGraphDao.findNodeById(nodeBId).orElse(null);
         if (nodeA == null || nodeB == null) {
             return Result.badRequest("Node not found");
         }

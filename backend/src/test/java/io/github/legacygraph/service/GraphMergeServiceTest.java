@@ -1,7 +1,6 @@
 package io.github.legacygraph.service;
 
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.GraphEdge;
 import org.junit.jupiter.api.Test;
@@ -20,15 +19,13 @@ import static org.mockito.Mockito.*;
 class GraphMergeServiceTest {
 
     @Mock
-    private GraphNodeRepository graphNodeRepository;
-    @Mock
-    private GraphEdgeRepository graphEdgeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
 
     private GraphMergeService graphMergeService;
 
     @Test
     void testConstruction() {
-        graphMergeService = new GraphMergeService(graphNodeRepository, graphEdgeRepository);
+        graphMergeService = new GraphMergeService(neo4jGraphDao);
         assertNotNull(graphMergeService);
     }
 }

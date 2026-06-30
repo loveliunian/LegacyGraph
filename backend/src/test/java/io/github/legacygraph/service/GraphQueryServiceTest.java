@@ -1,10 +1,10 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.repository.FactRepository;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,10 +32,7 @@ import static org.mockito.Mockito.*;
 class GraphQueryServiceTest {
 
     @Mock
-    private GraphNodeRepository graphNodeRepository;
-
-    @Mock
-    private GraphEdgeRepository graphEdgeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
 
     @Mock
     private ScanVersionRepository scanVersionRepository;
@@ -75,8 +72,7 @@ class GraphQueryServiceTest {
     @BeforeEach
     void setUp() {
         graphQueryService = new GraphQueryService(
-                graphNodeRepository,
-                graphEdgeRepository,
+                neo4jGraphDao,
                 scanVersionRepository,
                 scanTaskRepository,
                 factRepository,
@@ -90,7 +86,7 @@ class GraphQueryServiceTest {
         when(session.run(anyString(), anyMap())).thenReturn(result);
         when(result.hasNext()).thenReturn(false);
 
-        List<Map<String, Object>> resultList = graphQueryService.getApiCallChain("v1", "POST /api/test");
+        List<Map<String, Object>> resultList = graphQueryService.getApiCallChain("p1", "v1", "POST /api/test");
 
         assertNotNull(resultList);
         assertTrue(resultList.isEmpty());
@@ -116,7 +112,7 @@ class GraphQueryServiceTest {
         when(node2.labels()).thenReturn(Collections.singletonList("Service"));
         when(node2.asMap()).thenReturn(Map.of("nodeKey", "TestService", "displayName", "测试服务"));
 
-        List<Map<String, Object>> resultList = graphQueryService.getApiCallChain("v1", "POST /api/test");
+        List<Map<String, Object>> resultList = graphQueryService.getApiCallChain("p1", "v1", "POST /api/test");
 
         assertNotNull(resultList);
         assertFalse(resultList.isEmpty());
@@ -129,7 +125,7 @@ class GraphQueryServiceTest {
         when(session.run(anyString(), anyMap())).thenReturn(result);
         when(result.hasNext()).thenReturn(false);
 
-        List<Map<String, Object>> resultList = graphQueryService.getTableImpact("v1", "t_user");
+        List<Map<String, Object>> resultList = graphQueryService.getTableImpact("p1", "v1", "t_user");
 
         assertNotNull(resultList);
         assertTrue(resultList.isEmpty());
@@ -143,7 +139,7 @@ class GraphQueryServiceTest {
         when(result.next()).thenReturn(record);
         when(record.asMap()).thenReturn(Map.of("api", "POST /api/test", "path", "some-path"));
 
-        List<Map<String, Object>> resultList = graphQueryService.getTableImpact("v1", "t_user");
+        List<Map<String, Object>> resultList = graphQueryService.getTableImpact("p1", "v1", "t_user");
 
         assertNotNull(resultList);
         assertEquals(1, resultList.size());
@@ -155,11 +151,12 @@ class GraphQueryServiceTest {
         when(session.run(anyString(), anyMap())).thenReturn(result);
         when(result.hasNext()).thenReturn(false);
 
-        Map<String, Object> resultMap = graphQueryService.getFeatureView("v1", "user");
+        Map<String, Object> resultMap = graphQueryService.getFeatureView("p1", "v1", "user");
 
         assertNotNull(resultMap);
         assertEquals("user", resultMap.get("module"));
         assertEquals("v1", resultMap.get("versionId"));
+        assertEquals("p1", resultMap.get("projectId"));
         assertEquals(0, ((List<?>) resultMap.get("nodes")).size());
         assertEquals(0, ((List<?>) resultMap.get("edges")).size());
     }
@@ -187,7 +184,7 @@ class GraphQueryServiceTest {
         when(relationship.endNodeElementId()).thenReturn("node-2");
         when(relationship.asMap()).thenReturn(Map.of("confidence", 0.9));
 
-        Map<String, Object> resultMap = graphQueryService.getFeatureView("v1", "user");
+        Map<String, Object> resultMap = graphQueryService.getFeatureView("p1", "v1", "user");
 
         assertNotNull(resultMap);
         assertEquals(1, ((List<?>) resultMap.get("nodes")).size());

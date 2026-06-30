@@ -5,6 +5,7 @@ import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.dto.CreateProjectRequest;
 import io.github.legacygraph.entity.Project;
 import io.github.legacygraph.exception.BusinessException;
+import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.ProjectRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,9 @@ class ProjectServiceTest {
 
     @Mock
     private ProjectRepository projectRepository;
+
+    @Mock
+    private CodeRepoRepository codeRepoRepository;
 
     @InjectMocks
     private ProjectService projectService;

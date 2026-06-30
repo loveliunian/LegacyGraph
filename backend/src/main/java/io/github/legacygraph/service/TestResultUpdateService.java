@@ -5,8 +5,7 @@ import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.ReviewRecordRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
@@ -32,8 +31,7 @@ import java.util.UUID;
 @Service
 public class TestResultUpdateService {
 
-    private final GraphNodeRepository nodeRepository;
-    private final GraphEdgeRepository edgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final TestResultRepository testResultRepository;
     private final TestCaseRepository testCaseRepository;
     private final ReviewRecordRepository reviewRecordRepository;
@@ -43,13 +41,11 @@ public class TestResultUpdateService {
     private static final BigDecimal FAIL_EDGE_DECREMENT = new BigDecimal("0.20");
     private static final BigDecimal VERIFIED_THRESHOLD = new BigDecimal("0.85");
 
-    public TestResultUpdateService(GraphNodeRepository nodeRepository,
-                                  GraphEdgeRepository edgeRepository,
+    public TestResultUpdateService(Neo4jGraphDao neo4jGraphDao,
                                   TestResultRepository testResultRepository,
                                   TestCaseRepository testCaseRepository,
                                   ReviewRecordRepository reviewRecordRepository) {
-        this.nodeRepository = nodeRepository;
-        this.edgeRepository = edgeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.testResultRepository = testResultRepository;
         this.testCaseRepository = testCaseRepository;
         this.reviewRecordRepository = reviewRecordRepository;
@@ -61,19 +57,19 @@ public class TestResultUpdateService {
     @Transactional
     public void onTestPass(String nodeId, String edgeId) {
         if (nodeId != null) {
-            GraphNode node = nodeRepository.selectById(nodeId);
+            GraphNode node = neo4jGraphDao.findNodeById(nodeId).orElse(null);
             if (node != null && node.getVerifiedScore() != null) {
                 node.setVerifiedScore(node.getVerifiedScore().add(PASS_NODE_INCREMENT));
                 // 不超过 1.0000
                 if (node.getVerifiedScore().compareTo(BigDecimal.ONE) > 0) {
                     node.setVerifiedScore(BigDecimal.ONE);
                 }
-                nodeRepository.updateById(node);
+                neo4jGraphDao.updateNode(node);
             }
         }
 
         if (edgeId != null) {
-            GraphEdge edge = edgeRepository.selectById(edgeId);
+            GraphEdge edge = neo4jGraphDao.findEdgeById(edgeId).orElse(null);
             if (edge != null && edge.getVerifiedScore() != null) {
                 edge.setVerifiedScore(edge.getVerifiedScore().add(PASS_EDGE_INCREMENT));
                 // 不超过 1.0000
@@ -85,7 +81,7 @@ public class TestResultUpdateService {
                 if (totalConfidence.compareTo(VERIFIED_THRESHOLD) >= 0) {
                     edge.setRelationStatus("verified");
                 }
-                edgeRepository.updateById(edge);
+                neo4jGraphDao.updateEdge(edge);
             }
         }
 
@@ -98,7 +94,7 @@ public class TestResultUpdateService {
     @Transactional
     public void onTestFail(String nodeId, String edgeId, String testResultId, String failureMessage) {
         if (edgeId != null) {
-            GraphEdge edge = edgeRepository.selectById(edgeId);
+            GraphEdge edge = neo4jGraphDao.findEdgeById(edgeId).orElse(null);
             if (edge != null && edge.getVerifiedScore() != null) {
                 edge.setVerifiedScore(edge.getVerifiedScore().subtract(FAIL_EDGE_DECREMENT));
                 // 不低于 0
@@ -106,13 +102,13 @@ public class TestResultUpdateService {
                     edge.setVerifiedScore(BigDecimal.ZERO);
                 }
                 edge.setRelationStatus("review");
-                edgeRepository.updateById(edge);
+                neo4jGraphDao.updateEdge(edge);
             }
         }
 
         // 创建审核任务记录失败上下文
         if (nodeId != null) {
-            GraphNode node = nodeRepository.selectById(nodeId);
+            GraphNode node = neo4jGraphDao.findNodeById(nodeId).orElse(null);
             if (node != null) {
                 ReviewRecord review = new ReviewRecord();
                 review.setId(UUID.randomUUID().toString());

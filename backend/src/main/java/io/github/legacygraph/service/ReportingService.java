@@ -12,8 +12,7 @@ import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.entity.Report;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.ReportRepository;
 import io.github.legacygraph.repository.TestResultRepository;
 import io.minio.BucketExistsArgs;
@@ -43,8 +42,7 @@ import java.util.*;
 public class ReportingService {
 
     private final ReportRepository reportRepository;
-    private final GraphNodeRepository nodeRepository;
-    private final GraphEdgeRepository edgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final TestResultRepository testResultRepository;
     private final io.github.legacygraph.repository.TestCaseRepository testCaseRepository;
     private final io.github.legacygraph.repository.NodeEvidenceRepository nodeEvidenceRepository;
@@ -53,10 +51,8 @@ public class ReportingService {
     private final ReportExportService reportExportService;
 
     private final String bucketName = "legacygraph-reports";
-
     public ReportingService(ReportRepository reportRepository,
-                           GraphNodeRepository nodeRepository,
-                           GraphEdgeRepository edgeRepository,
+                           Neo4jGraphDao neo4jGraphDao,
                            TestResultRepository testResultRepository,
                            io.github.legacygraph.repository.TestCaseRepository testCaseRepository,
                            io.github.legacygraph.repository.NodeEvidenceRepository nodeEvidenceRepository,
@@ -64,8 +60,7 @@ public class ReportingService {
                            ObjectMapper objectMapper,
                            ReportExportService reportExportService) {
         this.reportRepository = reportRepository;
-        this.nodeRepository = nodeRepository;
-        this.edgeRepository = edgeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.testResultRepository = testResultRepository;
         this.testCaseRepository = testCaseRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
@@ -81,13 +76,8 @@ public class ReportingService {
     public MigrationReadinessReport generateMigrationReport(String projectId) {
         log.info("Generating migration readiness report for project: {}", projectId);
 
-        List<GraphNode> allNodes = nodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .list();
-
-        List<GraphEdge> allEdges = edgeRepository.lambdaQuery()
-                .eq(GraphEdge::getProjectId, projectId)
-                .list();
+        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, null, null, null, null, null, 0);
+        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, null, null, null, 0);
 
         MigrationReadinessReport report = new MigrationReadinessReport();
         report.setProjectId(projectId);
@@ -220,11 +210,7 @@ public class ReportingService {
         report.setProjectId(projectId);
         report.setVersionId(versionId);
 
-        // 获取所有节点按创建日期分组
-        List<GraphNode> allNodes = nodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .list();
+        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
 
         if (allNodes.isEmpty()) {
             report.setDailyData(Collections.emptyList());
@@ -302,15 +288,9 @@ public class ReportingService {
         report.setVersionId(versionId);
 
         // 获取所有节点
-        List<GraphNode> allNodes = nodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .list();
+        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
 
-        List<GraphEdge> allEdges = edgeRepository.lambdaQuery()
-                .eq(GraphEdge::getProjectId, projectId)
-                .eq(GraphEdge::getVersionId, versionId)
-                .list();
+        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 0);
 
         report.setTotalNodes(allNodes.size());
         report.setTotalEdges(allEdges.size());
@@ -384,15 +364,9 @@ public class ReportingService {
         report.setProjectId(projectId);
         report.setVersionId(versionId);
 
-        List<GraphNode> allNodes = nodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .list();
+        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
 
-        List<GraphEdge> allEdges = edgeRepository.lambdaQuery()
-                .eq(GraphEdge::getProjectId, projectId)
-                .eq(GraphEdge::getVersionId, versionId)
-                .list();
+        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 0);
 
         report.setTotalNodes(allNodes.size());
         report.setTotalEdges(allEdges.size());
@@ -496,15 +470,8 @@ public class ReportingService {
         report.setProjectId(projectId);
         report.setVersionId(versionId);
 
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GraphNode> nodeQuery =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-        nodeQuery.eq(GraphNode::getProjectId, projectId).eq(GraphNode::getVersionId, versionId);
-        List<GraphNode> nodes = nodeRepository.selectList(nodeQuery);
-
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GraphEdge> edgeQuery =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-        edgeQuery.eq(GraphEdge::getProjectId, projectId).eq(GraphEdge::getVersionId, versionId);
-        long edgeCount = edgeRepository.selectCount(edgeQuery);
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
+        long edgeCount = neo4jGraphDao.countEdges(projectId, versionId, null);
 
         long total = nodes.size();
         report.setTotalNodes(total);

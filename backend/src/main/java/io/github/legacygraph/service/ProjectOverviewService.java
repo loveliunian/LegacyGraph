@@ -1,6 +1,7 @@
 package io.github.legacygraph.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.ProjectOverviewResponse;
 import io.github.legacygraph.entity.*;
 import io.github.legacygraph.repository.*;
@@ -18,23 +19,20 @@ public class ProjectOverviewService {
     private final CodeRepoRepository codeRepoRepository;
     private final DbConnectionRepository dbConnectionRepository;
     private final DocumentRepository documentRepository;
-    private final GraphNodeRepository graphNodeRepository;
-    private final GraphEdgeRepository graphEdgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final ScanVersionRepository scanVersionRepository;
     private final ReviewRecordRepository reviewRecordRepository;
 
     public ProjectOverviewService(CodeRepoRepository codeRepoRepository,
                                   DbConnectionRepository dbConnectionRepository,
                                   DocumentRepository documentRepository,
-                                  GraphNodeRepository graphNodeRepository,
-                                  GraphEdgeRepository graphEdgeRepository,
+                                  Neo4jGraphDao neo4jGraphDao,
                                   ScanVersionRepository scanVersionRepository,
                                   ReviewRecordRepository reviewRecordRepository) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
-        this.graphNodeRepository = graphNodeRepository;
-        this.graphEdgeRepository = graphEdgeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.scanVersionRepository = scanVersionRepository;
         this.reviewRecordRepository = reviewRecordRepository;
     }
@@ -119,13 +117,9 @@ public class ProjectOverviewService {
     private ProjectOverviewResponse.GraphStats buildGraphStats(String projectId) {
         ProjectOverviewResponse.GraphStats stats = new ProjectOverviewResponse.GraphStats();
 
-        List<GraphNode> allNodes = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .list();
+        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, null, null, null, null, null, 0);
         long totalNodes = allNodes.size();
-        long totalEdges = graphEdgeRepository.lambdaQuery()
-                .eq(GraphEdge::getProjectId, projectId)
-                .count();
+        long totalEdges = neo4jGraphDao.countEdges(projectId, null, null);
         double avgConfidence = allNodes.stream()
                 .mapToDouble(n -> n.getConfidence() != null ? n.getConfidence().doubleValue() : 0.0)
                 .average().orElse(0.0);
@@ -144,14 +138,9 @@ public class ProjectOverviewService {
         long pendingEdges = 0;
 
         if (totalEdges > 0) {
-            confirmedEdges = graphEdgeRepository.lambdaQuery()
-                    .eq(GraphEdge::getProjectId, projectId)
-                    .eq(GraphEdge::getStatus, "CONFIRMED")
-                    .count();
-            pendingEdges = graphEdgeRepository.lambdaQuery()
-                    .eq(GraphEdge::getProjectId, projectId)
-                    .in(GraphEdge::getStatus, "PENDING", "PENDING_CONFIRM")
-                    .count();
+            confirmedEdges = neo4jGraphDao.countEdges(projectId, null, "CONFIRMED");
+            pendingEdges = neo4jGraphDao.countEdges(projectId, null, "PENDING")
+                          + neo4jGraphDao.countEdges(projectId, null, "PENDING_CONFIRM");
             edgeConfirmationRate = (double) confirmedEdges / totalEdges * 100;
         }
 

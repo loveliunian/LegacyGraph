@@ -8,9 +8,8 @@ import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.FactRepository;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
 import org.neo4j.driver.Driver;
@@ -27,21 +26,18 @@ import java.util.*;
 @Service
 public class GraphQueryService {
 
-    private final GraphNodeRepository graphNodeRepository;
-    private final GraphEdgeRepository graphEdgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final ScanVersionRepository scanVersionRepository;
     private final ScanTaskRepository scanTaskRepository;
     private final FactRepository factRepository;
     private final Driver neo4jDriver;
 
-    public GraphQueryService(GraphNodeRepository graphNodeRepository,
-                            GraphEdgeRepository graphEdgeRepository,
+    public GraphQueryService(Neo4jGraphDao neo4jGraphDao,
                             ScanVersionRepository scanVersionRepository,
                             ScanTaskRepository scanTaskRepository,
                             FactRepository factRepository,
                             Driver neo4jDriver) {
-        this.graphNodeRepository = graphNodeRepository;
-        this.graphEdgeRepository = graphEdgeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
@@ -50,15 +46,22 @@ public class GraphQueryService {
 
     /**
      * 查询接口完整调用链: ApiEndpoint -> Controller -> Method -> Service -> Mapper -> SQL -> Table
+     * 增加 projectId/versionId 过滤，避免同名 API 跨版本串数据。
      */
-    public List<Map<String, Object>> getApiCallChain(String versionId, String apiKey) {
+    public List<Map<String, Object>> getApiCallChain(String projectId, String versionId, String apiKey) {
         String cypher = """
-                MATCH p = (api:ApiEndpoint {nodeKey: $apiKey})-[:HANDLED_BY|CALLS|EXECUTES|READS|WRITES*1..8]->(n)
+                MATCH p = (api:ApiEndpoint {nodeKey: $apiKey, projectId: $projectId, versionId: $versionId})
+                         -[:HANDLED_BY|CALLS|EXECUTES|READS|WRITES*1..8]->(n)
+                WHERE n.projectId = $projectId AND n.versionId = $versionId
                 RETURN p
                 """;
 
         try (Session session = neo4jDriver.session()) {
-            Result result = session.run(cypher, Map.of("apiKey", apiKey));
+            Result result = session.run(cypher, Map.of(
+                    "apiKey", apiKey,
+                    "projectId", projectId,
+                    "versionId", versionId
+            ));
             List<Map<String, Object>> response = new ArrayList<>();
             while (result.hasNext()) {
                 Record record = result.next();
@@ -81,15 +84,22 @@ public class GraphQueryService {
 
     /**
      * 查询表被哪些接口影响
+     * 增加 projectId/versionId 过滤，避免同名表跨版本串数据。
      */
-    public List<Map<String, Object>> getTableImpact(String versionId, String tableName) {
+    public List<Map<String, Object>> getTableImpact(String projectId, String versionId, String tableName) {
         String cypher = """
-                MATCH p = (api:ApiEndpoint)-[:HANDLED_BY|CALLS|EXECUTES|WRITES*1..8]->(t:Table {nodeName: $tableName})
+                MATCH p = (api:ApiEndpoint {projectId: $projectId, versionId: $versionId})
+                         -[:HANDLED_BY|CALLS|EXECUTES|WRITES*1..8]->(t:Table {nodeName: $tableName})
+                WHERE t.projectId = $projectId AND t.versionId = $versionId
                 RETURN api, p
                 """;
 
         try (Session session = neo4jDriver.session()) {
-            Result result = session.run(cypher, Map.of("tableName", tableName));
+            Result result = session.run(cypher, Map.of(
+                    "tableName", tableName,
+                    "projectId", projectId,
+                    "versionId", versionId
+            ));
             List<Map<String, Object>> response = new ArrayList<>();
             while (result.hasNext()) {
                 Record record = result.next();
@@ -101,21 +111,45 @@ public class GraphQueryService {
 
     /**
      * 获取功能图谱视图
-     * 根据模块名称查询完整的功能调用链路图谱
+     * 根据模块名称查询完整的功能调用链路图谱。
+     * 当 module 未稳定写入时，返回该版本所有 Feature/Page/ApiEndpoint/Service/Repository 子图，
+     * 并在结果中标记 moduleMissing = true。
      */
-    public Map<String, Object> getFeatureView(String versionId, String module) {
-        String cypher = """
-                MATCH (n)
-                WHERE n.versionId = $versionId
-                  AND any(label IN labels(n) WHERE label IN ['Feature', 'ApiEndpoint', 'Service', 'Repository'])
-                  AND n.module = $module
-                MATCH p = (n)-[:EXPOSED_BY|CALLS|HANDLED_BY|EXECUTES|READS|WRITES*1..10]->(m)
-                RETURN DISTINCT p
-                """;
-
+    public Map<String, Object> getFeatureView(String projectId, String versionId, String module) {
+        boolean hasModule = module != null && !module.isBlank();
+        String cypher;
         Map<String, Object> result = new HashMap<>();
+        result.put("module", module);
+        result.put("versionId", versionId);
+        result.put("projectId", projectId);
+
+        if (hasModule) {
+            cypher = """
+                    MATCH (n)
+                    WHERE n.projectId = $projectId AND n.versionId = $versionId
+                      AND any(label IN labels(n) WHERE label IN ['Feature', 'ApiEndpoint', 'Service', 'Repository'])
+                      AND n.module = $module
+                    MATCH p = (n)-[:EXPOSED_BY|CALLS|HANDLED_BY|EXECUTES|READS|WRITES*1..10]->(m)
+                    WHERE m.projectId = $projectId AND m.versionId = $versionId
+                    RETURN DISTINCT p
+                    """;
+            result.put("moduleMissing", false);
+        } else {
+            // fallback: 无 module 属性时，返回该版本所有相关类型子图
+            cypher = """
+                    MATCH (n)
+                    WHERE n.projectId = $projectId AND n.versionId = $versionId
+                      AND any(label IN labels(n) WHERE label IN ['Feature', 'ApiEndpoint', 'Service', 'Repository', 'Page'])
+                    OPTIONAL MATCH p = (n)-[:EXPOSED_BY|CALLS|HANDLED_BY|EXECUTES|READS|WRITES*1..10]->(m)
+                    WHERE m.projectId = $projectId AND m.versionId = $versionId
+                    RETURN DISTINCT n, p
+                    """;
+            result.put("moduleMissing", true);
+        }
+
         try (Session session = neo4jDriver.session()) {
             Result queryResult = session.run(cypher, Map.of(
+                    "projectId", projectId,
                     "versionId", versionId,
                     "module", module
             ));
@@ -126,9 +160,37 @@ public class GraphQueryService {
 
             while (queryResult.hasNext()) {
                 Record record = queryResult.next();
-                Path path = record.get("p").asPath();
+                org.neo4j.driver.Value pValue = record.get("p");
+                if (!pValue.isNull()) {
+                    Path path = pValue.asPath();
 
-                for (var node : path.nodes()) {
+                    for (var node : path.nodes()) {
+                        String nodeId = node.elementId();
+                        if (!nodeIds.contains(nodeId)) {
+                            nodeIds.add(nodeId);
+                            Map<String, Object> nodeMap = new HashMap<>();
+                            nodeMap.put("id", nodeId);
+                            nodeMap.put("labels", node.labels());
+                            nodeMap.put("properties", node.asMap());
+                            nodes.add(nodeMap);
+                        }
+                    }
+
+                    for (var rel : path.relationships()) {
+                        Map<String, Object> relMap = new HashMap<>();
+                        relMap.put("id", rel.elementId());
+                        relMap.put("type", rel.type().toString());
+                        relMap.put("startNodeId", rel.startNodeElementId());
+                        relMap.put("endNodeId", rel.endNodeElementId());
+                        relMap.put("properties", rel.asMap());
+                        edges.add(relMap);
+                    }
+                }
+                // 处理 fallback 返回的 standalone 节点
+                if (hasModule) continue;
+                org.neo4j.driver.Value nValue = record.get("n");
+                if (!nValue.isNull()) {
+                    var node = nValue.asNode();
                     String nodeId = node.elementId();
                     if (!nodeIds.contains(nodeId)) {
                         nodeIds.add(nodeId);
@@ -139,20 +201,8 @@ public class GraphQueryService {
                         nodes.add(nodeMap);
                     }
                 }
-
-                for (var rel : path.relationships()) {
-                    Map<String, Object> relMap = new HashMap<>();
-                    relMap.put("id", rel.elementId());
-                    relMap.put("type", rel.type().toString());
-                    relMap.put("startNodeId", rel.startNodeElementId());
-                    relMap.put("endNodeId", rel.endNodeElementId());
-                    relMap.put("properties", rel.asMap());
-                    edges.add(relMap);
-                }
             }
 
-            result.put("module", module);
-            result.put("versionId", versionId);
             result.put("nodes", nodes);
             result.put("edges", edges);
             result.put("nodeCount", nodes.size());
@@ -164,21 +214,46 @@ public class GraphQueryService {
 
     /**
      * 获取业务图谱视图
-     * 根据业务域查询完整的业务对象、流程、规则图谱
+     * 根据业务域查询完整的业务对象、流程、规则图谱。
+     * 当 domain 属性未稳定写入时，从 BusinessDomain 节点名和
+     * BELONGS_TO/PART_OF/IMPLEMENTS 边扩展子图。
      */
-    public Map<String, Object> getBusinessView(String versionId, String domain) {
-        String cypher = """
-                MATCH (n)
-                WHERE n.versionId = $versionId
-                  AND any(label IN labels(n) WHERE label IN ['BusinessDomain', 'BusinessProcess', 'BusinessObject', 'BusinessRule'])
-                  AND (n.businessDomain = $domain OR n.domain = $domain)
-                OPTIONAL MATCH p = (n)-[:CONTAINS|USES|DEFINES|REFERENCES*1..8]->(m)
-                RETURN DISTINCT n, p
-                """;
-
+    public Map<String, Object> getBusinessView(String projectId, String versionId, String domain) {
+        boolean hasDomain = domain != null && !domain.isBlank();
+        String cypher;
         Map<String, Object> result = new HashMap<>();
+        result.put("domain", domain);
+        result.put("versionId", versionId);
+        result.put("projectId", projectId);
+
+        if (hasDomain) {
+            // 有 domain 参数：按属性过滤 + 从边关系扩展 nodeName 匹配
+            cypher = """
+                    MATCH (n)
+                    WHERE n.projectId = $projectId AND n.versionId = $versionId
+                      AND any(label IN labels(n) WHERE label IN ['BusinessDomain', 'BusinessProcess', 'BusinessObject', 'BusinessRule'])
+                      AND (n.businessDomain = $domain OR n.domain = $domain OR n.nodeName = $domain)
+                    OPTIONAL MATCH p = (n)-[:CONTAINS|USES|DEFINES|REFERENCES*1..8]->(m)
+                    WHERE m.projectId = $projectId AND m.versionId = $versionId
+                    RETURN DISTINCT n, p
+                    """;
+            result.put("domainFallback", false);
+        } else {
+            // fallback: 无 domain 参数时，返回所有业务节点 + BELONGS_TO/PART_OF/IMPLEMENTS 边
+            cypher = """
+                    MATCH (n)
+                    WHERE n.projectId = $projectId AND n.versionId = $versionId
+                      AND any(label IN labels(n) WHERE label IN ['BusinessDomain', 'BusinessProcess', 'BusinessObject', 'BusinessRule'])
+                    OPTIONAL MATCH p = (n)-[:CONTAINS|USES|DEFINES|REFERENCES|BELONGS_TO|PART_OF|IMPLEMENTS*1..8]->(m)
+                    WHERE m.projectId = $projectId AND m.versionId = $versionId
+                    RETURN DISTINCT n, p
+                    """;
+            result.put("domainFallback", true);
+        }
+
         try (Session session = neo4jDriver.session()) {
             Result queryResult = session.run(cypher, Map.of(
+                    "projectId", projectId,
                     "versionId", versionId,
                     "domain", domain
             ));
@@ -215,10 +290,22 @@ public class GraphQueryService {
                         edges.add(relMap);
                     }
                 }
+                // 处理 standalone 节点（无出边的 n）
+                org.neo4j.driver.Value nValue = record.get("n");
+                if (!nValue.isNull()) {
+                    var node = nValue.asNode();
+                    String nodeId = node.elementId();
+                    if (!nodeIds.contains(nodeId)) {
+                        nodeIds.add(nodeId);
+                        Map<String, Object> nodeMap = new HashMap<>();
+                        nodeMap.put("id", nodeId);
+                        nodeMap.put("labels", node.labels());
+                        nodeMap.put("properties", node.asMap());
+                        nodes.add(nodeMap);
+                    }
+                }
             }
 
-            result.put("domain", domain);
-            result.put("versionId", versionId);
             result.put("nodes", nodes);
             result.put("edges", edges);
             result.put("nodeCount", nodes.size());
@@ -229,23 +316,32 @@ public class GraphQueryService {
     }
 
     /**
-     * 获取统一图谱全量数据
-     * 查询指定扫描版本的所有节点和边，按置信度过滤后返回
+     * 获取统一图谱全量数据（支持按状态过滤、返回空视图结构化原因）
+     * 从 Neo4j 查询指定扫描版本的所有节点和边，按置信度+状态过滤后返回
      */
-    public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence) {
-        // 从PostgreSQL查询，获取完整的统一图谱数据
-        List<GraphNode> nodes = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getVersionId, versionId)
-                .ge(GraphNode::getConfidence, minConfidence)
-                .list();
+    public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence, String statusFilter) {
+        // 从 scanVersionRepository 获取 projectId
+        ScanVersion version = scanVersionRepository.lambdaQuery()
+                .eq(ScanVersion::getId, versionId)
+                .one();
+        if (version == null) {
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("versionId", versionId);
+            errorResult.put("emptyReasons", List.of("版本不存在"));
+            return errorResult;
+        }
+        String projectId = version.getProjectId();
 
-        List<GraphEdge> edges = graphEdgeRepository.lambdaQuery()
-                .eq(GraphEdge::getVersionId, versionId)
-                .ge(GraphEdge::getConfidence, minConfidence)
-                .list();
+        // 从Neo4j查询节点
+        String effectiveStatus = (statusFilter != null && !statusFilter.isBlank()) ? statusFilter : null;
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, minConfidence, effectiveStatus, 0);
+
+        // 从Neo4j查询边
+        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, versionId, minConfidence, effectiveStatus, 0);
 
         Map<String, Object> result = new HashMap<>();
         result.put("versionId", versionId);
+        result.put("statusFilter", statusFilter);
         result.put("nodes", nodes.stream().map(node -> {
             Map<String, Object> nodeMap = new HashMap<>();
             nodeMap.put("id", node.getId());
@@ -256,6 +352,11 @@ public class GraphQueryService {
             nodeMap.put("status", node.getStatus());
             nodeMap.put("description", node.getDescription());
             nodeMap.put("sourcePath", node.getSourcePath());
+            nodeMap.put("sourceType", node.getSourceType());
+            nodeMap.put("verifiedScore", node.getVerifiedScore());
+            nodeMap.put("runtimeVerified", node.getRuntimeVerified());
+            nodeMap.put("lastSeenAt", node.getLastSeenAt() != null ? node.getLastSeenAt().toString() : null);
+            nodeMap.put("traceCount", node.getTraceCount());
             return nodeMap;
         }).toList());
         result.put("edges", edges.stream().map(edge -> {
@@ -266,10 +367,33 @@ public class GraphQueryService {
             edgeMap.put("type", edge.getEdgeType());
             edgeMap.put("label", getEdgeLabel(edge.getEdgeType()));
             edgeMap.put("confidence", edge.getConfidence());
+            edgeMap.put("status", edge.getStatus());
             return edgeMap;
         }).toList());
         result.put("nodeCount", nodes.size());
         result.put("edgeCount", edges.size());
+
+        // 空视图时返回结构化原因
+        if (nodes.isEmpty()) {
+            List<String> reasons = new ArrayList<>();
+            // 检查是否有该版本的任何节点（不过滤状态）
+            long totalNodes = neo4jGraphDao.countNodes(projectId, versionId, null);
+            if (totalNodes == 0) {
+                reasons.add("该版本尚未扫描或扫描未生成图谱数据");
+            } else {
+                reasons.add("有 " + totalNodes + " 个节点但未匹配当前过滤条件（置信度>=" + minConfidence +
+                        (statusFilter != null ? ", 状态=" + statusFilter : "") + "）");
+            }
+            // 检查是否同步到 Neo4j
+            if (totalNodes > 0) {
+                long confirmedNodes = neo4jGraphDao.countNodes(projectId, versionId, "CONFIRMED");
+                long pendingNodes = totalNodes - confirmedNodes;
+                if (pendingNodes > 0) {
+                    reasons.add(pendingNodes + " 个节点状态为 PENDING_CONFIRM，同步到 Neo4j 后可在专题视图中查看");
+                }
+            }
+            result.put("emptyReasons", reasons);
+        }
 
         return result;
     }
@@ -341,13 +465,9 @@ public class GraphQueryService {
             }
             map.put("duration", duration);
 
-            // 统计该版本的节点和边数量
-            long nodeCount = graphNodeRepository.lambdaQuery()
-                    .eq(GraphNode::getVersionId, v.getId())
-                    .count();
-            long edgeCount = graphEdgeRepository.lambdaQuery()
-                    .eq(GraphEdge::getVersionId, v.getId())
-                    .count();
+            // 统计该版本的节点和边数量（从 Neo4j 查询）
+            long nodeCount = neo4jGraphDao.countNodes(projectId, v.getId(), null);
+            long edgeCount = neo4jGraphDao.countEdges(projectId, v.getId(), null);
             map.put("nodeCount", nodeCount);
             map.put("edgeCount", edgeCount);
 

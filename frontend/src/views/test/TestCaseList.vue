@@ -85,18 +85,18 @@
       <el-form label-width="120px">
         <el-form-item label="生成范围">
           <el-checkbox-group v-model="generateForm.scopes">
-            <el-checkbox label="order_module">订单模块</el-checkbox>
-            <el-checkbox label="user_module">用户模块</el-checkbox>
-            <el-checkbox label="payment_module">支付模块</el-checkbox>
-            <el-checkbox label="product_module">商品模块</el-checkbox>
-            <el-checkbox label="inventory_module">库存模块</el-checkbox>
+            <el-checkbox value="order_module">订单模块</el-checkbox>
+            <el-checkbox value="user_module">用户模块</el-checkbox>
+            <el-checkbox value="payment_module">支付模块</el-checkbox>
+            <el-checkbox value="product_module">商品模块</el-checkbox>
+            <el-checkbox value="inventory_module">库存模块</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="用例类型">
           <el-checkbox-group v-model="generateForm.types">
-            <el-checkbox label="API">API测试</el-checkbox>
-            <el-checkbox label="E2E">端到端测试</el-checkbox>
-            <el-checkbox label="DB_ASSERTION">数据库断言</el-checkbox>
+            <el-checkbox value="API">API测试</el-checkbox>
+            <el-checkbox value="E2E">端到端测试</el-checkbox>
+            <el-checkbox value="DB_ASSERTION">数据库断言</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="生成数量">

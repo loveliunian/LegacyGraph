@@ -19,7 +19,7 @@ import java.time.format.DateTimeFormatter;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/reports")
+@RequestMapping("/reports")
 @RequiredArgsConstructor
 public class ReportExportController {
 

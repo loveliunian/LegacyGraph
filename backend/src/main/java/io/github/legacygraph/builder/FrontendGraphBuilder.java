@@ -10,9 +10,8 @@ import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.entity.EdgeEvidence;
 import io.github.legacygraph.model.FrontendPageFact;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.EvidenceRepository;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -31,19 +30,16 @@ import java.util.*;
 @Component
 public class FrontendGraphBuilder {
 
-    private final GraphNodeRepository graphNodeRepository;
-    private final GraphEdgeRepository graphEdgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
     private final EdgeEvidenceRepository edgeEvidenceRepository;
 
-    public FrontendGraphBuilder(GraphNodeRepository graphNodeRepository,
-                               GraphEdgeRepository graphEdgeRepository,
+    public FrontendGraphBuilder(Neo4jGraphDao neo4jGraphDao,
                                EvidenceRepository evidenceRepository,
                                NodeEvidenceRepository nodeEvidenceRepository,
                                EdgeEvidenceRepository edgeEvidenceRepository) {
-        this.graphNodeRepository = graphNodeRepository;
-        this.graphEdgeRepository = graphEdgeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.edgeEvidenceRepository = edgeEvidenceRepository;
@@ -322,12 +318,7 @@ public class FrontendGraphBuilder {
      * 查找后端已有的API节点
      */
     private Optional<GraphNode> findBackendApi(String projectId, String versionId, String apiKey) {
-        return graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, NodeType.ApiEndpoint.name())
-                .eq(GraphNode::getNodeKey, apiKey)
-                .oneOpt();
+        return neo4jGraphDao.findNode(projectId, versionId, NodeType.ApiEndpoint.name(), apiKey);
     }
 
     /**
@@ -387,10 +378,28 @@ public class FrontendGraphBuilder {
                 score += 0.4;
             }
 
-            // TODO: 参数相似性打分 (需要抽取参数)
+            // 参数相似性打分：路径参数个数一致时加分（区分 /user/{id} 与 /user/{id}/role/{rid}）
+            if (countPathParams(frontendPath) == countPathParams(backendPath)) {
+                score += 0.1;
+            }
         }
 
         return Math.min(score, 1.0);
+    }
+
+    /**
+     * 统计路径中的参数占位符数量（形如 {id}）
+     */
+    private int countPathParams(String path) {
+        if (path == null || path.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{[^}]+\\}").matcher(path);
+        while (m.find()) {
+            count++;
+        }
+        return count;
     }
 
     /**
@@ -413,12 +422,7 @@ public class FrontendGraphBuilder {
             String sourceType, String sourcePath,
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status) {
-        GraphNode existing = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, nodeType)
-                .eq(GraphNode::getNodeKey, nodeKey)
-                .oneOpt()
+        GraphNode existing = neo4jGraphDao.findNode(projectId, versionId, nodeType, nodeKey)
                 .orElse(null);
 
         if (existing != null) {
@@ -443,7 +447,7 @@ public class FrontendGraphBuilder {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        graphNodeRepository.insert(node);
+        neo4jGraphDao.createNode(node);
 
         // 创建证据并关联
         if (sourcePath != null && !sourcePath.isEmpty()) {
@@ -517,7 +521,7 @@ public class FrontendGraphBuilder {
         edge.setCreatedAt(LocalDateTime.now());
         edge.setUpdatedAt(LocalDateTime.now());
 
-        graphEdgeRepository.insert(edge);
+        neo4jGraphDao.createEdge(edge);
 
         // 从源节点继承证据关联
         List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.lambdaQuery()

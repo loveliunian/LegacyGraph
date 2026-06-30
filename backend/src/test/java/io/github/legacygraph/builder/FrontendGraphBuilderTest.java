@@ -1,5 +1,6 @@
 package io.github.legacygraph.builder;
 
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,9 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class FrontendGraphBuilderTest {
 
     @Mock
-    private GraphNodeRepository graphNodeRepository;
-    @Mock
-    private GraphEdgeRepository graphEdgeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private EvidenceRepository evidenceRepository;
     @Mock
@@ -26,7 +25,7 @@ class FrontendGraphBuilderTest {
 
     @Test
     void testConstruction() {
-        frontendGraphBuilder = new FrontendGraphBuilder(graphNodeRepository, graphEdgeRepository,
+        frontendGraphBuilder = new FrontendGraphBuilder(neo4jGraphDao,
                 evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
         assertNotNull(frontendGraphBuilder);
     }

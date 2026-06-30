@@ -203,6 +203,12 @@ const routes: RouteRecordRaw[] = [
             name: 'SystemSettings',
             component: () => import('@/views/system/Settings.vue'),
             meta: { title: 'menu.systemSettings' }
+          },
+          {
+            path: 'system/llm',
+            name: 'LlmProviderSettings',
+            component: () => import('@/views/system/LlmProviderSettings.vue'),
+            meta: { title: 'LLM 提供商' }
           }
         ]
       }

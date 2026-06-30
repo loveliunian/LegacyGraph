@@ -120,6 +120,25 @@ public class ProjectScanner {
         }
 
         try {
+            // 读取 CodeRepo 配置，获取子路径和 include/exclude 规则
+            List<CodeRepo> repos = codeRepoRepository.selectList(
+                    new LambdaQueryWrapper<CodeRepo>()
+                            .eq(CodeRepo::getProjectId, projectId)
+            );
+            String backendDir = baseDir;
+            String frontendDir = baseDir;
+            if (!repos.isEmpty()) {
+                CodeRepo repo = repos.get(0);
+                if (repo.getBackendSubPath() != null && !repo.getBackendSubPath().isBlank()) {
+                    backendDir = Paths.get(baseDir, repo.getBackendSubPath()).toString();
+                    log.info("Using backend sub-path: {}", backendDir);
+                }
+                if (repo.getFrontendSubPath() != null && !repo.getFrontendSubPath().isBlank()) {
+                    frontendDir = Paths.get(baseDir, repo.getFrontendSubPath()).toString();
+                    log.info("Using frontend sub-path: {}", frontendDir);
+                }
+            }
+
             // === 0. 自动发现：数据库连接、子路径、文档 ===
             // 0a. 从代码中自动发现数据库连接配置
             ScanTask dbDiscoveryTask = createTask(projectId, versionId, "DB_DISCOVERY", "数据库连接自动发现");
@@ -135,31 +154,31 @@ public class ProjectScanner {
 
             // 0c. 自动发现文档文件
             ScanTask docDiscoveryTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
-            int docCount = discoverDocuments(projectId, baseDir);
+            int docCount = discoverDocuments(projectId, versionId, baseDir);
             completeTask(docDiscoveryTask, "Discovered " + docCount + " documents", null);
             log.info("Auto-discovered {} documents", docCount);
 
             // 1. 扫描Java文件获取Controller接口
             ScanTask javaTask = createTask(projectId, versionId, "BACKEND_SCAN", "Java代码扫描");
-            int apiCount = scanJavaControllers(projectId, versionId, baseDir, javaTask);
+            int apiCount = scanJavaControllers(projectId, versionId, backendDir, javaTask);
             completeTask(javaTask, "Scanned " + apiCount + " APIs", null);
             log.info("Completed Java controller scan, found {} APIs", apiCount);
 
             // 1.5 扫描Service调用关系
             ScanTask serviceCallTask = createTask(projectId, versionId, "SERVICE_CALL_SCAN", "Service调用关系扫描");
-            int callCount = scanServiceCalls(projectId, versionId, baseDir, serviceCallTask);
+            int callCount = scanServiceCalls(projectId, versionId, backendDir, serviceCallTask);
             completeTask(serviceCallTask, "Scanned " + callCount + " service call relations", null);
             log.info("Completed service call scan, found {} call relations", callCount);
 
             // 2. 扫描MyBatis XML文件
             ScanTask mapperTask = createTask(projectId, versionId, "MAPPER_SCAN", "MyBatis XML扫描");
-            int mapperCount = scanMyBatisXml(projectId, versionId, baseDir, mapperTask);
+            int mapperCount = scanMyBatisXml(projectId, versionId, backendDir, mapperTask);
             completeTask(mapperTask, "Scanned " + mapperCount + " mappers", null);
             log.info("Completed MyBatis XML scan, found {} mappers", mapperCount);
 
             // 3. 扫描前端文件 (Vue路由和API调用)
             ScanTask frontendTask = createTask(projectId, versionId, "FRONTEND_SCAN", "前端文件扫描");
-            int frontendCount = scanFrontendFiles(projectId, versionId, baseDir, frontendTask);
+            int frontendCount = scanFrontendFiles(projectId, versionId, frontendDir, frontendTask);
             completeTask(frontendTask, "Scanned " + frontendCount + " frontend pages/APIs", null);
             log.info("Completed frontend file scan, found {} pages/APIs", frontendCount);
 
@@ -186,10 +205,9 @@ public class ProjectScanner {
                 log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables);
             }
 
-            // 5. 构建图谱
+            // 5. 图谱已由各 Builder 在扫描过程中直写 Neo4j，无需额外同步步骤
             ScanTask buildTask = createTask(projectId, versionId, "GRAPH_BUILD", "图谱构建");
-            graphBuilder.syncToNeo4j(projectId, versionId);
-            completeTask(buildTask, "Graph built and synced to Neo4j", null);
+            completeTask(buildTask, "Graph built in Neo4j", null);
 
             if (version != null) {
                 version.setScanStatus("SUCCESS");
@@ -544,9 +562,10 @@ public class ProjectScanner {
 
     /**
      * 自动发现代码仓库中的文档文件，创建 Document 记录。
+     * 写入 filePath（绝对路径）、versionId，使自动发现文档可解析。
      * @return 发现的文档数量
      */
-    private int discoverDocuments(String projectId, String baseDir) {
+    private int discoverDocuments(String projectId, String versionId, String baseDir) {
         int count = 0;
         try {
             Path basePath = Paths.get(baseDir);
@@ -594,6 +613,7 @@ public class ProjectScanner {
 
                     Document doc = new Document();
                     doc.setProjectId(projectId);
+                    doc.setVersionId(versionId);
                     doc.setDocName(relativePath);
                     doc.setFilePath(docFile.toAbsolutePath().toString());
                     doc.setDocType(detectDocType(docFile.getFileName().toString()));
@@ -689,7 +709,7 @@ public class ProjectScanner {
                     List<ApiFact> apis = extractor.extractFromFile(javaFile);
                     if (!apis.isEmpty()) {
                         for (ApiFact api : apis) {
-                            saveFact(projectId, versionId, "API", api.getFullPath(), api.getMethodName(),
+                            saveFact(projectId, versionId, "CODE_AST", "API", api.getFullPath(), api.getMethodName(),
                                     javaFile.toString(), api.getStartLine(), api.getEndLine(),
                                     api, BigDecimal.ONE, "EXTRACTED");
                         }
@@ -719,7 +739,7 @@ public class ProjectScanner {
                 File xmlFile = xmlPath.toFile();
                 MapperSqlFact mapperFact = extractor.extractFromFile(xmlFile);
                 if (mapperFact.getNamespace() != null) {
-                    saveFact(projectId, versionId, "MAPPER", mapperFact.getNamespace(),
+                    saveFact(projectId, versionId, "MAPPER_XML", "MAPPER", mapperFact.getNamespace(),
                             mapperFact.getNamespace(), xmlFile.getAbsolutePath(),
                             null, null, mapperFact, BigDecimal.ONE, "EXTRACTED");
                     graphBuilder.buildMapperSqlGraph(projectId, versionId, mapperFact);
@@ -757,7 +777,7 @@ public class ProjectScanner {
                     List<FrontendPageFact> pages = vueExtractor.extractFromFile(vueFile);
                     if (!pages.isEmpty()) {
                         for (FrontendPageFact page : pages) {
-                            saveFact(projectId, versionId, "FRONTEND_PAGE", page.getRoutePath(),
+                            saveFact(projectId, versionId, "FRONTEND_AST", "FRONTEND_PAGE", page.getRoutePath(),
                                     page.getPageName(), vueFile.toString(), page.getStartLine(), page.getEndLine(),
                                     page, BigDecimal.ONE, "EXTRACTED");
                             totalCount++;
@@ -767,7 +787,7 @@ public class ProjectScanner {
                     List<io.github.legacygraph.model.FrontendPageFact.FrontendApiCall> apiCalls = apiExtractor.extractFromFile(vueFile);
                     if (!apiCalls.isEmpty()) {
                         for (io.github.legacygraph.model.FrontendPageFact.FrontendApiCall api : apiCalls) {
-                            saveFact(projectId, versionId, "FRONTEND_API", api.getUrl(),
+                            saveFact(projectId, versionId, "FRONTEND_AST", "FRONTEND_API", api.getUrl(),
                                     api.getMethod() + " " + api.getUrl(), vueFile.toString(),
                                     api.getLineNumber(), api.getLineNumber(), api, BigDecimal.ONE, "EXTRACTED");
                             totalCount++;
@@ -805,7 +825,7 @@ public class ProjectScanner {
                     List<ServiceCallExtractor.CallRelation> calls = extractor.extractFromFile(javaFile.toFile());
                     if (!calls.isEmpty()) {
                         for (ServiceCallExtractor.CallRelation call : calls) {
-                            saveFact(projectId, versionId, "SERVICE_CALL", call.getCallerClass() + "." + call.getCallerMethod(),
+                            saveFact(projectId, versionId, "CODE_AST", "SERVICE_CALL", call.getCallerClass() + "." + call.getCallerMethod(),
                                     call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod(),
                                     javaFile.toString(), call.getLineNumber(), call.getLineNumber(),
                                     call, BigDecimal.ONE, "EXTRACTED");
@@ -863,7 +883,11 @@ public class ProjectScanner {
     }
 
     private void completeTask(ScanTask task, String summary, String error) {
-        task.setOutputSummary(summary);
+        try {
+            task.setOutputSummary(objectMapper.writeValueAsString(summary));
+        } catch (Exception e) {
+            task.setOutputSummary("\"" + summary.replace("\"", "\\\"") + "\"");
+        }
         task.setErrorMessage(error);
         task.setTaskStatus(error == null ? "SUCCESS" : "FAILED");
         task.setFinishedAt(LocalDateTime.now());
@@ -871,7 +895,7 @@ public class ProjectScanner {
         scanTaskRepository.updateById(task);
     }
 
-    private void saveFact(String projectId, String versionId, String factType, String factKey, String factName,
+    private void saveFact(String projectId, String versionId, String sourceType, String factType, String factKey, String factName,
             String sourcePath, Integer startLine, Integer endLine, Object data,
             BigDecimal confidence, String status) {
         try {
@@ -894,7 +918,7 @@ public class ProjectScanner {
             fact.setFactType(factType);
             fact.setFactKey(factKey);
             fact.setFactName(factName);
-            fact.setSourceType("CODE_AST");
+            fact.setSourceType(sourceType);
             fact.setSourcePath(sourcePath);
             fact.setStartLine(startLine);
             fact.setEndLine(endLine);

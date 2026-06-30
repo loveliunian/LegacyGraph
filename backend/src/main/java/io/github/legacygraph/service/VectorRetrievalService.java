@@ -1,8 +1,8 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.VectorDocument;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.VectorDocumentRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -22,16 +22,16 @@ public class VectorRetrievalService {
 
     private final EmbeddingModel embeddingModel;
     private final VectorDocumentRepository vectorDocumentRepository;
-    private final GraphNodeRepository graphNodeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final VectorizationService vectorizationService;
 
     public VectorRetrievalService(EmbeddingModel embeddingModel,
                                VectorDocumentRepository vectorDocumentRepository,
-                               GraphNodeRepository graphNodeRepository,
+                               Neo4jGraphDao neo4jGraphDao,
                                VectorizationService vectorizationService) {
         this.embeddingModel = embeddingModel;
         this.vectorDocumentRepository = vectorDocumentRepository;
-        this.graphNodeRepository = graphNodeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.vectorizationService = vectorizationService;
     }
 
@@ -99,7 +99,7 @@ public class VectorRetrievalService {
             for (VectorDocument doc : similarDocs) {
                 if (doc.getSourceUri() != null) {
                     // sourceUri 格式可能是节点ID或文件路径
-                    GraphNode node = graphNodeRepository.selectById(doc.getSourceUri());
+                    GraphNode node = neo4jGraphDao.findNodeById(doc.getSourceUri()).orElse(null);
                     if (node != null && !result.contains(node)) {
                         result.add(node);
                     }

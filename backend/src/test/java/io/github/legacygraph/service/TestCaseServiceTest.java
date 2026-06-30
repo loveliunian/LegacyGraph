@@ -1,6 +1,7 @@
 package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.*;
 import io.github.legacygraph.test.ApiTestExecutor;
 import io.github.legacygraph.test.DbAssertionExecutor;
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TestCaseServiceTest {
 
     @Mock
-    private GraphNodeRepository graphNodeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private TestCaseRepository testCaseRepository;
     @Mock
@@ -36,7 +37,7 @@ class TestCaseServiceTest {
 
     @Test
     void testConstruction() {
-        testCaseService = new TestCaseService(graphNodeRepository, testCaseRepository,
+        testCaseService = new TestCaseService(neo4jGraphDao, testCaseRepository,
                 testResultRepository, objectMapper, apiTestExecutor,
                 dbAssertionExecutor, e2eTestExecutor, testResultUpdateService);
         assertNotNull(testCaseService);

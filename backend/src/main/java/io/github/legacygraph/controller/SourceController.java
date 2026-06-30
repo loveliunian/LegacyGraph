@@ -380,16 +380,22 @@ public class SourceController {
 
             ProcessBuilder pb;
             if (Files.exists(Path.of(localPath, ".git"))) {
-                // Already cloned, do pull
-                pb = new ProcessBuilder("git", "pull")
+                // Already cloned, do pull with depth=1
+                pb = new ProcessBuilder("git", "-c", "protocol.version=2", "pull", "--depth", "1")
                         .directory(new java.io.File(localPath));
             } else {
-                // Fresh clone
-                pb = new ProcessBuilder("git", "clone", "-b", repo.getBranchName(), repo.getGitUrl(), localPath);
+                // Fresh shallow clone for speed: depth=1, single branch
+                pb = new ProcessBuilder("git", "clone", "--depth", "1", "--single-branch",
+                        "-b", repo.getBranchName(), repo.getGitUrl(), localPath);
             }
 
             Process process = pb.start();
-            int exitCode = process.waitFor();
+            boolean finished = process.waitFor(5, java.util.concurrent.TimeUnit.MINUTES);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new RuntimeException("Git操作超时（5分钟），仓库过大或网络异常");
+            }
+            int exitCode = process.exitValue();
 
             if (exitCode == 0) {
                 repo.setStatus("READY");
@@ -412,7 +418,11 @@ public class SourceController {
         repo.setUpdatedAt(LocalDateTime.now());
         codeRepoRepository.updateById(repo);
 
-        return Result.success();
+        if ("READY".equals(repo.getStatus())) {
+            return Result.success();
+        } else {
+            return Result.error("拉取失败，请检查仓库地址、认证信息或网络连接");
+        }
     }
 
     /**
@@ -976,6 +986,16 @@ public class SourceController {
 
         Map<String, Object> result = new HashMap<>();
         try {
+            // 对缺失 filePath 给出明确错误，而不是进入不可解释失败
+            if (doc.getFilePath() == null || doc.getFilePath().isBlank()) {
+                doc.setParseStatus("PARSE_FAILED");
+                doc.setErrorMessage("文档缺少文件路径(filePath)，无法解析。请确认文档来源：上传文档或自动发现文档是否已正确记录路径。");
+                documentRepository.updateById(doc);
+                result.put("success", false);
+                result.put("message", doc.getErrorMessage());
+                return Result.success(result);
+            }
+
             // 使用 DocumentExtractor 真实抽取文本并切片
             DocumentExtractor extractor = new DocumentExtractor();
             java.io.File file = new java.io.File(doc.getFilePath());

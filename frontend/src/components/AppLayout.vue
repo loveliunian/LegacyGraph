@@ -23,6 +23,9 @@
         </div>
 
         <div class="header-right">
+          <!-- LLM 模型切换 -->
+          <ModelSwitcher />
+
           <el-tooltip content="切换主题" placement="bottom">
             <el-button
               :icon="Sunny"
@@ -83,6 +86,7 @@ import {
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import LangSwitcher from '@/components/LangSwitcher.vue'
+import ModelSwitcher from '@/components/ModelSwitcher.vue'
 
 const router = useRouter()
 const userStore = useUserStore()

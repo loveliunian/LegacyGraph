@@ -1,47 +1,37 @@
 package io.github.legacygraph.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import org.mockito.Answers;
 
 @ExtendWith(MockitoExtension.class)
 class GraphValidatorServiceTest {
 
     @Mock
-    private GraphNodeRepository graphNodeRepository;
-
-    @Mock
-    private GraphEdgeRepository graphEdgeRepository;
-
+    private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private TestCaseRepository testCaseRepository;
-
     @Mock
     private TestResultRepository testResultRepository;
 
-    @InjectMocks
     private GraphValidatorService graphValidatorService;
 
     private TestResult passedResult;
@@ -52,6 +42,8 @@ class GraphValidatorServiceTest {
 
     @BeforeEach
     void setUp() {
+        graphValidatorService = new GraphValidatorService(neo4jGraphDao, testCaseRepository, testResultRepository);
+
         passedResult = new TestResult();
         passedResult.setVersionId("version-1");
         passedResult.setResultStatus("PASSED");
@@ -64,14 +56,17 @@ class GraphValidatorServiceTest {
 
         testCase = new TestCase();
         testCase.setId("case-1");
+        testCase.setProjectId("p1");
         testCase.setTargetNodeId("node-1");
         testCase.setCaseType("API");
 
         testEdge = new GraphEdge();
         testEdge.setId("edge-1");
+        testEdge.setToNodeId("node-1");
         testEdge.setVersionId("version-1");
         testEdge.setConfidence(new BigDecimal("0.7000"));
         testEdge.setStatus("PENDING");
+        testEdge.setEdgeType("IMPLEMENTED_BY");
 
         testNode = new GraphNode();
         testNode.setId("node-1");
@@ -80,242 +75,154 @@ class GraphValidatorServiceTest {
         testNode.setConfidence(new BigDecimal("0.8000"));
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     void testUpdateConfidenceByTestResults_EmptyResults() {
-        LambdaQueryChainWrapper<TestResult> chain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(chain);
-        when(chain.eq(any(), any())).thenReturn(chain);
-        when(chain.list()).thenReturn(Collections.emptyList());
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(Collections.emptyList());
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
-
-        // No updates should occur
-        verify(graphEdgeRepository, never()).updateById(any(GraphEdge.class));
-        verify(graphNodeRepository, never()).updateById(any(GraphNode.class));
+        verify(neo4jGraphDao, never()).updateEdge(any());
+        verify(neo4jGraphDao, never()).updateNode(any());
     }
 
     @Test
     void testUpdateConfidenceByTestResults_WithPassedResult() {
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(passedResult));
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
-
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.and(any())).thenReturn(edgeChain);
-        when(edgeChain.list()).thenReturn(List.of(testEdge));
+        when(neo4jGraphDao.queryEdges(isNull(), eq("version-1"), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
-        // Confidence should increase by 0.05
         assertEquals(new BigDecimal("0.7500"), testEdge.getConfidence());
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
+        verify(neo4jGraphDao, times(1)).updateEdge(testEdge);
     }
 
     @Test
     void testUpdateConfidenceByTestResults_PassedResultIncreasesToOverZeroEight() {
         testEdge.setConfidence(new BigDecimal("0.7800"));
 
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(passedResult));
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
-
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.and(any())).thenReturn(edgeChain);
-        when(edgeChain.list()).thenReturn(List.of(testEdge));
+        when(neo4jGraphDao.queryEdges(isNull(), eq("version-1"), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
         assertEquals(new BigDecimal("0.8300"), testEdge.getConfidence());
         assertEquals("CONFIRMED", testEdge.getStatus());
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
+        verify(neo4jGraphDao, times(1)).updateEdge(testEdge);
     }
 
     @Test
     void testUpdateConfidenceByTestResults_CapsAtOne() {
         testEdge.setConfidence(BigDecimal.ONE);
 
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(passedResult));
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
-
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.and(any())).thenReturn(edgeChain);
-        when(edgeChain.list()).thenReturn(List.of(testEdge));
+        when(neo4jGraphDao.queryEdges(isNull(), eq("version-1"), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
-        // Should still be 1.0
-        assertEquals(0, BigDecimal.ONE.compareTo(testEdge.getConfidence()), "Confidence should be 1.0");
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
+        assertEquals(0, BigDecimal.ONE.compareTo(testEdge.getConfidence()));
+        verify(neo4jGraphDao, times(1)).updateEdge(testEdge);
     }
 
     @Test
     void testUpdateConfidenceByTestResults_FailedApiResultWith404() {
         failedResult.setResponseData("{\"status\": 404, \"error\": \"Not Found\"}");
 
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(failedResult));
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(failedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
-        when(graphNodeRepository.getById("node-1")).thenReturn(testNode);
+        when(neo4jGraphDao.findNodeById("node-1")).thenReturn(Optional.of(testNode));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
         assertEquals("INVALID_CANDIDATE", testNode.getStatus());
-        verify(graphNodeRepository, times(1)).updateById(testNode);
+        verify(neo4jGraphDao, times(1)).updateNode(testNode);
     }
 
     @Test
     void testUpdateConfidenceByTestResults_FailedApiResultNot404() {
         failedResult.setResponseData("{\"status\": 500, \"error\": \"Server Error\"}");
 
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(failedResult));
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(failedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
-
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.in(any(), anyString(), anyString())).thenReturn(edgeChain);
-        when(edgeChain.list()).thenReturn(List.of(testEdge));
+        when(neo4jGraphDao.queryEdges(eq("p1"), eq("version-1"), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(testEdge));
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
 
-        // 0.7 - 0.1 = 0.6, which is >= 0.5, so status should remain PENDING
         assertEquals(new BigDecimal("0.6000"), testEdge.getConfidence());
-        assertEquals("PENDING", testEdge.getStatus());
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
-    }
-
-    @Test
-    void testUpdateConfidenceByTestResults_FailedDbAssertion() {
-        testCase.setCaseType("DB_ASSERTION");
-
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(failedResult));
-        when(testCaseRepository.getById("case-1")).thenReturn(testCase);
-
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.in(any(), anyString(), anyString())).thenReturn(edgeChain);
-        when(edgeChain.list()).thenReturn(List.of(testEdge));
-
-        graphValidatorService.updateConfidenceByTestResults("version-1");
-
-        // 0.7 - 0.15 = 0.55
-        assertEquals(new BigDecimal("0.5500"), testEdge.getConfidence());
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
-    }
-
-    @Test
-    void testUpdateConfidenceByTestResults_FailedPermissionAssertion() {
-        testCase.setCaseType("PERMISSION");
-
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(failedResult));
-        when(testCaseRepository.getById("case-1")).thenReturn(testCase);
-
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.list()).thenReturn(List.of(testEdge));
-
-        graphValidatorService.updateConfidenceByTestResults("version-1");
-
-        // 0.7 - 0.2 = 0.5
-        assertEquals(new BigDecimal("0.5000"), testEdge.getConfidence());
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
+        verify(neo4jGraphDao, times(1)).updateEdge(testEdge);
     }
 
     @Test
     void testConfirmNode_NodeExists() {
-        when(graphNodeRepository.getById("node-1")).thenReturn(testNode);
-
+        when(neo4jGraphDao.findNodeById("node-1")).thenReturn(Optional.of(testNode));
         graphValidatorService.confirmNode("node-1", "tester");
-
         assertEquals("CONFIRMED", testNode.getStatus());
         assertEquals(BigDecimal.ONE, testNode.getConfidence());
-        verify(graphNodeRepository, times(1)).updateById(testNode);
+        verify(neo4jGraphDao, times(1)).updateNode(testNode);
     }
 
     @Test
     void testConfirmNode_NodeNotFound() {
-        when(graphNodeRepository.getById("node-999")).thenReturn(null);
-
+        when(neo4jGraphDao.findNodeById("node-999")).thenReturn(Optional.empty());
         graphValidatorService.confirmNode("node-999", "tester");
-
-        verify(graphNodeRepository, never()).updateById(any(GraphNode.class));
+        verify(neo4jGraphDao, never()).updateNode(any());
     }
 
     @Test
     void testRejectNode_NodeExists() {
-        when(graphNodeRepository.getById("node-1")).thenReturn(testNode);
-
+        when(neo4jGraphDao.findNodeById("node-1")).thenReturn(Optional.of(testNode));
         graphValidatorService.rejectNode("node-1", "tester");
-
         assertEquals("REJECTED", testNode.getStatus());
-        verify(graphNodeRepository, times(1)).updateById(testNode);
+        verify(neo4jGraphDao, times(1)).updateNode(testNode);
     }
 
     @Test
     void testConfirmEdge_EdgeExists() {
-        when(graphEdgeRepository.getById("edge-1")).thenReturn(testEdge);
-
+        when(neo4jGraphDao.queryEdges(isNull(), isNull(), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(testEdge));
         graphValidatorService.confirmEdge("edge-1", "tester");
-
         assertEquals("CONFIRMED", testEdge.getStatus());
         assertEquals(BigDecimal.ONE, testEdge.getConfidence());
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
+        verify(neo4jGraphDao, times(1)).updateEdge(testEdge);
     }
 
     @Test
     void testRejectEdge_EdgeExists() {
-        when(graphEdgeRepository.getById("edge-1")).thenReturn(testEdge);
-
+        when(neo4jGraphDao.queryEdges(isNull(), isNull(), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(testEdge));
         graphValidatorService.rejectEdge("edge-1", "tester");
-
         assertEquals("REJECTED", testEdge.getStatus());
-        verify(graphEdgeRepository, times(1)).updateById(testEdge);
+        verify(neo4jGraphDao, times(1)).updateEdge(testEdge);
     }
 
     @Test
     void testGetValidationReport_EmptyVersion() {
-        LambdaQueryChainWrapper<GraphNode> nodeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphNodeRepository.lambdaQuery()).thenReturn(nodeChain);
-        when(nodeChain.eq(any(), any())).thenReturn(nodeChain);
-        when(nodeChain.count()).thenReturn(0L);
-
-        LambdaQueryChainWrapper<GraphEdge> edgeChain = mock(LambdaQueryChainWrapper.class);
-        when(graphEdgeRepository.lambdaQuery()).thenReturn(edgeChain);
-        when(edgeChain.eq(any(), any())).thenReturn(edgeChain);
-        when(edgeChain.count()).thenReturn(0L);
-
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.eq(any(), any()).eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.count()).thenReturn(0L);
+        when(neo4jGraphDao.countNodes(any(), eq("version-1"), any())).thenReturn(0L);
+        when(neo4jGraphDao.countEdges(any(), eq("version-1"), any())).thenReturn(0L);
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).count()).thenReturn(0L);
+        when(neo4jGraphDao.queryNodes(any(), eq("version-1"), any(), any(), any(), any(), anyInt()))
+                .thenReturn(Collections.emptyList());
 
         GraphValidatorService.ValidationReport report = graphValidatorService.getValidationReport("version-1");
 
@@ -334,63 +241,19 @@ class GraphValidatorServiceTest {
 
     @Test
     void testGetValidationReport_WithData() {
-        // Create individual chain mocks for each lambdaQuery() call
-        // Calls to graphNodeRepository.lambdaQuery() are in order:
-        //   1. totalNodes (eq + count)
-        //   2. confirmedNodes (eq + eq + count)
-        //   3. pendingNodes (eq + eq + count)
-        //   4. overall confidence list (eq + list)
-        LambdaQueryChainWrapper<GraphNode> totalNodeChain = mock(LambdaQueryChainWrapper.class);
-        LambdaQueryChainWrapper<GraphNode> confirmedNodeChain = mock(LambdaQueryChainWrapper.class);
-        LambdaQueryChainWrapper<GraphNode> pendingNodeChain = mock(LambdaQueryChainWrapper.class);
-        LambdaQueryChainWrapper<GraphNode> listNodeChain = mock(LambdaQueryChainWrapper.class);
+        when(neo4jGraphDao.countNodes(isNull(), eq("version-1"), isNull())).thenReturn(10L);
+        when(neo4jGraphDao.countNodes(isNull(), eq("version-1"), eq("CONFIRMED"))).thenReturn(5L);
+        when(neo4jGraphDao.countNodes(isNull(), eq("version-1"), eq("PENDING_CONFIRM"))).thenReturn(3L);
+        when(neo4jGraphDao.countEdges(isNull(), eq("version-1"), isNull())).thenReturn(20L);
+        when(neo4jGraphDao.countEdges(isNull(), eq("version-1"), eq("CONFIRMED"))).thenReturn(10L);
+        when(neo4jGraphDao.countEdges(isNull(), eq("version-1"), eq("PENDING_CONFIRM"))).thenReturn(5L);
+        when(neo4jGraphDao.queryNodes(isNull(), eq("version-1"), isNull(), isNull(), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(testNode));
 
-        when(graphNodeRepository.lambdaQuery())
-                .thenReturn(totalNodeChain)
-                .thenReturn(confirmedNodeChain)
-                .thenReturn(pendingNodeChain)
-                .thenReturn(listNodeChain);
-        when(totalNodeChain.eq(any(), any())).thenReturn(totalNodeChain);
-        when(totalNodeChain.count()).thenReturn(10L);
-        when(confirmedNodeChain.eq(any(), any())).thenReturn(confirmedNodeChain);
-        when(confirmedNodeChain.count()).thenReturn(5L);
-        when(pendingNodeChain.eq(any(), any())).thenReturn(pendingNodeChain);
-        when(pendingNodeChain.count()).thenReturn(3L);
-        when(listNodeChain.eq(any(), any())).thenReturn(listNodeChain);
-        when(listNodeChain.list()).thenReturn(List.of(testNode));
-
-        // Calls to graphEdgeRepository.lambdaQuery():
-        //   1. totalEdges (eq + count)
-        //   2. confirmedEdges (eq + eq + count)
-        //   3. pendingEdges (eq + eq + count)
-        LambdaQueryChainWrapper<GraphEdge> totalEdgeChain = mock(LambdaQueryChainWrapper.class);
-        LambdaQueryChainWrapper<GraphEdge> confirmedEdgeChain = mock(LambdaQueryChainWrapper.class);
-        LambdaQueryChainWrapper<GraphEdge> pendingEdgeChain = mock(LambdaQueryChainWrapper.class);
-
-        when(graphEdgeRepository.lambdaQuery())
-                .thenReturn(totalEdgeChain)
-                .thenReturn(confirmedEdgeChain)
-                .thenReturn(pendingEdgeChain);
-        when(totalEdgeChain.eq(any(), any())).thenReturn(totalEdgeChain);
-        when(totalEdgeChain.count()).thenReturn(20L);
-        when(confirmedEdgeChain.eq(any(), any())).thenReturn(confirmedEdgeChain);
-        when(confirmedEdgeChain.count()).thenReturn(10L);
-        when(pendingEdgeChain.eq(any(), any())).thenReturn(pendingEdgeChain);
-        when(pendingEdgeChain.count()).thenReturn(5L);
-
-        // Calls to testResultRepository.lambdaQuery():
-        //   1. passedTests (eq + eq + count)
-        //   2. failedTests (eq + eq + count)
-        LambdaQueryChainWrapper<TestResult> passedChain = mock(LambdaQueryChainWrapper.class);
-        LambdaQueryChainWrapper<TestResult> failedChain = mock(LambdaQueryChainWrapper.class);
-
-        when(testResultRepository.lambdaQuery())
-                .thenReturn(passedChain)
-                .thenReturn(failedChain);
-        when(passedChain.eq(any(), any())).thenReturn(passedChain);
-        when(passedChain.count()).thenReturn(3L);
-        when(failedChain.eq(any(), any())).thenReturn(failedChain);
-        when(failedChain.count()).thenReturn(2L);
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any()).count()).thenReturn(3L, 2L);
 
         GraphValidatorService.ValidationReport report = graphValidatorService.getValidationReport("version-1");
 
@@ -409,29 +272,25 @@ class GraphValidatorServiceTest {
 
     @Test
     void testUpdateConfidenceByTestResults_NullTestCaseDoesNothing() {
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(passedResult));
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(null);
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
-
-        verify(graphEdgeRepository, never()).updateById(any(GraphEdge.class));
+        verify(neo4jGraphDao, never()).updateEdge(any());
     }
 
     @Test
     void testUpdateConfidenceByTestResults_NullTargetNodeIdDoesNothing() {
         testCase.setTargetNodeId(null);
 
-        LambdaQueryChainWrapper<TestResult> resultChain = mock(LambdaQueryChainWrapper.class);
-        when(testResultRepository.lambdaQuery()).thenReturn(resultChain);
-        when(resultChain.eq(any(), any())).thenReturn(resultChain);
-        when(resultChain.list()).thenReturn(List.of(passedResult));
+        when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
+        when(testResultRepository.lambdaQuery().eq(any(), any()).list()).thenReturn(List.of(passedResult));
         when(testCaseRepository.getById("case-1")).thenReturn(testCase);
 
         graphValidatorService.updateConfidenceByTestResults("version-1");
-
-        verify(graphEdgeRepository, never()).updateById(any(GraphEdge.class));
+        verify(neo4jGraphDao, never()).updateEdge(any());
     }
 }

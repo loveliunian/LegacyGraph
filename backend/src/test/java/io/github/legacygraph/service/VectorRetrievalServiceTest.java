@@ -1,8 +1,8 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.VectorDocument;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.VectorDocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +14,7 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -27,7 +28,7 @@ class VectorRetrievalServiceTest {
     @Mock
     private VectorDocumentRepository vectorDocumentRepository;
     @Mock
-    private GraphNodeRepository graphNodeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private VectorizationService vectorizationService;
 
@@ -36,7 +37,7 @@ class VectorRetrievalServiceTest {
     @BeforeEach
     void setUp() {
         vectorRetrievalService = new VectorRetrievalService(
-                embeddingModel, vectorDocumentRepository, graphNodeRepository, vectorizationService);
+                embeddingModel, vectorDocumentRepository, neo4jGraphDao, vectorizationService);
     }
 
     @Test
@@ -101,7 +102,7 @@ class VectorRetrievalServiceTest {
         GraphNode node = new GraphNode();
         node.setId("node-1");
         node.setNodeName("订单节点");
-        when(graphNodeRepository.selectById("node-1")).thenReturn(node);
+        when(neo4jGraphDao.findNodeById("node-1")).thenReturn(Optional.of(node));
 
         List<GraphNode> results = vectorRetrievalService.findSimilarNodes(
                 "p1", "v1", searchText, 0.7);
@@ -121,7 +122,7 @@ class VectorRetrievalServiceTest {
         VectorizationService realVectorization =
                 new VectorizationService(embeddingModel, vectorDocumentRepository);
         VectorRetrievalService retrieval = new VectorRetrievalService(
-                embeddingModel, vectorDocumentRepository, graphNodeRepository, realVectorization);
+                embeddingModel, vectorDocumentRepository, neo4jGraphDao, realVectorization);
 
         // 任意文本都返回固定向量；插入时回填自增主键
         when(embeddingModel.embed(anyString())).thenReturn(new float[]{0.1f, 0.2f, 0.3f});

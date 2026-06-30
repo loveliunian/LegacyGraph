@@ -17,7 +17,7 @@ import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
@@ -41,7 +41,7 @@ public class FactController {
     private final FactRepository factRepository;
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
-    private final GraphNodeRepository graphNodeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final ScanVersionRepository scanVersionRepository;
     private final CodeRepoRepository codeRepoRepository;
     private final BusinessGraphBuilder businessGraphBuilder;
@@ -51,7 +51,7 @@ public class FactController {
     public FactController(FactRepository factRepository,
                           EvidenceRepository evidenceRepository,
                           NodeEvidenceRepository nodeEvidenceRepository,
-                          GraphNodeRepository graphNodeRepository,
+                          Neo4jGraphDao neo4jGraphDao,
                           ScanVersionRepository scanVersionRepository,
                           CodeRepoRepository codeRepoRepository,
                           BusinessGraphBuilder businessGraphBuilder,
@@ -60,7 +60,7 @@ public class FactController {
         this.factRepository = factRepository;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
-        this.graphNodeRepository = graphNodeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.scanVersionRepository = scanVersionRepository;
         this.codeRepoRepository = codeRepoRepository;
         this.businessGraphBuilder = businessGraphBuilder;
@@ -161,7 +161,7 @@ public class FactController {
             return Result.success(List.of());
         }
 
-        List<GraphNode> nodes = graphNodeRepository.selectByIds(nodeIds);
+        List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(nodeIds);
         return Result.success(nodes);
     }
 
@@ -262,6 +262,10 @@ public class FactController {
                 try {
                     businessGraphBuilder.buildBusinessGraph(projectId, versionId, result);
                     log.info("Business graph built from doc facts: projectId={}, versionId={}", projectId, versionId);
+
+                    // 自动触发功能到代码实现的映射（Feature -> Page/API）
+                    businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
+                    log.info("Feature-to-code mapping completed: projectId={}, versionId={}", projectId, versionId);
                 } catch (Exception e) {
                     log.error("Failed to build business graph from doc facts: projectId={}", projectId, e);
                 }

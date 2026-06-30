@@ -5,6 +5,7 @@ import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.DocChunk;
 import io.github.legacygraph.entity.EdgeEvidence;
 import io.github.legacygraph.entity.Evidence;
@@ -14,8 +15,6 @@ import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.repository.DocChunkRepository;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -25,32 +24,30 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * 业务图谱构建器
- * 将文档抽取的业务事实构建为业务图谱节点和关系
- * 所有节点/边创建时自动关联证据
+ * 将文档抽取的业务事实构建为业务图谱节点和关系（直写 Neo4j）
+ * 所有节点/边创建时自动关联证据（证据仍走 PostgreSQL）
  */
 @Slf4j
 @Component
 public class BusinessGraphBuilder {
 
-    private final GraphNodeRepository graphNodeRepository;
-    private final GraphEdgeRepository graphEdgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final DocChunkRepository docChunkRepository;
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
     private final EdgeEvidenceRepository edgeEvidenceRepository;
 
-    public BusinessGraphBuilder(GraphNodeRepository graphNodeRepository,
-                              GraphEdgeRepository graphEdgeRepository,
+    public BusinessGraphBuilder(Neo4jGraphDao neo4jGraphDao,
                               DocChunkRepository docChunkRepository,
                               EvidenceRepository evidenceRepository,
                               NodeEvidenceRepository nodeEvidenceRepository,
                               EdgeEvidenceRepository edgeEvidenceRepository) {
-        this.graphNodeRepository = graphNodeRepository;
-        this.graphEdgeRepository = graphEdgeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.docChunkRepository = docChunkRepository;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
@@ -107,10 +104,9 @@ public class BusinessGraphBuilder {
             domainNodes.add(domainNode);
         }
 
-        // 构建业务流程，并关联到所属业务域
-        // 简单策略：第 i 个流程关联到第 i % domainCount 个业务域
-        int domainIndex = 0;
-        int domainCount = domainNodes.size();
+        // 构建业务流程
+        // 不再轮询分配到业务域：LLM 输出中有明确 domain 属性时才建确定边。
+        // 当前 BusinessProcess 无 domain 字段，因此流程节点保持孤立，状态 PENDING_CONFIRM 等待用户确认。
         for (var process : facts.getBusinessProcesses()) {
             GraphNode processNode = findOrCreateNode(
                     projectId, versionId,
@@ -126,20 +122,6 @@ public class BusinessGraphBuilder {
                     BigDecimal.valueOf(process.getConfidence()),
                     process.getConfidence() >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
             );
-
-            // 关联业务流程到业务域
-            if (domainCount > 0) {
-                GraphNode domainNode = domainNodes.get(domainIndex % domainCount);
-                createEdge(projectId, versionId,
-                        domainNode.getId(), processNode.getId(),
-                        EdgeType.CONTAINS.name(),
-                        domainNode.getNodeKey() + "->contains->" + processNode.getNodeKey(),
-                        SourceType.DOC_AI.name(),
-                        BigDecimal.valueOf(process.getConfidence() * 0.9),
-                        NodeStatus.PENDING_CONFIRM
-                );
-            }
-            domainIndex++;
 
             // 每个步骤对应一个功能
             if (process.getSteps() != null) {
@@ -238,26 +220,16 @@ public class BusinessGraphBuilder {
     @Transactional
     public void mapFeaturesToCode(String projectId, String versionId) {
         // 获取所有文档抽取的Feature节点
-        List<GraphNode> docFeatures = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, NodeType.Feature.name())
-                .eq(GraphNode::getSourceType, SourceType.DOC_AI.name())
-                .list();
+        List<GraphNode> docFeatures = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Feature.name(), SourceType.DOC_AI.name(), null, null, 0);
 
         // 获取所有已有的Page节点
-        List<GraphNode> pages = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, NodeType.Page.name())
-                .list();
+        List<GraphNode> pages = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Page.name(), null, null, null, 0);
 
         // 获取所有已有的ApiEndpoint节点
-        List<GraphNode> apis = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, NodeType.ApiEndpoint.name())
-                .list();
+        List<GraphNode> apis = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.ApiEndpoint.name(), null, null, null, 0);
 
         int mappedCount = 0;
         // 基于名称语义相似度做简单匹配（向量服务已可用，后续可替换为 semanticSearch 提升精度）
@@ -342,17 +314,10 @@ public class BusinessGraphBuilder {
             String sourceType, String sourcePath,
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status) {
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GraphNode> nodeQuery =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-        nodeQuery.eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, nodeType)
-                .eq(GraphNode::getNodeKey, nodeKey)
-                .last("LIMIT 1");
-        GraphNode existing = graphNodeRepository.selectOne(nodeQuery);
-
-        if (existing != null) {
-            return existing;
+        // Neo4j 中查找是否已存在（projectId + versionId + nodeType + nodeKey 唯一）
+        Optional<GraphNode> existing = neo4jGraphDao.findNode(projectId, versionId, nodeType, nodeKey);
+        if (existing.isPresent()) {
+            return existing.get();
         }
 
         GraphNode node = new GraphNode();
@@ -373,7 +338,7 @@ public class BusinessGraphBuilder {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        graphNodeRepository.insert(node);
+        neo4jGraphDao.createNode(node);
 
         // 创建证据并关联 - 即使没有 sourcePath，也为 DOC_AI 类型创建
         createEvidenceForNode(node, sourceType, sourcePath, startLine, endLine);
@@ -446,7 +411,7 @@ public class BusinessGraphBuilder {
         edge.setCreatedAt(LocalDateTime.now());
         edge.setUpdatedAt(LocalDateTime.now());
 
-        graphEdgeRepository.insert(edge);
+        neo4jGraphDao.createEdge(edge);
 
         // 从源节点继承证据（创建关联）
         com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NodeEvidence> neQuery =

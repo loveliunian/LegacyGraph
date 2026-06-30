@@ -7,7 +7,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 图谱关系表实体
+ * 图谱关系模型
+ * @deprecated 数据已迁移到 Neo4j（Neo4jGraphDao），此实体仅保留用于 MyBatis-Plus Bean 定义
+ *           以维持 Spring 上下文加载兼容性。所有读写请使用 Neo4jGraphDao。
  */
 @Data
 @TableName("lg_graph_edge")
@@ -15,7 +17,6 @@ public class GraphEdge {
 
     @TableId(type = IdType.ASSIGN_UUID)
     private String id;
-
     private String projectId;
     private String versionId;
     private String fromNodeId;
@@ -25,19 +26,12 @@ public class GraphEdge {
     private String sourceType;
     private BigDecimal confidence;
     private String status;
-    private String properties; // JSONB
-
-    // LLM integration fields — 数据库尚未迁移，标记为 exist=false 避免查询报错
-    @TableField(exist = false)
-    private String evidenceIds; // JSONB
-    @TableField(exist = false)
-    private String relationStatus; // candidate / verified / review / rejected
-    @TableField(exist = false)
+    private String properties;
+    private String evidenceIds;
     private BigDecimal verifiedScore;
+    private Integer deleted;
+    private String relationStatus;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    @TableLogic
-    private Integer deleted;
 }

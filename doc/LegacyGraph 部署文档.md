@@ -39,41 +39,49 @@
 
 ## 依赖服务部署
 
-### 方式一：Docker Compose 一键启动（推荐）
+> **架构说明（2026-06-30 起）**：`deploy/docker-compose.yml` **只构建前后端应用代码**，PostgreSQL、Neo4j、Redis、MinIO 均使用**外部服务器**，连接信息通过 `.env` 注入。
+> 若你尚未准备外部依赖服务，可用下方「独立部署各依赖服务」的命令在任意服务器上拉起，再把地址填入 `.env`。
 
-LegacyGraph 提供了完整的 Docker Compose 配置，包含所有依赖服务。
+### 应用部署：Docker Compose（仅前后端）
 
 ```bash
 # 进入部署目录
 cd deploy
 
-# 启动所有依赖服务
-docker-compose up -d
+# 1. 复制环境变量模板并填入外部服务连接信息
+cp .env.example .env
+vim .env   # 填写外部 PostgreSQL / Neo4j / Redis / MinIO 地址与凭据
 
-# 查看服务状态
-docker-compose ps
+# 2. 构建并启动前后端
+docker compose up --build -d
 
-# 查看服务日志
-docker-compose logs -f postgres
-docker-compose logs -f neo4j
-docker-compose logs -f redis
-docker-compose logs -f minio
+# 3. 查看状态与日志
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f frontend
 ```
 
-启动后各服务地址：
+`.env` 需要配置的关键项（详见 `deploy/.env.example`）：
 
-| 服务 | 地址 | 用户名/密码 | 说明 |
-|------|------|------------|------|
-| PostgreSQL | `localhost:5432` | `legacy_graph` / `legacy_graph` | 关系数据库 |
-| Neo4j Browser | http://localhost:7474 | `neo4j` / `password` | 图数据库控制台 |
-| Neo4j Bolt | `bolt://localhost:7687` | - | 图数据库连接 |
-| MinIO Console | http://localhost:9001 | `minio` / `minio123456` | 对象存储控制台 |
-| MinIO API | http://localhost:9000 | - | 对象存储 API |
-| Redis | `localhost:6379` | - | 缓存服务 |
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `POSTGRES_URL` | 外部 PostgreSQL JDBC 地址（需启用 pgvector） | `jdbc:postgresql://db.example.com:5432/legacy_graph` |
+| `POSTGRES_USERNAME` / `POSTGRES_PASSWORD` | PG 账号密码 | - |
+| `NEO4J_URI` | 外部 Neo4j Bolt 地址 | `bolt://graph.example.com:7687` |
+| `NEO4J_USERNAME` / `NEO4J_PASSWORD` | Neo4j 账号密码 | - |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | 外部 Redis（密码可空） | `cache.example.com` / `6379` |
+| `MINIO_ENDPOINT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | 外部 MinIO / S3 兼容存储 | `http://oss.example.com:9000` |
+| `OPENAI_API_KEY` | LLM API Key（可选，留空禁用 LLM） | - |
+| `BACKEND_PORT` / `FRONTEND_PORT` | 宿主机端口映射（默认 8080 / 80） | - |
 
-### 方式二：独立部署
+> 标记 `${VAR:?...}` 的连接项为必填，未配置时 `docker compose up` 会直接报错并提示缺哪个变量。
+> 填入真实密码的 `.env` 已被 `.gitignore` 忽略，不会入库。
 
-如果需要独立部署各个服务，请参考以下配置：
+> **首次部署提醒**：依赖服务移到外部后，compose 不再自动初始化数据库。需手动在外部 PostgreSQL 执行 `docs/sql/init.sql`（见下文「数据库初始化」）。
+
+### 独立部署各依赖服务
+
+如果还没有现成的外部依赖服务，可用以下命令在目标服务器上拉起，再把地址/凭据填入 `deploy/.env`：
 
 #### PostgreSQL (带 pgvector)
 
@@ -133,14 +141,15 @@ docker run -d \
 
 ### 执行顺序
 
-> **重要**：必须按顺序执行，先执行基础表，再执行 LLM 增强表
+> **重要**：必须按顺序执行，先执行基础表，再执行 LLM 增强表。
+> 依赖服务在外部时，把 `-h localhost` 换成外部 PostgreSQL 主机地址（与 `.env` 中 `POSTGRES_URL` 一致）。
 
 ```bash
-# 1. 执行基础表结构
-psql -h localhost -p 5432 -U legacy_graph -d legacy_graph < docs/sql/init.sql
+# 1. 执行基础表结构（含运行时链路表 lg_runtime_trace）
+psql -h <PG_HOST> -p 5432 -U legacy_graph -d legacy_graph < docs/sql/init.sql
 
 # 2. 执行 LLM 集成表和字段增强（包含向量表、Prompt模板等）
-psql -h localhost -p 5432 -U legacy_graph -d legacy_graph < docs/sql/llm_integration.sql
+psql -h <PG_HOST> -p 5432 -U legacy_graph -d legacy_graph < docs/sql/llm_integration.sql
 ```
 
 ### 验证表结构

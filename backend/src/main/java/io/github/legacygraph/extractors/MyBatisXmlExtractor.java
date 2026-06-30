@@ -57,6 +57,9 @@ public class MyBatisXmlExtractor {
             Document doc = builder.parse(xmlFile);
             doc.getDocumentElement().normalize();
 
+            // 读取原始文本用于近似行号解析（DOM 不保留位置信息）
+            String rawText = java.nio.file.Files.readString(xmlFile.toPath());
+
             // 获取namespace
             String namespace = doc.getDocumentElement().getAttribute("namespace");
             fact.setNamespace(namespace);
@@ -66,10 +69,10 @@ public class MyBatisXmlExtractor {
 
             // 处理各个statement元素
             List<SqlStatement> statements = new ArrayList<>();
-            statements.addAll(extractStatements(doc, "select", sqlFragments));
-            statements.addAll(extractStatements(doc, "insert", sqlFragments));
-            statements.addAll(extractStatements(doc, "update", sqlFragments));
-            statements.addAll(extractStatements(doc, "delete", sqlFragments));
+            statements.addAll(extractStatements(doc, "select", sqlFragments, rawText));
+            statements.addAll(extractStatements(doc, "insert", sqlFragments, rawText));
+            statements.addAll(extractStatements(doc, "update", sqlFragments, rawText));
+            statements.addAll(extractStatements(doc, "delete", sqlFragments, rawText));
 
             fact.setStatements(statements);
 
@@ -109,24 +112,68 @@ public class MyBatisXmlExtractor {
     /**
      * 提取指定类型的SQL语句，并展开 <include refid> 片段
      */
-    private List<SqlStatement> extractStatements(Document doc, String tagName, Map<String, String> sqlFragments) {
+    private List<SqlStatement> extractStatements(Document doc, String tagName,
+                                                 Map<String, String> sqlFragments, String rawText) {
         List<SqlStatement> result = new ArrayList<>();
         NodeList nodes = doc.getElementsByTagName(tagName);
 
         for (int i = 0; i < nodes.getLength(); i++) {
             Element element = (Element) nodes.item(i);
             SqlStatement stmt = new SqlStatement();
-            stmt.setId(element.getAttribute("id"));
+            String id = element.getAttribute("id");
+            stmt.setId(id);
             stmt.setType(tagName);
             String rawSql = element.getTextContent().trim();
             stmt.setSql(rawSql);
             // 展开 include 片段后的 SQL（无 include 时与原 SQL 一致）
             stmt.setExpandedSql(expandIncludes(element, sqlFragments));
-            // 行号解析需要 SAX/StAX parser 记录 Locator，DOM 不保留位置信息，暂留默认值
+            // 近似行号：在原始文本中定位 <tag ... id="theId"> 及其闭合标签
+            resolveLineNumbers(stmt, tagName, id, rawText);
             result.add(stmt);
         }
 
         return result;
+    }
+
+    /**
+     * 在原始 XML 文本中近似定位语句的起止行号。
+     * 以 &lt;tag ... id="theId" 作为起点，&lt;/tag&gt; 作为终点。
+     */
+    private void resolveLineNumbers(SqlStatement stmt, String tagName, String id, String rawText) {
+        if (rawText == null || id == null || id.isEmpty()) {
+            return;
+        }
+        // 匹配形如 <select ... id="theId"
+        java.util.regex.Pattern openPat = java.util.regex.Pattern.compile(
+                "<" + java.util.regex.Pattern.quote(tagName) + "\\b[^>]*\\bid\\s*=\\s*[\"']"
+                        + java.util.regex.Pattern.quote(id) + "[\"']");
+        java.util.regex.Matcher m = openPat.matcher(rawText);
+        if (!m.find()) {
+            return;
+        }
+        int startOffset = m.start();
+        int startLine = countLines(rawText, startOffset);
+        stmt.setStartLine(startLine);
+
+        // 从开标签之后查找对应的闭合标签
+        int closeIdx = rawText.indexOf("</" + tagName + ">", m.end());
+        if (closeIdx >= 0) {
+            stmt.setEndLine(countLines(rawText, closeIdx));
+        } else {
+            stmt.setEndLine(startLine);
+        }
+    }
+
+    /** 计算 offset 处的行号（从 1 开始） */
+    private int countLines(String text, int offset) {
+        int line = 1;
+        int limit = Math.min(offset, text.length());
+        for (int i = 0; i < limit; i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
     }
 
     /**

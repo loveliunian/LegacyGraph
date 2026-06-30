@@ -2,8 +2,7 @@ package io.github.legacygraph.service;
 
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.repository.GraphEdgeRepository;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,8 +21,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class GraphMergeService {
 
-    private final GraphNodeRepository nodeRepository;
-    private final GraphEdgeRepository edgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
 
     /**
      * 合并候选对
@@ -42,7 +40,8 @@ public class GraphMergeService {
      * 遍历同一项目、同类型的节点，计算相似度，返回可能重复的候选对
      */
     public List<MergeCandidate> findMergeCandidates(String projectId, String nodeType) {
-        List<GraphNode> nodes = nodeRepository.findByProjectIdAndNodeType(projectId, nodeType);
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(
+                projectId, null, nodeType, null, null, null, Integer.MAX_VALUE);
         List<MergeCandidate> candidates = new ArrayList<>();
 
         // 过滤已删除的节点
@@ -197,14 +196,13 @@ public class GraphMergeService {
     @Transactional
     public void executeMerge(String projectId, String targetNodeId, String mergeNodeId) {
         // 更新所有指向合并节点的边，改为指向目标节点
-        edgeRepository.updateFromNodeId(mergeNodeId, targetNodeId, projectId);
-        edgeRepository.updateToNodeId(mergeNodeId, targetNodeId, projectId);
+        neo4jGraphDao.updateEdgeFromNode(mergeNodeId, targetNodeId, projectId);
+        neo4jGraphDao.updateEdgeToNode(mergeNodeId, targetNodeId, projectId);
 
-        // 标记合并节点为已删除
-        GraphNode mergeNode = nodeRepository.selectById(mergeNodeId);
+        // 在 Neo4j 中物理删除合并节点（替代 PG 的软删除）
+        GraphNode mergeNode = neo4jGraphDao.findNodeById(mergeNodeId).orElse(null);
         if (mergeNode != null) {
-            mergeNode.setDeleted(1);
-            nodeRepository.updateById(mergeNode);
+            neo4jGraphDao.deleteNode(projectId, mergeNode.getVersionId(), mergeNodeId);
         }
 
         log.info("Merged node {} into {} in project {}", mergeNodeId, targetNodeId, projectId);

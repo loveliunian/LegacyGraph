@@ -4,6 +4,7 @@ import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.*;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
@@ -11,7 +12,6 @@ import io.github.legacygraph.extractors.SqlTableExtractor;
 import io.github.legacygraph.model.ApiFact;
 import io.github.legacygraph.model.MapperSqlFact;
 import io.github.legacygraph.repository.*;
-import io.github.legacygraph.service.Neo4jSyncService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,35 +20,30 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * 统一图谱构建器
- * 将抽取的事实转换为图谱节点和关系，并写入PostgreSQL和Neo4j
+ * 将抽取的事实转换为图谱节点和关系，直写 Neo4j（不再经 PostgreSQL）
  */
 @Slf4j
 @Component
 public class GraphBuilder {
 
-    private final GraphNodeRepository graphNodeRepository;
-    private final GraphEdgeRepository graphEdgeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
     private final EdgeEvidenceRepository edgeEvidenceRepository;
-    private final Neo4jSyncService neo4jSyncService;
 
-    public GraphBuilder(GraphNodeRepository graphNodeRepository,
-                       GraphEdgeRepository graphEdgeRepository,
+    public GraphBuilder(Neo4jGraphDao neo4jGraphDao,
                        EvidenceRepository evidenceRepository,
                        NodeEvidenceRepository nodeEvidenceRepository,
-                       EdgeEvidenceRepository edgeEvidenceRepository,
-                       Neo4jSyncService neo4jSyncService) {
-        this.graphNodeRepository = graphNodeRepository;
-        this.graphEdgeRepository = graphEdgeRepository;
+                       EdgeEvidenceRepository edgeEvidenceRepository) {
+        this.neo4jGraphDao = neo4jGraphDao;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.edgeEvidenceRepository = edgeEvidenceRepository;
-        this.neo4jSyncService = neo4jSyncService;
     }
 
     /**
@@ -348,17 +343,10 @@ public class GraphBuilder {
             String sourceType, String sourcePath,
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status) {
-        // 查询是否已存在
-        GraphNode existing = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, nodeType)
-                .eq(GraphNode::getNodeKey, nodeKey)
-                .oneOpt()
-                .orElse(null);
-
-        if (existing != null) {
-            return existing;
+        // Neo4j 中查找是否已存在
+        Optional<GraphNode> existing = neo4jGraphDao.findNode(projectId, versionId, nodeType, nodeKey);
+        if (existing.isPresent()) {
+            return existing.get();
         }
 
         GraphNode node = new GraphNode();
@@ -379,7 +367,7 @@ public class GraphBuilder {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        graphNodeRepository.insert(node);
+        neo4jGraphDao.createNode(node);
 
         // 创建证据并关联
         if (sourcePath != null && !sourcePath.isEmpty()) {
@@ -473,7 +461,7 @@ public class GraphBuilder {
         edge.setCreatedAt(LocalDateTime.now());
         edge.setUpdatedAt(LocalDateTime.now());
 
-        graphEdgeRepository.insert(edge);
+        neo4jGraphDao.createEdge(edge);
 
         // 从源节点继承证据（创建关联）
         // 找到源节点的证据，关联到这条边
@@ -599,14 +587,7 @@ public class GraphBuilder {
      */
     private GraphNode findOrCreateNodeByClass(String projectId, String versionId,
             NodeType nodeType, String classFullName, String sourcePath) {
-        // 先查找是否已存在
-        GraphNode existing = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, nodeType.name())
-                .eq(GraphNode::getNodeKey, classFullName)
-                .oneOpt()
-                .orElse(null);
+        GraphNode existing = neo4jGraphDao.findNode(projectId, versionId, nodeType.name(), classFullName).orElse(null);
 
         if (existing != null) {
             return existing;
@@ -637,19 +618,6 @@ public class GraphBuilder {
      * 查找已存在的节点
      */
     private GraphNode findExistingNode(String projectId, String versionId, String nodeType, String nodeKey) {
-        return graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getVersionId, versionId)
-                .eq(GraphNode::getNodeType, nodeType)
-                .eq(GraphNode::getNodeKey, nodeKey)
-                .oneOpt()
-                .orElse(null);
-    }
-
-    /**
-     * 同步所有节点和关系到Neo4j
-     */
-    public void syncToNeo4j(String projectId, String versionId) {
-        neo4jSyncService.syncGraph(projectId, versionId);
+        return neo4jGraphDao.findNode(projectId, versionId, nodeType, nodeKey).orElse(null);
     }
 }

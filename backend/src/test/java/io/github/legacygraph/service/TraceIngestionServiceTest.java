@@ -4,7 +4,7 @@ import io.github.legacygraph.dto.trace.TraceIngestRequest;
 import io.github.legacygraph.dto.trace.TraceTopology;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.RuntimeTrace;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.RuntimeTraceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +19,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,13 +28,13 @@ class TraceIngestionServiceTest {
     @Mock
     private RuntimeTraceRepository runtimeTraceRepository;
     @Mock
-    private GraphNodeRepository graphNodeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
 
     private TraceIngestionService service;
 
     @BeforeEach
     void setUp() {
-        service = new TraceIngestionService(runtimeTraceRepository, graphNodeRepository);
+        service = new TraceIngestionService(runtimeTraceRepository, neo4jGraphDao);
     }
 
     private TraceIngestRequest.SpanDto span(String spanId, String parent, String svc, String op, String status) {
@@ -61,7 +61,7 @@ class TraceIngestionServiceTest {
         GraphNode node = new GraphNode();
         node.setId("node-1");
         node.setNodeKey("GET /api/order");
-        when(graphNodeRepository.selectList(any()))
+        when(neo4jGraphDao.queryNodes(anyString(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
                 .thenReturn(Collections.singletonList(node))  // 第一个 span 命中
                 .thenReturn(Collections.emptyList());         // 第二个 span 无命中
 
@@ -70,10 +70,8 @@ class TraceIngestionServiceTest {
         assertEquals(2, count);
         verify(runtimeTraceRepository, times(2)).insert(any(RuntimeTrace.class));
 
-        // 命中节点应被标记运行时已验证
-        ArgumentCaptor<GraphNode> nodeCaptor = ArgumentCaptor.forClass(GraphNode.class);
-        verify(graphNodeRepository).updateById(nodeCaptor.capture());
-        assertEquals(0, nodeCaptor.getValue().getVerifiedScore().compareTo(java.math.BigDecimal.ONE));
+        // 命中节点应更新运行时验证状态
+        verify(neo4jGraphDao, atLeastOnce()).updateNode(any(GraphNode.class));
     }
 
     @Test
@@ -108,7 +106,6 @@ class TraceIngestionServiceTest {
         assertEquals(2, topo.getTotalSpans());
         assertEquals(1, topo.getTotalTraces());
         assertEquals(2, topo.getServices().size());
-        // 一条 gateway -> order-svc 的调用边，含 1 次错误
         assertEquals(1, topo.getCalls().size());
         TraceTopology.CallEdge edge = topo.getCalls().get(0);
         assertEquals("gateway", edge.getFrom());

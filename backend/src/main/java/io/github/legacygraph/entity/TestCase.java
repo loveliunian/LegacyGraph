@@ -23,6 +23,8 @@ public class TestCase {
 
     private String caseType;
 
+    private String scenario;
+
     private String targetNodeId;
 
     private String priority;

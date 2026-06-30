@@ -14,7 +14,7 @@ import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.entity.TestRun;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
@@ -45,7 +45,7 @@ public class TestCaseController {
     private final io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler;
     private final GraphValidatorService graphValidatorService;
     private final TestCaseAgent testCaseAgent;
-    private final GraphNodeRepository graphNodeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final ScanTaskRepository scanTaskRepository;
 
     public TestCaseController(TestCaseRepository testCaseRepository,
@@ -54,7 +54,7 @@ public class TestCaseController {
                               io.github.legacygraph.task.TestExecutionScheduler testExecutionScheduler,
                               GraphValidatorService graphValidatorService,
                               TestCaseAgent testCaseAgent,
-                              GraphNodeRepository graphNodeRepository,
+                              Neo4jGraphDao neo4jGraphDao,
                               ScanTaskRepository scanTaskRepository) {
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
@@ -62,7 +62,7 @@ public class TestCaseController {
         this.testExecutionScheduler = testExecutionScheduler;
         this.graphValidatorService = graphValidatorService;
         this.testCaseAgent = testCaseAgent;
-        this.graphNodeRepository = graphNodeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.scanTaskRepository = scanTaskRepository;
     }
 
@@ -175,11 +175,13 @@ public class TestCaseController {
 
         // 获取所有 API 节点，用 TestCaseAgent 生成测试用例
         try {
-            List<GraphNode> apiNodes = graphNodeRepository.lambdaQuery()
-                    .eq(GraphNode::getProjectId, projectId)
-                    .eq(GraphNode::getVersionId, request.getVersionId())
-                    .in(GraphNode::getNodeType, "ApiEndpoint", "Feature", "Controller")
-                    .list();
+            // Query nodes from Neo4j — loop over nodeTypes since queryNodes supports single type
+            List<GraphNode> apiNodes = new ArrayList<>();
+            String[] types = {"ApiEndpoint", "Feature", "Controller"};
+            for (String t : types) {
+                apiNodes.addAll(neo4jGraphDao.queryNodes(
+                        projectId, request.getVersionId(), t, null, null, null, Integer.MAX_VALUE));
+            }
 
             if (apiNodes.isEmpty()) {
                 log.info("No API/Feature nodes found for test generation");

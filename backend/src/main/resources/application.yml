@@ -10,9 +10,9 @@ spring:
 
   # 数据源配置
   datasource:
-    url: jdbc:postgresql://118.145.225.100:5432/legacy_graph
-    username: mumuai
-    password: Liucl157
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/legacy_graph}
+    username: ${POSTGRES_USERNAME:legacygraph}
+    password: ${POSTGRES_PASSWORD:changeme}
     driver-class-name: org.postgresql.Driver
     hikari:
       minimum-idle: 5
@@ -24,12 +24,22 @@ spring:
       data-source-properties:
         stringtype: unspecified
 
+  # Flyway 数据库迁移配置（Spring Boot 4.x 移除自动配置，手动 FlywayConfig 管理）
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    locations: classpath:db/migration
+    clean-disabled: true
+    validate-on-migrate: true
+    placeholder-replacement: false
+
   # Redis 配置
   data:
     redis:
-      host: 47.95.208.205
-      port: 6379
-      password:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:changeme}
       database: 11
       lettuce:
         pool:
@@ -44,22 +54,28 @@ spring:
     time-zone: GMT+8
     default-property-inclusion: non_null
 
+  # 禁用未使用的自动配置（项目用 MyBatis-Plus，不需要 JPA/Hibernate）
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
+
   # Neo4j 配置
   neo4j:
-    uri: bolt://47.95.208.205:7687
+    uri: ${NEO4J_URI:bolt://localhost:7687}
     authentication:
-      username: neo4j
-      password: Liucl157
+      username: ${NEO4J_USERNAME:neo4j}
+      password: ${NEO4J_PASSWORD:changeme}
 
-  # Spring AI OpenAI 配置
-  # 在 application-local.yml 中配置实际的 api-key
+  # Spring AI OpenAI 配置（兼容 DeepSeek）
+  # api-key 从数据库 lg_llm_provider 表读取，此处仅做占位
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:your-openai-api-key-here}
-      base-url: https://api.openai.com/v1
+      api-key: ${DEEPSEEK_API_KEY:changeme}
+      base-url: https://api.deepseek.com/v1
       chat:
         options:
-          model: gpt-5.5
+          model: deepseek-chat
           temperature: 0.1
       embedding:
         options:
@@ -73,19 +89,21 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
       id-type: ASSIGN_UUID
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+      # 启用自动建表：表不存在时自动创建（仅开发环境）
+      auto-create-table: false
 
 # MinIO 配置
 minio:
-  endpoint: http://47.95.208.205:9000
-  access-key: admin
-  secret-key: Liucl@157
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:admin}
+  secret-key: ${MINIO_SECRET_KEY:changeme}
   bucket-name: legacy-graph
 
 # JWT 配置
@@ -96,8 +114,8 @@ jwt:
 # 日志配置
 logging:
   level:
-    io.github.legacygraph: debug
-    org.springframework.security: debug
+    io.github.legacygraph: info
+    org.springframework.security: warn
 
 # OpenAPI/Swagger 配置
 springdoc:

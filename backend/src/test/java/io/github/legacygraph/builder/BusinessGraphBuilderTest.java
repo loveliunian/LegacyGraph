@@ -2,6 +2,7 @@ package io.github.legacygraph.builder;
 
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
@@ -15,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -24,9 +26,7 @@ import static org.mockito.Mockito.*;
 class BusinessGraphBuilderTest {
 
     @Mock
-    private GraphNodeRepository graphNodeRepository;
-    @Mock
-    private GraphEdgeRepository graphEdgeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private EvidenceRepository evidenceRepository;
     @Mock
@@ -40,7 +40,7 @@ class BusinessGraphBuilderTest {
 
     @BeforeEach
     void setUp() {
-        businessGraphBuilder = new BusinessGraphBuilder(graphNodeRepository, graphEdgeRepository,
+        businessGraphBuilder = new BusinessGraphBuilder(neo4jGraphDao,
                 docChunkRepository, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
     }
 
@@ -55,8 +55,8 @@ class BusinessGraphBuilderTest {
      */
     @Test
     void testBuildBusinessGraph_PersistsNodesEdgesAndEvidence() {
-        // selectOne 返回 null，表示节点不存在，走 create 分支
-        when(graphNodeRepository.selectOne(any())).thenReturn(null);
+        // findNode 返回 Optional.empty()，表示节点不存在，走 create 分支
+        when(neo4jGraphDao.findNode(any(), any(), any(), any())).thenReturn(Optional.empty());
         // 边继承证据时查询源节点证据，返回空列表
         when(nodeEvidenceRepository.selectList(any())).thenReturn(List.of());
 
@@ -82,7 +82,7 @@ class BusinessGraphBuilderTest {
 
         // then: 节点落库 —— 1 domain + 1 process + 2 step features = 4 个节点
         ArgumentCaptor<GraphNode> nodeCaptor = ArgumentCaptor.forClass(GraphNode.class);
-        verify(graphNodeRepository, times(4)).insert(nodeCaptor.capture());
+        verify(neo4jGraphDao, times(4)).createNode(nodeCaptor.capture());
 
         List<GraphNode> nodes = nodeCaptor.getAllValues();
         assertTrue(nodes.stream().anyMatch(n ->
@@ -94,9 +94,9 @@ class BusinessGraphBuilderTest {
         assertTrue(nodes.stream().allMatch(n ->
                 "project-1".equals(n.getProjectId()) && "version-1".equals(n.getVersionId())));
 
-        // 边落库 —— domain CONTAINS process + process CONTAINS 2 steps = 3 条边
+        // 边落库 —— 不再轮询分配 domain→process 边，仅 process CONTAINS 2 steps = 2 条边
         ArgumentCaptor<GraphEdge> edgeCaptor = ArgumentCaptor.forClass(GraphEdge.class);
-        verify(graphEdgeRepository, times(3)).insert(edgeCaptor.capture());
+        verify(neo4jGraphDao, times(2)).createEdge(edgeCaptor.capture());
 
         // 每个节点都生成一条证据 + 一条 node-evidence 关联
         verify(evidenceRepository, times(4)).insert(any(Evidence.class));

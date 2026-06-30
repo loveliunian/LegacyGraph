@@ -209,4 +209,37 @@ class MyBatisXmlExtractorTest {
         // expandedSql 中不应再残留 include 标签
         assertThat(stmt.getExpandedSql()).doesNotContain("include");
     }
+
+    // ==================== 用例 6：行号解析 ====================
+
+    @Test
+    @DisplayName("解析语句应给出近似起止行号")
+    void shouldResolveLineNumbers(@TempDir Path tempDir) throws IOException {
+        // language=xml
+        String xml = """
+                <?xml version="1.0" encoding="UTF-8" ?>
+                <mapper namespace="com.example.mapper.LineMapper">
+                    <select id="findAll" resultType="Book">
+                        SELECT * FROM books
+                    </select>
+                    <insert id="add">
+                        INSERT INTO books(name) VALUES(#{name})
+                    </insert>
+                </mapper>
+                """;
+
+        File xmlFile = createXmlFile(tempDir, "LineMapper.xml", xml);
+
+        MapperSqlFact fact = extractor.extractFromFile(xmlFile);
+
+        SqlStatement select = fact.getStatements().stream()
+                .filter(s -> "findAll".equals(s.getId())).findFirst().orElseThrow();
+        // <select id="findAll"> 位于第 3 行
+        assertThat(select.getStartLine()).isEqualTo(3);
+        assertThat(select.getEndLine()).isGreaterThanOrEqualTo(select.getStartLine());
+
+        SqlStatement insert = fact.getStatements().stream()
+                .filter(s -> "add".equals(s.getId())).findFirst().orElseThrow();
+        assertThat(insert.getStartLine()).isGreaterThan(select.getStartLine());
+    }
 }

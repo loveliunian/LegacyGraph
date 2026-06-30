@@ -4,8 +4,8 @@ import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.GraphMergeDecision;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.service.GraphMergeService;
 import io.github.legacygraph.service.GraphQueryService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,20 +37,20 @@ public class GraphQueryController {
 
     private final GraphQueryService graphQueryService;
     private final GraphMergeService graphMergeService;
-    private final GraphNodeRepository nodeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
 
     /**
      * 构造函数注入
      * @param graphQueryService 图谱查询服务
      * @param graphMergeService 图谱合并服务
-     * @param nodeRepository 图节点数据访问层
+     * @param neo4jGraphDao Neo4j图数据访问层
      */
     public GraphQueryController(GraphQueryService graphQueryService,
                                 GraphMergeService graphMergeService,
-                                GraphNodeRepository nodeRepository) {
+                                Neo4jGraphDao neo4jGraphDao) {
         this.graphQueryService = graphQueryService;
         this.graphMergeService = graphMergeService;
-        this.nodeRepository = nodeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
     }
 
     /**
@@ -71,7 +71,7 @@ public class GraphQueryController {
             @Parameter(description = "API接口路径或方法签名", required = true)
             @RequestParam String api) {
         try {
-            List<Map<String, Object>> result = graphQueryService.getApiCallChain(versionId, api);
+            List<Map<String, Object>> result = graphQueryService.getApiCallChain(projectId, versionId, api);
             return Result.success(result);
         } catch (Exception e) {
             return Result.error(e.getMessage());
@@ -96,7 +96,7 @@ public class GraphQueryController {
             @Parameter(description = "数据库表名", required = true)
             @RequestParam String tableName) {
         try {
-            List<Map<String, Object>> result = graphQueryService.getTableImpact(versionId, tableName);
+            List<Map<String, Object>> result = graphQueryService.getTableImpact(projectId, versionId, tableName);
             return Result.success(result);
         } catch (Exception e) {
             return Result.error(e.getMessage());
@@ -121,7 +121,7 @@ public class GraphQueryController {
             @Parameter(description = "模块名称", required = true)
             @RequestParam String module) {
         try {
-            Map<String, Object> result = graphQueryService.getFeatureView(versionId, module);
+            Map<String, Object> result = graphQueryService.getFeatureView(projectId, versionId, module);
             return Result.success(result);
         } catch (Exception e) {
             return Result.error(e.getMessage());
@@ -146,7 +146,7 @@ public class GraphQueryController {
             @Parameter(description = "业务域名称", required = true)
             @RequestParam String domain) {
         try {
-            Map<String, Object> result = graphQueryService.getBusinessView(versionId, domain);
+            Map<String, Object> result = graphQueryService.getBusinessView(projectId, versionId, domain);
             return Result.success(result);
         } catch (Exception e) {
             return Result.error(e.getMessage());
@@ -169,8 +169,8 @@ public class GraphQueryController {
     public Result<GraphMergeDecision> decideMerge(
             @PathVariable String projectId,
             @RequestBody GraphMergeService.MergeCandidate candidate) {
-        GraphNode a = nodeRepository.selectById(candidate.getNodeAId());
-        GraphNode b = nodeRepository.selectById(candidate.getNodeBId());
+        GraphNode a = neo4jGraphDao.findNodeById(candidate.getNodeAId()).orElse(null);
+        GraphNode b = neo4jGraphDao.findNodeById(candidate.getNodeBId()).orElse(null);
         if (a == null || b == null) {
             return Result.error("节点不存在");
         }
@@ -198,16 +198,18 @@ public class GraphQueryController {
      * @return 统一图谱数据，包含所有节点和边
      */
     @GetMapping("/graph/unified")
-    @Operation(summary = "获取统一图谱全量数据", description = "查询指定扫描版本的所有节点和边，过滤后返回用于可视化")
+    @Operation(summary = "获取统一图谱全量数据", description = "查询指定扫描版本的所有节点和边，支持按置信度和状态过滤")
     public Result<Map<String, Object>> getUnifiedGraph(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
             @RequestParam String versionId,
             @Parameter(description = "最低置信度", required = false)
-            @RequestParam(defaultValue = "0.0") Double minConfidence) {
+            @RequestParam(defaultValue = "0.0") Double minConfidence,
+            @Parameter(description = "状态过滤：CONFIRMED/PENDING_CONFIRM/REJECTED", required = false)
+            @RequestParam(required = false) String statusFilter) {
         try {
-            Map<String, Object> result = graphQueryService.getUnifiedGraph(versionId, minConfidence);
+            Map<String, Object> result = graphQueryService.getUnifiedGraph(versionId, minConfidence, statusFilter);
             return Result.success(result);
         } catch (Exception e) {
             return Result.error(e.getMessage());

@@ -2,12 +2,12 @@ package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.GenerateTestCasesRequest;
 import io.github.legacygraph.dto.StartTestRunRequest;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
-import io.github.legacygraph.repository.GraphNodeRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
 import io.github.legacygraph.test.ApiTestExecutor;
@@ -35,7 +35,7 @@ import java.util.concurrent.Executors;
 @Service
 public class TestCaseService {
 
-    private final GraphNodeRepository graphNodeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
     private final TestCaseRepository testCaseRepository;
     private final TestResultRepository testResultRepository;
     private final ObjectMapper objectMapper;
@@ -46,7 +46,7 @@ public class TestCaseService {
 
     private final ExecutorService testExecutor = Executors.newFixedThreadPool(4);
 
-    public TestCaseService(GraphNodeRepository graphNodeRepository,
+    public TestCaseService(Neo4jGraphDao neo4jGraphDao,
                           TestCaseRepository testCaseRepository,
                           TestResultRepository testResultRepository,
                           ObjectMapper objectMapper,
@@ -54,7 +54,7 @@ public class TestCaseService {
                           DbAssertionExecutor dbAssertionExecutor,
                           E2eTestExecutor e2eTestExecutor,
                           TestResultUpdateService testResultUpdateService) {
-        this.graphNodeRepository = graphNodeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
         this.objectMapper = objectMapper;
@@ -68,20 +68,21 @@ public class TestCaseService {
      * 生成测试用例
      */
     @Transactional
-    public String generateTestCases(GenerateTestCasesRequest request) {
+    public String generateTestCases(String projectId, GenerateTestCasesRequest request) {
         String executionId = UUID.randomUUID().toString();
         String versionId = request.getVersionId();
 
-        log.info("Starting generate test cases for versionId: {}", versionId);
+        log.info("Starting generate test cases for projectId: {}, versionId: {}", projectId, versionId);
 
         GenerateTestCasesRequest.Scope scope = request.getScope();
         List<String> nodeTypes = scope != null ? scope.getNodeTypes() : Arrays.asList("ApiEndpoint");
 
-        List<GraphNode> nodes = graphNodeRepository.lambdaQuery()
-                .eq(GraphNode::getVersionId, versionId)
-                .in(GraphNode::getNodeType, nodeTypes)
-                .eq(GraphNode::getStatus, "CONFIRMED")
-                .list();
+        // Query nodes from Neo4j — loop over nodeTypes since queryNodes supports single type
+        List<GraphNode> nodes = new ArrayList<>();
+        for (String nt : nodeTypes) {
+            nodes.addAll(neo4jGraphDao.queryNodes(
+                    projectId, versionId, nt, null, null, "CONFIRMED", Integer.MAX_VALUE));
+        }
 
         int generatedCount = 0;
         for (GraphNode node : nodes) {
@@ -209,8 +210,7 @@ public class TestCaseService {
         testCase.setCaseName(apiNode.getDisplayName() != null ? apiNode.getDisplayName() + " " + scenarioDesc : "API测试-" + scenarioDesc);
         testCase.setCaseType("API");
         testCase.setTargetNodeId(apiNode.getId());
-        // TODO: TestCase 实体缺少 scenario 字段
-        // testCase.setScenario(scenario);
+        testCase.setScenario(scenario);
         testCase.setPriority(scenario.equals("NORMAL") ? "P2" : "P3");
         testCase.setGeneratedBy("AUTO");
         testCase.setConfidence(confidence);

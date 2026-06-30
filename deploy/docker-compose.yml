@@ -1,71 +1,8 @@
-# LegacyGraph 完整部署 Docker Compose 配置
-# 包含所有服务: PostgreSQL, Neo4j, Redis, MinIO, backend, frontend
+# LegacyGraph 应用部署 Docker Compose 配置
+# 仅包含前后端应用代码；PostgreSQL、Neo4j、Redis、MinIO 均使用外部服务器
+# 外部服务连接信息通过 .env 文件或环境变量注入（参见同目录 .env.example）
 
 services:
-  # PostgreSQL 18 + pgvector 向量扩展
-  postgres:
-    image: pgvector/pgvector:pg18
-    container_name: legacygraph-postgres
-    environment:
-      POSTGRES_DB: legacy_graph
-      POSTGRES_USER: legacy_graph
-      POSTGRES_PASSWORD: legacy_graph
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ../docs/sql:/docker-entrypoint-initdb.d
-    networks:
-      - legacygraph-network
-    restart: unless-stopped
-
-  # Neo4j 5.x 图数据库
-  neo4j:
-    image: neo4j:5.26
-    container_name: legacygraph-neo4j
-    environment:
-      NEO4J_AUTH: neo4j/password
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_memory_heap_initial__size: 512m
-      NEO4J_dbms_memory_heap_max__size: 2G
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    volumes:
-      - neo4j-data:/data
-    networks:
-      - legacygraph-network
-    restart: unless-stopped
-
-  # Redis 缓存
-  redis:
-    image: redis:7-alpine
-    container_name: legacygraph-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - legacygraph-network
-    restart: unless-stopped
-
-  # MinIO 对象存储
-  minio:
-    image: minio/minio:latest
-    container_name: legacygraph-minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123456
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio-data:/data
-    networks:
-      - legacygraph-network
-    restart: unless-stopped
-
   # 后端 Spring Boot 应用
   backend:
     build:
@@ -73,27 +10,27 @@ services:
       dockerfile: Dockerfile
     container_name: legacygraph-backend
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/legacy_graph
-      SPRING_DATASOURCE_USERNAME: legacy_graph
-      SPRING_DATASOURCE_PASSWORD: legacy_graph
-      SPRING_NEO4J_URI: bolt://neo4j:7687
-      SPRING_NEO4J_AUTHENTICATION_USERNAME: neo4j
-      SPRING_NEO4J_AUTHENTICATION_PASSWORD: password
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minio
-      MINIO_SECRET_KEY: minio123456
-      # 需要配置 OpenAI API Key 才能使用 LLM 功能
-      # SPRING_AI_OPENAI_API_KEY: your-openai-api-key
-    depends_on:
-      - postgres
-      - neo4j
-      - redis
-      - minio
+      # ---- 外部 PostgreSQL ----
+      SPRING_DATASOURCE_URL: ${POSTGRES_URL:?需在 .env 配置外部 PostgreSQL 地址，如 jdbc:postgresql://db.example.com:5432/legacy_graph}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USERNAME:?需在 .env 配置 PostgreSQL 用户名}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?需在 .env 配置 PostgreSQL 密码}
+      # ---- 外部 Neo4j ----
+      SPRING_NEO4J_URI: ${NEO4J_URI:?需在 .env 配置外部 Neo4j 地址，如 bolt://graph.example.com:7687}
+      SPRING_NEO4J_AUTHENTICATION_USERNAME: ${NEO4J_USERNAME:?需在 .env 配置 Neo4j 用户名}
+      SPRING_NEO4J_AUTHENTICATION_PASSWORD: ${NEO4J_PASSWORD:?需在 .env 配置 Neo4j 密码}
+      # ---- 外部 Redis ----
+      SPRING_DATA_REDIS_HOST: ${REDIS_HOST:?需在 .env 配置外部 Redis 主机}
+      SPRING_DATA_REDIS_PORT: ${REDIS_PORT:-6379}
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # ---- 外部 MinIO / S3 ----
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:?需在 .env 配置外部 MinIO 地址，如 http://oss.example.com:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?需在 .env 配置 MinIO Access Key}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?需在 .env 配置 MinIO Secret Key}
+      # ---- LLM（可选）----
+      SPRING_AI_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     networks:
       - legacygraph-network
     restart: unless-stopped
@@ -105,18 +42,12 @@ services:
       dockerfile: Dockerfile
     container_name: legacygraph-frontend
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       - backend
     networks:
       - legacygraph-network
     restart: unless-stopped
-
-volumes:
-  postgres-data:
-  neo4j-data:
-  redis-data:
-  minio-data:
 
 networks:
   legacygraph-network:

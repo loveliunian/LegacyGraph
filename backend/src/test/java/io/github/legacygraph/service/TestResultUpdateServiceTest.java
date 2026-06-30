@@ -1,5 +1,6 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,9 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TestResultUpdateServiceTest {
 
     @Mock
-    private GraphNodeRepository graphNodeRepository;
-    @Mock
-    private GraphEdgeRepository graphEdgeRepository;
+    private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private TestResultRepository testResultRepository;
     @Mock
@@ -27,7 +26,7 @@ class TestResultUpdateServiceTest {
     @Test
     void testConstruction() {
         testResultUpdateService = new TestResultUpdateService(
-                graphNodeRepository, graphEdgeRepository, testResultRepository,
+                neo4jGraphDao, testResultRepository,
                 testCaseRepository, reviewRecordRepository);
         assertNotNull(testResultUpdateService);
     }

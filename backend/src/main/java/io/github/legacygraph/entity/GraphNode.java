@@ -7,7 +7,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 图谱节点表实体
+ * 图谱节点模型
+ * @deprecated 数据已迁移到 Neo4j（Neo4jGraphDao），此实体仅保留用于 MyBatis-Plus Bean 定义
+ *           以维持 Spring 上下文加载兼容性。所有读写请使用 Neo4jGraphDao。
  */
 @Data
 @TableName("lg_graph_node")
@@ -29,16 +31,15 @@ public class GraphNode {
     private Integer endLine;
     private BigDecimal confidence;
     private String status;
-    private String properties; // JSONB
+    private String properties;
 
-    // LLM integration fields — 数据库尚未迁移，标记为 exist=false 避免查询报错
-    @TableField(exist = false)
-    private String aliasNames; // JSONB
-    @TableField(exist = false)
-    private String evidenceIds; // JSONB
-    @TableField(exist = false)
-    private Long semanticVectorRef;
     private BigDecimal verifiedScore;
+    private String evidenceIds;
+    private String aliasNames;
+
+    private Boolean runtimeVerified;
+    private LocalDateTime lastSeenAt;
+    private Integer traceCount;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

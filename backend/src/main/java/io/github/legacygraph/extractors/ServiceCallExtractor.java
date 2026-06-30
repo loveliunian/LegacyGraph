@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -33,6 +34,7 @@ public class ServiceCallExtractor {
 
     /**
      * 从Java文件抽取调用关系
+     * 增强：建立注入变量名→类型映射，用于精确绑定 Controller→Service、Service→Mapper 调用。
      */
     public List<CallRelation> extractFromFile(File file) throws IOException {
         List<CallRelation> relations = new ArrayList<>();
@@ -44,28 +46,49 @@ public class ServiceCallExtractor {
         }
 
         CompilationUnit cu = result.getResult().get();
+        String filePath = file.getAbsolutePath();
         for (var typeDecl : cu.getTypes()) {
             if (typeDecl instanceof ClassOrInterfaceDeclaration) {
                 ClassOrInterfaceDeclaration clazz = (ClassOrInterfaceDeclaration) typeDecl;
                 String className = clazz.getFullyQualifiedName().orElse(clazz.getNameAsString());
-                Set<String> injectedServices = collectInjectedServices(clazz);
-                for (String service : injectedServices) {
-                    relations.add(new CallRelation(className, null, service));
-                }
-            }
-        }
+                // 建立注入变量名→类型映射（字段注入 + 构造器注入）
+                Map<String, String> injectedVarToType = collectInjectedVarTypes(clazz);
+                Set<String> injectedServices = new HashSet<>(injectedVarToType.values());
 
-        // 遍历所有方法，抽取方法调用
-        for (var typeDecl : cu.getTypes()) {
-            if (typeDecl instanceof ClassOrInterfaceDeclaration) {
-                ClassOrInterfaceDeclaration clazz = (ClassOrInterfaceDeclaration) typeDecl;
-                String callerClass = clazz.getFullyQualifiedName().orElse(clazz.getNameAsString());
+                // 遍历所有方法，抽取方法调用
                 for (MethodDeclaration method : clazz.getMethods()) {
+                    String callerMethod = method.getNameAsString();
                     method.findAll(MethodCallExpr.class).forEach(methodCall -> {
                         String calledMethod = methodCall.getNameAsString();
-                        String callerMethod = method.getNameAsString();
-                        relations.add(new CallRelation(callerClass, callerMethod, calledMethod));
+                        CallRelation rel = new CallRelation(className, callerMethod, calledMethod);
+                        rel.setSourcePath(filePath);
+                        rel.setLineNumber(methodCall.getBegin().map(p -> p.line).orElse(null));
+
+                        // 尝试解析目标：检查方法调用的 scope（如 mapper.findById → mapper 是注入的 MapperUser）
+                        methodCall.getScope().ifPresent(scope -> {
+                            String varName = scope.toString();
+                            String resolvedType = injectedVarToType.get(varName);
+                            if (resolvedType != null) {
+                                rel.setTargetClass(resolvedType);
+                                rel.setTargetMethod(calledMethod);
+                            }
+                        });
+                        relations.add(rel);
                     });
+                }
+
+                // 添加注入依赖边（仅依赖关系，不含调用方法）
+                for (String service : injectedServices) {
+                    // 避免重复创建注入边
+                    boolean alreadyAdded = relations.stream().anyMatch(r ->
+                            r.getCallerClass().equals(className) && service.equals(r.getCallerMethod())
+                                    && r.getTargetClass() == null);
+                    if (!alreadyAdded) {
+                        CallRelation depRel = new CallRelation(className, null, "injects:" + service);
+                        depRel.setTargetClass(service);
+                        depRel.setSourcePath(filePath);
+                        relations.add(depRel);
+                    }
                 }
             }
         }
@@ -74,11 +97,11 @@ public class ServiceCallExtractor {
     }
 
     /**
-     * 收集所有注入的服务依赖
-     * 支持：字段注入、构造器注入、Lombok注入
+     * 收集所有注入的服务依赖，返回变量名→类型名的映射
+     * 支持：字段注入(@Autowired/@Inject)、构造器注入
      */
-    private Set<String> collectInjectedServices(ClassOrInterfaceDeclaration clazz) {
-        Set<String> services = new HashSet<>();
+    private Map<String, String> collectInjectedVarTypes(ClassOrInterfaceDeclaration clazz) {
+        Map<String, String> varToType = new java.util.LinkedHashMap<>();
 
         // 处理构造器注入 — 通过解析构造参数中的类型名
         clazz.getConstructors().forEach(constructor -> {
@@ -89,7 +112,7 @@ public class ServiceCallExtractor {
                     if (genericIdx > 0) {
                         typeName = typeName.substring(0, genericIdx);
                     }
-                    services.add(typeName);
+                    varToType.put(param.getNameAsString(), typeName);
                 }
             }
         });
@@ -103,16 +126,17 @@ public class ServiceCallExtractor {
                     });
             if (hasAutowired) {
                 for (var variable : field.getVariables()) {
+                    String varName = variable.getNameAsString();
                     String typeName = variable.getType().asString();
                     int genericIdx = typeName.indexOf('<');
                     if (genericIdx > 0) {
                         typeName = typeName.substring(0, genericIdx);
                     }
-                    services.add(typeName);
+                    varToType.put(varName, typeName);
                 }
             }
         }
-        return services;
+        return varToType;
     }
 
     /**

@@ -128,14 +128,67 @@ public class ApiTestExecutor {
         for (var pre : preconditions) {
             String type = (String) pre.get("type");
             if ("LOGIN".equals(type)) {
-                // 执行登录获取token
-                String role = (String) pre.get("role");
-                // TODO: 根据配置的登录接口和账号获取token
-                // context.put("token", token);
+                // 执行登录获取 token 并写入上下文，供后续步骤以 ${token} 引用
+                try {
+                    String loginPath = pre.get("loginPath") != null
+                            ? (String) pre.get("loginPath") : "/lg/auth/login";
+                    Map<String, Object> credentials = new HashMap<>();
+                    if (pre.get("username") != null) credentials.put("username", pre.get("username"));
+                    if (pre.get("password") != null) credentials.put("password", pre.get("password"));
+                    // 兼容直接传入完整登录体
+                    Object bodyObj = pre.get("body");
+                    if (bodyObj instanceof Map) {
+                        credentials.putAll((Map<String, Object>) bodyObj);
+                    }
+
+                    Response loginResp = executeRequest("POST", baseUrl + loginPath, null, credentials);
+
+                    // token 字段名可配置，默认尝试常见路径
+                    String tokenField = pre.get("tokenField") != null
+                            ? (String) pre.get("tokenField") : "data.token";
+                    String token = extractToken(loginResp, tokenField);
+                    if (token != null && !token.isEmpty()) {
+                        context.put("token", token);
+                        String contextKey = (String) pre.get("contextKey");
+                        if (contextKey != null && !contextKey.isEmpty()) {
+                            context.put(contextKey, token);
+                        }
+                        log.info("LOGIN precondition succeeded, token acquired for role={}", pre.get("role"));
+                    } else {
+                        log.warn("LOGIN precondition: token not found at field '{}'", tokenField);
+                    }
+                } catch (Exception e) {
+                    log.warn("LOGIN precondition failed: {}", e.getMessage());
+                }
             }
         }
 
         return context;
+    }
+
+    /**
+     * 从登录响应中按字段路径提取 token，支持点号分隔的嵌套路径（如 data.token）。
+     */
+    private String extractToken(Response response, String tokenField) {
+        if (response == null) {
+            return null;
+        }
+        try {
+            Object value = response.jsonPath().get(tokenField);
+            if (value != null) {
+                return value.toString();
+            }
+            // 兜底尝试常见字段
+            for (String candidate : new String[]{"data.token", "token", "accessToken", "data.accessToken"}) {
+                Object v = response.jsonPath().get(candidate);
+                if (v != null) {
+                    return v.toString();
+                }
+            }
+        } catch (Exception e) {
+            log.debug("extractToken failed for field {}: {}", tokenField, e.getMessage());
+        }
+        return null;
     }
 
     /**

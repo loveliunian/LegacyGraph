@@ -1,6 +1,7 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -9,7 +10,7 @@ import java.time.LocalDateTime;
  * 扫描版本表实体
  */
 @Data
-@TableName("lg_scan_version")
+@TableName(value = "lg_scan_version", autoResultMap = true)
 public class ScanVersion {
 
     @TableId(type = IdType.ASSIGN_UUID)
@@ -20,6 +21,8 @@ public class ScanVersion {
     private String branchName;
     private String commitId;
     private String sourceHash;
+
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private String scanScope; // JSONB
     private String scanStatus;
     private LocalDateTime startedAt;

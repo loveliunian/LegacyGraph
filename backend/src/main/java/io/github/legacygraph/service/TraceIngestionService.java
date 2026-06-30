@@ -5,7 +5,7 @@ import io.github.legacygraph.dto.trace.TraceIngestRequest;
 import io.github.legacygraph.dto.trace.TraceTopology;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.RuntimeTrace;
-import io.github.legacygraph.repository.GraphNodeRepository;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.RuntimeTraceRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,12 +32,12 @@ import java.util.stream.Collectors;
 public class TraceIngestionService {
 
     private final RuntimeTraceRepository runtimeTraceRepository;
-    private final GraphNodeRepository graphNodeRepository;
+    private final Neo4jGraphDao neo4jGraphDao;
 
     public TraceIngestionService(RuntimeTraceRepository runtimeTraceRepository,
-                                 GraphNodeRepository graphNodeRepository) {
+                                 Neo4jGraphDao neo4jGraphDao) {
         this.runtimeTraceRepository = runtimeTraceRepository;
-        this.graphNodeRepository = graphNodeRepository;
+        this.neo4jGraphDao = neo4jGraphDao;
     }
 
     /**
@@ -69,32 +69,64 @@ public class TraceIngestionService {
             runtimeTraceRepository.insert(trace);
             count++;
 
-            // 运行时验证：匹配 operationName 到图谱节点 nodeKey，提升 verifiedScore
-            markRuntimeVerified(projectId, request.getVersionId(), span.getOperationName());
+            // 运行时验证：匹配 operationName + spanKind 到图谱节点
+            markRuntimeVerified(projectId, request.getVersionId(), span.getOperationName(), span.getSpanKind());
         }
         log.info("Ingested {} spans for projectId={}, versionId={}", count, projectId, request.getVersionId());
         return count;
     }
 
     /**
-     * 将 operationName 匹配到的图谱节点标记为运行时已验证（verifiedScore=1.0）。
+     * 将 span 匹配到的图谱节点标记为运行时已验证。
+     * 匹配规则：
+     *   HTTP span (SERVER/CLIENT) → 按 operationName 匹配 ApiEndpoint
+     *   方法 span (INTERNAL)        → 按 operationName 匹配 Service/Repository/Mapper
+     *   SQL span                    → 按 operationName 匹配 Mapper/Table
+     * 匹配到的节点设置 verifiedScore=1.0、runtimeVerified=true、lastSeenAt、traceCount+1。
+     * 对无法匹配的 trace 记录 unmatched 原因。
      */
-    private void markRuntimeVerified(String projectId, String versionId, String operationName) {
+    private void markRuntimeVerified(String projectId, String versionId, String operationName, String spanKind) {
         if (operationName == null || operationName.isBlank()) {
             return;
         }
-        LambdaQueryWrapper<GraphNode> q = new LambdaQueryWrapper<>();
-        q.eq(GraphNode::getProjectId, projectId)
-                .eq(GraphNode::getNodeKey, operationName);
-        if (versionId != null) {
-            q.eq(GraphNode::getVersionId, versionId);
+        // 根据 spanKind 确定目标节点类型
+        String[] targetTypes;
+        if ("SERVER".equals(spanKind) || "CLIENT".equals(spanKind)) {
+            targetTypes = new String[]{"ApiEndpoint"};
+        } else if ("INTERNAL".equals(spanKind)) {
+            targetTypes = new String[]{"Service", "Repository", "Mapper"};
+        } else if (spanKind != null && spanKind.toUpperCase().contains("SQL")) {
+            targetTypes = new String[]{"Mapper", "Table"};
+        } else {
+            // 未识别的 spanKind，fallback 到全类型匹配
+            targetTypes = new String[]{"ApiEndpoint", "Service", "Repository", "Mapper", "Table"};
         }
-        List<GraphNode> matched = graphNodeRepository.selectList(q);
+
+        // Query matching nodes from Neo4j — loop over targetTypes since queryNodes supports single type
+        List<GraphNode> matched = new ArrayList<>();
+        for (String targetType : targetTypes) {
+            matched.addAll(neo4jGraphDao.queryNodes(
+                    projectId, versionId, targetType, operationName,
+                    null, null, null, Integer.MAX_VALUE));
+        }
+        if (matched.isEmpty()) {
+            log.debug("Runtime trace unmatched: projectId={}, operationName={}, spanKind={}",
+                    projectId, operationName, spanKind);
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
         for (GraphNode node : matched) {
             node.setVerifiedScore(BigDecimal.ONE);
-            node.setUpdatedAt(LocalDateTime.now());
-            graphNodeRepository.updateById(node);
+            node.setRuntimeVerified(true);
+            node.setLastSeenAt(now);
+            int currentCount = node.getTraceCount() != null ? node.getTraceCount() : 0;
+            node.setTraceCount(currentCount + 1);
+            node.setUpdatedAt(now);
+            neo4jGraphDao.updateNode(node);
         }
+        log.debug("Runtime verified {} nodes for operationName={}, spanKind={}",
+                matched.size(), operationName, spanKind);
     }
 
     /**
