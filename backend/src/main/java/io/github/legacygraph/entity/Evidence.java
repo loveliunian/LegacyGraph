@@ -37,6 +37,12 @@ public class Evidence {
     private Long chunkId;
     private String relatedNodeIds;
 
+    /** 隐私级别 PUBLIC/INTERNAL/CONFIDENTIAL/SECRET（见 doc 4.4） */
+    private String privacyLevel;
+
+    /** 脱敏策略 none/mask/hash/drop（见 doc 4.4） */
+    private String redactionPolicy;
+
     /** 位置（前端展示用，由 sourcePath 转换而来） */
     @TableField(exist = false)
     private String location;

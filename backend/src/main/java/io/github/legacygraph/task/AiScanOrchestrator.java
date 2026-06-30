@@ -236,7 +236,7 @@ public class AiScanOrchestrator {
             return;
         }
         try {
-            businessGraphBuilder.buildBusinessGraph(projectId, versionId, extraction);
+            businessGraphBuilder.buildBusinessGraph(projectId, versionId, extraction, doc.getFilePath());
         } catch (Exception e) {
             log.warn("Business graph build failed for doc {}: {}", doc.getId(), e.getMessage());
         }
@@ -320,7 +320,7 @@ public class AiScanOrchestrator {
 
         String edgeKey = "ai-feature:" + mapping.getPageKey() + "->" + mapping.getApiKey();
         // 去重：已存在则直接返回
-        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(
+        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(projectId, versionId,
                 page.getId(), api.getId(), EdgeType.CALLS.name(), edgeKey);
         if (existing.isPresent()) {
             return existing.get();

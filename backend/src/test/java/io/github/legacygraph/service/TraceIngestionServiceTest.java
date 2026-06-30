@@ -2,6 +2,7 @@ package io.github.legacygraph.service;
 
 import io.github.legacygraph.dto.trace.TraceIngestRequest;
 import io.github.legacygraph.dto.trace.TraceTopology;
+import io.github.legacygraph.builder.TraceGraphAligner;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.RuntimeTrace;
 import io.github.legacygraph.dao.Neo4jGraphDao;
@@ -29,12 +30,14 @@ class TraceIngestionServiceTest {
     private RuntimeTraceRepository runtimeTraceRepository;
     @Mock
     private Neo4jGraphDao neo4jGraphDao;
+    @Mock
+    private TraceGraphAligner traceGraphAligner;
 
     private TraceIngestionService service;
 
     @BeforeEach
     void setUp() {
-        service = new TraceIngestionService(runtimeTraceRepository, neo4jGraphDao);
+        service = new TraceIngestionService(runtimeTraceRepository, neo4jGraphDao, traceGraphAligner);
     }
 
     private TraceIngestRequest.SpanDto span(String spanId, String parent, String svc, String op, String status) {
@@ -50,28 +53,24 @@ class TraceIngestionServiceTest {
     }
 
     @Test
-    void testIngest_PersistsSpansAndMarksVerified() {
+    void testIngest_PersistsSpansAndAlignsRuntimeEvidence() {
         TraceIngestRequest req = new TraceIngestRequest();
         req.setVersionId("v1");
         req.setSpans(Arrays.asList(
                 span("s1", null, "gateway", "GET /api/order", "OK"),
                 span("s2", "s1", "order-svc", "OrderService.create", "OK")));
 
-        // operationName 匹配到一个图谱节点
-        GraphNode node = new GraphNode();
-        node.setId("node-1");
-        node.setNodeKey("GET /api/order");
-        when(neo4jGraphDao.queryNodes(anyString(), anyString(), anyString(), anyString(), any(), anyString(), anyInt()))
-                .thenReturn(Collections.singletonList(node))  // 第一个 span 命中
-                .thenReturn(Collections.emptyList());         // 第二个 span 无命中
-
         int count = service.ingest("project-1", req);
 
         assertEquals(2, count);
         verify(runtimeTraceRepository, times(2)).insert(any(RuntimeTrace.class));
 
-        // 命中节点应更新运行时验证状态
-        verify(neo4jGraphDao, atLeastOnce()).updateNode(any(GraphNode.class));
+        verify(traceGraphAligner).align(eq("project-1"), eq("v1"), argThat(records ->
+                records.size() == 2
+                        && "GET /api/order".equals(records.get(0).getOperationName())
+                        && "GET".equals(records.get(0).getHttpMethod())
+                        && "/api/order".equals(records.get(0).getPath())
+        ));
     }
 
     @Test

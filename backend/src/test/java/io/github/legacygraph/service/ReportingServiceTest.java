@@ -248,6 +248,14 @@ class ReportingServiceTest {
 
     @Test
     void testGenerateReportInsights_UsesGraphMetricsAndGapSummary() throws Exception {
+        // 重构后：versionGraphStats 聚合 + queryNodes(limit=100) 找高置信未覆盖 + queryLowConfidenceNodes + queryDisconnectedNodes
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalNodes", 2L);
+        stats.put("totalEdges", 0L);
+        stats.put("pendingNodes", 1L);
+        stats.put("avgConfidence", 0.6);
+        when(neo4jGraphDao.versionGraphStats("project-1", "v1")).thenReturn(stats);
+
         GraphNode highConfidenceApi = new GraphNode();
         highConfidenceApi.setId("api-1");
         highConfidenceApi.setNodeType("ApiEndpoint");
@@ -262,10 +270,15 @@ class ReportingServiceTest {
         lowConfidenceNode.setStatus("PENDING_CONFIRM");
         lowConfidenceNode.setConfidence(BigDecimal.valueOf(0.3));
 
-        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("v1"), isNull(), isNull(), isNull(), isNull(), eq(0)))
+        // generateReportInsights 用 limit=100 查询节点（注意不是 0）
+        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("v1"), isNull(), isNull(), isNull(), isNull(), eq(100)))
                 .thenReturn(List.of(highConfidenceApi, lowConfidenceNode));
-        when(neo4jGraphDao.queryEdges(eq("project-1"), eq("v1"), isNull(), isNull(), eq(0)))
+        when(neo4jGraphDao.queryLowConfidenceNodes(eq("project-1"), eq("v1"), eq(0.5), eq(50)))
+                .thenReturn(List.of(lowConfidenceNode));
+        when(neo4jGraphDao.queryDisconnectedNodes(eq("project-1"), eq("v1"), eq(50)))
                 .thenReturn(Collections.emptyList());
+
+        // findCoveredNodeIds + computeTestPassRatio 都走 testResultRepository.selectList
         when(testResultRepository.selectList(any())).thenReturn(Collections.emptyList());
         when(objectMapper.writeValueAsString(any())).thenAnswer(invocation -> {
             Object value = invocation.getArgument(0);

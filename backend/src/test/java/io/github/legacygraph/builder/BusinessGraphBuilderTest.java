@@ -3,10 +3,10 @@ package io.github.legacygraph.builder;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.entity.Evidence;
+import io.github.legacygraph.dto.graph.GraphEdgeClaim;
+import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +16,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,13 +34,14 @@ class BusinessGraphBuilderTest {
     private EdgeEvidenceRepository edgeEvidenceRepository;
     @Mock
     private DocChunkRepository docChunkRepository;
+    @Mock
+    private EvidenceGraphWriter writer;
 
     private BusinessGraphBuilder businessGraphBuilder;
 
     @BeforeEach
     void setUp() {
-        businessGraphBuilder = new BusinessGraphBuilder(neo4jGraphDao,
-                docChunkRepository, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
+        businessGraphBuilder = new BusinessGraphBuilder(neo4jGraphDao, docChunkRepository, writer);
     }
 
     @Test
@@ -55,10 +55,30 @@ class BusinessGraphBuilderTest {
      */
     @Test
     void testBuildBusinessGraph_PersistsNodesEdgesAndEvidence() {
-        // findNode 返回 Optional.empty()，表示节点不存在，走 create 分支
-        when(neo4jGraphDao.findNode(any(), any(), any(), any())).thenReturn(Optional.empty());
-        // 边继承证据时查询源节点证据，返回空列表
-        when(nodeEvidenceRepository.selectList(any())).thenReturn(List.of());
+        when(writer.upsertNode(any(GraphNodeClaim.class))).thenAnswer(invocation -> {
+            GraphNodeClaim claim = invocation.getArgument(0);
+            GraphNode node = new GraphNode();
+            node.setId(claim.getNodeType() + ":" + claim.getNodeKey());
+            node.setProjectId(claim.getProjectId());
+            node.setVersionId(claim.getVersionId());
+            node.setNodeType(claim.getNodeType());
+            node.setNodeKey(claim.getNodeKey());
+            node.setNodeName(claim.getNodeName());
+            node.setSourcePath(claim.getSourcePath());
+            return node;
+        });
+        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenAnswer(invocation -> {
+            GraphEdgeClaim claim = invocation.getArgument(0);
+            GraphEdge edge = new GraphEdge();
+            edge.setId(claim.getEdgeType() + ":" + claim.getEdgeKey());
+            edge.setProjectId(claim.getProjectId());
+            edge.setVersionId(claim.getVersionId());
+            edge.setFromNodeId(claim.getFromNodeId());
+            edge.setToNodeId(claim.getToNodeId());
+            edge.setEdgeType(claim.getEdgeType());
+            edge.setEdgeKey(claim.getEdgeKey());
+            return edge;
+        });
 
         DocUnderstandingAgent.BusinessFactExtraction facts =
                 new DocUnderstandingAgent.BusinessFactExtraction();
@@ -78,13 +98,13 @@ class BusinessGraphBuilderTest {
         facts.getBusinessProcesses().add(process);
 
         // when
-        businessGraphBuilder.buildBusinessGraph("project-1", "version-1", facts);
+        businessGraphBuilder.buildBusinessGraph("project-1", "version-1", facts, "/docs/order.md");
 
         // then: 节点落库 —— 1 domain + 1 process + 2 step features = 4 个节点
-        ArgumentCaptor<GraphNode> nodeCaptor = ArgumentCaptor.forClass(GraphNode.class);
-        verify(neo4jGraphDao, times(4)).createNode(nodeCaptor.capture());
+        ArgumentCaptor<GraphNodeClaim> nodeCaptor = ArgumentCaptor.forClass(GraphNodeClaim.class);
+        verify(writer, times(4)).upsertNode(nodeCaptor.capture());
 
-        List<GraphNode> nodes = nodeCaptor.getAllValues();
+        List<GraphNodeClaim> nodes = nodeCaptor.getAllValues();
         assertTrue(nodes.stream().anyMatch(n ->
                 NodeType.BusinessDomain.name().equals(n.getNodeType()) && "订单管理".equals(n.getNodeName())));
         assertTrue(nodes.stream().anyMatch(n ->
@@ -93,13 +113,10 @@ class BusinessGraphBuilderTest {
         // 全部来自文档 AI，项目/版本一致
         assertTrue(nodes.stream().allMatch(n ->
                 "project-1".equals(n.getProjectId()) && "version-1".equals(n.getVersionId())));
+        assertTrue(nodes.stream().allMatch(n -> "/docs/order.md".equals(n.getSourcePath())));
 
         // 边落库 —— 不再轮询分配 domain→process 边，仅 process CONTAINS 2 steps = 2 条边
-        ArgumentCaptor<GraphEdge> edgeCaptor = ArgumentCaptor.forClass(GraphEdge.class);
-        verify(neo4jGraphDao, times(2)).createEdge(edgeCaptor.capture());
-
-        // 每个节点都生成一条证据 + 一条 node-evidence 关联
-        verify(evidenceRepository, times(4)).insert(any(Evidence.class));
-        verify(nodeEvidenceRepository, times(4)).insert(any(NodeEvidence.class));
+        ArgumentCaptor<GraphEdgeClaim> edgeCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
+        verify(writer, times(2)).upsertEdge(edgeCaptor.capture());
     }
 }

@@ -290,6 +290,6 @@ class AiScanOrchestratorTest {
         assertTrue(factTypes.contains("BUSINESS_ROLE"));
         assertTrue(factTypes.contains("STATUS_TRANSITION"));
         assertTrue(factTypes.contains("FEATURE"));
-        verify(businessGraphBuilder).buildBusinessGraph("proj-1", "v1", extraction);
+        verify(businessGraphBuilder).buildBusinessGraph(eq("proj-1"), eq("v1"), eq(extraction), anyString());
     }
 }

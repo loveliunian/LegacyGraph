@@ -84,6 +84,11 @@
             <el-menu-item :index="`/projects/${projectId}/validation`">验证报告</el-menu-item>
             <el-menu-item :index="`/projects/${projectId}/migration/risks`">迁移风险</el-menu-item>
           </el-sub-menu>
+
+          <el-menu-item :index="`/projects/${projectId}/workbench`">
+            <el-icon><DocumentChecked /></el-icon>
+            <span>证据工作台</span>
+          </el-menu-item>
         </el-menu>
       </el-aside>
 

@@ -227,6 +227,7 @@ public class SourceController {
         repo.setUpdatedAt(LocalDateTime.now());
 
         codeRepoRepository.updateById(repo);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success();
     }
 
@@ -252,6 +253,7 @@ public class SourceController {
             return Result.error("代码仓库不存在");
         }
         codeRepoRepository.deleteById(id);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success();
     }
 
@@ -573,6 +575,7 @@ public class SourceController {
         db.setUpdatedAt(LocalDateTime.now());
 
         dbConnectionRepository.insert(db);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success(db.getId());
     }
 
@@ -615,6 +618,7 @@ public class SourceController {
         db.setUpdatedAt(LocalDateTime.now());
 
         dbConnectionRepository.updateById(db);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success();
     }
 
@@ -640,6 +644,7 @@ public class SourceController {
             return Result.error("数据库连接不存在");
         }
         dbConnectionRepository.deleteById(id);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success();
     }
 
@@ -880,6 +885,7 @@ public class SourceController {
         doc.setUpdatedAt(LocalDateTime.now());
 
         documentRepository.insert(doc);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success(doc.getId());
     }
 
@@ -1126,6 +1132,7 @@ public class SourceController {
             return Result.error("文档不存在");
         }
         documentRepository.deleteById(id);
+        graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success();
     }
 

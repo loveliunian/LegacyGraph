@@ -25,8 +25,9 @@ class FrontendGraphBuilderTest {
 
     @Test
     void testConstruction() {
-        frontendGraphBuilder = new FrontendGraphBuilder(neo4jGraphDao,
-                evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
+        EvidenceGraphWriter writer = new EvidenceGraphWriter(
+                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
+        frontendGraphBuilder = new FrontendGraphBuilder(neo4jGraphDao, writer);
         assertNotNull(frontendGraphBuilder);
     }
 }

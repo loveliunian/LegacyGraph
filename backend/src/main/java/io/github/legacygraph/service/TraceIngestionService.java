@@ -1,6 +1,8 @@
 package io.github.legacygraph.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.legacygraph.builder.TraceGraphAligner;
+import io.github.legacygraph.dto.graph.RuntimeEvidenceRecord;
 import io.github.legacygraph.dto.trace.TraceIngestRequest;
 import io.github.legacygraph.dto.trace.TraceTopology;
 import io.github.legacygraph.entity.GraphNode;
@@ -33,11 +35,14 @@ public class TraceIngestionService {
 
     private final RuntimeTraceRepository runtimeTraceRepository;
     private final Neo4jGraphDao neo4jGraphDao;
+    private final TraceGraphAligner traceGraphAligner;
 
     public TraceIngestionService(RuntimeTraceRepository runtimeTraceRepository,
-                                 Neo4jGraphDao neo4jGraphDao) {
+                                 Neo4jGraphDao neo4jGraphDao,
+                                 TraceGraphAligner traceGraphAligner) {
         this.runtimeTraceRepository = runtimeTraceRepository;
         this.neo4jGraphDao = neo4jGraphDao;
+        this.traceGraphAligner = traceGraphAligner;
     }
 
     /**
@@ -49,6 +54,7 @@ public class TraceIngestionService {
             return 0;
         }
         int count = 0;
+        List<RuntimeEvidenceRecord> runtimeEvidence = new ArrayList<>();
         for (TraceIngestRequest.SpanDto span : request.getSpans()) {
             RuntimeTrace trace = new RuntimeTrace();
             trace.setProjectId(projectId);
@@ -69,11 +75,42 @@ public class TraceIngestionService {
             runtimeTraceRepository.insert(trace);
             count++;
 
-            // 运行时验证：匹配 operationName + spanKind 到图谱节点
-            markRuntimeVerified(projectId, request.getVersionId(), span.getOperationName(), span.getSpanKind());
+            runtimeEvidence.add(toRuntimeEvidenceRecord(span, trace.getStartedAt()));
         }
+        traceGraphAligner.align(projectId, request.getVersionId(), runtimeEvidence);
         log.info("Ingested {} spans for projectId={}, versionId={}", count, projectId, request.getVersionId());
         return count;
+    }
+
+    private RuntimeEvidenceRecord toRuntimeEvidenceRecord(TraceIngestRequest.SpanDto span,
+                                                          LocalDateTime observedAt) {
+        String operationName = span.getOperationName();
+        String httpMethod = null;
+        String path = null;
+        if (operationName != null) {
+            String[] parts = operationName.trim().split("\\s+", 2);
+            if (parts.length == 2 && isHttpMethod(parts[0])) {
+                httpMethod = parts[0].toUpperCase();
+                path = parts[1];
+            }
+        }
+        return RuntimeEvidenceRecord.builder()
+                .traceId(span.getTraceId())
+                .spanKind(span.getSpanKind())
+                .operationName(operationName)
+                .httpMethod(httpMethod)
+                .path(path)
+                .durationMs(span.getDurationMs())
+                .errorCount("ERROR".equals(span.getStatus()) ? 1 : 0)
+                .observedAt(observedAt != null ? observedAt : LocalDateTime.now())
+                .build();
+    }
+
+    private boolean isHttpMethod(String value) {
+        return switch (value.toUpperCase()) {
+            case "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS" -> true;
+            default -> false;
+        };
     }
 
     /**

@@ -5,15 +5,24 @@ import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
+import io.github.legacygraph.agent.SqlAdvisorAgent;
+import io.github.legacygraph.common.EdgeType;
+import io.github.legacygraph.common.NodeStatus;
+import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.SqlAdvisorResult;
-import io.github.legacygraph.entity.*;
+import io.github.legacygraph.dto.graph.GraphEdgeClaim;
+import io.github.legacygraph.dto.graph.GraphNodeClaim;
+import io.github.legacygraph.entity.GraphEdge;
+import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
 import io.github.legacygraph.model.ApiFact;
 import io.github.legacygraph.model.MapperSqlFact;
-import io.github.legacygraph.repository.*;
+import io.github.legacygraph.repository.ReviewRecordRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,10 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -36,22 +43,16 @@ import java.util.UUID;
 public class GraphBuilder {
 
     private final Neo4jGraphDao neo4jGraphDao;
-    private final EvidenceRepository evidenceRepository;
-    private final NodeEvidenceRepository nodeEvidenceRepository;
-    private final EdgeEvidenceRepository edgeEvidenceRepository;
+    private final EvidenceGraphWriter writer;
     private final SqlAdvisorAgent sqlAdvisorAgent;
     private final ReviewRecordRepository reviewRecordRepository;
 
     public GraphBuilder(Neo4jGraphDao neo4jGraphDao,
-                       EvidenceRepository evidenceRepository,
-                       NodeEvidenceRepository nodeEvidenceRepository,
-                       EdgeEvidenceRepository edgeEvidenceRepository,
+                       EvidenceGraphWriter writer,
                        SqlAdvisorAgent sqlAdvisorAgent,
                        ReviewRecordRepository reviewRecordRepository) {
         this.neo4jGraphDao = neo4jGraphDao;
-        this.evidenceRepository = evidenceRepository;
-        this.nodeEvidenceRepository = nodeEvidenceRepository;
-        this.edgeEvidenceRepository = edgeEvidenceRepository;
+        this.writer = writer;
         this.sqlAdvisorAgent = sqlAdvisorAgent;
         this.reviewRecordRepository = reviewRecordRepository;
     }
@@ -425,7 +426,7 @@ public class GraphBuilder {
     }
 
     /**
-     * 查找或创建节点
+     * 查找或创建节点（委托给 EvidenceGraphWriter）。
      */
     private GraphNode findOrCreateNode(String projectId, String versionId,
             String nodeType, String nodeKey, String nodeName,
@@ -433,80 +434,21 @@ public class GraphBuilder {
             String sourceType, String sourcePath,
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status) {
-        // Neo4j 中查找是否已存在
-        Optional<GraphNode> existing = neo4jGraphDao.findNode(projectId, versionId, nodeType, nodeKey);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        GraphNode node = new GraphNode();
-        node.setId(UUID.randomUUID().toString());
-        node.setProjectId(projectId);
-        node.setVersionId(versionId);
-        node.setNodeType(nodeType);
-        node.setNodeKey(nodeKey);
-        node.setNodeName(nodeName);
-        node.setDisplayName(displayName);
-        node.setDescription(description);
-        node.setSourceType(sourceType);
-        node.setSourcePath(sourcePath);
-        node.setStartLine(startLine);
-        node.setEndLine(endLine);
-        node.setConfidence(confidence);
-        node.setStatus(status.name());
-        node.setCreatedAt(LocalDateTime.now());
-        node.setUpdatedAt(LocalDateTime.now());
-
-        neo4jGraphDao.createNode(node);
-
-        // 创建证据并关联
-        if (sourcePath != null && !sourcePath.isEmpty()) {
-            createEvidenceForNode(node, sourceType, sourcePath, startLine, endLine);
-        }
-
-        return node;
-    }
-
-    /**
-     * 为节点创建证据记录并建立关联
-     */
-    private void createEvidenceForNode(GraphNode node, String sourceType, String sourcePath,
-            Integer startLine, Integer endLine) {
-        Evidence evidence = new Evidence();
-        evidence.setId(UUID.randomUUID().toString());
-        evidence.setProjectId(node.getProjectId());
-        evidence.setVersionId(node.getVersionId());
-        evidence.setEvidenceType(mapSourceTypeToEvidenceType(sourceType));
-        evidence.setSourcePath(sourcePath);
-        evidence.setSourceName(node.getDisplayName());
-        evidence.setStartLine(startLine);
-        evidence.setEndLine(endLine);
-        evidence.setCreatedAt(LocalDateTime.now());
-        evidenceRepository.insert(evidence);
-
-        // 创建节点-证据关联
-        NodeEvidence nodeEvidence = new NodeEvidence();
-        nodeEvidence.setId(UUID.randomUUID().toString());
-        nodeEvidence.setNodeId(node.getId());
-        nodeEvidence.setEvidenceId(evidence.getId());
-        nodeEvidence.setRelationType("PRIMARY_SOURCE");
-        nodeEvidence.setCreatedAt(LocalDateTime.now());
-        nodeEvidenceRepository.insert(nodeEvidence);
-    }
-
-    /**
-     * 将源码类型映射为证据类型
-     */
-    private String mapSourceTypeToEvidenceType(String sourceType) {
-        if (sourceType == null) return "unknown";
-        return switch (sourceType) {
-            case "CODE_AST" -> "code";
-            case "MYBATIS_XML", "SQL_PARSE" -> "sql";
-            case "FRONTEND_AST" -> "ui";
-            case "DB_METADATA" -> "db";
-            case "DOCUMENT" -> "doc";
-            default -> sourceType.toLowerCase();
-        };
+        return writer.upsertNode(GraphNodeClaim.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .nodeType(nodeType)
+                .nodeKey(nodeKey)
+                .nodeName(nodeName)
+                .displayName(displayName)
+                .description(description)
+                .sourceType(sourceType)
+                .sourcePath(sourcePath)
+                .startLine(startLine)
+                .endLine(endLine)
+                .confidence(confidence)
+                .status(status != null ? status.name() : null)
+                .build());
     }
 
     /**
@@ -530,51 +472,24 @@ public class GraphBuilder {
     }
 
     /**
-     * 创建边（去重：按 fromNodeId+toNodeId+edgeType+edgeKey 查找，已存在则直接返回）
+     * 创建边（委托给 EvidenceGraphWriter，自动去重+证据继承）。
      */
     private GraphEdge createEdge(String projectId, String versionId,
             String fromNodeId, String toNodeId,
             String edgeType, String edgeKey,
             String sourceType, BigDecimal confidence,
             NodeStatus status) {
-        // 先去重检查
-        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(fromNodeId, toNodeId, edgeType, edgeKey);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        GraphEdge edge = new GraphEdge();
-        edge.setId(UUID.randomUUID().toString());
-        edge.setProjectId(projectId);
-        edge.setVersionId(versionId);
-        edge.setFromNodeId(fromNodeId);
-        edge.setToNodeId(toNodeId);
-        edge.setEdgeType(edgeType);
-        edge.setEdgeKey(edgeKey);
-        edge.setSourceType(sourceType);
-        edge.setConfidence(confidence);
-        edge.setStatus(status.name());
-        edge.setCreatedAt(LocalDateTime.now());
-        edge.setUpdatedAt(LocalDateTime.now());
-
-        neo4jGraphDao.createEdge(edge);
-
-        // 从源节点继承证据（创建关联）
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NodeEvidence> neQuery =
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-        neQuery.eq(NodeEvidence::getNodeId, fromNodeId);
-        List<NodeEvidence> nodeEvidences = nodeEvidenceRepository.selectList(neQuery);
-        for (NodeEvidence ne : nodeEvidences) {
-            EdgeEvidence edgeEvidence = new EdgeEvidence();
-            edgeEvidence.setId(UUID.randomUUID().toString());
-            edgeEvidence.setEdgeId(edge.getId());
-            edgeEvidence.setEvidenceId(ne.getEvidenceId());
-            edgeEvidence.setRelationType("INHERITED");
-            edgeEvidence.setCreatedAt(LocalDateTime.now());
-            edgeEvidenceRepository.insert(edgeEvidence);
-        }
-
-        return edge;
+        return writer.upsertEdge(GraphEdgeClaim.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .fromNodeId(fromNodeId)
+                .toNodeId(toNodeId)
+                .edgeType(edgeType)
+                .edgeKey(edgeKey)
+                .sourceType(sourceType)
+                .confidence(confidence)
+                .status(status != null ? status.name() : null)
+                .build());
     }
 
     /**

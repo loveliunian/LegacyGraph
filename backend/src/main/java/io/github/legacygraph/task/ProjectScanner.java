@@ -17,6 +17,11 @@ import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
 import io.github.legacygraph.extractors.VueRouteExtractor;
+import io.github.legacygraph.extractors.adapter.ExtractionAdapter;
+import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
+import io.github.legacygraph.extractors.adapter.ExtractionResult;
+import io.github.legacygraph.extractors.adapter.ScanContext;
+import io.github.legacygraph.extractors.adapter.SourceAsset;
 import io.github.legacygraph.model.ApiFact;
 import io.github.legacygraph.model.FrontendPageFact;
 import io.github.legacygraph.model.MapperSqlFact;
@@ -69,6 +74,7 @@ public class ProjectScanner {
     private final ObjectMapper objectMapper;
     private final AiScanOrchestrator aiScanOrchestrator;
     private final DbSchemaAnalysisAgent dbSchemaAnalysisAgent;
+    private final ExtractionAdapterRegistry extractionAdapterRegistry;
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -101,9 +107,10 @@ public class ProjectScanner {
                          DocumentRepository documentRepository,
                          GraphBuilder graphBuilder,
                          FrontendGraphBuilder frontendGraphBuilder,
-                         ObjectMapper objectMapper,
-                         AiScanOrchestrator aiScanOrchestrator,
-                         DbSchemaAnalysisAgent dbSchemaAnalysisAgent) {
+	                         ObjectMapper objectMapper,
+	                         AiScanOrchestrator aiScanOrchestrator,
+	                         DbSchemaAnalysisAgent dbSchemaAnalysisAgent,
+	                         ExtractionAdapterRegistry extractionAdapterRegistry) {
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
@@ -115,6 +122,7 @@ public class ProjectScanner {
         this.objectMapper = objectMapper;
         this.aiScanOrchestrator = aiScanOrchestrator;
         this.dbSchemaAnalysisAgent = dbSchemaAnalysisAgent;
+        this.extractionAdapterRegistry = extractionAdapterRegistry;
     }
 
     /**
@@ -175,6 +183,12 @@ public class ProjectScanner {
             int docCount = discoverDocuments(projectId, versionId, baseDir);
             completeTask(docDiscoveryTask, "Discovered " + docCount + " documents", null);
             log.info("Auto-discovered {} documents", docCount);
+
+            // 0d. Adapter Registry 试运行：按资产选择 Adapter 做补充抽取，未匹配资产保留旧扫描链路兜底
+            ScanTask adapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
+            int adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir);
+            completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
+            log.info("Adapter registry scan processed {} assets", adapterCount);
 
             // 1. 扫描Java文件获取Controller接口
             ScanTask javaTask = createTask(projectId, versionId, "BACKEND_SCAN", "Java代码扫描");
@@ -777,6 +791,108 @@ public class ProjectScanner {
     }
 
     // ==================== 代码扫描 ====================
+
+    int scanAssetsWithAdapters(String projectId, String versionId,
+                               String baseDir, String backendDir, String frontendDir) {
+        if (baseDir == null || extractionAdapterRegistry == null) {
+            return 0;
+        }
+        Path root = Paths.get(baseDir);
+        if (!Files.exists(root)) {
+            return 0;
+        }
+        ScanContext context = ScanContext.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .baseDir(baseDir)
+                .backendDir(backendDir)
+                .frontendDir(frontendDir)
+                .config(Map.of())
+                .build();
+        int processed = 0;
+        try {
+            List<Path> files = Files.walk(root)
+                    .filter(Files::isRegularFile)
+                    .filter(this::isAdapterCandidate)
+                    .collect(Collectors.toList());
+            for (Path file : files) {
+                SourceAsset asset = toSourceAsset(root, file);
+                Optional<ExtractionAdapter> adapter = extractionAdapterRegistry.selectAdapter(context, asset);
+                if (adapter.isEmpty()) {
+                    continue;
+                }
+                try {
+                    ExtractionResult result = adapter.get().extract(context, asset);
+                    processed += result != null && result.getProcessedAssets() > 0
+                            ? result.getProcessedAssets() : 1;
+                } catch (Exception e) {
+                    log.warn("Adapter {} failed for {}: {}",
+                            adapter.get().capability().getName(), asset.getRelativePath(), e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            log.warn("Adapter scan failed for {}: {}", baseDir, e.getMessage());
+        }
+        return processed;
+    }
+
+    private boolean isAdapterCandidate(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".java")
+                || name.endsWith(".xml")
+                || name.endsWith(".vue")
+                || name.endsWith(".ts")
+                || name.endsWith(".js")
+                || name.endsWith(".md")
+                || name.endsWith(".sql");
+    }
+
+    private SourceAsset toSourceAsset(Path root, Path file) {
+        String relativePath = root.relativize(file).toString();
+        String fileName = file.getFileName().toString();
+        String fileType = "";
+        int dot = fileName.lastIndexOf('.');
+        if (dot >= 0 && dot < fileName.length() - 1) {
+            fileType = fileName.substring(dot + 1).toLowerCase();
+        }
+        long size = 0L;
+        try {
+            size = Files.size(file);
+        } catch (IOException ignored) {}
+        return SourceAsset.builder()
+                .file(file)
+                .relativePath(relativePath)
+                .fileType(fileType)
+                .language(detectLanguage(fileType))
+                .framework(detectFramework(relativePath, fileType))
+                .fileSize(size)
+                .build();
+    }
+
+    private String detectLanguage(String fileType) {
+        return switch (fileType) {
+            case "java" -> "java";
+            case "vue", "ts", "js" -> "javascript";
+            case "xml" -> "xml";
+            case "sql" -> "sql";
+            case "md" -> "markdown";
+            default -> fileType;
+        };
+    }
+
+    private String detectFramework(String relativePath, String fileType) {
+        String lower = relativePath.toLowerCase();
+        if ("java".equals(fileType) && (lower.contains("controller") || lower.contains("service"))) {
+            return "spring";
+        }
+        if ("xml".equals(fileType) && lower.contains("mapper")) {
+            return "mybatis";
+        }
+        if ("vue".equals(fileType)) {
+            return "vue";
+        }
+        return null;
+    }
 
     private int scanJavaControllers(String projectId, String versionId, String baseDir, ScanTask task) {
         if (baseDir == null) return 0;

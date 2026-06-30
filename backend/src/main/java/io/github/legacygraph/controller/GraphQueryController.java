@@ -3,8 +3,11 @@ package io.github.legacygraph.controller;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.builder.FeatureSliceBuilder;
 import io.github.legacygraph.dto.GraphMergeDecision;
+import io.github.legacygraph.dto.graph.FeatureSlice;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.service.GraphMergeService;
 import io.github.legacygraph.service.GraphQueryService;
@@ -16,8 +19,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
+import java.math.BigDecimal;
+import java.util.*;
 
 /**
  * 知识图谱查询控制器
@@ -38,6 +41,7 @@ public class GraphQueryController {
     private final GraphQueryService graphQueryService;
     private final GraphMergeService graphMergeService;
     private final Neo4jGraphDao neo4jGraphDao;
+    private final FeatureSliceBuilder featureSliceBuilder;
 
     /**
      * 构造函数注入
@@ -47,10 +51,12 @@ public class GraphQueryController {
      */
     public GraphQueryController(GraphQueryService graphQueryService,
                                 GraphMergeService graphMergeService,
-                                Neo4jGraphDao neo4jGraphDao) {
+                                Neo4jGraphDao neo4jGraphDao,
+                                FeatureSliceBuilder featureSliceBuilder) {
         this.graphQueryService = graphQueryService;
         this.graphMergeService = graphMergeService;
         this.neo4jGraphDao = neo4jGraphDao;
+        this.featureSliceBuilder = featureSliceBuilder;
     }
 
     /**
@@ -236,6 +242,87 @@ public class GraphQueryController {
     }
 
     /**
+     * 获取功能切片列表：总图上的 Feature → Page → API → Method → SQL → Table 投影视图。
+     */
+    @GetMapping("/graph/feature-slices")
+    @Operation(summary = "获取功能切片列表", description = "按 Feature 节点构建功能切片投影视图")
+    public Result<List<FeatureSlice>> getFeatureSlices(
+            @PathVariable String projectId,
+            @RequestParam String versionId) {
+        return Result.success(featureSliceBuilder.buildAllSlices(projectId, versionId));
+    }
+
+    /**
+     * 获取单个功能切片详情。sliceId 使用 Feature 节点 ID。
+     */
+    @GetMapping("/graph/feature-slices/{sliceId}")
+    @Operation(summary = "获取功能切片详情", description = "按 Feature 节点 ID 构建单个功能切片详情")
+    public Result<FeatureSlice> getFeatureSliceDetail(
+            @PathVariable String projectId,
+            @PathVariable String sliceId) {
+        return Result.success(featureSliceBuilder.buildSliceById(projectId, sliceId));
+    }
+
+    /**
+     * 获取图谱质量统计。
+     */
+    @GetMapping("/graph/quality")
+    @Operation(summary = "获取图谱质量统计", description = "返回节点、边、证据、AI-only/runtime-only 等质量指标")
+    public Result<Map<String, Object>> getGraphQualityReport(
+            @PathVariable String projectId,
+            @RequestParam(required = false) String versionId) {
+        Map<String, Object> stats = new LinkedHashMap<>(versionId != null && !versionId.isBlank()
+                ? neo4jGraphDao.versionGraphStats(projectId, versionId)
+                : neo4jGraphDao.graphStats(projectId));
+        ensureQualityDefaults(stats);
+        return Result.success(stats);
+    }
+
+    /**
+     * 获取漂移队列。
+     */
+    @GetMapping("/graph/drift-queue")
+    @Operation(summary = "获取漂移队列", description = "返回静态-only、运行时-only、文档-only、低置信等待处理项")
+    public Result<Map<String, Object>> getDriftQueue(
+            @PathVariable String projectId,
+            @RequestParam(required = false, defaultValue = "all") String type) {
+        List<Map<String, Object>> allItems = new ArrayList<>();
+
+        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, null, null, null, 200);
+        for (GraphEdge edge : edges) {
+            if ("static_only_candidate".equals(edge.getRelationStatus())) {
+                allItems.add(edgeDriftItem(edge, "static_only", "静态图谱存在但运行时尚未观测", "MEDIUM"));
+            } else if ("dynamic_only_candidate".equals(edge.getRelationStatus())
+                    || "RUNTIME_TRACE".equals(edge.getSourceType())) {
+                allItems.add(edgeDriftItem(edge, "dynamic_only", "运行时观测到但静态图谱未确认", "HIGH"));
+            }
+        }
+
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, null, null, null, null, null, 200);
+        for (GraphNode node : nodes) {
+            if ("DOC_AI".equals(node.getSourceType())) {
+                allItems.add(nodeDriftItem(node, "doc_only", "文档 AI 节点需要与代码/运行时证据对齐", "MEDIUM"));
+            }
+            BigDecimal confidence = node.getConfidence();
+            if (confidence != null && confidence.compareTo(BigDecimal.valueOf(0.5)) < 0) {
+                allItems.add(nodeDriftItem(node, "low_confidence", "低置信节点需要人工确认", "HIGH"));
+            }
+        }
+
+        String normalizedType = type == null || type.isBlank() ? "all" : type;
+        List<Map<String, Object>> items = "all".equals(normalizedType)
+                ? allItems
+                : allItems.stream()
+                .filter(item -> normalizedType.equals(item.get("driftType")))
+                .toList();
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("items", items);
+        response.put("summary", driftSummary(allItems));
+        return Result.success(response);
+    }
+
+    /**
      * 获取项目扫描版本列表（分页）
      * 查询项目的所有扫描版本，用于选择展示哪个版本的图谱
      * @param projectId 项目ID
@@ -255,5 +342,64 @@ public class GraphQueryController {
         } catch (Exception e) {
             return Result.error(e.getMessage());
         }
+    }
+
+    private void ensureQualityDefaults(Map<String, Object> stats) {
+        stats.putIfAbsent("totalNodes", 0L);
+        stats.putIfAbsent("confirmedNodes", 0L);
+        stats.putIfAbsent("pendingNodes", 0L);
+        stats.putIfAbsent("avgConfidence", 0.0);
+        stats.putIfAbsent("withEvidenceCount", 0L);
+        stats.putIfAbsent("noEvidenceNodes", 0L);
+        stats.putIfAbsent("aiOnlyNodes", 0L);
+        stats.putIfAbsent("totalEdges", 0L);
+        stats.putIfAbsent("confirmedEdges", 0L);
+        stats.putIfAbsent("pendingEdges", 0L);
+        stats.putIfAbsent("noEvidenceEdges", 0L);
+        stats.putIfAbsent("aiOnlyEdges", 0L);
+        stats.putIfAbsent("runtimeOnlyEdges", 0L);
+    }
+
+    private Map<String, Object> edgeDriftItem(GraphEdge edge, String driftType,
+                                              String description, String severity) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", edge.getId());
+        item.put("elementId", edge.getId());
+        item.put("targetType", "EDGE");
+        item.put("driftType", driftType);
+        item.put("elementName", edge.getEdgeKey() != null ? edge.getEdgeKey() : edge.getEdgeType());
+        item.put("description", description);
+        item.put("severity", severity);
+        item.put("confidence", edge.getConfidence());
+        item.put("createdAt", edge.getCreatedAt());
+        return item;
+    }
+
+    private Map<String, Object> nodeDriftItem(GraphNode node, String driftType,
+                                              String description, String severity) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", node.getId());
+        item.put("elementId", node.getId());
+        item.put("targetType", "NODE");
+        item.put("driftType", driftType);
+        item.put("elementName", node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName());
+        item.put("description", description);
+        item.put("severity", severity);
+        item.put("confidence", node.getConfidence());
+        item.put("createdAt", node.getCreatedAt());
+        return item;
+    }
+
+    private Map<String, Object> driftSummary(List<Map<String, Object>> items) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("staticOnly", countDrift(items, "static_only"));
+        summary.put("dynamicOnly", countDrift(items, "dynamic_only"));
+        summary.put("docOnly", countDrift(items, "doc_only"));
+        summary.put("lowConfidence", countDrift(items, "low_confidence"));
+        return summary;
+    }
+
+    private long countDrift(List<Map<String, Object>> items, String driftType) {
+        return items.stream().filter(item -> driftType.equals(item.get("driftType"))).count();
     }
 }

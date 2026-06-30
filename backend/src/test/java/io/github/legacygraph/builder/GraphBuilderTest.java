@@ -3,6 +3,9 @@ package io.github.legacygraph.builder;
 import io.github.legacygraph.agent.SqlAdvisorAgent;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.SqlAdvisorResult;
+import io.github.legacygraph.dto.graph.GraphEdgeClaim;
+import io.github.legacygraph.dto.graph.GraphNodeClaim;
+import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
@@ -16,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,11 +30,7 @@ class GraphBuilderTest {
     @Mock
     private Neo4jGraphDao neo4jGraphDao;
     @Mock
-    private EvidenceRepository evidenceRepository;
-    @Mock
-    private NodeEvidenceRepository nodeEvidenceRepository;
-    @Mock
-    private EdgeEvidenceRepository edgeEvidenceRepository;
+    private EvidenceGraphWriter writer;
     @Mock
     private SqlAdvisorAgent sqlAdvisorAgent;
     @Mock
@@ -42,20 +40,40 @@ class GraphBuilderTest {
 
     @Test
     void testConstruction() {
-        graphBuilder = new GraphBuilder(neo4jGraphDao,
-                evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
-                sqlAdvisorAgent, reviewRecordRepository);
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer, sqlAdvisorAgent, reviewRecordRepository);
         assertNotNull(graphBuilder);
     }
 
     @Test
     void testBuildMapperSqlGraph_CreatesReviewRecordForSqlAdvisorIssues() {
-        graphBuilder = new GraphBuilder(neo4jGraphDao,
-                evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
-                sqlAdvisorAgent, reviewRecordRepository);
-        when(neo4jGraphDao.findNode(any(), any(), any(), any())).thenReturn(Optional.empty());
-        when(neo4jGraphDao.createNode(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(nodeEvidenceRepository.selectList(any())).thenReturn(List.of());
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer, sqlAdvisorAgent, reviewRecordRepository);
+        when(writer.upsertNode(any(GraphNodeClaim.class))).thenAnswer(invocation -> {
+            GraphNodeClaim claim = invocation.getArgument(0);
+            GraphNode node = new GraphNode();
+            node.setId(claim.getNodeType() + ":" + claim.getNodeKey());
+            node.setProjectId(claim.getProjectId());
+            node.setVersionId(claim.getVersionId());
+            node.setNodeType(claim.getNodeType());
+            node.setNodeKey(claim.getNodeKey());
+            node.setNodeName(claim.getNodeName());
+            node.setDisplayName(claim.getDisplayName());
+            node.setConfidence(claim.getConfidence());
+            node.setStatus(claim.getStatus());
+            return node;
+        });
+        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenAnswer(invocation -> {
+            GraphEdgeClaim claim = invocation.getArgument(0);
+            GraphEdge edge = new GraphEdge();
+            edge.setId(claim.getEdgeType() + ":" + claim.getEdgeKey());
+            edge.setProjectId(claim.getProjectId());
+            edge.setVersionId(claim.getVersionId());
+            edge.setFromNodeId(claim.getFromNodeId());
+            edge.setToNodeId(claim.getToNodeId());
+            edge.setEdgeType(claim.getEdgeType());
+            edge.setEdgeKey(claim.getEdgeKey());
+            edge.setStatus(claim.getStatus());
+            return edge;
+        });
         when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
 
         SqlAdvisorResult.SqlIssue issue = new SqlAdvisorResult.SqlIssue();

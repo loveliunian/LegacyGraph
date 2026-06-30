@@ -191,6 +191,12 @@ const routes: RouteRecordRaw[] = [
             name: 'AuditLogDetail',
             component: () => import('@/views/audit/LogDetail.vue'),
             meta: { title: 'menu.logDetail' }
+          },
+          {
+            path: 'workbench',
+            name: 'EvidenceWorkbench',
+            component: () => import('@/views/workbench/EvidenceWorkbench.vue'),
+            meta: { title: '证据工作台' }
           }
         ]
       },

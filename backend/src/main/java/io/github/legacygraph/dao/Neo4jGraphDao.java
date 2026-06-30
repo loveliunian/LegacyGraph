@@ -271,7 +271,8 @@ public class Neo4jGraphDao {
                     "MATCH (to {id: $toId}) " +
                     "CREATE (from)-[r:%s {id: $id, projectId: $projectId, versionId: $versionId, " +
                     "edgeKey: $edgeKey, edgeType: $edgeType, sourceType: $sourceType, " +
-                    "confidence: $confidence, status: $status, evidenceIds: $evidenceIds, " +
+                    "confidence: $confidence, status: $status, properties: $properties, " +
+                    "evidenceIds: $evidenceIds, relationStatus: $relationStatus, " +
                     "createdAt: $createdAt, updatedAt: $updatedAt}]->(to) RETURN r",
                     edge.getEdgeType());
             Map<String, Object> params = new HashMap<>();
@@ -285,7 +286,9 @@ public class Neo4jGraphDao {
             params.put("sourceType", edge.getSourceType() != null ? edge.getSourceType() : "");
             params.put("confidence", edge.getConfidence() != null ? edge.getConfidence().doubleValue() : 1.0);
             params.put("status", edge.getStatus() != null ? edge.getStatus() : "");
+            params.put("properties", edge.getProperties() != null ? edge.getProperties() : "{}");
             params.put("evidenceIds", edge.getEvidenceIds() != null ? edge.getEvidenceIds() : "");
+            params.put("relationStatus", edge.getRelationStatus() != null ? edge.getRelationStatus() : "");
             params.put("createdAt", edge.getCreatedAt() != null ? edge.getCreatedAt().toString() : LocalDateTime.now().toString());
             params.put("updatedAt", edge.getUpdatedAt() != null ? edge.getUpdatedAt().toString() : LocalDateTime.now().toString());
             session.run(cypher, params);
@@ -295,14 +298,19 @@ public class Neo4jGraphDao {
 
     /**
      * 查找已存在的边（用于去重）。
-     * 按 (fromNodeId, toNodeId, edgeType, edgeKey) 唯一标识一条边。
+     * 按 (projectId, versionId, fromNodeId, toNodeId, edgeType, edgeKey) 唯一标识一条边。
      */
-    public Optional<GraphEdge> findEdge(String fromNodeId, String toNodeId, String edgeType, String edgeKey) {
+    public Optional<GraphEdge> findEdge(String projectId, String versionId,
+            String fromNodeId, String toNodeId, String edgeType, String edgeKey) {
         try (Session session = neo4jDriver.session()) {
             String cypher = "MATCH (from {id: $fromId})-[r]->(to {id: $toId}) " +
                     "WHERE type(r) = $edgeType AND r.edgeKey = $edgeKey " +
+                    "AND r.projectId = $projectId " +
+                    "AND (r.versionId = $versionId OR $versionId IS NULL) " +
                     "RETURN r, from, to LIMIT 1";
             Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", versionId);
             params.put("fromId", fromNodeId);
             params.put("toId", toNodeId);
             params.put("edgeType", edgeType);
@@ -392,22 +400,37 @@ public class Neo4jGraphDao {
                 "     count(CASE WHEN n.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedNodes, " +
                 "     count(CASE WHEN n.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingNodes, " +
                 "     coalesce(avg(n.confidence), 0.0) AS avgConfidence, " +
-                "     count(CASE WHEN n.evidenceIds IS NOT NULL AND n.evidenceIds <> '' THEN 1 END) AS withEvidenceCount " +
+                "     count(CASE WHEN n.evidenceIds IS NOT NULL AND n.evidenceIds <> '' THEN 1 END) AS withEvidenceCount, " +
+                "     count(CASE WHEN n.evidenceIds IS NULL OR n.evidenceIds = '' THEN 1 END) AS noEvidenceNodes, " +
+                "     count(CASE WHEN n.sourceType IN ['AI_INFERENCE', 'DOC_AI'] THEN 1 END) AS aiOnlyNodes " +
                 "OPTIONAL MATCH ()-[r]->() WHERE r.projectId = $projectId " +
-                "RETURN totalNodes, confirmedNodes, pendingNodes, avgConfidence, withEvidenceCount, " +
+                "RETURN totalNodes, confirmedNodes, pendingNodes, avgConfidence, withEvidenceCount, noEvidenceNodes, aiOnlyNodes, " +
                 "       count(r) AS totalEdges, " +
                 "       count(CASE WHEN r.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedEdges, " +
-                "       count(CASE WHEN r.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingEdges";
+                "       count(CASE WHEN r.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingEdges, " +
+                "       count(CASE WHEN r.evidenceIds IS NULL OR r.evidenceIds = '' THEN 1 END) AS noEvidenceEdges, " +
+                "       count(CASE WHEN r.sourceType IN ['AI_INFERENCE', 'AI_FEATURE_MAPPING', 'DOC_AI'] THEN 1 END) AS aiOnlyEdges, " +
+                "       count(CASE WHEN r.sourceType = 'RUNTIME_TRACE' THEN 1 END) AS runtimeOnlyEdges";
             Result result = session.run(cypher, Map.of("projectId", projectId));
             if (result.hasNext()) {
                 return result.next().asMap();
             }
         }
-        return Map.of(
-            "totalNodes", 0L, "confirmedNodes", 0L, "pendingNodes", 0L,
-            "avgConfidence", 0.0, "withEvidenceCount", 0L,
-            "totalEdges", 0L, "confirmedEdges", 0L, "pendingEdges", 0L
-        );
+        Map<String, Object> emptyStats = new LinkedHashMap<>();
+        emptyStats.put("totalNodes", 0L);
+        emptyStats.put("confirmedNodes", 0L);
+        emptyStats.put("pendingNodes", 0L);
+        emptyStats.put("avgConfidence", 0.0);
+        emptyStats.put("withEvidenceCount", 0L);
+        emptyStats.put("noEvidenceNodes", 0L);
+        emptyStats.put("aiOnlyNodes", 0L);
+        emptyStats.put("totalEdges", 0L);
+        emptyStats.put("confirmedEdges", 0L);
+        emptyStats.put("pendingEdges", 0L);
+        emptyStats.put("noEvidenceEdges", 0L);
+        emptyStats.put("aiOnlyEdges", 0L);
+        emptyStats.put("runtimeOnlyEdges", 0L);
+        return emptyStats;
     }
 
     /**
@@ -481,11 +504,17 @@ public class Neo4jGraphDao {
     public void updateEdge(GraphEdge edge) {
         try (Session session = neo4jDriver.session()) {
             String cypher = "MATCH ()-[r {id: $id}]->() SET " +
-                    "r.status = $status, r.confidence = $confidence, r.updatedAt = $updatedAt";
+                    "r.status = $status, " +
+                    "r.confidence = $confidence, " +
+                    "r.relationStatus = $relationStatus, " +
+                    "r.properties = $properties, " +
+                    "r.updatedAt = $updatedAt";
             session.run(cypher, Map.of(
                     "id", edge.getId(),
                     "status", edge.getStatus() != null ? edge.getStatus() : "",
                     "confidence", edge.getConfidence() != null ? edge.getConfidence().doubleValue() : 1.0,
+                    "relationStatus", edge.getRelationStatus() != null ? edge.getRelationStatus() : "",
+                    "properties", edge.getProperties() != null ? edge.getProperties() : "{}",
                     "updatedAt", LocalDateTime.now().toString()
             ));
         }
@@ -568,18 +597,36 @@ public class Neo4jGraphDao {
                 "     count(CASE WHEN n.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingNodes, " +
                 "     coalesce(avg(n.confidence), 0.0) AS avgConfidence, " +
                 "     count(CASE WHEN n.evidenceIds IS NOT NULL AND n.evidenceIds <> '' THEN 1 END) AS withEvidenceCount, " +
+                "     count(CASE WHEN n.evidenceIds IS NULL OR n.evidenceIds = '' THEN 1 END) AS noEvidenceNodes, " +
+                "     count(CASE WHEN n.sourceType IN ['AI_INFERENCE', 'DOC_AI'] THEN 1 END) AS aiOnlyNodes, " +
                 "     count(CASE WHEN coalesce(n.verifiedScore, 0.0) > 0 THEN 1 END) AS runtimeVerifiedCount " +
                 "OPTIONAL MATCH ()-[r]->() WHERE r.projectId = $projectId AND r.versionId = $versionId " +
-                "RETURN totalNodes, confirmedNodes, pendingNodes, avgConfidence, withEvidenceCount, runtimeVerifiedCount, " +
+                "RETURN totalNodes, confirmedNodes, pendingNodes, avgConfidence, withEvidenceCount, noEvidenceNodes, aiOnlyNodes, runtimeVerifiedCount, " +
                 "       count(r) AS totalEdges, " +
                 "       count(CASE WHEN r.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedEdges, " +
-                "       count(CASE WHEN r.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingEdges";
+                "       count(CASE WHEN r.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingEdges, " +
+                "       count(CASE WHEN r.evidenceIds IS NULL OR r.evidenceIds = '' THEN 1 END) AS noEvidenceEdges, " +
+                "       count(CASE WHEN r.sourceType IN ['AI_INFERENCE', 'AI_FEATURE_MAPPING', 'DOC_AI'] THEN 1 END) AS aiOnlyEdges, " +
+                "       count(CASE WHEN r.sourceType = 'RUNTIME_TRACE' THEN 1 END) AS runtimeOnlyEdges";
             Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
             if (result.hasNext()) return result.next().asMap();
         }
-        return Map.of("totalNodes", 0L, "confirmedNodes", 0L, "pendingNodes", 0L,
-                "avgConfidence", 0.0, "withEvidenceCount", 0L, "runtimeVerifiedCount", 0L,
-                "totalEdges", 0L, "confirmedEdges", 0L, "pendingEdges", 0L);
+        Map<String, Object> emptyStats = new LinkedHashMap<>();
+        emptyStats.put("totalNodes", 0L);
+        emptyStats.put("confirmedNodes", 0L);
+        emptyStats.put("pendingNodes", 0L);
+        emptyStats.put("avgConfidence", 0.0);
+        emptyStats.put("withEvidenceCount", 0L);
+        emptyStats.put("noEvidenceNodes", 0L);
+        emptyStats.put("aiOnlyNodes", 0L);
+        emptyStats.put("runtimeVerifiedCount", 0L);
+        emptyStats.put("totalEdges", 0L);
+        emptyStats.put("confirmedEdges", 0L);
+        emptyStats.put("pendingEdges", 0L);
+        emptyStats.put("noEvidenceEdges", 0L);
+        emptyStats.put("aiOnlyEdges", 0L);
+        emptyStats.put("runtimeOnlyEdges", 0L);
+        return emptyStats;
     }
 
     /**
@@ -910,7 +957,9 @@ public class Neo4jGraphDao {
         if (conf instanceof Double) edge.setConfidence(BigDecimal.valueOf((Double) conf));
         else if (conf instanceof String) edge.setConfidence(new BigDecimal((String) conf));
         edge.setStatus((String) props.get("status"));
+        edge.setProperties((String) props.get("properties"));
         edge.setEvidenceIds((String) props.get("evidenceIds"));
+        edge.setRelationStatus((String) props.get("relationStatus"));
         Object ca = props.get("createdAt");
         if (ca instanceof String) edge.setCreatedAt(LocalDateTime.parse((String) ca));
         Object ua = props.get("updatedAt");
@@ -936,7 +985,9 @@ public class Neo4jGraphDao {
         if (conf instanceof Double) edge.setConfidence(BigDecimal.valueOf((Double) conf));
         else if (conf instanceof String) edge.setConfidence(new BigDecimal((String) conf));
         edge.setStatus((String) props.get("status"));
+        edge.setProperties((String) props.get("properties"));
         edge.setEvidenceIds((String) props.get("evidenceIds"));
+        edge.setRelationStatus((String) props.get("relationStatus"));
         Object ca = props.get("createdAt");
         if (ca instanceof String) edge.setCreatedAt(LocalDateTime.parse((String) ca));
         Object ua = props.get("updatedAt");

@@ -180,13 +180,7 @@ export const graphApi = {
     })
   },
 
-  /**
-   * 获取统一图谱全量数据
-   * @param projectId 项目ID
-   * @param versionId 扫描版本ID
-   * @param minConfidence 最低置信度过滤
-   * @returns 统一图谱数据，包含所有节点和边
-   */
+  /** 获取统一图谱全量数据 */
   getUnifiedGraph: (projectId: string, versionId: string, minConfidence: number = 0) => {
     return request.get(`/lg/projects/${projectId}/graph/unified`, {
       params: { versionId, minConfidence }
@@ -194,24 +188,48 @@ export const graphApi = {
   },
 
   /**
-   * 获取数据库表节点列表（仅Table节点，轻量查询）
-   * @param projectId 项目ID
-   * @param versionId 扫描版本ID
-   * @returns Table节点列表
+   * 获取功能切片列表（证据工作台）
    */
+  getFeatureSlices: (projectId: string, versionId: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/feature-slices`, {
+      params: { versionId }
+    })
+  },
+
+  /**
+   * 获取单个功能切片详情
+   */
+  getFeatureSliceDetail: (projectId: string, sliceId: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/feature-slices/${sliceId}`)
+  },
+
+  /**
+   * 获取图谱质量统计（含无证据节点/AI-only边/runtime-only边等）
+   */
+  getGraphQualityReport: (projectId: string, versionId?: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/quality`, {
+      params: versionId ? { versionId } : {}
+    })
+  },
+
+  /**
+   * 获取漂移队列
+   */
+  getDriftQueue: (projectId: string, type?: string) => {
+    return request.get(`/lg/projects/${projectId}/graph/drift-queue`, {
+      params: type ? { type } : {}
+    })
+  },
+
+  /** 获取数据库表节点列表（仅Table节点，轻量查询） */
   getTables: (projectId: string, versionId: string) => {
     return request.get(`/lg/projects/${projectId}/graph/tables`, { params: { versionId } })
   },
 
-  /**
-   * 获取项目扫描版本列表
-   * 查询项目的所有扫描版本，用于选择展示哪个版本的图谱
-   * @param projectId 项目ID
-   * @returns 扫描版本列表
-   */
+  /** 获取项目扫描版本列表 */
   getScanVersions: (projectId: string) => {
     return request.get(`/lg/projects/${projectId}/scan-versions`)
-  }
+  },
 }
 
 /**

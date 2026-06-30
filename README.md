@@ -1,537 +1,236 @@
-# LegacyGraph - 系统 AI 知识图谱分析平台
+# LegacyGraph — 遗留系统 AI 知识图谱分析平台
 
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
-[![Vue 3](https://img.shields.io/badge/Vue-3-blue.svg)](https://v3.vuejs.org/)
+[![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
+[![Vue](https://img.shields.io/badge/Vue-3-blue.svg)](https://v3.vuejs.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-379%20passed-green.svg)]()
+[![TypeScript](https://img.shields.io/badge/type--check-passing-green.svg)]()
 
 ## 项目简介
 
-**LegacyGraph** 是一个企业级系统分析与知识图谱平台，旨在通过大语言模型（LLM）、图数据库和向量检索技术，帮助开发团队理解、管理和现代化改造复杂的遗留系统。
+**LegacyGraph** 是一个企业级遗留系统分析与知识图谱平台，通过大语言模型（LLM）、图数据库（Neo4j）、向量检索（pgvector）和 Redis 缓存技术，把代码库、数据库、文档、前端页面连接成一张可追溯、可验证、可审核的统一知识网络。
 
-LegacyGraph 能够自动扫描你的代码库和数据库，构建包含业务域、模块、API、服务、表结构的完整知识图谱，并通过 AI 分析帮助团队更快理解系统，降低迁移风险。
+核心理念：**静态分析给事实，LLM 做归纳与补全，自动测试负责反证，人工审核兜底**。
 
-## 🎯 应用场景
+## 应用场景
 
-- 🏢 **企业遗留系统现代化**：帮助团队理解庞大的遗留系统，制定迁移计划
-- 👥 **新人接手**：快速了解系统架构和业务逻辑，缩短上手时间
-- 🔍 **架构审计**：识别代码异味、技术债务和不合理依赖
-- 📊 **影响分析**：分析变更影响范围，降低修改风险
-- 🧪 **测试辅助**：AI 辅助生成测试用例，提升覆盖率
+- 🏢 **遗留系统现代化**：扫描 Java Spring Boot + Vue 老项目，构建三类图谱，辅助迁移决策
+- 👥 **新人快速上手**：自然语言问答「用户注册涉及哪些表？」「修改密码经过哪些模块？」
+- 🔍 **架构审计**：识别代码异味、技术债务、N+1 查询、不合理依赖
+- 📊 **影响分析**：基于图谱依赖链评估变更影响范围
+- 🧪 **测试增强**：AI 自动生成 API/E2E/DB 测试用例，执行结果回写置信度
 
-## ✨ 核心功能
+## 核心能力
 
-### 1. 自动扫描与知识抽取
+### 三类图谱
 
-- **多维度代码扫描**
-  - Java Controller / Service 业务逻辑抽取
-  - MyBatis XML SQL 解析
-  - Vue 路由和前端 API 抽取
-  - SQL 表结构自动提取
-- **数据库元数据抽取**
-  - 支持直接连接数据库抽取表结构
-  - 表、字段、主键、外键关系识别
-  - 基于列注释推断业务含义
-- **文档抽取**
-  - 支持 Word、PDF、Text 等文档解析
-  - 业务需求文档向量化存储
+| 图谱 | 内容 | 数据来源 |
+|---|---|---|
+| 代码图谱 | Controller/Service/Mapper/SQL/表/字段调用链 | Java AST + MyBatis XML + JDBC 元数据 |
+| 功能图谱 | 页面/按钮/API/权限/菜单 → 后端接口映射 | Vue 组件 + axios 调用 + Controller 注解 |
+| 业务图谱 | 业务域/流程/角色/对象/规则/状态流转 | 文档 AI 抽取 + 人工确认 |
 
-### 2. 知识图谱可视化
+所有节点和关系均带 `evidence`（文件、行号、SQL、文档片段），`confidence`（0–1），`status`（CONFIRMED/PENDING_CONFIRM/REJECTED）。
 
-- 统一知识图谱展示
-- **节点类型**: 业务域、功能模块、API 接口、控制器、服务、数据访问层、数据库表、字段、前端页面
-- 支持力导向、环形、网格、分层等多种布局算法
-- 节点和关系的详细属性展示
-- 路径分析和影响分析
-- 支持图谱导出（JSON、PNG 图片）
+### LLM Agent 体系（15+ Agent）
 
-### 3. AI 智能分析
+| Agent | 功能 |
+|---|---|
+| CodeFactAgent | 代码语义事实抽取 |
+| DocUnderstandingAgent | 文档流程/规则/角色/对象抽取 |
+| FeatureMappingAgent | 页面/API/权限/功能映射 |
+| GraphMergeAgent | 图谱节点去重合并裁决 |
+| TestCaseAgent | API/E2E/DB 测试用例生成 |
+| ReviewAgent | 审核建议与冲突分析 |
+| QaAgent | 自然语言图谱问答（RAG + 图邻域） |
+| SqlAdvisorAgent | SQL 性能优化建议 |
+| TestFailureAnalysisAgent | 测试失败根因分析 |
+| ReportInsightAgent | 报告洞察与行动建议 |
+| RefactorAgent | 代码异味重构建议 |
+| ChangeImpactAgent | 语义级变更影响分析 |
+| MigrationAgent | 迁移代码自动转换 |
+| PrDescriptionAgent | PR 描述/提交信息生成 |
+| DbSchemaAnalysisAgent | 数据库 Schema 业务分析 |
 
-- 🤖 **LLM 驱动分析**：基于大语言模型的代码理解和业务识别
-- 业务流程自动识别
-- API 调用链追踪
-- 数据流向分析
-- 代码异味检测
-- 技术债务评估
-- 多轮对话式代码审查
+全部 Agent 经 `LlmGateway` 统一调用——支持多模型动态路由、Prompt 模板渲染、PII 脱敏、结构化校验、`PromptRun` 审计（token/latency/inputHash）和 Redis 结果缓存（TTL 7d）。
 
-### 4. 向量检索
+### RAG 问答
 
-- 基于内容的代码相似度搜索
-- 语义化查询支持
-- 向量索引加速检索
-- 支持模糊搜索和精确匹配
-- 基于 pgvector 原生向量存储，无需额外向量数据库
+五段式检索增强生成：规则过滤 → pgvector 向量召回（Top-30）→ Neo4j 图邻域扩展（1–2 跳）→ 重排序 → LLM 生成。回答带 `usedEvidence`（节点/边/文档片段三元组）、`relatedNodeKeys` 和 `confidence`。
 
-### 5. 报告与统计
+### 扫描后 AI 编排
 
-- 代码质量报告
-- 迁移就绪度评估
-- 测试覆盖率分析
-- 置信度趋势分析
-- 图谱质量评估
+AI 能力不是孤立的——`ProjectScanner` 扫描完成后由 `AiScanOrchestrator` 自动执行四个 AI 子任务：
+- 文档分片 → 业务事实抽取 → 业务图谱构建
+- 前端 API ↔ 后端接口映射 → 待确认 CALLS 边
+- 高价值 API 节点测试用例生成（上限 20 节点）
+- 低置信节点审核任务生成（上限 50 个）
 
-### 6. 迁移辅助
+### 测试闭环
 
-- 风险识别与评估
-- 影响范围分析
-- 重构建议生成
-- 迁移计划生成
+从功能节点出发，沿 `Feature → Page → API → Service → SQL → Table` 链路生成测试；API 用 REST Assured、E2E 用 Playwright、断言覆盖 HTTP/JSONPath/SQL/状态；结果回写图谱置信度（PASS +0.10，FAIL −0.20，人工审核通过 +0.15）。
 
-### 7. 测试自动化
+### Redis 缓存体系
 
-- AI 辅助生成测试用例
-- 支持 API 测试、数据库断言、E2E 测试
-- 测试执行与结果追踪
-- 覆盖率报告生成
+全链路容错缓存——Redis 不可用时静默降级回源。已落地 9 个场景：
 
-## 🏗️ 技术架构
+| 场景 | TTL | 实现 |
+|---|---|---|
+| LLM 结果缓存 | 7d | `inputHash` 去重，命中跳过 LLM 调用 |
+| JWT 登出黑名单 | token 剩余有效期 | 真登出 + 强制下线 |
+| 扫描进度缓存 | 3s / 30min | 吸收前端高频轮询 |
+| 图谱视图/报告缓存 | 按版本 | `GraphCacheInvalidator` 统一失效 |
+| 配置/字典/Prompt/提供商缓存 | 1–6h | @Cacheable + 写时 @CacheEvict |
+| 项目概览/验证报告/迁移报告 | 1min–1h | 多写点失效 |
+| 向量检索/节点详情 | 60s–3min | 编程式缓存 + 写时 evict |
 
-### 前端技术栈
+### 报告与度量
 
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Vue | 3.x | 前端框架 |
-| TypeScript | 5.x | 类型系统 |
-| Vite | 5.x | 构建工具 |
-| Element Plus | 2.x | UI 组件库 |
-| @vue-flow/core | latest | 图谱流式布局 |
-| @antv/G6 | 5.x | 图可视化引擎 |
-| Pinia | latest | 状态管理 |
-| Vue Router | 4.x | 路由 |
-| Vue I18n | 9.x | 国际化 |
+- 迁移就绪度评估（低置信节点、孤立节点、缺口分析）
+- 五维图谱质量度量（覆盖率/证据完备度/待审核比例/测试通过率/运行时验证比例）
+- AI 行动建议（按优先级排序、带证据来源的可执行清单）
 
-### 后端技术栈
+## 技术架构
 
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Spring Boot | 3.5.0 | 应用框架 |
-| Java | 21 | 开发语言 |
-| Spring AI | 2.0.0-M4 | AI 集成 |
-| PostgreSQL | 18+ | 关系数据库 + pgvector 向量扩展 |
-| Neo4j | 5.x | 图数据库（可选） |
-| Redis | 7.x | 缓存 |
-| MinIO | latest | 对象存储 |
-| MyBatis-Plus | 3.5.16 | ORM 框架 |
-| JavaParser | 3.25.8 | Java AST 解析 |
-| JWT | 0.12.3 | 认证 |
+### 四段式架构
 
-## 🚀 快速开始
+```
+静态事实层 → 检索增强层 → Agent 编排层 → 验证回写层
+```
+
+**LLM 不放在最前面，而是放在事实库、向量检索与图谱构建之间。**
+
+### 技术栈
+
+| 层 | 选型 |
+|---|---|
+| 后端框架 | Spring Boot 3.5.0 + Java 21 |
+| AI 集成 | Spring AI + LlmGateway（多模型路由） |
+| 关系数据库 | PostgreSQL + jsonb + GIN 索引 |
+| 向量检索 | pgvector（HNSW 索引） |
+| 图数据库 | Neo4j 5.x（向量索引 + 全文组合检索） |
+| 缓存 | Redis 7.x（Lettuce 客户端） |
+| 对象存储 | MinIO |
+| ORM | MyBatis-Plus 3.5.16 |
+| 认证 | JWT + Redis 黑名单 |
+| 前端框架 | Vue 3 + TypeScript + Vite 5 |
+| UI 组件 | Element Plus |
+| 图可视化 | @antv/G6 5.x |
+| 状态管理 | Pinia |
+| 国际化 | Vue I18n |
+
+### 模型支持
+
+所有兼容 OpenAI 接口的模型均可接入（通过配置 `endpoint` + `api-key`）。推荐：
+- 私有部署：Qwen3（vLLM/TGI）
+- 云弹性：GLM-4.5 / DeepSeek-V4
+- Embedding：text-embedding-3-small（512–768 维）
+
+## 项目规模
+
+| 类别 | 数量 |
+|---|---:|
+| 后端 Controller | 17 |
+| 后端 Entity | 32 |
+| 数据库表 | 32（含 lg_runtime_trace / lg_prompt_run / lg_llm_provider 等） |
+| Vue 页面 | 36 |
+| 后端测试 | 379 全绿 |
+| AI Agent | 15+ |
+| Prompt 模板 | 13（全部纳入契约测试） |
+| 缓存场景 | 9 个落地 |
+
+## 快速开始
 
 ### 环境要求
 
-- Node.js >= 18.0.0
-- JDK >= 21
-- Maven >= 3.8
-- PostgreSQL >= 15 (with [pgvector](https://github.com/pgvector/pgvector) extension)
-- Docker & Docker Compose (推荐)
+- Node.js ≥ 18、JDK ≥ 21、Maven ≥ 3.8
+- PostgreSQL ≥ 15（需 pgvector 扩展）
+- Neo4j ≥ 5.x、Redis ≥ 7.x、MinIO
+- Docker（可选，仅构建前后端镜像；外部依赖经 `.env` 注入）
 
-### 🐳 Docker 一键启动（推荐）
+### Docker 启动
 
 ```bash
-# 克隆项目
-git clone https://github.com/legacygraph/LegacyGraph.git
-cd LegacyGraph
-
-# 启动所有服务（PostgreSQL, Neo4j, Redis, MinIO, backend, frontend）
-cd deploy
-docker-compose up -d
-
-# 查看启动日志
-docker-compose logs -f
+git clone https://github.com/loveliunian/LegacyGraph.git
+cd LegacyGraph/deploy
+cp .env.example .env    # 填写外部 PostgreSQL/Neo4j/Redis/MinIO 连接信息
+docker compose up -d --build
 ```
 
-启动完成后访问：
-- 前端界面: http://localhost
-- 后端 API: http://localhost:8080
-- Swagger 文档: http://localhost:8080/swagger-ui.html
-- Neo4j Browser: http://localhost:7474
+首次需手动在外部 PostgreSQL 执行 `docs/sql/init.sql` 初始化 32 张表。
 
-### 🔧 本地开发
-
-#### 前端开发
+### 本地开发
 
 ```bash
-# 进入前端目录
-cd frontend
-
-# 安装依赖
-npm install
-
-# 启动开发服务器
-npm run dev
-
-# 构建生产版本
-npm run build
-
-# 运行单元测试
-npm run test
-
-# 运行 E2E 测试
-npx playwright test
-
-# 代码检查
-npm run lint
-
-# 代码格式化
-npm run format
-```
-
-#### 后端开发
-
-```bash
-# 进入后端目录
+# 后端
 cd backend
-
-# 使用 Maven 构建
-mvn clean install
-
-# 启动应用
+mvn clean test      # 379 tests
 mvn spring-boot:run
 
-# 运行测试
-mvn test
+# 前端
+cd frontend
+npm install
+npm run dev
+npm run type-check  # 类型门禁
 ```
 
-### ⚙️ 配置说明
-
-#### 环境变量
-
-**前端** (`frontend/.env.local`):
-
-```env
-VITE_APP_TITLE=LegacyGraph
-VITE_API_BASE_URL=http://localhost:8080/api
-```
-
-**后端** (`backend/src/main/resources/application.yml`):
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/legacy_graph
-    username: legacy_graph
-    password: legacy_graph
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY:your-api-key}
-      base-url: https://api.openai.com
-  neo4j:
-    uri: bolt://localhost:7687
-    authentication:
-      username: neo4j
-      password: password
-```
-
-> **重要**: 要使用 AI 分析功能，必须配置 OpenAI API Key（或兼容 OpenAI 的接口）。
-
-## 📁 项目结构
+## 项目结构
 
 ```
 LegacyGraph/
-├── backend/                          # 后端服务
-│   └── src/main/java/io/github/legacygraph/
-│       ├── LegacyGraphApplication.java
-│       ├── agent/                    # AI Agent 代理
-│       │   ├── CodeFactAgent.java       # 代码事实抽取
-│       │   ├── DocUnderstandingAgent.java # 文档理解
-│       │   ├── FeatureMappingAgent.java  # 特征映射
-│       │   ├── GraphMergeAgent.java      # 图谱合并
-│       │   ├── ReviewAgent.java          # 代码审查
-│       │   └── TestCaseAgent.java        # 测试用例生成
-│       ├── config/                   # 配置类
-│       ├── controller/               # REST API 控制器
-│       ├── dto/                      # 数据传输对象
-│       ├── entity/                   # 数据库实体
-│       ├── extractors/               # 代码抽取器
-│       │   ├── DatabaseMetadataExtractor.java
-│       │   ├── DocumentExtractor.java
-│       │   ├── FrontendApiExtractor.java
-│       │   ├── JavaControllerExtractor.java
-│       │   ├── MyBatisXmlExtractor.java
-│       │   ├── ServiceCallExtractor.java
-│       │   ├── SqlTableExtractor.java
-│       │   └── VueRouteExtractor.java
-│       ├── llm/                      # LLM 网关
-│       ├── model/                    # 领域模型
-│       ├── repository/               # 数据访问层
-│       ├── service/                  # 业务逻辑层
-│       ├── task/                     # 后台任务
-│       ├── test/                     # 测试执行器
-│       └── util/                     # 工具类
-├── frontend/                         # 前端界面
-│   └── src/
-│       ├── api/                    # API 接口定义
-│       ├── assets/                 # 静态资源
-│       ├── components/             # 公共组件
-│       │   ├── common/             # 通用组件
-│       │   ├── charts/             # 图表组件
-│       │   ├── code/               # 代码相关组件
-│       │   ├── graph/              # 图谱组件
-│       │   ├── upload/             # 上传组件
-│       │   └── ...
-│       ├── composables/            # 组合式函数
-│       ├── directives/             # 自定义指令
-│       ├── locales/                # 国际化（中文/英文）
-│       ├── router/                 # 路由配置
-│       ├── stores/                 # Pinia 状态管理
-│       ├── types/                  # TypeScript 类型定义
-│       ├── utils/                  # 工具函数
-│       └── views/                  # 页面组件
-│           ├── dashboard/          # 仪表板
-│           ├── project/            # 项目管理
-│           ├── scan/               # 扫描管理
-│           ├── graph/              # 图谱浏览
-│           ├── report/             # 分析报告
-│           ├── migration/          # 迁移辅助
-│           ├── test/               # 测试管理
-│           ├── review/             # AI 审查
-│           ├── audit/              # 审计日志
-│           └── settings/           # 系统设置
-├── deploy/                          # 部署配置
-│   ├── docker-compose.yml          # Docker Compose 完整部署
-│   ├── backend/Dockerfile          # 后端 Docker 镜像
-│   └── frontend/Dockerfile         # 前端 Docker 镜像
-├── docs/                            # 文档
-│   └── sql/                        # 数据库初始化脚本
-└── README.md
+├── backend/src/main/java/io/github/legacygraph/
+│   ├── agent/           # AI Agent（15+）
+│   ├── builder/         # 图谱构建器（GraphBuilder/BusinessGraphBuilder/FrontendGraphBuilder）
+│   ├── config/          # 配置（RedisConfig/SecurityConfig/WebConfig）
+│   ├── controller/      # REST API（17 个 Controller）
+│   ├── dao/             # 数据访问（Neo4jGraphDao）
+│   ├── dto/             # 数据传输对象
+│   ├── entity/          # 数据库实体（32 个）
+│   ├── extractors/      # 代码抽取器（Java/MyBatis/Vue/DB/Document）
+│   ├── llm/             # LLM 网关 + Prompt 模板加载器
+│   ├── repository/      # MyBatis-Plus Repository
+│   ├── service/         # 业务逻辑（含 CacheService/GraphCacheInvalidator）
+│   ├── task/            # 后台任务（ProjectScanner/AiScanOrchestrator）
+│   ├── test/            # 测试执行器（ApiTestExecutor/DbAssertionExecutor/E2eTestExecutor）
+│   └── util/            # 工具类
+├── frontend/src/
+│   ├── views/           # 36 个页面（dashboard/project/source/scan/graph/fact/review/test/migration/system/audit）
+│   ├── components/      # 组件（graph/charts/common/upload）
+│   ├── api/             # 前端 API 层
+│   ├── stores/          # Pinia 状态管理
+│   ├── locales/         # 中/英国际化
+│   └── router/          # 路由配置
+├── deploy/              # Docker Compose + Dockerfile
+├── docs/sql/            # 数据库初始化脚本（init.sql）
+└── doc/                 # 设计文档（全景设计文档.md）
 ```
 
-## 📖 使用指南
-
-### 第一步：创建项目
-
-1. 登录系统后，点击「新建项目」
-2. 填写项目名称、描述
-3. 选择扫描配置
-
-### 第二步：配置数据源
-
-支持两种扫描方式：
-- **代码仓库扫描**：配置代码仓库地址，自动拉取代码进行分析
-- **数据库连接**：配置数据库连接，自动抽取表结构和关系
-
-### 第三步：启动扫描
-
-1. 点击「开始扫描」
-2. 系统会自动：
-   - 解析代码 AST，抽取业务事实
-   - 连接数据库，提取元数据
-   - LLM 分析代码语义，识别业务域
-   - 构建知识图谱
-   - 生成向量嵌入
-   - 保存到数据库
-
-### 第四步：浏览分析
-
-- 在「图谱视图」查看完整系统架构
-- 点击节点查看详情和代码片段
-- 使用「路径分析」查找两个模块之间的调用关系
-- 使用「影响分析」查看修改影响范围
-
-### 第五步：查看报告
-
-- 查看代码质量报告
-- 查看迁移就绪度评估
-- 下载报告分享给团队成员
-
-## 🧩 核心组件
-
-### 前端组件
-
-#### `GraphViewer.vue`
-图谱查看器组件，提供完整的图可视化与交互功能。
-
-**Props**:
-```typescript
-{
-  nodes: Node[]           // 节点数据
-  edges: Edge[]           // 边数据
-  height?: string         // 容器高度 (默认 '600px')
-  editable?: boolean      // 是否可编辑 (默认 true)
-}
-```
-
-**Events**:
-- `@node-click(node)` - 节点点击事件
-- `@edge-click(edge)` - 边点击事件
-- `node-drag(node)` - 节点拖拽结束事件
-- `connect(connection)` - 创建连接事件
-
-**功能**:
-- MiniMap 小地图导航
-- 缩放/平移控制
-- 多种布局切换
-- 图谱导出（JSON、图片）
-- 自定义节点样式
-
-#### `GraphAnalysisPanel.vue`
-图谱分析面板，提供高级图分析功能。
-
-**功能**:
-- 路径分析：最短路径、所有路径查找
-- 影响分析：上游/下游影响范围
-- 邻居展开：按层级展开节点关联
-- 聚合视图：按类型/置信度分组展示
-
-## 📚 API 文档
-
-启动后端后访问 `http://localhost:8080/swagger-ui.html` 查看完整 API 文档。
-
-### 主要端点
+## API 端点
 
 | 端点 | 说明 |
-|------|------|
-| `/api/auth/*` | 用户认证 |
-| `/api/projects/*` | 项目管理 |
-| `/api/graph/*` | 图谱查询 |
-| `/api/scan/*` | 扫描管理 |
-| `/api/source/*` | 数据源管理 |
-| `/api/fact/*` | 事实管理 |
-| `/api/reports/*` | 报告生成 |
-| `/api/vector/*` | 向量检索 |
-| `/api/llm/*` | LLM Agent |
-| `/api/testcase/*` | 测试用例管理 |
-| `/api/review/*` | AI 审查 |
+|---|---|
+| `/api/auth/*` | JWT 认证（登录/登出/刷新/当前用户） |
+| `/api/projects/*` | 项目管理 + 报告洞察 |
+| `/api/source/*` | 数据源（代码仓库/数据库连接/文档上传） |
+| `/api/scan/*` | 扫描管理（全量/增量/进度/版本） |
+| `/api/graph/*` | 图谱查询（统一视图/API链/表影响/功能视图/业务视图） |
+| `/api/fact/*` | 事实管理 + 文档事实抽取 |
+| `/api/review/*` | 审核管理（待审列表/确认/驳回/批量） |
+| `/api/tests/*` | 测试用例管理 + 执行结果回写 |
+| `/api/reports/*` | 报告生成（迁移就绪度/置信度/覆盖率/图谱质量/五维指标） |
+| `/api/vector/*` | 向量检索（语义搜索/相似节点） |
+| `/api/qa/*` | 自然语言问答 |
+| `/api/agents/*` | AI Agent 端点（SQL分析/失败分析/报告洞察/重构/影响/迁移/PR描述） |
+| `/api/llm/*` | LLM 提供商 + Prompt 模板管理 |
+| `/api/system/*` | 系统配置 + 字典 |
+| `/api/trace/*` | 运行时链路（Trace 上报/拓扑/列表） |
 | `/api/audit/*` | 审计日志 |
 
-## 🧪 测试
+## 设计文档
 
-### 前端测试
+详细设计见 [`doc/LegacyGraph 平台全景设计文档.md`](doc/LegacyGraph%20平台全景设计文档.md)，涵盖：总体架构、LLM 网关与 Agent 体系、RAG 与向量检索、缓存策略、测试闭环、安全与运维、实施进度与后置项。
 
-```bash
-# 运行所有单元测试
-npm run test
+## 许可证
 
-# 监听模式
-npm run test:watch
-
-# 查看覆盖率
-npm run test:coverage
-```
-
-### 后端测试
-
-```bash
-# 运行所有测试
-mvn test
-
-# 运行单个测试类
-mvn test -Dtest=ProjectControllerTest
-```
-
-## 🚀 部署
-
-### 生产环境构建
-
-```bash
-# 构建前端
-cd frontend && npm run build
-
-# 构建后端
-cd backend && mvn clean package -Pprod
-```
-
-### Docker 部署
-
-```bash
-# 构建镜像
-docker build -t legacygraph/backend:latest ./backend
-docker build -t legacygraph/frontend:latest ./frontend
-
-# 使用 docker-compose 启动
-cd deploy
-docker-compose up -d
-```
-
-### Nginx 配置示例
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        root /var/www/legacygraph/dist;
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api {
-        proxy_pass http://localhost:8080/api;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-```
-
-## ⚡ 性能优化
-
-### 首屏加载优化
-- 路由懒加载
-- 代码分割：按功能模块动态导入
-- 骨架屏：页面加载前显示骨架屏
-- 资源预加载：关键资源预加载
-
-### 图谱性能
-- 聚合节点：大数据量时按类型聚合
-- 按需渲染：视口内节点优先渲染
-- Web Worker：复杂计算移至后台线程
-- 虚拟滚动：节点列表使用虚拟滚动
-
-### 后端性能
-- Redis 缓存：频繁查询缓存
-- 分页查询：大数据集分页返回
-- 异步任务：长时间扫描异步执行
-- 连接池：合理配置数据库连接池
-
-## ❓ 常见问题
-
-### Q: 需要 Neo4j 吗？可以只用 PostgreSQL 吗？
-A: 当前架构 PostgreSQL 是必需的，用于存储业务数据和向量。Neo4j 是可选的，用于高级图查询。如果你只需要基本的图谱可视化，不使用 Neo4j 也可以运行。
-
-### Q: 如何使用国产 LLM 如通义千问、文心一言？
-A: 由于使用 Spring AI，只要接口兼容 OpenAI 格式，配置 `base-url` 和 `api-key` 即可使用。
-
-### Q: 图谱渲染卡顿怎么办？
-A: 启用节点聚合、减少显示节点数、使用 Web Worker 进行布局计算。
-
-### Q: 支持哪些编程语言？
-A: 当前主要支持 Java Spring Boot + Vue 项目。其他语言可以通过数据库扫描功能分析数据层。欢迎贡献更多语言的抽取器！
-
-### Q: 大文件上传失败？
-A: 检查 Spring Boot 配置的 `spring.servlet.multipart.max-file-size`，前端在 `DragUpload.vue` 中也有相应配置。
-
-## 🤝 贡献
-
-欢迎贡献代码！请参考 [CONTRIBUTING.md](docs/CONTRIBUTING.md)。
-
-开发流程：
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
-
-## 📄 许可证
-
-本项目采用 Apache 2.0 许可证 - 详见 [LICENSE](LICENSE) 文件。
-
-## 👥 联系方式
-
-- 项目主页：https://github.com/legacygraph/LegacyGraph
-- 问题反馈：https://github.com/legacygraph/LegacyGraph/issues
-- 作者：liuchengliang01
-
-## 🙏 致谢
-
-感谢以下开源项目：
-
-- [Spring Boot](https://spring.io/projects/spring-boot)
-- [Vue](https://vuejs.org/)
-- [Element Plus](https://element-plus.org/)
-- [AntV G6](https://g6.antv.vision/)
-- [pgvector](https://github.com/pgvector/pgvector)
-- [JavaParser](https://javaparser.org/)
-
----
-
-如果你觉得这个项目对你有帮助，请给我们一个 ⭐ Star！
+Apache 2.0 — 详见 [LICENSE](LICENSE)。
