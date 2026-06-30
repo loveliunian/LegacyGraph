@@ -194,6 +194,7 @@ public class EvidenceGraphWriter {
         ev.setMetadata(evidence.getMetadata());
         ev.setAstPath(evidence.getAstPath());
         ev.setSqlHash(evidence.getSqlHash());
+        applyPrivacy(ev, evidence);
         ev.setCreatedAt(LocalDateTime.now());
         evidenceRepository.insert(ev);
 
@@ -220,6 +221,47 @@ public class EvidenceGraphWriter {
     // ==================== 内部辅助方法 ====================
 
     /**
+     * 证据隐私分层（见 doc 4.4）：对含内容的证据做 secret scan，
+     * 命中密钥则内容以 redacted 形式落库并打 SECRET，避免图谱成为高敏资产聚合点。
+     */
+    private void applyPrivacy(Evidence ev, EvidenceRecord record) {
+        // 显式声明的隐私级别优先
+        PrivacyLevel declared = null;
+        if (hasText(record.getPrivacyLevel())) {
+            try {
+                declared = PrivacyLevel.valueOf(record.getPrivacyLevel().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                // 容错：非标准枚举值时回退到扫描结果
+            }
+        }
+        String content = ev.getContent();
+        if (hasText(content)) {
+            SecretScanService.SecretScanResult scan = secretScanService.scan(content);
+            PrivacyLevel level;
+            String policy;
+            if (declared != null && declared.ordinal() >= scan.getSuggestedLevel().ordinal()) {
+                // 显式声明更严格或同等时，以声明为准，但仍按策略脱敏存储
+                level = declared;
+                policy = hasText(record.getRedactionPolicy()) ? record.getRedactionPolicy() : scan.getSuggestedPolicy();
+            } else {
+                level = scan.getSuggestedLevel();
+                policy = scan.getSuggestedPolicy();
+            }
+            // 命中密钥的内容必须以 redacted 落库
+            if (scan.isHasSecret() && hasText(scan.getRedacted())) {
+                ev.setContent(scan.getRedacted());
+            } else if (PrivacyLevel.CONFIDENTIAL == level || PrivacyLevel.SECRET == level) {
+                ev.setContent(secretScanService.scan(content).getRedacted());
+            }
+            ev.setPrivacyLevel(level.name());
+            ev.setRedactionPolicy(policy);
+        } else {
+            ev.setPrivacyLevel(declared != null ? declared.name() : PrivacyLevel.INTERNAL.name());
+            ev.setRedactionPolicy(hasText(record.getRedactionPolicy()) ? record.getRedactionPolicy() : "none");
+        }
+    }
+
+    /**
      * 为节点创建证据记录并建立关联。
      */
     private void createEvidenceForNode(GraphNode node, String sourceType, String sourcePath,
@@ -233,6 +275,13 @@ public class EvidenceGraphWriter {
         evidence.setSourceName(node.getDisplayName());
         evidence.setStartLine(startLine);
         evidence.setEndLine(endLine);
+        // 无内容证据默认 INTERNAL（节点指针型证据不含源码正文）
+        if (evidence.getPrivacyLevel() == null) {
+            evidence.setPrivacyLevel(PrivacyLevel.INTERNAL.name());
+        }
+        if (evidence.getRedactionPolicy() == null) {
+            evidence.setRedactionPolicy("none");
+        }
         evidence.setCreatedAt(LocalDateTime.now());
         evidenceRepository.insert(evidence);
 

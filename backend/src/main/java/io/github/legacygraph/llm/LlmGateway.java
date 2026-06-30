@@ -1,8 +1,11 @@
 package io.github.legacygraph.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dto.graph.AgentRunContract;
+import io.github.legacygraph.entity.AgentRun;
 import io.github.legacygraph.entity.LlmProvider;
 import io.github.legacygraph.entity.PromptRun;
+import io.github.legacygraph.repository.AgentRunRepository;
 import io.github.legacygraph.repository.PromptRunRepository;
 import io.github.legacygraph.service.CacheService;
 import io.github.legacygraph.service.LlmProviderService;
@@ -19,18 +22,17 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * LLM 网关 — 支持多提供商动态切换
- * 从数据库读取当前默认的 LLM 提供商配置，动态创建 ChatClient。
- *
- * <p>Phase 0 加固要点：
- * <ul>
- *   <li>结构化校验：LLM 输出必须能反序列化到目标 DTO，否则进入 REVIEW。</li>
- *   <li>失败显式返回：不再把失败默默转换为空对象，而是抛出 {@link LlmCallException}。</li>
- *   <li>PromptRun 审计补全：写入 inputHash / parsedOutput / promptTokens / completionTokens / latencyMs。</li>
- * </ul>
+ * LLM 网关 — 支持多提供商动态切换。
+ * <p>
+ * Phase 0 加固：结构化校验（失败进 REVIEW）、失败显式抛出、PromptRun 审计补全。
+ * <p>
+ * doc 4.3（AgentRun 合约）：每次调用经 {@link AgentRunContract} 记录 schema 版本 / 证据 / 成本 / 自校正，
+ * schema 解析失败支持一次自我修复（带原始错误）；doc 4.4（隐私分层）：发往外部模型的 prompt 必须是
+ * 脱敏后的内容（pii + secret scan），审计只存 masked input。
  */
 @Slf4j
 @Component
@@ -38,8 +40,10 @@ public class LlmGateway {
 
     private final ObjectMapper objectMapper;
     private final PromptRunRepository promptRunRepository;
+    private final AgentRunRepository agentRunRepository;
     private final PromptTemplateLoader templateLoader;
     private final PiiMaskingService piiMaskingService;
+    private final SecretScanService secretScanService;
     private final LlmProviderService llmProviderService;
 
     /** 缓存已创建的 ChatModel，按 providerCode 缓存 */
@@ -52,17 +56,321 @@ public class LlmGateway {
     /** LLM 结果缓存 TTL */
     private static final Duration LLM_CACHE_TTL = Duration.ofDays(7);
 
+    /** schema 解析失败时的最大自我修复次数（doc 4.3：限制次数和成本） */
+    private static final int MAX_SELF_CORRECTION = 1;
+
     public LlmGateway(ObjectMapper objectMapper,
                       PromptRunRepository promptRunRepository,
+                      AgentRunRepository agentRunRepository,
                       PromptTemplateLoader templateLoader,
                       PiiMaskingService piiMaskingService,
+                      SecretScanService secretScanService,
                       LlmProviderService llmProviderService) {
         this.objectMapper = objectMapper;
         this.promptRunRepository = promptRunRepository;
+        this.agentRunRepository = agentRunRepository;
         this.templateLoader = templateLoader;
         this.piiMaskingService = piiMaskingService;
+        this.secretScanService = secretScanService;
         this.llmProviderService = llmProviderService;
     }
+
+    /**
+     * 调用 LLM（无显式合约 — 自动构造默认合约，agentType=templateName）。
+     * 现有 Agent 无需改动即获得合约审计。
+     */
+    @Transactional
+    public <T> T callWithTemplate(String projectId, String templateName,
+                                   Map<String, String> variables, Class<T> responseType) {
+        AgentRunContract contract = AgentRunContract.builder()
+                .projectId(projectId)
+                .agentType(templateName)
+                .agentName(templateName)
+                .inputSchemaVersion("1.0")
+                .outputSchemaVersion("1.0")
+                .build();
+        return callWithTemplate(projectId, templateName, variables, responseType, contract);
+    }
+
+    /**
+     * 调用 LLM 并按 {@link AgentRunContract} 记录合约信息（doc 4.3）。
+     *
+     * @param contract 调用方填充 agentType / schema 版本 / usedEvidenceIds 等；tokens / cost /
+     *                 selfCorrectionCount / needsHumanReview 由网关回填
+     * @throws LlmCallException 调用失败或输出经自我修复仍无法反序列化时抛出
+     */
+    @Transactional
+    public <T> T callWithTemplate(String projectId, String templateName,
+                                   Map<String, String> variables, Class<T> responseType,
+                                   AgentRunContract contract) {
+        log.info("LLM call: projectId={}, template={}, agent={}",
+                projectId, templateName, contract != null ? contract.getAgentType() : templateName);
+
+        if (contract == null) {
+            contract = AgentRunContract.builder().agentType(templateName).build();
+        }
+        if (contract.getContractId() == null) {
+            contract.setContractId(UUID.randomUUID().toString());
+        }
+        if (contract.getAgentType() == null) {
+            contract.setAgentType(templateName);
+        }
+        contract.setProjectId(projectId);
+        contract.setStartedAt(LocalDateTime.now());
+
+        // 加载并渲染模板
+        String prompt = templateLoader.render(templateName, variables);
+        // doc 4.4：发往外部模型的内容必须先脱敏（PII + secret scan），审计只存 masked input
+        String safePrompt = redactForEgress(prompt);
+        log.debug("Rendered prompt (redacted):\n{}", safePrompt);
+
+        // inputHash 基于原始 prompt，保证脱敏策略调整不影响缓存命中
+        String inputHash = sha256(prompt);
+
+        // 命中 LLM 结果缓存：直接反序列化返回，跳过真实调用与 DB 写入
+        String cacheKey = llmCacheKey(templateName, inputHash);
+        if (cacheService != null && cacheKey != null) {
+            String cachedJson = cacheService.getString(cacheKey);
+            if (cachedJson != null) {
+                try {
+                    log.info("LLM cache hit: template={}, inputHash={}", templateName, inputHash);
+                    return deserialize(cachedJson, responseType);
+                } catch (Exception e) {
+                    log.warn("LLM cache deserialize failed, evict and recompute: {}", e.getMessage());
+                    cacheService.evict(cacheKey);
+                }
+            }
+        }
+
+        // 获取当前默认提供商信息
+        LlmProvider provider = llmProviderService.getActiveDefault();
+        String providerCode = provider != null ? provider.getProviderCode() : "unknown";
+        String modelId = provider != null ? provider.getModelId() : "unknown";
+        contract.setModel(modelId);
+
+        // 创建 PromptRun 审计记录
+        PromptRun run = new PromptRun();
+        run.setProjectId(projectId);
+        run.setTaskType(templateName);
+        run.setProviderCode(providerCode);
+        run.setModelId(modelId);
+        run.setTemplateCode(templateName);
+        run.setTemplateVersion(contract.getInputSchemaVersion() != null ? contract.getInputSchemaVersion() : "1.0");
+        run.setInputHash(inputHash);
+        run.setMaskedInput(safePrompt);
+        run.setStatus("RUNNING");
+        run.setCreatedAt(LocalDateTime.now());
+        promptRunRepository.insert(run);
+
+        // 创建 AgentRun 合约记录
+        AgentRun agentRun = toAgentRun(contract, run.getId());
+
+        long startMs = System.currentTimeMillis();
+        String response;
+        try {
+            ChatResponse chatResponse = invokeModel(safePrompt);
+            response = extractText(chatResponse);
+            run.setLatencyMs((int) (System.currentTimeMillis() - startMs));
+            applyUsage(run, chatResponse);
+            run.setRawOutput(response);
+        } catch (Exception e) {
+            run.setLatencyMs((int) (System.currentTimeMillis() - startMs));
+            run.setStatus("FAILED");
+            safeUpdate(run);
+            contract.setFinishedAt(LocalDateTime.now());
+            contract.setNeedsHumanReview(false);
+            finishAgentRun(agentRun, contract, run, false);
+            log.error("LLM call failed: projectId={}, template={}", projectId, templateName, e);
+            throw new LlmCallException("LLM call failed: " + e.getMessage(), e, false, run.getId());
+        }
+
+        // 字符串类型：无需 schema 校验与自校正
+        if (responseType == String.class) {
+            run.setStatus("SUCCESS");
+            run.setParsedOutput(response);
+            safeUpdate(run);
+            cacheLlmResult(cacheKey, response);
+            contract.setFinishedAt(LocalDateTime.now());
+            contract.setNeedsHumanReview(false);
+            finishAgentRun(agentRun, contract, run, true);
+            return (T) response;
+        }
+
+        // 结构化解析：失败时尝试一次自我修复（doc 4.3）
+        String cleanResponse = cleanJsonResponse(response);
+        try {
+            T result = objectMapper.readValue(cleanResponse, responseType);
+            run.setStatus("SUCCESS");
+            run.setParsedOutput(writeJsonSafe(result));
+            safeUpdate(run);
+            cacheLlmResult(cacheKey, writeJsonSafe(result));
+            contract.setFinishedAt(LocalDateTime.now());
+            contract.setNeedsHumanReview(false);
+            finishAgentRun(agentRun, contract, run, true);
+            log.info("LLM call completed: projectId={}, template={}, agent={}, model={}",
+                    projectId, templateName, contract.getAgentType(), modelId);
+            return result;
+        } catch (Exception parseEx) {
+            log.warn("LLM output failed schema validation (attempt 1): target={}, err={}",
+                    responseType.getSimpleName(), parseEx.getMessage());
+            run.setRawOutput(cleanResponse);
+
+            // 自我修复：把解析错误回灌，重试一次
+            if (contract.getSelfCorrectionCount() < MAX_SELF_CORRECTION) {
+                try {
+                    String repairPrompt = buildSelfCorrectionPrompt(safePrompt, responseType, parseEx);
+                    ChatResponse repairChatResponse = invokeModel(repairPrompt);
+                    String repairResponse = extractText(repairChatResponse);
+                    applyUsage(run, repairChatResponse);
+                    String cleanRepair = cleanJsonResponse(repairResponse);
+                    T repaired = objectMapper.readValue(cleanRepair, responseType);
+                    contract.setSelfCorrectionCount(contract.getSelfCorrectionCount() + 1);
+                    run.setRawOutput(repairResponse);
+                    run.setParsedOutput(writeJsonSafe(repaired));
+                    run.setStatus("SUCCESS");
+                    safeUpdate(run);
+                    cacheLlmResult(cacheKey, writeJsonSafe(repaired));
+                    contract.setFinishedAt(LocalDateTime.now());
+                    contract.setNeedsHumanReview(false);
+                    finishAgentRun(agentRun, contract, run, true);
+                    log.info("LLM self-correction succeeded: template={}, target={}",
+                            templateName, responseType.getSimpleName());
+                    return repaired;
+                } catch (Exception repairEx) {
+                    log.warn("LLM self-correction also failed: template={}, err={}",
+                            templateName, repairEx.getMessage());
+                }
+            }
+
+            run.setStatus("REVIEW");
+            safeUpdate(run);
+            contract.setSelfCorrectionCount(Math.max(contract.getSelfCorrectionCount(), 1));
+            contract.setNeedsHumanReview(true);
+            contract.setFinishedAt(LocalDateTime.now());
+            finishAgentRun(agentRun, contract, run, false);
+            throw new LlmCallException(
+                    "LLM output failed schema validation for " + responseType.getSimpleName()
+                            + " after self-correction: " + parseEx.getMessage(),
+                    parseEx, true, run.getId());
+        }
+    }
+
+    /**
+     * doc 4.4：对发往外部模型的 prompt 做 PII + 密钥脱敏，返回安全内容。
+     */
+    private String redactForEgress(String prompt) {
+        if (prompt == null || prompt.isEmpty()) {
+            return prompt;
+        }
+        String masked = piiMaskingService.mask(prompt);
+        SecretScanService.SecretScanResult scan = secretScanService.scan(masked);
+        return scan.getRedacted() != null ? scan.getRedacted() : masked;
+    }
+
+    /**
+     * 构造自我修复 prompt：附原始解析错误，要求严格按 schema 重出。
+     */
+    private String buildSelfCorrectionPrompt(String originalPrompt, Class<?> responseType, Exception parseEx) {
+        return originalPrompt
+                + "\n\n[自我校正] 上一次输出无法解析为 " + responseType.getSimpleName()
+                + " 的 JSON，错误: " + truncate(parseEx.getMessage(), 300)
+                + "。请严格按输出格式只输出合法 JSON，不要包含 markdown 代码块或额外说明。";
+    }
+
+    private String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+    /**
+     * 实际调用 ChatModel，返回 ChatResponse（含 token 用量）。
+     */
+    private ChatResponse invokeModel(String prompt) {
+        OpenAiChatModel chatModel = getChatModel();
+        ChatClient chatClient = ChatClient.create(chatModel);
+        return chatClient.prompt()
+                .user(prompt)
+                .call()
+                .chatResponse();
+    }
+
+    private String extractText(ChatResponse chatResponse) {
+        return chatResponse != null && chatResponse.getResult() != null
+                && chatResponse.getResult().getOutput() != null
+                ? chatResponse.getResult().getOutput().getText()
+                : null;
+    }
+
+    /**
+     * 从 ChatResponse 提取 token 用量并写入审计记录（容错，缺失则跳过）。
+     * 同时回填到 AgentRunContract。
+     */
+    private void applyUsage(PromptRun run, ChatResponse chatResponse) {
+        try {
+            // chatResponse 为 null 时（字符串路径）无法提取 token，跳过
+            if (chatResponse == null || chatResponse.getMetadata() == null
+                    || chatResponse.getMetadata().getUsage() == null) {
+                return;
+            }
+            var usage = chatResponse.getMetadata().getUsage();
+            if (usage.getPromptTokens() != null) {
+                run.setPromptTokens(usage.getPromptTokens());
+            }
+            if (usage.getCompletionTokens() != null) {
+                run.setCompletionTokens(usage.getCompletionTokens());
+            }
+        } catch (Exception ignore) {
+            // token 用量为可选审计项，提取失败不影响主流程
+        }
+    }
+
+    // ==================== AgentRun 合约持久化 ====================
+
+    private AgentRun toAgentRun(AgentRunContract contract, Long promptRunId) {
+        AgentRun run = new AgentRun();
+        run.setContractId(contract.getContractId());
+        run.setProjectId(contract.getProjectId());
+        run.setAgentType(contract.getAgentType());
+        run.setAgentName(contract.getAgentName());
+        run.setInputSchemaVersion(contract.getInputSchemaVersion());
+        run.setOutputSchemaVersion(contract.getOutputSchemaVersion());
+        run.setUsedEvidenceIds(writeJsonSafe(contract.getUsedEvidenceIds()));
+        run.setOmittedBecause(writeJsonSafe(contract.getOmittedBecause()));
+        run.setNeedsHumanReview(contract.isNeedsHumanReview() ? 1 : 0);
+        run.setModel(contract.getModel());
+        run.setRetryCount(contract.getRetryCount());
+        run.setSelfCorrectionCount(contract.getSelfCorrectionCount());
+        run.setQualityScore(contract.getQualityScore());
+        run.setPromptRunId(promptRunId);
+        run.setStartedAt(contract.getStartedAt());
+        run.setMetadata(writeJsonSafe(contract.getMetadata()));
+        try {
+            agentRunRepository.insert(run);
+        } catch (Exception e) {
+            log.warn("Failed to persist AgentRun contract: {}", e.getMessage());
+        }
+        return run;
+    }
+
+    /**
+     * 调用结束时回填 token / 成本 / 自校正 / 审核标记并更新合约记录。
+     */
+    private void finishAgentRun(AgentRun agentRun, AgentRunContract contract, PromptRun promptRun, boolean success) {
+        if (agentRun == null) return;
+        try {
+            agentRun.setPromptTokens(promptRun.getPromptTokens());
+            agentRun.setCompletionTokens(promptRun.getCompletionTokens());
+            agentRun.setSelfCorrectionCount(contract.getSelfCorrectionCount());
+            agentRun.setNeedsHumanReview(contract.isNeedsHumanReview() ? 1 : 0);
+            agentRun.setQualityScore(contract.getQualityScore());
+            agentRun.setFinishedAt(contract.getFinishedAt() != null ? contract.getFinishedAt() : LocalDateTime.now());
+            agentRunRepository.updateById(agentRun);
+        } catch (Exception e) {
+            log.warn("Failed to update AgentRun contract: {}", e.getMessage());
+        }
+    }
+
+    // ==================== ChatModel 获取 ====================
 
     /**
      * 获取当前可用的 ChatModel（从 DB 读取默认提供商）
@@ -103,146 +411,14 @@ public class LlmGateway {
         log.info("LLM ChatModel 缓存已清除");
     }
 
-    /**
-     * 调用LLM使用指定模板
-     * @param projectId 项目ID
-     * @param templateName 模板名称
-     * @param variables 模板变量
-     * @param responseType 期望返回类型
-     * @return 解析后的响应对象
-     * @throws LlmCallException 调用失败或输出无法反序列化到目标 DTO 时抛出（失败显式返回）
-     */
-    @Transactional
-    public <T> T callWithTemplate(String projectId, String templateName,
-                                   Map<String, String> variables, Class<T> responseType) {
-        log.info("LLM call: projectId={}, template={}", projectId, templateName);
+    // ==================== 辅助方法 ====================
 
-        // 加载并渲染模板
-        String prompt = templateLoader.render(templateName, variables);
-        String maskedPrompt = piiMaskingService.mask(prompt);
-        log.debug("Rendered prompt:\n{}", maskedPrompt);
-
-        String inputHash = sha256(prompt);
-
-        // 命中 LLM 结果缓存：直接反序列化返回，跳过真实调用与 DB 写入
-        String cacheKey = llmCacheKey(templateName, inputHash);
-        if (cacheService != null && cacheKey != null) {
-            String cachedJson = cacheService.getString(cacheKey);
-            if (cachedJson != null) {
-                try {
-                    log.info("LLM cache hit: template={}, inputHash={}", templateName, inputHash);
-                    if (responseType == String.class) {
-                        return (T) cachedJson;
-                    }
-                    return objectMapper.readValue(cachedJson, responseType);
-                } catch (Exception e) {
-                    // 缓存内容损坏 → 失效后回源
-                    log.warn("LLM cache deserialize failed, evict and recompute: {}", e.getMessage());
-                    cacheService.evict(cacheKey);
-                }
-            }
-        }
-
-        // 获取当前默认提供商信息
-        LlmProvider provider = llmProviderService.getActiveDefault();
-        String providerCode = provider != null ? provider.getProviderCode() : "unknown";
-        String modelId = provider != null ? provider.getModelId() : "unknown";
-
-        // 创建记录
-        PromptRun run = new PromptRun();
-        run.setProjectId(projectId);
-        run.setTaskType(templateName);
-        run.setProviderCode(providerCode);
-        run.setModelId(modelId);
-        run.setTemplateCode(templateName);
-        run.setTemplateVersion("1.0");
-        run.setInputHash(inputHash);
-        run.setMaskedInput(maskedPrompt);
-        run.setStatus("RUNNING");
-        run.setCreatedAt(LocalDateTime.now());
-        promptRunRepository.insert(run);
-
-        long startMs = System.currentTimeMillis();
-        String response;
-        try {
-            // 动态获取 ChatModel 并调用
-            OpenAiChatModel chatModel = getChatModel();
-            ChatClient chatClient = ChatClient.create(chatModel);
-            ChatResponse chatResponse = chatClient.prompt()
-                    .user(prompt)
-                    .call()
-                    .chatResponse();
-
-            response = chatResponse != null && chatResponse.getResult() != null
-                    && chatResponse.getResult().getOutput() != null
-                    ? chatResponse.getResult().getOutput().getText()
-                    : null;
-
-            log.debug("LLM response received, length={}", response != null ? response.length() : 0);
-
-            // 记录 token / latency 审计信息
-            run.setLatencyMs((int) (System.currentTimeMillis() - startMs));
-            applyUsage(run, chatResponse);
-            run.setRawOutput(response);
-        } catch (Exception e) {
-            run.setLatencyMs((int) (System.currentTimeMillis() - startMs));
-            run.setStatus("FAILED");
-            safeUpdate(run);
-            log.error("LLM call failed: projectId={}, template={}", projectId, templateName, e);
-            throw new LlmCallException("LLM call failed: " + e.getMessage(), e, false, run.getId());
-        }
-
-        // 直接返回字符串类型
+    @SuppressWarnings("unchecked")
+    private <T> T deserialize(String json, Class<T> responseType) throws Exception {
         if (responseType == String.class) {
-            run.setStatus("SUCCESS");
-            run.setParsedOutput(response);
-            safeUpdate(run);
-            cacheLlmResult(cacheKey, response);
-            return (T) response;
+            return (T) json;
         }
-
-        // 结构化解析与校验：失败时不返回空对象，而是标记 REVIEW 并抛出异常
-        String cleanResponse = cleanJsonResponse(response);
-        try {
-            T result = objectMapper.readValue(cleanResponse, responseType);
-            run.setStatus("SUCCESS");
-            run.setParsedOutput(writeJsonSafe(result));
-            safeUpdate(run);
-            // 回填缓存：存可反序列化为目标 DTO 的干净 JSON
-            cacheLlmResult(cacheKey, writeJsonSafe(result));
-            log.info("LLM call completed: projectId={}, template={}, provider={}, model={}",
-                    projectId, templateName, providerCode, modelId);
-            return result;
-        } catch (Exception parseEx) {
-            run.setStatus("REVIEW");
-            safeUpdate(run);
-            log.warn("LLM output failed schema validation, marked REVIEW: projectId={}, template={}, target={}",
-                    projectId, templateName, responseType.getSimpleName(), parseEx);
-            throw new LlmCallException(
-                    "LLM output failed schema validation for " + responseType.getSimpleName()
-                            + ": " + parseEx.getMessage(),
-                    parseEx, true, run.getId());
-        }
-    }
-
-    /**
-     * 从 ChatResponse 提取 token 用量并写入审计记录（容错，缺失则跳过）
-     */
-    private void applyUsage(PromptRun run, ChatResponse chatResponse) {        try {
-            if (chatResponse == null || chatResponse.getMetadata() == null
-                    || chatResponse.getMetadata().getUsage() == null) {
-                return;
-            }
-            var usage = chatResponse.getMetadata().getUsage();
-            if (usage.getPromptTokens() != null) {
-                run.setPromptTokens(usage.getPromptTokens());
-            }
-            if (usage.getCompletionTokens() != null) {
-                run.setCompletionTokens(usage.getCompletionTokens());
-            }
-        } catch (Exception ignore) {
-            // token 用量为可选审计项，提取失败不影响主流程
-        }
+        return objectMapper.readValue(json, responseType);
     }
 
     private void safeUpdate(PromptRun run) {
@@ -256,6 +432,7 @@ public class LlmGateway {
     }
 
     private String writeJsonSafe(Object value) {
+        if (value == null) return null;
         try {
             return objectMapper.writeValueAsString(value);
         } catch (Exception e) {
@@ -282,7 +459,7 @@ public class LlmGateway {
     }
 
     /**
-     * 构造 LLM 结果缓存 key：lg:llm:result:{template}:{inputHash}
+     * 构造 LLM 结果缓存 key：llm:result:{template}:{inputHash}
      */
     private String llmCacheKey(String templateName, String inputHash) {
         if (inputHash == null) {
