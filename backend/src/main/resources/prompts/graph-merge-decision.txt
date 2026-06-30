@@ -2,35 +2,44 @@
 
 图谱构建过程中发现两个可能重复的节点，请你判断是否应该合并。
 
-## 节点 A 信息
-- 类型: {typeA}
-- 名称: {nameA}
-- 键: {keyA}
-- 描述: {descriptionA}
-- 置信度: {confidenceA}
+## 候选节点 A
+- 键: {candidateAKey}
+- 信息:
+{candidateAInfo}
 
-## 节点 B 信息
-- 类型: {typeB}
-- 名称: {nameB}
-- 键: {keyB}
-- 描述: {descriptionB}
-- 置信度: {confidenceB}
+## 候选节点 B
+- 键: {candidateBKey}
+- 信息:
+{candidateBInfo}
+
+## 相似度评分（0~1）
+- 名称相似度 nameScore: {nameScore}
+- 语义相似度 semanticScore: {semanticScore}
+- 结构相似度 structScore: {structScore}
+- 邻域相似度 neighborScore: {neighborScore}
+- 证据相似度 evidenceScore: {evidenceScore}
 
 ## 判断规则
-- 如果两个节点描述的是同一个概念（同一个类、同一个业务功能、同一个表），应该合并
-- 如果两个节点是不同层级的概念（比如业务域 vs 具体功能），不应该合并
-- 如果两个节点类型不同但实际上指代同一实体，可以合并
-- 如果你不确定，偏向不合并
+- 描述同一个概念（同一个类、业务功能、表）应合并。
+- 不同层级概念（业务域 vs 具体功能）不应合并。
+- 类型不同但指代同一实体可合并。
+- 不确定时偏向 REVIEW（进入人工审核），证据明显冲突则 REJECT。
+
+## 决策取值
+- decision 必须是以下之一：AUTO_MERGE（高置信自动合并）、REVIEW（人工审核）、REJECT（不合并）。
+- score 为最终合并置信度（0~1）。
 
 ## 输出格式
-请以严格 JSON 格式输出：
+请以严格 JSON 格式输出，结构如下：
 ```json
 {
-  "shouldMerge": true/false,
-  "confidence": 0.9,
-  "reason": "你的判断理由",
-  "keepNodeId": "建议保留哪个节点的id",
-  "mergeToNode": "合并后保留哪个节点的信息"
+  "candidateA": "{candidateAKey}",
+  "candidateB": "{candidateBKey}",
+  "decision": "REVIEW",
+  "score": 0.72,
+  "reasons": ["判断理由1", "判断理由2"],
+  "positiveEvidenceIds": [],
+  "negativeEvidenceIds": []
 }
 ```
 

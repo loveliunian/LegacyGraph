@@ -2,6 +2,7 @@ package io.github.legacygraph.agent;
 
 import io.github.legacygraph.agent.TestCaseAgent.TestGenerationRequest;
 import io.github.legacygraph.dto.GeneratedTestCase;
+import io.github.legacygraph.dto.TestCaseGenerationResult;
 import io.github.legacygraph.llm.LlmGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,11 +23,15 @@ import static org.mockito.Mockito.*;
 /**
  * Test cases for {@link TestCaseAgent}.
  *
+ * <p>Phase 0 契约对齐后：模板单次返回 {@link TestCaseGenerationResult}（testCases 数组），
+ * Agent 解析为多个 {@link GeneratedTestCase}。
+ *
  * <p>Covers:
  * <ul>
- *   <li>Normal scenario — all fields populated, LLM returns a valid GeneratedTestCase</li>
- *   <li>Null scenario — LLM returns null, resulting list should be empty</li>
- *   <li>Partial fields scenario — null-safe handling when request fields are null</li>
+ *   <li>Normal scenario — LLM 返回多个场景的测试用例</li>
+ *   <li>Null scenario — LLM 返回 null，结果列表为空</li>
+ *   <li>Partial fields scenario — 请求字段为 null 时 null-safe 传参</li>
+ *   <li>featureKey 缺失时由 Agent 补全</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -59,6 +64,12 @@ class TestCaseAgentTest {
         return request;
     }
 
+    private TestCaseGenerationResult resultWith(GeneratedTestCase... cases) {
+        TestCaseGenerationResult result = new TestCaseGenerationResult();
+        result.setTestCases(List.of(cases));
+        return result;
+    }
+
     // ==================== Test Case 1: Normal scenario ====================
 
     @Test
@@ -66,30 +77,36 @@ class TestCaseAgentTest {
         // Arrange
         TestGenerationRequest request = fullRequest();
 
-        GeneratedTestCase mockCase = new GeneratedTestCase();
-        mockCase.setFeatureKey("user-login");
-        mockCase.setCaseName("用户登录-正常场景");
-        mockCase.setCaseType(GeneratedTestCase.CaseType.API);
+        GeneratedTestCase normal = new GeneratedTestCase();
+        normal.setFeatureKey("user-login");
+        normal.setCaseName("用户登录-正常场景");
+        normal.setCaseType(GeneratedTestCase.CaseType.API);
+
+        GeneratedTestCase boundary = new GeneratedTestCase();
+        boundary.setFeatureKey("user-login");
+        boundary.setCaseName("用户登录-边界场景");
+        boundary.setCaseType(GeneratedTestCase.CaseType.API);
 
         when(llmGateway.callWithTemplate(
                 eq("project-1"),
                 eq("test-case-generation"),
                 anyMap(),
-                eq(GeneratedTestCase.class)
-        )).thenReturn(mockCase);
+                eq(TestCaseGenerationResult.class)
+        )).thenReturn(resultWith(normal, boundary));
 
         // Act
         List<GeneratedTestCase> results = testCaseAgent.generateTestCases(request);
 
         // Assert
-        assertEquals(1, results.size(), "Should return exactly 1 generated test case");
-        assertSame(mockCase, results.getFirst(), "Should return the LLM-generated case");
+        assertEquals(2, results.size(), "Should return all generated scenarios");
+        assertSame(normal, results.get(0));
+        assertSame(boundary, results.get(1));
 
         verify(llmGateway).callWithTemplate(
                 eq("project-1"),
                 eq("test-case-generation"),
                 variablesCaptor.capture(),
-                eq(GeneratedTestCase.class)
+                eq(TestCaseGenerationResult.class)
         );
 
         Map<String, String> captured = variablesCaptor.getValue();
@@ -113,7 +130,7 @@ class TestCaseAgentTest {
                 anyString(),
                 anyString(),
                 anyMap(),
-                eq(GeneratedTestCase.class)
+                eq(TestCaseGenerationResult.class)
         )).thenReturn(null);
 
         // Act
@@ -123,7 +140,7 @@ class TestCaseAgentTest {
         assertNotNull(results, "Result list should never be null");
         assertTrue(results.isEmpty(), "Should return empty list when LLM returns null");
         verify(llmGateway, times(1)).callWithTemplate(
-                anyString(), anyString(), anyMap(), eq(GeneratedTestCase.class)
+                anyString(), anyString(), anyMap(), eq(TestCaseGenerationResult.class)
         );
     }
 
@@ -146,8 +163,8 @@ class TestCaseAgentTest {
                 eq("project-2"),
                 eq("test-case-generation"),
                 anyMap(),
-                eq(GeneratedTestCase.class)
-        )).thenReturn(mockCase);
+                eq(TestCaseGenerationResult.class)
+        )).thenReturn(resultWith(mockCase));
 
         // Act
         List<GeneratedTestCase> results = testCaseAgent.generateTestCases(request);
@@ -159,7 +176,7 @@ class TestCaseAgentTest {
                 eq("project-2"),
                 eq("test-case-generation"),
                 variablesCaptor.capture(),
-                eq(GeneratedTestCase.class)
+                eq(TestCaseGenerationResult.class)
         );
 
         Map<String, String> captured = variablesCaptor.getValue();
@@ -171,5 +188,30 @@ class TestCaseAgentTest {
         assertEquals("", captured.get("requestSchema"));
         assertEquals("", captured.get("relatedTables"));
         assertEquals("", captured.get("businessRules"));
+    }
+
+    // ==================== Test Case 4: featureKey 补全 ====================
+
+    @Test
+    void testGenerateTestCases_FillsMissingFeatureKey() {
+        // Arrange
+        TestGenerationRequest request = fullRequest();
+
+        GeneratedTestCase caseWithoutKey = new GeneratedTestCase();
+        caseWithoutKey.setCaseName("缺失 featureKey 的用例");
+        caseWithoutKey.setCaseType(GeneratedTestCase.CaseType.API);
+        // featureKey 故意留空
+
+        when(llmGateway.callWithTemplate(
+                anyString(), anyString(), anyMap(), eq(TestCaseGenerationResult.class)
+        )).thenReturn(resultWith(caseWithoutKey));
+
+        // Act
+        List<GeneratedTestCase> results = testCaseAgent.generateTestCases(request);
+
+        // Assert
+        assertEquals(1, results.size());
+        assertEquals("user-login", results.get(0).getFeatureKey(),
+                "Agent 应在模板遗漏时补全 featureKey");
     }
 }

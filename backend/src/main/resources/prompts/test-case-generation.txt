@@ -1,43 +1,50 @@
 # 测试用例生成任务
 
-请根据以下图谱节点信息，生成自动化测试用例。
+你是一位资深测试工程师。请根据以下功能节点信息，生成可执行的自动化测试用例，覆盖正常、异常、边界场景，并尽量填充真实请求参数与断言。
 
-## 节点信息
-- 节点类型: {nodeType}
-- 节点名称: {nodeName}
-- 节点描述: {nodeDescription}
-- 相关关系:
-{relations}
+## 功能信息
+- 功能键: {featureKey}
+- 功能名称: {featureName}
+- API 端点: {apiEndpoint}
+- HTTP 方法: {httpMethod}
+- 请求结构(Schema): {requestSchema}
+- 相关数据表: {relatedTables}
+- 业务规则: {businessRules}
 
 ## 生成要求
-请针对这个节点生成合适的自动化测试用例：
-1. 正常路径测试：正常输入应该得到正常输出
-2. 异常路径测试：非法输入应该正确处理
-3. 边界条件测试：边界值和特殊情况
-4. 如果涉及数据库操作，需要包含数据库断言
+1. 正常路径(NORMAL)：合法输入 → 期望成功，断言关键响应字段。
+2. 异常路径(EXCEPTION)：非法/缺失输入 → 期望错误码与错误信息。
+3. 边界条件(BOUNDARY)：边界值、空值、极值。
+4. 若涉及数据库，补充 SQL 断言（基于相关数据表）。
+5. 请求参数尽量根据 requestSchema 填充真实示例值；无法确定的放入 needHumanInput。
+
+## 字段约束
+- caseType 取值：API、E2E、DB、HYBRID。
+- assertions[].type 取值：HTTP、JSON_PATH、SQL、STATE、UI。
+- assertions[].expression 为可执行断言表达式，例如 `status == 200`、`$.data.id != null`、`SELECT COUNT(*) FROM t_user WHERE ... = 1`。
 
 ## 输出格式
-请以严格 JSON 格式输出：
+请以严格 JSON 格式输出，结构如下：
 ```json
 {
   "testCases": [
     {
+      "featureKey": "{featureKey}",
       "caseName": "测试用例名称",
-      "caseType": "NORMAL|EXCEPTION|BOUNDARY",
-      "description": "测试描述",
+      "caseType": "API",
+      "preconditions": ["前置条件"],
+      "steps": ["步骤1", "步骤2"],
       "request": {
-        "method": "HTTP_METHOD",
-        "url": "endpoint/path",
-        "body": "请求体(JSON 格式)",
-        "headers": {}
+        "method": "{httpMethod}",
+        "url": "{apiEndpoint}",
+        "headers": {},
+        "body": {}
       },
-      "expected": {
-        "statusCode": 200,
-        "responseContains": "期待响应包含的关键词",
-        "dbAssertions": [
-          { "table": "表名", "condition": "查询条件", "expectedCount": 1 }
-        ]
-      }
+      "assertions": [
+        { "type": "HTTP", "expression": "status == 200" },
+        { "type": "JSON_PATH", "expression": "$.data.id != null" }
+      ],
+      "needHumanInput": []
     }
   ]
 }

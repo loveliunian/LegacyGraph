@@ -1,0 +1,30 @@
+# 变更影响分析增强
+
+你是一位资深架构师。请基于变更内容与图谱依赖，做语义级影响分析。
+
+## 变更信息
+- 变更目标: {changeTarget}
+- 变更描述/diff: {changeDescription}
+- 图谱依赖节点: {dependencies}
+
+## 分析要求
+1. 判断修改类型 changeType：BUGFIX、FEATURE、BREAKING_CHANGE、REFACTOR。
+2. 评估业务影响严重程度 severity：HIGH、MEDIUM、LOW。
+3. 预测需要重跑的测试范围 affectedTests。
+4. 建议重点回归范围 regressionScope。
+5. 列出受影响的关键节点 impactedNodes（来自依赖节点，勿编造）。
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "changeType": "BREAKING_CHANGE",
+  "severity": "HIGH",
+  "summary": "影响总结一句话",
+  "impactedNodes": ["api:/order/create", "service:OrderService"],
+  "affectedTests": ["下单接口用例"],
+  "regressionScope": ["订单创建链路"]
+}
+```
+
+只输出 JSON，不要其他解释内容。

@@ -1,32 +1,67 @@
-# 需求文档理解与业务节点抽取
+# 需求文档理解与业务事实抽取
 
-你是一位资深业务架构师，请分析以下需求文档片段，抽取业务领域模型节点。
+你是一位资深业务架构师，请分析以下需求文档片段，抽取结构化业务事实。
 
-## 文档内容:
-{documentContent}
+## 文档信息
+- 来源路径: {sourcePath}
+- 文档内容:
+```
+{docContent}
+```
 
 ## 抽取要求
-请识别并输出以下类型的业务节点：
-1. **业务域(BusinessDomain)**：一个大的业务领域，比如"订单管理"、"用户中心"
-2. **业务流程(BusinessProcess)**：一个完整的业务流程，比如"用户注册"、"订单支付"
-3. **业务对象(BusinessObject)**：核心业务实体，比如"用户"、"订单"、"商品"
-4. **业务规则(BusinessRule)**：明确的业务规则或约束条件
+请识别以下类型的业务事实：
+1. 业务域(businessDomains)：大的业务领域，如"订单管理"。
+2. 业务流程(businessProcesses)：完整业务流程，含步骤、角色、对象、规则。
+3. 业务对象(businessObjects)：核心业务实体及其属性。
+4. 业务规则(businessRules)：明确的业务规则或约束。
+5. 角色(roles)：参与的角色名称列表。
+6. 状态流转(statusTransitions)：业务对象的状态变化。
+7. 功能清单(features)：可识别的功能名称列表。
+
+## 重要约束
+- 每条结论尽量给出证据(evidence)，evidence 引用文档原文片段。
+- confidence 为 0~1 之间的小数；不确定的不要硬编。
 
 ## 输出格式
-请以严格 JSON 格式输出：
+请以严格 JSON 格式输出，结构如下（数组可为空，但字段名必须保持一致）：
 ```json
 {
   "businessDomains": [
-    { "name": "业务域名称", "description": "简要描述" }
+    { "name": "业务域名称", "description": "简要描述", "confidence": 0.9, "evidenceText": "文档原文" }
   ],
   "businessProcesses": [
-    { "name": "流程名称", "description": "流程描述", "belongsToDomain": "所属业务域" }
+    {
+      "key": "process:用户注册",
+      "name": "流程名称",
+      "description": "流程描述",
+      "steps": ["步骤1", "步骤2"],
+      "roles": ["角色"],
+      "objects": ["业务对象"],
+      "rules": ["规则"],
+      "confidence": 0.85,
+      "evidence": [ { "sourceType": "doc", "sourceUri": "{sourcePath}", "lineStart": 1, "lineEnd": 5, "excerpt": "原文" } ]
+    }
   ],
   "businessObjects": [
-    { "name": "对象名称", "description": "对象描述", "attributes": ["属性1", "属性2"] }
+    {
+      "name": "对象名称",
+      "description": "对象描述",
+      "attributes": ["属性1", "属性2"],
+      "confidence": 0.8,
+      "evidence": [ { "sourceType": "doc", "sourceUri": "{sourcePath}", "excerpt": "原文" } ]
+    }
   ],
   "businessRules": [
-    { "description": "规则描述", "relatedObjects": ["相关业务对象"] }
+    { "name": "规则名", "expression": "规则表达式或描述", "confidence": 0.8, "evidence": [] }
+  ],
+  "roles": ["管理员", "普通用户"],
+  "statusTransitions": [
+    { "businessObject": "订单", "fromStatus": "待支付", "toStatus": "已支付", "trigger": "支付成功", "confidence": 0.8, "evidence": [] }
+  ],
+  "features": ["用户注册", "订单支付"],
+  "evidence": [
+    { "chunkTitle": "片段标题", "contentExcerpt": "片段摘录", "chunkIndex": 0 }
   ]
 }
 ```

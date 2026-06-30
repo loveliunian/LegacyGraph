@@ -1,0 +1,41 @@
+# 报告洞察与行动建议生成
+
+你是一位迁移交付负责人。请根据以下图谱质量与迁移就绪度指标，生成按优先级排序的、可执行的行动清单。
+
+## 报告指标
+{metrics}
+
+## 低置信 / 孤立 / 未覆盖 摘要
+{gaps}
+
+## 生成要求
+请输出按优先级排序的行动项（actions），每项必须：
+- 关联具体的图谱节点、证据或报告指标来源（source）。
+- 指明动作类型 actionType：补证据(ADD_EVIDENCE)、生成测试(GENERATE_TEST)、迁移风险处置(MIGRATION_RISK)、批量确认(BATCH_CONFIRM)、人工细看(MANUAL_REVIEW)。
+- 给出优先级 priority：HIGH、MEDIUM、LOW。
+- 给出简明理由 rationale 与预期收益 expectedBenefit。
+
+## 重要约束
+- 不得编造不在指标中的节点或数据。
+- 建议要具体、可执行，而非泛泛而谈。
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "summary": "总体结论一句话",
+  "actions": [
+    {
+      "title": "为低置信 API 节点补充证据",
+      "actionType": "ADD_EVIDENCE",
+      "priority": "HIGH",
+      "source": "GraphMetricsReport.pendingRatio=0.32",
+      "targets": ["api:/order/create"],
+      "rationale": "该批节点缺少运行时验证",
+      "expectedBenefit": "提升迁移就绪度"
+    }
+  ]
+}
+```
+
+只输出 JSON，不要其他解释内容。

@@ -3,39 +3,53 @@
 你是一位专业的系统分析师，请根据以下提供的代码片段，抽取结构化的业务事实。
 
 ## 代码信息
-- 类名: {className}
-- 方法名: {methodName}
+- 项目ID: {projectId}
+- 源文件路径: {sourcePath}
 - 代码内容:
 ```
 {codeContent}
 ```
 
 ## 抽取要求
-请抽取以下信息：
-1. 业务功能：这个方法实际实现什么业务？
-2. 输入参数：方法接收什么参数，业务含义是什么？
-3. 输出结果：方法返回什么结果？
-4. 数据库操作：是否读写数据库，操作哪些表？
-5. 业务规则：有哪些重要的判断条件和业务规则？
-6. 依赖调用：调用了哪些其他服务？
+请抽取该代码片段中的业务事实条目（每个方法、SQL 操作或关键业务规则可作为一条 item）：
+1. 业务功能：方法/片段实际实现什么业务？
+2. 输入输出：业务含义是什么？
+3. 数据库操作：是否读写数据库，操作哪些表？
+4. 业务规则：有哪些重要的判断条件？
+5. 依赖调用：调用了哪些其他服务？
+
+## 重要约束
+- 每条结论必须有代码证据（evidence），不得过度推断。
+- 证据中的 sourceUri 使用上面的源文件路径，lineStart/lineEnd 标注证据所在行号。
+- confidence 为 0~1 之间的小数，证据充分则高，推断成分多则低。
 
 ## 输出格式
-请以严格 JSON 格式输出：
+请以严格 JSON 格式输出，结构如下：
 ```json
 {
-  "businessFunction": "一句话描述业务功能",
-  "inputParameters": [
-    { "name": "参数名", "businessMeaning": "业务含义" }
-  ],
-  "outputResult": "描述输出结果",
-  "databaseOperations": [
-    { "tableName": "表名", "operation": "READ/WRITE" }
-  ],
-  "businessRules": [
-    "规则描述"
-  ],
-  "dependencies": [
-    "依赖的服务类名"
+  "factType": "method",
+  "projectId": "{projectId}",
+  "items": [
+    {
+      "key": "method:类名#方法名",
+      "name": "方法或事实名称",
+      "attributes": {
+        "businessFunction": "一句话描述业务功能",
+        "databaseOperations": [ { "tableName": "表名", "operation": "READ" } ],
+        "businessRules": [ "规则描述" ],
+        "dependencies": [ "依赖的服务类名" ]
+      },
+      "evidence": [
+        {
+          "sourceType": "code",
+          "sourceUri": "{sourcePath}",
+          "lineStart": 1,
+          "lineEnd": 20,
+          "excerpt": "关键代码片段"
+        }
+      ],
+      "confidence": 0.9
+    }
   ]
 }
 ```

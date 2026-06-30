@@ -2,6 +2,7 @@ package io.github.legacygraph.controller;
 
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.entity.LlmProvider;
+import io.github.legacygraph.llm.LlmGateway;
 import io.github.legacygraph.service.LlmProviderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -22,6 +23,7 @@ import java.util.List;
 public class LlmProviderController {
 
     private final LlmProviderService llmProviderService;
+    private final LlmGateway llmGateway;
 
     /**
      * 获取所有 LLM 提供商列表
@@ -80,6 +82,7 @@ public class LlmProviderController {
             @Parameter(description = "提供商代码", required = true)
             @PathVariable String providerCode) {
         llmProviderService.setDefault(providerCode);
+        llmGateway.clearCache(); // 清除缓存使切换立即生效
         return Result.ok();
     }
 
@@ -94,6 +97,7 @@ public class LlmProviderController {
             @Parameter(description = "是否启用", required = true)
             @RequestParam boolean active) {
         llmProviderService.toggleActive(providerCode, active);
+        llmGateway.clearCache(); // 清除缓存使状态变更立即生效
         return Result.ok();
     }
 
@@ -106,6 +110,7 @@ public class LlmProviderController {
             @Parameter(description = "提供商代码", required = true)
             @PathVariable String providerCode) {
         llmProviderService.delete(providerCode);
+        llmGateway.clearCache(); // 清除缓存避免误用已删除的提供商
         return Result.ok();
     }
 }

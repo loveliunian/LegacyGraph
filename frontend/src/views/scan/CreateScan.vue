@@ -293,7 +293,17 @@ const startScan = async () => {
   try {
     const res = await post(`/lg/projects/${projectId}/scan-versions`, {
       versionNo: scanForm.taskName.replace(/[\s-]/g, '_'),
-      branchName: 'main'
+      branchName: 'main',
+      // 将 AI 开关随 scanScope 传递给后端扫描后编排器
+      scanScope: JSON.stringify({
+        scanTypes: scanForm.scanTypes,
+        repoIds: scanForm.repoIds,
+        dbIds: scanForm.dbIds,
+        docIds: scanForm.docIds,
+        enableAi: scanForm.enableAi,
+        autoGenerateTestCase: scanForm.autoGenerateTestCase,
+        minConfidence: scanForm.minConfidence
+      })
     })
     const versionId = typeof res === 'string' ? res : res.id || res
     await post(`/lg/projects/${projectId}/scan-versions/${versionId}/start`)

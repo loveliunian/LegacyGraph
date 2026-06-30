@@ -68,8 +68,8 @@ public class ReviewAgent {
         variables.put("conflictingEvidence", String.join("\n- ", request.getConflictingEvidence()));
         variables.put("currentConfidence", String.valueOf(request.getCurrentConfidence()));
 
-        // 使用现有的 graph-merge-decision 模板，结构相近
-        return llmGateway.callWithTemplate(request.getProjectId(), "graph-merge-decision",
+        // 使用独立的审核模板
+        return llmGateway.callWithTemplate(request.getProjectId(), "review-suggestion",
                 variables, ReviewResult.class);
     }
 }

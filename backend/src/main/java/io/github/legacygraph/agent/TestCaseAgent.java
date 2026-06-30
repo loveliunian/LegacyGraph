@@ -1,6 +1,7 @@
 package io.github.legacygraph.agent;
 
 import io.github.legacygraph.dto.GeneratedTestCase;
+import io.github.legacygraph.dto.TestCaseGenerationResult;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.llm.LlmGateway;
 import lombok.Data;
@@ -56,18 +57,23 @@ public class TestCaseAgent {
         variables.put("relatedTables", request.getRelatedTables() != null ? request.getRelatedTables() : "");
         variables.put("businessRules", request.getBusinessRules() != null ? request.getBusinessRules() : "");
 
-        // 模板返回单个测试用例，我们生成多个场景
+        // 模板单次调用返回 testCases 数组，覆盖正常/异常/边界多个场景
         List<GeneratedTestCase> results = new ArrayList<>();
 
-        // 正常场景
-        GeneratedTestCase normalCase = llmGateway.callWithTemplate(request.getProjectId(),
-                "test-case-generation", variables, GeneratedTestCase.class);
-        if (normalCase != null) {
-            results.add(normalCase);
+        TestCaseGenerationResult generation = llmGateway.callWithTemplate(request.getProjectId(),
+                "test-case-generation", variables, TestCaseGenerationResult.class);
+        if (generation != null && generation.getTestCases() != null) {
+            for (GeneratedTestCase tc : generation.getTestCases()) {
+                if (tc == null) {
+                    continue;
+                }
+                // 补全 featureKey，避免模板遗漏
+                if (tc.getFeatureKey() == null || tc.getFeatureKey().isEmpty()) {
+                    tc.setFeatureKey(request.getFeatureKey());
+                }
+                results.add(tc);
+            }
         }
-
-        // 注：其他场景可以通过多次调用或者在单次调用中返回多个
-        // 这里保持每次调用一个场景，让模型聚焦质量
 
         log.info("Generated {} test cases for feature {}", results.size(), request.getFeatureKey());
         return results;

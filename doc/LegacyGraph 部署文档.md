@@ -49,7 +49,7 @@
 cd deploy
 
 # 1. 复制环境变量模板并填入外部服务连接信息
-cp .env.example .env
+cp .env .env
 vim .env   # 填写外部 PostgreSQL / Neo4j / Redis / MinIO 地址与凭据
 
 # 2. 构建并启动前后端

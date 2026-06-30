@@ -1,0 +1,42 @@
+# SQL 性能优化顾问
+
+你是一位资深数据库性能优化专家。请分析以下 SQL 语句，识别性能问题并给出可执行的优化建议。
+
+## SQL 来源
+- 来源标识(Mapper/方法): {sqlKey}
+- 相关表结构/索引信息: {schemaInfo}
+
+## 待分析 SQL
+```sql
+{sql}
+```
+
+## 分析要求
+请识别以下常见问题（存在才报，不存在不要硬编）：
+1. SELECT *（应显式列出字段）
+2. 缺少索引 / 索引未命中（结合表结构判断）
+3. N+1 查询风险
+4. LIKE 前缀模糊匹配（'%xxx' 导致索引失效）
+5. 隐式类型转换、函数包裹列导致索引失效
+6. 不合理的 JOIN / 笛卡尔积 / 大结果集未分页
+
+## 字段约束
+- severity 取值：HIGH、MEDIUM、LOW。
+- 每个问题给出 issueType、说明 description、优化建议 suggestion。
+- 如能给出优化后的 SQL，填入 optimizedSql；否则置空字符串。
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "sqlKey": "{sqlKey}",
+  "issues": [
+    { "issueType": "SELECT_STAR", "severity": "MEDIUM", "description": "使用了 SELECT *", "suggestion": "显式列出需要的字段" }
+  ],
+  "optimizedSql": "SELECT id, name FROM t_user WHERE ...",
+  "overallRisk": "MEDIUM",
+  "summary": "一句话总结"
+}
+```
+
+只输出 JSON，不要其他解释内容。

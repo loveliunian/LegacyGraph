@@ -29,6 +29,7 @@ public class CodeFactAgent {
      */
     public FactExtractionResult extractFacts(String projectId, String codeContent, String sourcePath) {
         Map<String, String> variables = new HashMap<>();
+        variables.put("projectId", projectId != null ? projectId : "");
         variables.put("codeContent", codeContent);
         variables.put("sourcePath", sourcePath);
 

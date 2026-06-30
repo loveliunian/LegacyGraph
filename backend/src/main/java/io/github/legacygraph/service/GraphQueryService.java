@@ -49,6 +49,7 @@ public class GraphQueryService {
      * 增加 projectId/versionId 过滤，避免同名 API 跨版本串数据。
      */
     public List<Map<String, Object>> getApiCallChain(String projectId, String versionId, String apiKey) {
+        versionId = normalizeVersionId(versionId);
         String cypher = """
                 MATCH p = (api:ApiEndpoint {nodeKey: $apiKey, projectId: $projectId, versionId: $versionId})
                          -[:HANDLED_BY|CALLS|EXECUTES|READS|WRITES*1..8]->(n)
@@ -87,6 +88,7 @@ public class GraphQueryService {
      * 增加 projectId/versionId 过滤，避免同名表跨版本串数据。
      */
     public List<Map<String, Object>> getTableImpact(String projectId, String versionId, String tableName) {
+        versionId = normalizeVersionId(versionId);
         String cypher = """
                 MATCH p = (api:ApiEndpoint {projectId: $projectId, versionId: $versionId})
                          -[:HANDLED_BY|CALLS|EXECUTES|WRITES*1..8]->(t:Table {nodeName: $tableName})
@@ -116,6 +118,7 @@ public class GraphQueryService {
      * 并在结果中标记 moduleMissing = true。
      */
     public Map<String, Object> getFeatureView(String projectId, String versionId, String module) {
+        versionId = normalizeVersionId(versionId);
         boolean hasModule = module != null && !module.isBlank();
         String cypher;
         Map<String, Object> result = new HashMap<>();
@@ -219,6 +222,7 @@ public class GraphQueryService {
      * BELONGS_TO/PART_OF/IMPLEMENTS 边扩展子图。
      */
     public Map<String, Object> getBusinessView(String projectId, String versionId, String domain) {
+        versionId = normalizeVersionId(versionId);
         boolean hasDomain = domain != null && !domain.isBlank();
         String cypher;
         Map<String, Object> result = new HashMap<>();
@@ -320,6 +324,9 @@ public class GraphQueryService {
      * 从 Neo4j 查询指定扫描版本的所有节点和边，按置信度+状态过滤后返回
      */
     public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence, String statusFilter) {
+        // 标准化 versionId：PG JDBC 返回带横线格式，Neo4j 存储不带横线
+        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+
         // 从 scanVersionRepository 获取 projectId
         ScanVersion version = scanVersionRepository.lambdaQuery()
                 .eq(ScanVersion::getId, versionId)
@@ -334,10 +341,10 @@ public class GraphQueryService {
 
         // 从Neo4j查询节点
         String effectiveStatus = (statusFilter != null && !statusFilter.isBlank()) ? statusFilter : null;
-        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, minConfidence, effectiveStatus, 0);
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, normalizedVersionId, null, null, minConfidence, effectiveStatus, 0);
 
         // 从Neo4j查询边
-        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, versionId, minConfidence, effectiveStatus, 0);
+        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, normalizedVersionId, minConfidence, effectiveStatus, 0);
 
         Map<String, Object> result = new HashMap<>();
         result.put("versionId", versionId);
@@ -376,8 +383,17 @@ public class GraphQueryService {
         // 空视图时返回结构化原因
         if (nodes.isEmpty()) {
             List<String> reasons = new ArrayList<>();
+            // 检查 Neo4j 连通性
+            try (org.neo4j.driver.Session s = neo4jDriver.session()) {
+                var ping = s.run("RETURN 1 AS ok").single().get("ok").asInt();
+                if (ping != 1) {
+                    reasons.add("Neo4j 连接异常");
+                }
+            } catch (Exception neo4jEx) {
+                reasons.add("Neo4j 不可达: " + neo4jEx.getMessage());
+            }
             // 检查是否有该版本的任何节点（不过滤状态）
-            long totalNodes = neo4jGraphDao.countNodes(projectId, versionId, null);
+            long totalNodes = neo4jGraphDao.countNodes(projectId, normalizedVersionId, null);
             if (totalNodes == 0) {
                 reasons.add("该版本尚未扫描或扫描未生成图谱数据");
             } else {
@@ -386,11 +402,20 @@ public class GraphQueryService {
             }
             // 检查是否同步到 Neo4j
             if (totalNodes > 0) {
-                long confirmedNodes = neo4jGraphDao.countNodes(projectId, versionId, "CONFIRMED");
+                long confirmedNodes = neo4jGraphDao.countNodes(projectId, normalizedVersionId, "CONFIRMED");
                 long pendingNodes = totalNodes - confirmedNodes;
                 if (pendingNodes > 0) {
-                    reasons.add(pendingNodes + " 个节点状态为 PENDING_CONFIRM，同步到 Neo4j 后可在专题视图中查看");
+                    reasons.add(pendingNodes + " 个节点状态为 PENDING_CONFIRM");
                 }
+            }
+            // 交叉验证：检查该版本是否有事实数据（扫描是否真的执行了）
+            long factCount = factRepository.lambdaQuery()
+                    .eq(Fact::getVersionId, versionId)
+                    .count();
+            if (factCount == 0) {
+                reasons.add("该版本无事实数据，扫描可能未成功执行或代码目录为空");
+            } else {
+                reasons.add("有 " + factCount + " 条事实数据但未生成图谱节点（可能 Neo4j 写入失败）");
             }
             result.put("emptyReasons", reasons);
         }
@@ -497,5 +522,13 @@ public class GraphQueryService {
             case "HAS_COLUMN" -> "字段";
             default -> edgeType;
         };
+    }
+
+    /**
+     * 标准化 versionId：去掉横线以匹配 Neo4j 存储格式。
+     * PG JDBC 返回带横线的 UUID，Neo4j 写入时使用 MyBatis-Plus 生成的无横线格式。
+     */
+    private String normalizeVersionId(String versionId) {
+        return versionId != null ? versionId.replace("-", "") : null;
     }
 }

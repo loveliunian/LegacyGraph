@@ -46,6 +46,13 @@ public class LlmAgentController {
     private final GraphMergeAgent graphMergeAgent;
     private final TestCaseAgent testCaseAgent;
     private final ReviewAgent reviewAgent;
+    private final SqlAdvisorAgent sqlAdvisorAgent;
+    private final TestFailureAnalysisAgent testFailureAnalysisAgent;
+    private final ReportInsightAgent reportInsightAgent;
+    private final RefactorAgent refactorAgent;
+    private final ChangeImpactAgent changeImpactAgent;
+    private final MigrationAgent migrationAgent;
+    private final PrDescriptionAgent prDescriptionAgent;
     private final GraphMergeService graphMergeService;
     private final Neo4jGraphDao neo4jGraphDao;
 
@@ -230,6 +237,123 @@ public class LlmAgentController {
         req.setRelatedTables(vars.get("relatedTables"));
         req.setBusinessRules(vars.get("businessRules"));
         return req;
+    }
+
+    /**
+     * SQL 性能分析
+     */
+    @PostMapping("/sql/analyze")
+    @Operation(summary = "SQL 性能优化分析", description = "分析 SQL 性能问题并给出优化建议与优化后 SQL")
+    public Result<io.github.legacygraph.dto.SqlAdvisorResult> analyzeSql(
+            @RequestBody SqlAnalyzeRequest request) {
+        io.github.legacygraph.dto.SqlAdvisorResult result = sqlAdvisorAgent.analyze(
+                request.getProjectId(), request.getSqlKey(), request.getSql(), request.getSchemaInfo());
+        return Result.ok(result);
+    }
+
+    /**
+     * 测试失败根因分析
+     */
+    @PostMapping("/tests/analyze-failure")
+    @Operation(summary = "测试失败根因分析", description = "根据失败上下文归纳根因、排查步骤与复测建议")
+    public Result<io.github.legacygraph.dto.TestFailureAnalysis> analyzeTestFailure(
+            @RequestBody TestFailureAnalysisAgent.FailureContext context) {
+        io.github.legacygraph.dto.TestFailureAnalysis result = testFailureAnalysisAgent.analyze(context);
+        return Result.ok(result);
+    }
+
+    /**
+     * 报告洞察与行动建议
+     */
+    @PostMapping("/report/insights")
+    @Operation(summary = "报告行动建议", description = "根据图谱指标与缺口摘要生成按优先级排序的行动清单")
+    public Result<io.github.legacygraph.dto.ReportInsight> reportInsights(
+            @RequestBody ReportInsightRequest request) {
+        io.github.legacygraph.dto.ReportInsight result = reportInsightAgent.generateInsights(
+                request.getProjectId(), request.getMetrics(), request.getGaps());
+        return Result.ok(result);
+    }
+
+    @lombok.Data
+    public static class SqlAnalyzeRequest {
+        private String projectId;
+        private String sqlKey;
+        private String sql;
+        private String schemaInfo;
+    }
+
+    @lombok.Data
+    public static class ReportInsightRequest {
+        private String projectId;
+        private String metrics;
+        private String gaps;
+    }
+
+    // ==================== Phase 4：后置能力 ====================
+
+    @PostMapping("/refactor/suggest")
+    @Operation(summary = "代码异味重构建议", description = "分析职责边界并给出拆分建议与重构骨架")
+    public Result<io.github.legacygraph.dto.RefactorSuggestion> suggestRefactor(
+            @RequestBody RefactorRequest request) {
+        return Result.ok(refactorAgent.suggest(request.getProjectId(), request.getTarget(),
+                request.getSmellType(), request.getCode()));
+    }
+
+    @PostMapping("/change/impact")
+    @Operation(summary = "变更影响分析", description = "语义级判断变更类型、严重程度与回归范围")
+    public Result<io.github.legacygraph.dto.ChangeImpactAnalysis> analyzeChangeImpact(
+            @RequestBody ChangeImpactRequest request) {
+        return Result.ok(changeImpactAgent.analyze(request.getProjectId(), request.getChangeTarget(),
+                request.getChangeDescription(), request.getDependencies()));
+    }
+
+    @PostMapping("/migration/convert")
+    @Operation(summary = "迁移代码自动转换", description = "按迁移规则给出转换建议与转换后代码")
+    public Result<io.github.legacygraph.dto.MigrationConversion> convertMigration(
+            @RequestBody MigrationRequest request) {
+        return Result.ok(migrationAgent.convert(request.getProjectId(), request.getMigrationDirection(),
+                request.getSourcePath(), request.getCode(), request.getCustomRules()));
+    }
+
+    @PostMapping("/pr/describe")
+    @Operation(summary = "PR 描述/提交信息生成", description = "按 Conventional Commits 规范生成提交信息与 PR 描述")
+    public Result<io.github.legacygraph.dto.PrDescription> describePr(
+            @RequestBody PrDescribeRequest request) {
+        return Result.ok(prDescriptionAgent.generate(request.getProjectId(), request.getBranch(),
+                request.getIssue(), request.getDiff()));
+    }
+
+    @lombok.Data
+    public static class RefactorRequest {
+        private String projectId;
+        private String target;
+        private String smellType;
+        private String code;
+    }
+
+    @lombok.Data
+    public static class ChangeImpactRequest {
+        private String projectId;
+        private String changeTarget;
+        private String changeDescription;
+        private String dependencies;
+    }
+
+    @lombok.Data
+    public static class MigrationRequest {
+        private String projectId;
+        private String migrationDirection;
+        private String sourcePath;
+        private String code;
+        private String customRules;
+    }
+
+    @lombok.Data
+    public static class PrDescribeRequest {
+        private String projectId;
+        private String branch;
+        private String issue;
+        private String diff;
     }
 
     /**

@@ -91,7 +91,8 @@ class CodeFactAgentTest {
                 argThat((Map<String, String> vars) ->
                         TEST_SOURCE_PATH.equals(vars.get("sourcePath"))
                                 && codeContent.equals(vars.get("codeContent"))
-                                && vars.size() == 2),
+                                && TEST_PROJECT_ID.equals(vars.get("projectId"))
+                                && vars.size() == 3),
                 eq(FactExtractionResult.class));
     }
 

@@ -65,6 +65,7 @@ public class ProjectScanner {
     private final GraphBuilder graphBuilder;
     private final FrontendGraphBuilder frontendGraphBuilder;
     private final ObjectMapper objectMapper;
+    private final AiScanOrchestrator aiScanOrchestrator;
 
     /** 后端项目标志文件 */
     private static final List<String> BACKEND_INDICATORS = List.of(
@@ -93,7 +94,8 @@ public class ProjectScanner {
                          DocumentRepository documentRepository,
                          GraphBuilder graphBuilder,
                          FrontendGraphBuilder frontendGraphBuilder,
-                         ObjectMapper objectMapper) {
+                         ObjectMapper objectMapper,
+                         AiScanOrchestrator aiScanOrchestrator) {
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
@@ -103,6 +105,7 @@ public class ProjectScanner {
         this.graphBuilder = graphBuilder;
         this.frontendGraphBuilder = frontendGraphBuilder;
         this.objectMapper = objectMapper;
+        this.aiScanOrchestrator = aiScanOrchestrator;
     }
 
     /**
@@ -209,6 +212,17 @@ public class ProjectScanner {
             ScanTask buildTask = createTask(projectId, versionId, "GRAPH_BUILD", "图谱构建");
             completeTask(buildTask, "Graph built in Neo4j", null);
 
+            // 6. 扫描后 AI 编排（按 scanScope 中的 enableAi/autoGenerateTestCase/minConfidence 开关执行）
+            try {
+                io.github.legacygraph.dto.AiScanConfig aiConfig =
+                        io.github.legacygraph.dto.AiScanConfig.fromScanScope(
+                                version != null ? version.getScanScope() : null, objectMapper);
+                aiScanOrchestrator.orchestrate(projectId, versionId, aiConfig);
+            } catch (Exception aiEx) {
+                // AI 编排失败不应使整个扫描失败
+                log.error("AI orchestration failed (scan still SUCCESS): versionId={}", versionId, aiEx);
+            }
+
             if (version != null) {
                 version.setScanStatus("SUCCESS");
                 version.setFinishedAt(LocalDateTime.now());
@@ -233,7 +247,8 @@ public class ProjectScanner {
     /**
      * 从代码中自动发现数据库连接配置
      * 扫描 application*.yml / application*.properties / application*.yaml，提取 datasource 配置
-     * @return 新创建的数据库连接数量
+     * 如果同一 (host+port+database) 的连接已存在则更新，否则新建
+     * @return 新创建或更新的数据库连接数量
      */
     private int discoverDbConnections(String projectId, String baseDir) {
         int count = 0;
@@ -252,7 +267,7 @@ public class ProjectScanner {
                     .limit(10)
                     .collect(Collectors.toList());
 
-            Set<String> discoveredUrls = new HashSet<>(); // 去重
+            Set<String> discoveredUrls = new HashSet<>(); // 本次扫描去重
 
             for (Path configFile : configFiles) {
                 try {
@@ -264,25 +279,50 @@ public class ProjectScanner {
                             String dbType = dbConfig.getOrDefault("dbType", "POSTGRESQL").toUpperCase();
                             String schema = dbType.equals("MYSQL") || dbType.equals("MARIADB")
                                     ? "" : dbConfig.getOrDefault("schema", "public");
+                            String host = dbConfig.getOrDefault("host", "localhost");
+                            int port = Integer.parseInt(dbConfig.getOrDefault("port",
+                                    dbType.equals("MYSQL") || dbType.equals("MARIADB") ? "3306" : "5432"));
+                            String database = dbConfig.getOrDefault("database", "unknown");
 
-                            DbConnection conn = new DbConnection();
-                            conn.setProjectId(projectId);
-                            conn.setConnectionName(autoDbName(dbConfig, configFile));
-                            conn.setDbType(dbType);
-                            conn.setHost(dbConfig.getOrDefault("host", "localhost"));
-                            conn.setPort(Integer.parseInt(dbConfig.getOrDefault("port",
-                                    dbType.equals("MYSQL") || dbType.equals("MARIADB") ? "3306" : "5432")));
-                            conn.setDatabaseName(dbConfig.getOrDefault("database", "unknown"));
-                            conn.setSchemaName(schema);
-                            conn.setUsername(dbConfig.getOrDefault("username", ""));
-                            conn.setPassword(dbConfig.getOrDefault("password", ""));
-                            conn.setStatus("READY");
-                            conn.setCreatedBy("auto-discovery");
-                            conn.setCreatedAt(LocalDateTime.now());
-                            conn.setUpdatedAt(LocalDateTime.now());
-                            dbConnectionRepository.insert(conn);
+                            // 查找是否已有相同 (host, port, database) 的连接
+                            DbConnection existing = dbConnectionRepository.selectOne(
+                                    new LambdaQueryWrapper<DbConnection>()
+                                            .eq(DbConnection::getProjectId, projectId)
+                                            .eq(DbConnection::getHost, host)
+                                            .eq(DbConnection::getPort, port)
+                                            .eq(DbConnection::getDatabaseName, database)
+                            );
+
+                            if (existing != null) {
+                                // 更新已有连接
+                                existing.setDbType(dbType);
+                                existing.setSchemaName(schema);
+                                existing.setUsername(dbConfig.getOrDefault("username", existing.getUsername()));
+                                existing.setPassword(dbConfig.getOrDefault("password", existing.getPassword()));
+                                existing.setConnectionName(autoDbName(dbConfig, configFile));
+                                existing.setUpdatedAt(LocalDateTime.now());
+                                dbConnectionRepository.updateById(existing);
+                                log.info("Updated existing DB connection: {} (id={})", existing.getConnectionName(), existing.getId());
+                            } else {
+                                // 新建连接
+                                DbConnection conn = new DbConnection();
+                                conn.setProjectId(projectId);
+                                conn.setConnectionName(autoDbName(dbConfig, configFile));
+                                conn.setDbType(dbType);
+                                conn.setHost(host);
+                                conn.setPort(port);
+                                conn.setDatabaseName(database);
+                                conn.setSchemaName(schema);
+                                conn.setUsername(dbConfig.getOrDefault("username", ""));
+                                conn.setPassword(dbConfig.getOrDefault("password", ""));
+                                conn.setStatus("READY");
+                                conn.setCreatedBy("auto-discovery");
+                                conn.setCreatedAt(LocalDateTime.now());
+                                conn.setUpdatedAt(LocalDateTime.now());
+                                dbConnectionRepository.insert(conn);
+                                log.info("Auto-discovered DB connection: {} from {}", conn.getConnectionName(), configFile);
+                            }
                             count++;
-                            log.info("Auto-discovered DB connection: {} from {}", conn.getConnectionName(), configFile);
                         }
                     }
                 } catch (Exception e) {
@@ -371,6 +411,7 @@ public class ProjectScanner {
                     if (dsMap.get("username") instanceof String u) result.put("username", u);
                     if (dsMap.get("password") instanceof String p) result.put("password", p);
                     if (dsMap.get("driver-class-name") instanceof String d) result.put("dbType", driverToDbType(d));
+                    if (dsMap.get("driverClassName") instanceof String dc) result.put("dbType", driverToDbType(dc));
 
                     // Druid 嵌套: spring.datasource.druid.master.{url,username,password}
                     Object druid = dsMap.get("druid");
@@ -421,6 +462,8 @@ public class ProjectScanner {
                 result.put("username", extractPropertyValue(line));
             } else if (line.startsWith("spring.datasource.password")) {
                 result.put("password", extractPropertyValue(line));
+            } else if (line.startsWith("spring.datasource.driver-class-name")) {
+                result.put("dbType", driverToDbType(extractPropertyValue(line)));
             }
         }
     }
@@ -603,31 +646,42 @@ public class ProjectScanner {
                         relativePath = docFile.getFileName().toString();
                     }
 
-                    // 避免重复创建
-                    long exists = documentRepository.selectCount(
+                    // 查找是否已有相同 (projectId, docName) 的文档
+                    Document existing = documentRepository.selectOne(
                             new LambdaQueryWrapper<Document>()
                                     .eq(Document::getProjectId, projectId)
                                     .eq(Document::getDocName, relativePath)
                     );
-                    if (exists > 0) continue;
 
-                    Document doc = new Document();
-                    doc.setProjectId(projectId);
-                    doc.setVersionId(versionId);
-                    doc.setDocName(relativePath);
-                    doc.setFilePath(docFile.toAbsolutePath().toString());
-                    doc.setDocType(detectDocType(docFile.getFileName().toString()));
-                    doc.setFileType(detectFileType(docFile.getFileName().toString()));
-                    try {
-                        doc.setFileSize(Files.size(docFile));
-                    } catch (IOException ignored) {
-                        // fileSize is optional, leave as null
+                    if (existing != null) {
+                        // 更新已有文档
+                        existing.setVersionId(versionId);
+                        existing.setFilePath(docFile.toAbsolutePath().toString());
+                        existing.setDocType(detectDocType(docFile.getFileName().toString()));
+                        existing.setFileType(detectFileType(docFile.getFileName().toString()));
+                        try {
+                            existing.setFileSize(Files.size(docFile));
+                        } catch (IOException ignored) {}
+                        existing.setParseStatus("DISCOVERED");
+                        existing.setUpdatedAt(LocalDateTime.now());
+                        documentRepository.updateById(existing);
+                    } else {
+                        Document doc = new Document();
+                        doc.setProjectId(projectId);
+                        doc.setVersionId(versionId);
+                        doc.setDocName(relativePath);
+                        doc.setFilePath(docFile.toAbsolutePath().toString());
+                        doc.setDocType(detectDocType(docFile.getFileName().toString()));
+                        doc.setFileType(detectFileType(docFile.getFileName().toString()));
+                        try {
+                            doc.setFileSize(Files.size(docFile));
+                        } catch (IOException ignored) {}
+                        doc.setParseStatus("DISCOVERED");
+                        doc.setUploadedBy("auto-discovery");
+                        doc.setCreatedAt(LocalDateTime.now());
+                        doc.setUpdatedAt(LocalDateTime.now());
+                        documentRepository.insert(doc);
                     }
-                    doc.setParseStatus("DISCOVERED");
-                    doc.setUploadedBy("auto-discovery");
-                    doc.setCreatedAt(LocalDateTime.now());
-                    doc.setUpdatedAt(LocalDateTime.now());
-                    documentRepository.insert(doc);
                     count++;
                 } catch (Exception e) {
                     log.debug("Skip document {}: {}", docFile, e.getMessage());

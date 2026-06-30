@@ -1,0 +1,34 @@
+# 迁移代码自动转换
+
+你是一位 Spring Boot 迁移专家。请针对以下代码，按目标迁移规则给出转换建议与转换后代码。
+
+## 迁移信息
+- 迁移方向: {migrationDirection}
+- 源文件: {sourcePath}
+- 代码内容:
+```
+{code}
+```
+- 自定义迁移规则（可选）: {customRules}
+
+## 分析要求
+识别并转换常见迁移点（存在才报）：
+1. 过时注解（如 `@Autowired` 字段注入 → 构造注入）。
+2. 包名迁移（`javax.*` → `jakarta.*`）。
+3. 配置/API 变化。
+4. 自定义规则匹配项。
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "summary": "迁移要点一句话",
+  "changes": [
+    { "ruleType": "JAVAX_TO_JAKARTA", "before": "javax.persistence.Entity", "after": "jakarta.persistence.Entity", "reason": "Spring Boot 3 使用 jakarta" }
+  ],
+  "migratedCode": "转换后的代码",
+  "manualReviewNeeded": ["需人工确认的点"]
+}
+```
+
+只输出 JSON，不要其他解释内容。

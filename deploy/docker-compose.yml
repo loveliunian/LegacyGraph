@@ -1,6 +1,6 @@
 # LegacyGraph 应用部署 Docker Compose 配置
 # 仅包含前后端应用代码；PostgreSQL、Neo4j、Redis、MinIO 均使用外部服务器
-# 外部服务连接信息通过 .env 文件或环境变量注入（参见同目录 .env.example）
+# 外部服务连接信息通过 .env 文件或环境变量注入（参见同目录 .env）
 
 services:
   # 后端 Spring Boot 应用

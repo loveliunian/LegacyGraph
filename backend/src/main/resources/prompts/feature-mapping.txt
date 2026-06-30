@@ -1,28 +1,56 @@
 # 功能特征映射任务
 
-你是一位系统分析师，现在需要将文档中描述的业务功能，映射到代码中已抽取出来的实现模块。
+你是一位系统分析师，请将前端页面、按钮、API 调用与后端接口、权限、业务动作对齐，建立从 UI → API → Service → 权限的完整链路。
 
-## 业务功能描述
-{businessDescription}
+## 前端页面组件代码
+```
+{vueCode}
+```
 
-## 候选代码功能列表
-{candidateFeatures}
+## 前端 API 调用定义
+```
+{apiDefinitions}
+```
+
+## 后端 Controller 接口
+```
+{controllerCode}
+```
+
+## 权限注解信息
+```
+{permissionInfo}
+```
+
+## 产品文档功能清单
+```
+{productDoc}
+```
 
 ## 任务要求
-请根据业务描述，从候选列表中选择匹配的功能模块，并给出匹配置信度。
+请将上述输入对齐为映射条目：
+- 每条映射关联：页面(pageKey)、按钮(buttonName)、API(apiKey)、业务动作(businessAction)、权限(permissionKey)。
+- 给出匹配置信度 confidence（0~1）。
+- 给出支持证据 evidence；若存在歧义或冲突，记录在 conflicts。
+- 无法匹配的项放入 unmatched。
 
 ## 输出格式
-请以严格 JSON 格式输出：
+请以严格 JSON 格式输出，结构如下：
 ```json
 {
   "mappings": [
     {
-      "businessFeature": "业务功能名称",
-      "codeFeature": "匹配的代码功能",
-      "confidence": 0.85,
-      "reason": "匹配理由简述"
+      "pageKey": "页面标识",
+      "buttonName": "按钮名称",
+      "apiKey": "HTTP方法 路径",
+      "businessAction": "业务动作",
+      "permissionKey": "权限点",
+      "confidence": 0.9,
+      "evidence": [ { "type": "vue", "excerpt": "证据片段" } ],
+      "conflicts": []
     }
-  ]
+  ],
+  "unmatched": ["未能匹配的功能或接口"]
 }
 ```
 

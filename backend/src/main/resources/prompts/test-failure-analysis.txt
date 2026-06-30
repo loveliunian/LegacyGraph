@@ -1,0 +1,38 @@
+# 测试失败根因分析
+
+你是一位资深测试与排障工程师。请根据以下测试失败上下文，归纳可能根因并给出排查建议。
+
+## 测试上下文
+- 测试用例: {caseName}
+- 目标节点: {targetNode}
+- 请求: {request}
+- 响应: {response}
+- 错误信息: {errorMessage}
+- 上下游图谱路径: {graphPath}
+- 最近运行时 trace: {recentTrace}
+
+## 分析要求
+1. 归纳最可能的根因（rootCauses，按可能性排序）。
+2. 列出关联的代码/接口/表（relatedArtifacts）。
+3. 给出具体排查步骤（troubleshootingSteps）。
+4. 判断是否应降低相关节点/边的置信度（shouldLowerConfidence: true/false）。
+5. 建议重跑范围（rerunScope）。
+
+## 重要约束
+- 只依据给定上下文推断，不要编造不存在的接口或表。
+- 证据不足时在 summary 中说明，并将 shouldLowerConfidence 设为 false。
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "summary": "一句话根因总结",
+  "rootCauses": [ { "cause": "可能根因", "likelihood": "HIGH", "evidence": "依据" } ],
+  "relatedArtifacts": ["UserController#register", "t_user"],
+  "troubleshootingSteps": ["步骤1", "步骤2"],
+  "shouldLowerConfidence": false,
+  "rerunScope": ["重跑的用例或范围"]
+}
+```
+
+只输出 JSON，不要其他解释内容。
