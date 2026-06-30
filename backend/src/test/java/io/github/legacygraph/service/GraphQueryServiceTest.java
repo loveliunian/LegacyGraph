@@ -67,6 +67,9 @@ class GraphQueryServiceTest {
     @Mock
     private Relationship relationship;
 
+    @Mock
+    private CacheService cacheService;
+
     private GraphQueryService graphQueryService;
 
     @BeforeEach
@@ -76,8 +79,12 @@ class GraphQueryServiceTest {
                 scanVersionRepository,
                 scanTaskRepository,
                 factRepository,
-                neo4jDriver
+                neo4jDriver,
+                cacheService
         );
+        // 缓存默认未命中：getOrLoad 直接执行 loader（回源），便于测试原始查询逻辑
+        lenient().when(cacheService.getOrLoad(anyString(), any(), any(), any()))
+                .thenAnswer(inv -> ((java.util.function.Supplier<?>) inv.getArgument(3)).get());
     }
 
     @Test

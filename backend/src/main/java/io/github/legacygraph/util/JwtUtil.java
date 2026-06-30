@@ -70,7 +70,7 @@ public class JwtUtil {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (Exception e) {
-            log.error("解析JWT Token失败: {}", e.getMessage());
+            log.warn("解析JWT Token失败: {}", e.getMessage());
             return null;
         }
     }

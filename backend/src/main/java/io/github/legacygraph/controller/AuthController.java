@@ -33,16 +33,20 @@ public class AuthController {
     private final SysUserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final io.github.legacygraph.service.TokenBlacklistService tokenBlacklistService;
 
     /**
      * 构造函数注入
      * @param userRepository 用户数据访问层
      * @param jwtUtil JWT工具
+     * @param tokenBlacklistService JWT 登出黑名单服务
      */
-    public AuthController(SysUserRepository userRepository, JwtUtil jwtUtil) {
+    public AuthController(SysUserRepository userRepository, JwtUtil jwtUtil,
+                          io.github.legacygraph.service.TokenBlacklistService tokenBlacklistService) {
         this.userRepository = userRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.jwtUtil = jwtUtil;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     /**
@@ -128,9 +132,12 @@ public class AuthController {
      * @return 成功结果
      */
     @PostMapping("/logout")
-    @Operation(summary = "用户登出", description = "用户登出系统，清除客户端令牌即可")
+    @Operation(summary = "用户登出", description = "将当前令牌加入黑名单，使其在过期前立即失效")
     @Log(value = "用户登出", type = Log.OperationType.LOGOUT)
     public Result<Void> logout(@RequestHeader(value = "Authorization", required = false) String token) {
+        if (token != null && token.startsWith("Bearer ")) {
+            tokenBlacklistService.blacklist(token.substring(7));
+        }
         return Result.success();
     }
 

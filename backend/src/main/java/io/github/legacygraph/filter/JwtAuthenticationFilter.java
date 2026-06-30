@@ -1,5 +1,6 @@
 package io.github.legacygraph.filter;
 
+import io.github.legacygraph.service.TokenBlacklistService;
 import io.github.legacygraph.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -30,7 +32,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = getJwtFromRequest(request);
 
-            if (StringUtils.hasText(jwt) && jwtUtil.validateToken(jwt)) {
+            if (StringUtils.hasText(jwt) && jwtUtil.validateToken(jwt)
+                    && !tokenBlacklistService.isBlacklisted(jwt)) {
                 String username = jwtUtil.getUsernameFromToken(jwt);
                 String userId = jwtUtil.getUserIdFromToken(jwt);
 
@@ -54,8 +57,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private String getJwtFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
+            String token = bearerToken.substring(7);
+            return StringUtils.hasText(token) ? token : null;
         }
-        return bearerToken;
+        return null;
     }
 }

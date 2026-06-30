@@ -123,6 +123,7 @@ watch(
     graphNodes.value = newNodes.map((node) => ({
       id: node.id,
       type: 'custom',
+      position: node.position || { x: Math.random() * 600, y: Math.random() * 400 },
       data: (node.data || {}) as any,
       style: {
         width: 180,

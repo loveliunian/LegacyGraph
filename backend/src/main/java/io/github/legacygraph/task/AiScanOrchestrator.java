@@ -5,10 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.agent.FeatureMappingAgent;
 import io.github.legacygraph.agent.TestCaseAgent;
+import io.github.legacygraph.builder.BusinessGraphBuilder;
+import io.github.legacygraph.common.EdgeType;
+import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.entity.Document;
 import io.github.legacygraph.entity.Fact;
+import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.entity.ScanTask;
@@ -24,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -55,6 +60,7 @@ public class AiScanOrchestrator {
     private final DocUnderstandingAgent docUnderstandingAgent;
     private final FeatureMappingAgent featureMappingAgent;
     private final TestCaseAgent testCaseAgent;
+    private final BusinessGraphBuilder businessGraphBuilder;
     private final ObjectMapper objectMapper;
 
     /** 测试生成的高价值节点上限，避免编排耗时过长 */
@@ -71,6 +77,7 @@ public class AiScanOrchestrator {
                               DocUnderstandingAgent docUnderstandingAgent,
                               FeatureMappingAgent featureMappingAgent,
                               TestCaseAgent testCaseAgent,
+                              BusinessGraphBuilder businessGraphBuilder,
                               ObjectMapper objectMapper) {
         this.scanTaskRepository = scanTaskRepository;
         this.documentRepository = documentRepository;
@@ -81,6 +88,7 @@ public class AiScanOrchestrator {
         this.docUnderstandingAgent = docUnderstandingAgent;
         this.featureMappingAgent = featureMappingAgent;
         this.testCaseAgent = testCaseAgent;
+        this.businessGraphBuilder = businessGraphBuilder;
         this.objectMapper = objectMapper;
     }
 
@@ -126,6 +134,7 @@ public class AiScanOrchestrator {
                             docUnderstandingAgent.extractBusinessFacts(projectId,
                                     truncate(content, 8000), doc.getFilePath());
                     factCount += persistBusinessFacts(projectId, versionId, doc, extraction);
+                    buildBusinessGraph(projectId, versionId, doc, extraction);
                 } catch (Exception e) {
                     log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
                 }
@@ -143,6 +152,15 @@ public class AiScanOrchestrator {
             return 0;
         }
         int count = 0;
+        if (extraction.getBusinessDomains() != null) {
+            for (DocUnderstandingAgent.BusinessDomain domain : extraction.getBusinessDomains()) {
+                String key = "domain:" + nonBlank(domain.getName(), domain.getDescription());
+                if (saveAiFact(projectId, versionId, "BUSINESS_DOMAIN", key, domain.getName(),
+                        doc.getFilePath(), domain, domain.getConfidence())) {
+                    count++;
+                }
+            }
+        }
         if (extraction.getBusinessProcesses() != null) {
             for (DocUnderstandingAgent.BusinessProcess process : extraction.getBusinessProcesses()) {
                 String key = process.getKey() != null ? process.getKey()
@@ -162,7 +180,65 @@ public class AiScanOrchestrator {
                 }
             }
         }
+        if (extraction.getBusinessRules() != null) {
+            for (DocUnderstandingAgent.BusinessRule rule : extraction.getBusinessRules()) {
+                String key = "rule:" + nonBlank(rule.getName(), rule.getExpression());
+                if (saveAiFact(projectId, versionId, "BUSINESS_RULE", key, rule.getName(),
+                        doc.getFilePath(), rule, rule.getConfidence())) {
+                    count++;
+                }
+            }
+        }
+        if (extraction.getRoles() != null) {
+            for (String role : extraction.getRoles()) {
+                if (role == null || role.isBlank()) {
+                    continue;
+                }
+                if (saveAiFact(projectId, versionId, "BUSINESS_ROLE", "role:" + role,
+                        role, doc.getFilePath(), role, 0.7)) {
+                    count++;
+                }
+            }
+        }
+        if (extraction.getStatusTransitions() != null) {
+            for (DocUnderstandingAgent.StatusTransition transition : extraction.getStatusTransitions()) {
+                String key = "transition:" + nonBlank(transition.getBusinessObject(), "object")
+                        + ":" + nonBlank(transition.getFromStatus(), "?")
+                        + "->" + nonBlank(transition.getToStatus(), "?")
+                        + ":" + nonBlank(transition.getTrigger(), "");
+                String name = nonBlank(transition.getBusinessObject(), "对象") + " "
+                        + nonBlank(transition.getFromStatus(), "?") + " -> "
+                        + nonBlank(transition.getToStatus(), "?");
+                if (saveAiFact(projectId, versionId, "STATUS_TRANSITION", key, name,
+                        doc.getFilePath(), transition, transition.getConfidence())) {
+                    count++;
+                }
+            }
+        }
+        if (extraction.getFeatures() != null) {
+            for (String feature : extraction.getFeatures()) {
+                if (feature == null || feature.isBlank()) {
+                    continue;
+                }
+                if (saveAiFact(projectId, versionId, "FEATURE", "feature:" + feature,
+                        feature, doc.getFilePath(), feature, 0.7)) {
+                    count++;
+                }
+            }
+        }
         return count;
+    }
+
+    private void buildBusinessGraph(String projectId, String versionId, Document doc,
+                                    DocUnderstandingAgent.BusinessFactExtraction extraction) {
+        if (businessGraphBuilder == null || extraction == null) {
+            return;
+        }
+        try {
+            businessGraphBuilder.buildBusinessGraph(projectId, versionId, extraction);
+        } catch (Exception e) {
+            log.warn("Business graph build failed for doc {}: {}", doc.getId(), e.getMessage());
+        }
     }
 
     // ==================== AI_FEATURE_MAPPING ====================
@@ -172,9 +248,9 @@ public class AiScanOrchestrator {
         try {
             // 收集前端页面节点与后端 API 节点作为映射输入
             List<GraphNode> pages = neo4jGraphDao.queryNodes(projectId, versionId,
-                    "PAGE", null, null, null, 50);
+                    NodeType.Page.name(), null, null, null, 50);
             List<GraphNode> apis = neo4jGraphDao.queryNodes(projectId, versionId,
-                    "API", null, null, null, 50);
+                    NodeType.ApiEndpoint.name(), null, null, null, 50);
 
             if (pages.isEmpty() && apis.isEmpty()) {
                 completeTask(task, "无可映射的页面/接口节点，跳过", null);
@@ -192,11 +268,70 @@ public class AiScanOrchestrator {
             FeatureMappingAgent.MappingResult result = featureMappingAgent.mapFeatures(request);
             int mappingCount = result != null && result.getMappings() != null
                     ? result.getMappings().size() : 0;
-            completeTask(task, "AI 生成功能映射 " + mappingCount + " 条（PENDING_CONFIRM）", null);
+            int persistedCount = persistFeatureMappings(projectId, versionId, result);
+            completeTask(task, "AI 生成功能映射 " + mappingCount + " 条，落地待确认关系/审核 " + persistedCount + " 条", null);
         } catch (Exception e) {
             log.error("AI_FEATURE_MAPPING failed: versionId={}", versionId, e);
             completeTask(task, null, e.getMessage());
         }
+    }
+
+    private int persistFeatureMappings(String projectId, String versionId,
+                                       FeatureMappingAgent.MappingResult result) {
+        if (result == null || result.getMappings() == null) {
+            return 0;
+        }
+        int persisted = 0;
+        for (FeatureMappingAgent.Mapping mapping : result.getMappings()) {
+            if (mapping == null) {
+                continue;
+            }
+            String targetId = mappingTargetId(mapping);
+            try {
+                GraphEdge edge = createPendingFeatureEdge(projectId, versionId, mapping);
+                if (edge != null) {
+                    targetId = edge.getId();
+                    persisted++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to persist AI feature mapping edge {}: {}", targetId, e.getMessage());
+            }
+            if (createMappingReviewRecord(projectId, mapping, targetId)) {
+                persisted++;
+            }
+        }
+        return persisted;
+    }
+
+    private GraphEdge createPendingFeatureEdge(String projectId, String versionId,
+                                               FeatureMappingAgent.Mapping mapping) throws Exception {
+        if (mapping.getPageKey() == null || mapping.getPageKey().isBlank()
+                || mapping.getApiKey() == null || mapping.getApiKey().isBlank()) {
+            return null;
+        }
+        GraphNode page = neo4jGraphDao.findNode(projectId, versionId, NodeType.Page.name(), mapping.getPageKey())
+                .orElse(null);
+        GraphNode api = neo4jGraphDao.findNode(projectId, versionId, NodeType.ApiEndpoint.name(), mapping.getApiKey())
+                .orElse(null);
+        if (page == null || api == null) {
+            return null;
+        }
+        GraphEdge edge = new GraphEdge();
+        edge.setId(UUID.randomUUID().toString());
+        edge.setProjectId(projectId);
+        edge.setVersionId(versionId);
+        edge.setFromNodeId(page.getId());
+        edge.setToNodeId(api.getId());
+        edge.setEdgeType(EdgeType.CALLS.name());
+        edge.setEdgeKey("ai-feature:" + mapping.getPageKey() + "->" + mapping.getApiKey());
+        edge.setSourceType("AI_FEATURE_MAPPING");
+        edge.setConfidence(BigDecimal.valueOf(normalizeConfidence(mapping.getConfidence())));
+        edge.setStatus("PENDING_CONFIRM");
+        edge.setProperties(objectMapper.writeValueAsString(mapping));
+        edge.setCreatedAt(LocalDateTime.now());
+        edge.setUpdatedAt(LocalDateTime.now());
+        neo4jGraphDao.createEdge(edge);
+        return edge;
     }
 
     // ==================== AI_TEST_GENERATE ====================
@@ -205,7 +340,7 @@ public class AiScanOrchestrator {
         ScanTask task = createTask(projectId, versionId, "AI_TEST_GENERATE", "测试用例生成");
         try {
             List<GraphNode> apiNodes = neo4jGraphDao.queryNodes(projectId, versionId,
-                    "API", null, null, null, MAX_TEST_GEN_NODES);
+                    NodeType.ApiEndpoint.name(), null, null, null, MAX_TEST_GEN_NODES);
             int generated = 0;
             for (GraphNode node : apiNodes) {
                 try {
@@ -241,16 +376,48 @@ public class AiScanOrchestrator {
             tc.setCaseCode("AI-TC-" + versionId + "-" + index);
             tc.setCaseName(gen.getCaseName() != null ? gen.getCaseName() : node.getNodeName() + " 测试");
             tc.setCaseType(gen.getCaseType() != null ? gen.getCaseType().name() : "API");
+            tc.setScenario(nonBlank(gen.getFeatureKey(), node.getNodeKey()));
             tc.setTargetNodeId(node.getId());
-            tc.setSteps(gen.getSteps() != null ? String.join("\n", gen.getSteps()) : "");
-            tc.setExpectedResult("验证接口返回符合预期");
+            tc.setPriority("MEDIUM");
+            tc.setPreconditions(gen.getPreconditions() != null ? String.join("\n", gen.getPreconditions()) : "");
+            tc.setSteps(buildStructuredSteps(gen));
+            tc.setExpectedResult(buildExpectedResult(gen));
+            tc.setConfidence(BigDecimal.valueOf(0.7));
             tc.setStatus("ENABLED");
             tc.setGeneratedBy("LLM");
             tc.setCreatedAt(LocalDateTime.now());
+            tc.setUpdatedAt(LocalDateTime.now());
             testCaseRepository.insert(tc);
         } catch (Exception e) {
             log.warn("Failed to persist generated test case: {}", e.getMessage());
         }
+    }
+
+    private String buildStructuredSteps(GeneratedTestCase gen) throws Exception {
+        StringBuilder steps = new StringBuilder();
+        if (gen.getSteps() != null && !gen.getSteps().isEmpty()) {
+            steps.append(String.join("\n", gen.getSteps()));
+        }
+        if (gen.getRequest() != null && !gen.getRequest().isEmpty()) {
+            if (!steps.isEmpty()) {
+                steps.append("\n");
+            }
+            steps.append("REQUEST ").append(objectMapper.writeValueAsString(gen.getRequest()));
+        }
+        if (gen.getNeedHumanInput() != null && !gen.getNeedHumanInput().isEmpty()) {
+            if (!steps.isEmpty()) {
+                steps.append("\n");
+            }
+            steps.append("NEED_HUMAN_INPUT ").append(String.join("; ", gen.getNeedHumanInput()));
+        }
+        return steps.toString();
+    }
+
+    private String buildExpectedResult(GeneratedTestCase gen) throws Exception {
+        if (gen.getAssertions() == null || gen.getAssertions().isEmpty()) {
+            return "验证接口返回符合预期";
+        }
+        return objectMapper.writeValueAsString(gen.getAssertions());
     }
 
     // ==================== AI_REVIEW_PREPARE ====================
@@ -308,6 +475,39 @@ public class AiScanOrchestrator {
             return true;
         } catch (Exception e) {
             log.warn("Failed to create review record for node {}: {}", node.getId(), e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean createMappingReviewRecord(String projectId, FeatureMappingAgent.Mapping mapping, String targetId) {
+        try {
+            long exists = reviewRecordRepository.selectCount(
+                    new LambdaQueryWrapper<ReviewRecord>()
+                            .eq(ReviewRecord::getProjectId, projectId)
+                            .eq(ReviewRecord::getTargetId, targetId)
+                            .eq(ReviewRecord::getStatus, "PENDING"));
+            if (exists > 0) {
+                return false;
+            }
+            ReviewRecord record = new ReviewRecord();
+            record.setId(UUID.randomUUID().toString());
+            record.setProjectId(projectId);
+            record.setTargetType("EDGE");
+            record.setTargetId(targetId);
+            record.setTargetName(mappingTargetId(mapping));
+            record.setGraphType("AI_FEATURE_MAPPING");
+            record.setConfidence(normalizeConfidence(mapping.getConfidence()));
+            record.setPriority(mapping.getConfidence() < 0.6 ? "HIGH" : "MEDIUM");
+            record.setStatus("PENDING");
+            record.setComment("AI 功能映射待确认："
+                    + nonBlank(mapping.getBusinessAction(), mappingTargetId(mapping))
+                    + "，页面=" + nonBlank(mapping.getPageKey(), "-")
+                    + "，接口=" + nonBlank(mapping.getApiKey(), "-"));
+            record.setCreatedAt(LocalDateTime.now());
+            reviewRecordRepository.insert(record);
+            return true;
+        } catch (Exception e) {
+            log.warn("Failed to create review record for mapping {}: {}", mappingTargetId(mapping), e.getMessage());
             return false;
         }
     }
@@ -381,6 +581,21 @@ public class AiScanOrchestrator {
             return "";
         }
         return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    private String mappingTargetId(FeatureMappingAgent.Mapping mapping) {
+        return nonBlank(mapping.getPageKey(), "-") + "->" + nonBlank(mapping.getApiKey(), "-");
+    }
+
+    private String nonBlank(String preferred, String fallback) {
+        return preferred != null && !preferred.isBlank() ? preferred : fallback;
+    }
+
+    private double normalizeConfidence(double confidence) {
+        if (confidence <= 0) {
+            return 0.7;
+        }
+        return Math.min(1.0, Math.max(0.0, confidence));
     }
 
     private ScanTask createTask(String projectId, String versionId, String taskType, String taskName) {

@@ -4,16 +4,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.LlmProvider;
 import io.github.legacygraph.entity.PromptRun;
 import io.github.legacygraph.repository.PromptRunRepository;
+import io.github.legacygraph.service.CacheService;
 import io.github.legacygraph.service.LlmProviderService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,6 +44,13 @@ public class LlmGateway {
 
     /** 缓存已创建的 ChatModel，按 providerCode 缓存 */
     private final Map<String, OpenAiChatModel> chatModelCache = new ConcurrentHashMap<>();
+
+    /** LLM 结果缓存（可选）：以 inputHash 去重，命中跳过真实调用。Redis 不可用时为 null，自动降级。 */
+    @Autowired(required = false)
+    private CacheService cacheService;
+
+    /** LLM 结果缓存 TTL */
+    private static final Duration LLM_CACHE_TTL = Duration.ofDays(7);
 
     public LlmGateway(ObjectMapper objectMapper,
                       PromptRunRepository promptRunRepository,
@@ -112,6 +122,27 @@ public class LlmGateway {
         String maskedPrompt = piiMaskingService.mask(prompt);
         log.debug("Rendered prompt:\n{}", maskedPrompt);
 
+        String inputHash = sha256(prompt);
+
+        // 命中 LLM 结果缓存：直接反序列化返回，跳过真实调用与 DB 写入
+        String cacheKey = llmCacheKey(templateName, inputHash);
+        if (cacheService != null && cacheKey != null) {
+            String cachedJson = cacheService.getString(cacheKey);
+            if (cachedJson != null) {
+                try {
+                    log.info("LLM cache hit: template={}, inputHash={}", templateName, inputHash);
+                    if (responseType == String.class) {
+                        return (T) cachedJson;
+                    }
+                    return objectMapper.readValue(cachedJson, responseType);
+                } catch (Exception e) {
+                    // 缓存内容损坏 → 失效后回源
+                    log.warn("LLM cache deserialize failed, evict and recompute: {}", e.getMessage());
+                    cacheService.evict(cacheKey);
+                }
+            }
+        }
+
         // 获取当前默认提供商信息
         LlmProvider provider = llmProviderService.getActiveDefault();
         String providerCode = provider != null ? provider.getProviderCode() : "unknown";
@@ -125,7 +156,7 @@ public class LlmGateway {
         run.setModelId(modelId);
         run.setTemplateCode(templateName);
         run.setTemplateVersion("1.0");
-        run.setInputHash(sha256(prompt));
+        run.setInputHash(inputHash);
         run.setMaskedInput(maskedPrompt);
         run.setStatus("RUNNING");
         run.setCreatedAt(LocalDateTime.now());
@@ -166,6 +197,7 @@ public class LlmGateway {
             run.setStatus("SUCCESS");
             run.setParsedOutput(response);
             safeUpdate(run);
+            cacheLlmResult(cacheKey, response);
             return (T) response;
         }
 
@@ -176,6 +208,8 @@ public class LlmGateway {
             run.setStatus("SUCCESS");
             run.setParsedOutput(writeJsonSafe(result));
             safeUpdate(run);
+            // 回填缓存：存可反序列化为目标 DTO 的干净 JSON
+            cacheLlmResult(cacheKey, writeJsonSafe(result));
             log.info("LLM call completed: projectId={}, template={}, provider={}, model={}",
                     projectId, templateName, providerCode, modelId);
             return result;
@@ -194,8 +228,7 @@ public class LlmGateway {
     /**
      * 从 ChatResponse 提取 token 用量并写入审计记录（容错，缺失则跳过）
      */
-    private void applyUsage(PromptRun run, ChatResponse chatResponse) {
-        try {
+    private void applyUsage(PromptRun run, ChatResponse chatResponse) {        try {
             if (chatResponse == null || chatResponse.getMetadata() == null
                     || chatResponse.getMetadata().getUsage() == null) {
                 return;
@@ -246,6 +279,26 @@ public class LlmGateway {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 构造 LLM 结果缓存 key：lg:llm:result:{template}:{inputHash}
+     */
+    private String llmCacheKey(String templateName, String inputHash) {
+        if (inputHash == null) {
+            return null;
+        }
+        return "llm:result:" + templateName + ":" + inputHash;
+    }
+
+    /**
+     * 回填 LLM 结果缓存（容错，Redis 不可用时忽略）
+     */
+    private void cacheLlmResult(String cacheKey, String json) {
+        if (cacheService == null || cacheKey == null || json == null) {
+            return;
+        }
+        cacheService.putString(cacheKey, json, LLM_CACHE_TTL);
     }
 
     /**

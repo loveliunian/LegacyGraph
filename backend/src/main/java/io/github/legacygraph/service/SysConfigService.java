@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.entity.SysConfig;
 import io.github.legacygraph.repository.SysConfigRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -66,16 +68,18 @@ public class SysConfigService {
     }
 
     /**
-     * 根据键获取配置值
+     * 根据键获取配置值（缓存：config-value）
      */
+    @Cacheable(cacheNames = "config-value", key = "#configKey", unless = "#result == null")
     public String getValue(String configKey) {
         SysConfig config = getByKey(configKey);
         return config != null ? config.getConfigValue() : null;
     }
 
     /**
-     * 获取所有配置键值对
+     * 获取所有配置键值对（缓存：config-all）
      */
+    @Cacheable(cacheNames = "config-all", key = "'ACTIVE'")
     public Map<String, String> getAllConfigMap() {
         LambdaQueryWrapper<SysConfig> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysConfig::getStatus, "ACTIVE");
@@ -85,8 +89,9 @@ public class SysConfigService {
     }
 
     /**
-     * 创建配置
+     * 创建配置（写操作清空配置缓存）
      */
+    @CacheEvict(cacheNames = {"config-value", "config-all"}, allEntries = true)
     public SysConfig create(SysConfig config) {
         config.setId(UUID.randomUUID().toString());
         config.setConfigType(config.getConfigType() == null ? "STRING" : config.getConfigType());
@@ -99,16 +104,18 @@ public class SysConfigService {
     }
 
     /**
-     * 更新配置
+     * 更新配置（写操作清空配置缓存）
      */
+    @CacheEvict(cacheNames = {"config-value", "config-all"}, allEntries = true)
     public boolean update(SysConfig config) {
         config.setUpdatedAt(LocalDateTime.now());
         return sysConfigRepository.updateById(config) > 0;
     }
 
     /**
-     * 更新配置值
+     * 更新配置值（写操作清空配置缓存）
      */
+    @CacheEvict(cacheNames = {"config-value", "config-all"}, allEntries = true)
     public boolean updateValue(String configKey, String value) {
         SysConfig config = getByKey(configKey);
         if (config == null) {
@@ -120,8 +127,9 @@ public class SysConfigService {
     }
 
     /**
-     * 删除配置
+     * 删除配置（写操作清空配置缓存）
      */
+    @CacheEvict(cacheNames = {"config-value", "config-all"}, allEntries = true)
     public boolean delete(String id) {
         return sysConfigRepository.deleteById(id) > 0;
     }

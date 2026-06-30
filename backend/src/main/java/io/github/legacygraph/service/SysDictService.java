@@ -7,6 +7,8 @@ import io.github.legacygraph.entity.SysDict;
 import io.github.legacygraph.entity.SysDictItem;
 import io.github.legacygraph.repository.SysDictItemRepository;
 import io.github.legacygraph.repository.SysDictRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -102,9 +104,10 @@ public class SysDictService {
     }
 
     /**
-     * 删除字典类型
+     * 删除字典类型（级联删除字典项，清空字典项缓存）
      */
     @Transactional
+    @CacheEvict(cacheNames = {"dict-items", "dict-map"}, allEntries = true)
     public boolean delete(String id) {
         // 删除字典下所有项
         LambdaQueryWrapper<SysDictItem> itemWrapper = new LambdaQueryWrapper<>();
@@ -126,8 +129,9 @@ public class SysDictService {
     }
 
     /**
-     * 根据字典编码获取所有项
+     * 根据字典编码获取所有项（缓存：dict-items）
      */
+    @Cacheable(cacheNames = "dict-items", key = "#dictCode")
     public List<SysDictItem> getItemsByDictCode(String dictCode) {
         SysDict dict = getByCode(dictCode);
         if (dict == null) {
@@ -137,8 +141,9 @@ public class SysDictService {
     }
 
     /**
-     * 获取字典项映射（值 -> 标签）
+     * 获取字典项映射（值 -> 标签）（缓存：dict-map）
      */
+    @Cacheable(cacheNames = "dict-map", key = "#dictCode")
     public Map<String, String> getItemMap(String dictCode) {
         List<SysDictItem> items = getItemsByDictCode(dictCode);
         return items.stream()
@@ -146,8 +151,9 @@ public class SysDictService {
     }
 
     /**
-     * 创建字典项
+     * 创建字典项（写操作清空字典项缓存）
      */
+    @CacheEvict(cacheNames = {"dict-items", "dict-map"}, allEntries = true)
     public SysDictItem createItem(SysDictItem item) {
         item.setId(UUID.randomUUID().toString());
         item.setStatus(item.getStatus() == null ? "ACTIVE" : item.getStatus());
@@ -160,16 +166,18 @@ public class SysDictService {
     }
 
     /**
-     * 更新字典项
+     * 更新字典项（写操作清空字典项缓存）
      */
+    @CacheEvict(cacheNames = {"dict-items", "dict-map"}, allEntries = true)
     public boolean updateItem(SysDictItem item) {
         item.setUpdatedAt(LocalDateTime.now());
         return sysDictItemRepository.updateById(item) > 0;
     }
 
     /**
-     * 删除字典项
+     * 删除字典项（写操作清空字典项缓存）
      */
+    @CacheEvict(cacheNames = {"dict-items", "dict-map"}, allEntries = true)
     public boolean deleteItem(String id) {
         return sysDictItemRepository.deleteById(id) > 0;
     }

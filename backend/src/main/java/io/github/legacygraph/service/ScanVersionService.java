@@ -11,6 +11,7 @@ import io.github.legacygraph.repository.ScanVersionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,11 +21,21 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
 
     private final ScanTaskRepository scanTaskRepository;
     private final ScanVersionRepository scanVersionRepository;
+    private final CacheService cacheService;
+
+    /** 进度缓存 key 前缀 */
+    private static final String PROGRESS_KEY = "scan:progress:";
+    /** 运行中进度缓存 TTL（短，吸收高频轮询同时不长时间陈旧） */
+    private static final Duration RUNNING_TTL = Duration.ofSeconds(3);
+    /** 终态进度缓存 TTL（长，结果不再变化） */
+    private static final Duration TERMINAL_TTL = Duration.ofMinutes(30);
 
     public ScanVersionService(ScanTaskRepository scanTaskRepository,
-                              ScanVersionRepository scanVersionRepository) {
+                              ScanVersionRepository scanVersionRepository,
+                              CacheService cacheService) {
         this.scanTaskRepository = scanTaskRepository;
         this.scanVersionRepository = scanVersionRepository;
+        this.cacheService = cacheService;
     }
 
     /**
@@ -47,9 +58,16 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
     }
 
     /**
-     * 获取扫描进度
+     * 获取扫描进度（缓存优先：减轻前端高频轮询对 DB 的压力）。
+     * 运行中以短 TTL 缓存吸收轮询峰值，终态以长 TTL 缓存。
      */
     public ScanProgressResponse getScanProgress(String versionId) {
+        String cacheKey = PROGRESS_KEY + versionId;
+        ScanProgressResponse cached = cacheService.get(cacheKey, ScanProgressResponse.class);
+        if (cached != null) {
+            return cached;
+        }
+
         ScanVersion version = scanVersionRepository.selectById(versionId);
         if (version == null) {
             throw new IllegalArgumentException("扫描版本不存在: " + versionId);
@@ -77,7 +95,15 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
 
         int progress = totalTasks > 0 ? (completedTasks * 100 / totalTasks) : 0;
 
-        return new ScanProgressResponse(versionId, version.getScanStatus(), progress, taskProgressList);
+        ScanProgressResponse response =
+                new ScanProgressResponse(versionId, version.getScanStatus(), progress, taskProgressList);
+
+        // 终态用长 TTL，运行中用短 TTL
+        boolean terminal = "SUCCESS".equals(version.getScanStatus())
+                || "FAILED".equals(version.getScanStatus())
+                || "CANCELLED".equals(version.getScanStatus());
+        cacheService.put(cacheKey, response, terminal ? TERMINAL_TTL : RUNNING_TTL);
+        return response;
     }
 
     /**
@@ -95,6 +121,8 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
             }
             version.setUpdatedAt(LocalDateTime.now());
             scanVersionRepository.updateById(version);
+            // 状态变更后失效进度缓存，确保下次读取拿到最新状态
+            cacheService.evict(PROGRESS_KEY + versionId);
         }
     }
 
@@ -110,5 +138,6 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 .forEach(task -> scanTaskRepository.deleteById(task.getId()));
         // 再删除版本本身
         scanVersionRepository.deleteById(versionId);
+        cacheService.evict(PROGRESS_KEY + versionId);
     }
 }

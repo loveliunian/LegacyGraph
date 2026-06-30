@@ -2,6 +2,8 @@ package io.github.legacygraph.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.agent.ReportInsightAgent;
+import io.github.legacygraph.dto.ReportInsight;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
 import io.github.legacygraph.entity.GraphEdge;
@@ -55,6 +57,9 @@ class ReportingServiceTest {
     @Mock
     private ReportExportService reportExportService;
 
+    @Mock
+    private ReportInsightAgent reportInsightAgent;
+
     private ReportingService reportingService;
 
     private List<GraphNode> mockNodes;
@@ -70,7 +75,8 @@ class ReportingServiceTest {
                 nodeEvidenceRepository,
                 minioClient,
                 objectMapper,
-                reportExportService
+                reportExportService,
+                reportInsightAgent
         );
 
         GraphNode node1 = new GraphNode();
@@ -225,5 +231,47 @@ class ReportingServiceTest {
         assertEquals(0, report.getTotalNodes());
         assertEquals(0, report.getCoverageRatio().compareTo(BigDecimal.ZERO));
         assertEquals(0, report.getTestPassRatio().compareTo(BigDecimal.ZERO));
+    }
+
+    @Test
+    void testGenerateReportInsights_UsesGraphMetricsAndGapSummary() throws Exception {
+        GraphNode highConfidenceApi = new GraphNode();
+        highConfidenceApi.setId("api-1");
+        highConfidenceApi.setNodeType("ApiEndpoint");
+        highConfidenceApi.setNodeName("下单接口");
+        highConfidenceApi.setStatus("CONFIRMED");
+        highConfidenceApi.setConfidence(BigDecimal.valueOf(0.95));
+
+        GraphNode lowConfidenceNode = new GraphNode();
+        lowConfidenceNode.setId("svc-1");
+        lowConfidenceNode.setNodeType("Service");
+        lowConfidenceNode.setNodeName("库存服务");
+        lowConfidenceNode.setStatus("PENDING_CONFIRM");
+        lowConfidenceNode.setConfidence(BigDecimal.valueOf(0.3));
+
+        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("v1"), isNull(), isNull(), isNull(), isNull(), eq(0)))
+                .thenReturn(List.of(highConfidenceApi, lowConfidenceNode));
+        when(neo4jGraphDao.queryEdges(eq("project-1"), eq("v1"), isNull(), isNull(), eq(0)))
+                .thenReturn(Collections.emptyList());
+        when(testResultRepository.selectList(any())).thenReturn(Collections.emptyList());
+        when(objectMapper.writeValueAsString(any())).thenAnswer(invocation -> {
+            Object value = invocation.getArgument(0);
+            return String.valueOf(value);
+        });
+
+        ReportInsight insight = new ReportInsight();
+        insight.setSummary("优先补高置信 API 测试");
+        ReportInsight.ActionItem action = new ReportInsight.ActionItem();
+        action.setTitle("补充下单接口测试");
+        action.setPriority("HIGH");
+        insight.setActions(List.of(action));
+        when(reportInsightAgent.generateInsights(eq("project-1"), anyString(), anyString())).thenReturn(insight);
+
+        ReportInsight result = reportingService.generateReportInsights("project-1", "v1");
+
+        assertEquals("优先补高置信 API 测试", result.getSummary());
+        verify(reportInsightAgent).generateInsights(eq("project-1"),
+                argThat(metrics -> metrics.contains("totalNodes=2")),
+                argThat(gaps -> gaps.contains("highConfidenceUncovered") && gaps.contains("isolatedNodes")));
     }
 }

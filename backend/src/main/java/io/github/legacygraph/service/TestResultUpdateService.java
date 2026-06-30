@@ -1,5 +1,7 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.agent.TestFailureAnalysisAgent;
+import io.github.legacygraph.dto.TestFailureAnalysis;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.ReviewRecord;
@@ -35,6 +37,7 @@ public class TestResultUpdateService {
     private final TestResultRepository testResultRepository;
     private final TestCaseRepository testCaseRepository;
     private final ReviewRecordRepository reviewRecordRepository;
+    private final TestFailureAnalysisAgent testFailureAnalysisAgent;
 
     private static final BigDecimal PASS_EDGE_INCREMENT = new BigDecimal("0.10");
     private static final BigDecimal PASS_NODE_INCREMENT = new BigDecimal("0.05");
@@ -44,11 +47,13 @@ public class TestResultUpdateService {
     public TestResultUpdateService(Neo4jGraphDao neo4jGraphDao,
                                   TestResultRepository testResultRepository,
                                   TestCaseRepository testCaseRepository,
-                                  ReviewRecordRepository reviewRecordRepository) {
+                                  ReviewRecordRepository reviewRecordRepository,
+                                  TestFailureAnalysisAgent testFailureAnalysisAgent) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.testResultRepository = testResultRepository;
         this.testCaseRepository = testCaseRepository;
         this.reviewRecordRepository = reviewRecordRepository;
+        this.testFailureAnalysisAgent = testFailureAnalysisAgent;
     }
 
     /**
@@ -119,8 +124,8 @@ public class TestResultUpdateService {
                 review.setGraphType("code");
                 review.setConfidence(node.getConfidence().doubleValue());
                 review.setPriority("medium");
-                review.setStatus("pending");
-                review.setComment("测试失败: " + (failureMessage != null ? failureMessage : "验证未通过"));
+                review.setStatus("PENDING");
+                review.setComment(buildFailureReviewComment(node, testResultId, failureMessage));
                 review.setCreatedAt(LocalDateTime.now());
                 reviewRecordRepository.insert(review);
                 log.info("Created review task for failed test: projectId={}, targetId={}", node.getProjectId(), node.getId());
@@ -136,6 +141,65 @@ public class TestResultUpdateService {
     @Transactional
     public void onTestFail(String nodeId, String edgeId) {
         onTestFail(nodeId, edgeId, null, null);
+    }
+
+    private String buildFailureReviewComment(GraphNode node, String testResultId, String failureMessage) {
+        StringBuilder comment = new StringBuilder("测试失败: ")
+                .append(failureMessage != null ? failureMessage : "验证未通过");
+        TestFailureAnalysis analysis = analyzeFailure(node, testResultId, failureMessage);
+        if (analysis == null) {
+            return comment.toString();
+        }
+        if (analysis.getSummary() != null && !analysis.getSummary().isBlank()) {
+            comment.append("\nAI 根因摘要: ").append(analysis.getSummary());
+        }
+        if (analysis.getRootCauses() != null && !analysis.getRootCauses().isEmpty()) {
+            comment.append("\n可能根因: ");
+            comment.append(analysis.getRootCauses().stream()
+                    .map(TestFailureAnalysis.RootCause::getCause)
+                    .filter(cause -> cause != null && !cause.isBlank())
+                    .limit(3)
+                    .reduce((a, b) -> a + "；" + b)
+                    .orElse(""));
+        }
+        if (analysis.getTroubleshootingSteps() != null && !analysis.getTroubleshootingSteps().isEmpty()) {
+            comment.append("\n排查步骤: ")
+                    .append(String.join("；", analysis.getTroubleshootingSteps()));
+        }
+        if (analysis.getRerunScope() != null && !analysis.getRerunScope().isEmpty()) {
+            comment.append("\n建议复测范围: ")
+                    .append(String.join("；", analysis.getRerunScope()));
+        }
+        return comment.toString();
+    }
+
+    private TestFailureAnalysis analyzeFailure(GraphNode node, String testResultId, String failureMessage) {
+        if (testFailureAnalysisAgent == null) {
+            return null;
+        }
+        try {
+            TestResult result = testResultId != null ? testResultRepository.selectById(testResultId) : null;
+            TestCase testCase = result != null && result.getTestCaseId() != null
+                    ? testCaseRepository.selectById(result.getTestCaseId())
+                    : null;
+
+            TestFailureAnalysisAgent.FailureContext context = new TestFailureAnalysisAgent.FailureContext();
+            context.setProjectId(result != null && result.getProjectId() != null
+                    ? result.getProjectId() : node.getProjectId());
+            context.setCaseName(testCase != null ? testCase.getCaseName() : "");
+            context.setTargetNode(node.getDisplayName() != null && !node.getDisplayName().isBlank()
+                    ? node.getDisplayName() : node.getNodeName());
+            context.setRequest(result != null ? result.getRequestData() : "");
+            context.setResponse(result != null ? result.getResponseData() : "");
+            context.setErrorMessage(failureMessage != null ? failureMessage
+                    : result != null ? result.getErrorMessage() : "");
+            context.setGraphPath("");
+            context.setRecentTrace("");
+            return testFailureAnalysisAgent.analyze(context);
+        } catch (Exception e) {
+            log.warn("AI test failure analysis failed for node {}: {}", node.getId(), e.getMessage());
+            return null;
+        }
     }
 
     /**

@@ -212,26 +212,24 @@
         <span>AI 分析建议</span>
       </template>
       <div class="ai-suggestions">
-        <div class="suggestion-item">
+        <div v-if="aiInsightSummary" class="insight-summary">{{ aiInsightSummary }}</div>
+        <div class="suggestion-item" v-for="action in aiActions" :key="action.title + action.actionType">
           <el-icon><Star /></el-icon>
           <div class="suggestion-content">
-            <div class="suggestion-title">优先完成高置信度节点的测试用例</div>
-            <div class="suggestion-desc">当前有 45 个置信度 >= 90% 的节点缺少测试用例，建议优先生成这些节点的测试用例，可快速提升整体验证率。</div>
+            <div class="suggestion-title">
+              {{ action.title }}
+              <el-tag size="small" :type="action.priority === 'HIGH' ? 'danger' : action.priority === 'MEDIUM' ? 'warning' : 'info'">
+                {{ action.priority || 'MEDIUM' }}
+              </el-tag>
+            </div>
+            <div class="suggestion-desc">{{ action.rationale || action.expectedBenefit || action.source }}</div>
+            <div v-if="action.targets?.length" class="suggestion-targets">
+              <el-tag v-for="target in action.targets.slice(0, 4)" :key="target" size="small" effect="plain">{{ target }}</el-tag>
+            </div>
           </div>
         </div>
-        <div class="suggestion-item">
-          <el-icon><Star /></el-icon>
-          <div class="suggestion-content">
-            <div class="suggestion-title">重点关注订单-库存耦合问题</div>
-            <div class="suggestion-desc">分析发现订单模块与库存模块存在强数据耦合，涉及 8 张数据表和 12 个服务接口，建议在迁移前进行解耦设计。</div>
-          </div>
-        </div>
-        <div class="suggestion-item">
-          <el-icon><Star /></el-icon>
-          <div class="suggestion-content">
-            <div class="suggestion-title">补充文档事实来源</div>
-            <div class="suggestion-desc">当前有 23 个业务节点仅来源于代码分析，缺少文档证据支持，建议补充相关业务文档以提高置信度。</div>
-          </div>
+        <div v-if="!aiActions.length" class="empty-suggestions">
+          当前版本暂无 AI 行动建议
         </div>
       </div>
     </el-card>
@@ -239,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Connection, Link, CircleCheck, Warning, Opportunity, Star } from '@element-plus/icons-vue'
@@ -266,6 +264,8 @@ const reportData = ref({
 const nodeTypeDistribution = ref<any[]>([])
 const confidenceDistribution = ref<any[]>([])
 const risks = ref<any[]>([])
+const aiInsightSummary = ref('')
+const aiActions = ref<any[]>([])
 
 // 测试覆盖率数据，从后端概览接口加载
 const coverageData = ref({
@@ -292,6 +292,22 @@ const getRiskTypeText = (type: string) => {
 
 const exportReport = () => {
   ElMessage.success('报告导出中...')
+}
+
+const loadAiInsights = async () => {
+  if (!projectId || !selectedVersion.value) return
+  try {
+    const insight: any = await get(
+      `/lg/projects/${projectId}/reports/insights`,
+      { versionId: selectedVersion.value },
+      { _showLoading: false }
+    )
+    aiInsightSummary.value = insight?.summary || ''
+    aiActions.value = Array.isArray(insight?.actions) ? insight.actions : []
+  } catch (err) {
+    aiInsightSummary.value = ''
+    aiActions.value = []
+  }
 }
 
 onMounted(async () => {
@@ -358,6 +374,10 @@ onMounted(async () => {
   } catch (err) {
     console.error('获取验证报告数据失败:', err)
   }
+})
+
+watch(selectedVersion, () => {
+  loadAiInsights()
 })
 </script>
 
@@ -680,11 +700,22 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.insight-summary {
+  padding: 12px 14px;
+  background: #f5f7fa;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  color: #303133;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .suggestion-item {
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+  background: #f7f9fc;
+  border: 1px solid #e4e7ed;
   border-radius: 8px;
 }
 
@@ -696,6 +727,9 @@ onMounted(async () => {
 }
 
 .suggestion-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 500;
   color: #303133;
@@ -706,5 +740,22 @@ onMounted(async () => {
   font-size: 13px;
   color: #606266;
   line-height: 1.6;
+}
+
+.suggestion-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.empty-suggestions {
+  padding: 18px;
+  color: #909399;
+  background: #f5f7fa;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 13px;
 }
 </style>

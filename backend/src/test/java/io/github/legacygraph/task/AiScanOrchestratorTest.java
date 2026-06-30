@@ -4,11 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.agent.FeatureMappingAgent;
 import io.github.legacygraph.agent.TestCaseAgent;
+import io.github.legacygraph.common.EdgeType;
+import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.GeneratedTestCase;
+import io.github.legacygraph.entity.Fact;
+import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.entity.ScanTask;
+import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ReviewRecordRepository;
@@ -16,13 +23,16 @@ import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -44,14 +54,18 @@ class AiScanOrchestratorTest {
     @Mock private DocUnderstandingAgent docUnderstandingAgent;
     @Mock private FeatureMappingAgent featureMappingAgent;
     @Mock private TestCaseAgent testCaseAgent;
+    @Mock private BusinessGraphBuilder businessGraphBuilder;
 
     private AiScanOrchestrator orchestrator;
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() {
         orchestrator = new AiScanOrchestrator(scanTaskRepository, documentRepository, factRepository,
                 reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
-                featureMappingAgent, testCaseAgent, new ObjectMapper());
+                featureMappingAgent, testCaseAgent, businessGraphBuilder, new ObjectMapper());
     }
 
     private GraphNode node(String type, String key, String name, double conf) {
@@ -92,14 +106,14 @@ class AiScanOrchestratorTest {
         // 无文档
         when(documentRepository.selectList(any())).thenReturn(List.of());
         // 无页面/接口节点（feature mapping 跳过），低置信节点用于审核
-        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq("PAGE"), any(), any(), any(), anyInt()))
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
-        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq("API"), any(), any(), any(), anyInt()))
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), isNull(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of(
-                        node("API", "api:/a", "低置信A", 0.3),
-                        node("API", "api:/b", "高置信B", 0.9)));
+                        node(NodeType.ApiEndpoint.name(), "api:/a", "低置信A", 0.3),
+                        node(NodeType.ApiEndpoint.name(), "api:/b", "高置信B", 0.9)));
         when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
 
         orchestrator.orchestrate("proj-1", "v1", config);
@@ -127,11 +141,11 @@ class AiScanOrchestratorTest {
         config.setMinConfidence(0.5);
 
         when(documentRepository.selectList(any())).thenReturn(List.of());
-        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq("PAGE"), any(), any(), any(), anyInt()))
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
         // API 节点用于 feature mapping 与 test gen
-        List<GraphNode> apis = List.of(node("API", "api:/order", "下单接口", 0.8));
-        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq("API"), any(), any(), any(), anyInt()))
+        List<GraphNode> apis = List.of(node(NodeType.ApiEndpoint.name(), "api:/order", "下单接口", 0.8));
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt()))
                 .thenReturn(apis);
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), isNull(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
@@ -142,6 +156,13 @@ class AiScanOrchestratorTest {
         GeneratedTestCase gc = new GeneratedTestCase();
         gc.setCaseName("下单-正常");
         gc.setCaseType(GeneratedTestCase.CaseType.API);
+        gc.setPreconditions(List.of("用户已登录"));
+        gc.setSteps(List.of("调用下单接口"));
+        gc.setRequest(Map.of("method", "POST", "path", "/api/order", "body", Map.of("skuId", "SKU-1")));
+        GeneratedTestCase.TestCaseAssertion assertion = new GeneratedTestCase.TestCaseAssertion();
+        assertion.setType(GeneratedTestCase.AssertionType.JSON_PATH);
+        assertion.setExpression("$.code == 0");
+        gc.setAssertions(List.of(assertion));
         when(testCaseAgent.generateTestCases(any())).thenReturn(List.of(gc));
 
         orchestrator.orchestrate("proj-1", "v1", config);
@@ -154,29 +175,121 @@ class AiScanOrchestratorTest {
 
         // 生成的测试用例被持久化
         verify(testCaseAgent, atLeastOnce()).generateTestCases(any());
-        verify(testCaseRepository, times(1)).insert(any(io.github.legacygraph.entity.TestCase.class));
+        ArgumentCaptor<TestCase> testCaseCaptor = ArgumentCaptor.forClass(TestCase.class);
+        verify(testCaseRepository, times(1)).insert(testCaseCaptor.capture());
+        TestCase persisted = testCaseCaptor.getValue();
+        assertEquals("用户已登录", persisted.getPreconditions());
+        assertTrue(persisted.getExpectedResult().contains("$.code == 0"));
+        assertTrue(persisted.getSteps().contains("\"method\":\"POST\""));
     }
 
     @Test
-    void testOrchestrate_DocExtract_PersistsPendingConfirmFacts() {
+    void testOrchestrate_FeatureMapping_UsesRealNodeLabelsAndPersistsPendingEdgeAndReview() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+        config.setAutoGenerateTestCase(false);
+        config.setMinConfidence(0.5);
+
+        GraphNode page = node(NodeType.Page.name(), "page:/order", "订单页", 0.9);
+        GraphNode api = node(NodeType.ApiEndpoint.name(), "api:/order", "下单接口", 0.9);
+        when(documentRepository.selectList(any())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), any(), any(), any(), anyInt()))
+                .thenReturn(List.of(page));
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt()))
+                .thenReturn(List.of(api));
+        when(neo4jGraphDao.findNode(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), eq("page:/order")))
+                .thenReturn(java.util.Optional.of(page));
+        when(neo4jGraphDao.findNode(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()), eq("api:/order")))
+                .thenReturn(java.util.Optional.of(api));
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), isNull(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
+        when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
+
+        FeatureMappingAgent.Mapping mapping = new FeatureMappingAgent.Mapping();
+        mapping.setPageKey("page:/order");
+        mapping.setApiKey("api:/order");
+        mapping.setBusinessAction("订单提交");
+        mapping.setConfidence(0.82);
+        FeatureMappingAgent.MappingResult result = new FeatureMappingAgent.MappingResult();
+        result.setMappings(List.of(mapping));
+        when(featureMappingAgent.mapFeatures(any())).thenReturn(result);
+
+        orchestrator.orchestrate("proj-1", "v1", config);
+
+        ArgumentCaptor<GraphEdge> edgeCaptor = ArgumentCaptor.forClass(GraphEdge.class);
+        verify(neo4jGraphDao).createEdge(edgeCaptor.capture());
+        GraphEdge edge = edgeCaptor.getValue();
+        assertEquals(page.getId(), edge.getFromNodeId());
+        assertEquals(api.getId(), edge.getToNodeId());
+        assertEquals(EdgeType.CALLS.name(), edge.getEdgeType());
+        assertEquals("AI_FEATURE_MAPPING", edge.getSourceType());
+        assertEquals("PENDING_CONFIRM", edge.getStatus());
+
+        ArgumentCaptor<ReviewRecord> reviewCaptor = ArgumentCaptor.forClass(ReviewRecord.class);
+        verify(reviewRecordRepository).insert(reviewCaptor.capture());
+        assertTrue(reviewCaptor.getValue().getComment().contains("订单提交"));
+    }
+
+    @Test
+    void testOrchestrate_DocExtract_PersistsAllBusinessFactTypes() throws Exception {
         AiScanConfig config = new AiScanConfig();
         config.setEnableAi(true);
         config.setMinConfidence(0.6);
 
+        Path docPath = tempDir.resolve("product.md");
+        Files.writeString(docPath, "订单提交后校验库存，状态从待支付流转为已支付。");
         io.github.legacygraph.entity.Document doc = new io.github.legacygraph.entity.Document();
         doc.setId("d1");
-        doc.setFilePath(""); // 空路径 → 读取内容为 null，跳过抽取，但子任务仍应完成
+        doc.setFilePath(docPath.toString());
         when(documentRepository.selectList(any())).thenReturn(List.of(doc));
         when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
+        when(factRepository.selectCount(any())).thenReturn(0L);
+
+        DocUnderstandingAgent.BusinessFactExtraction extraction = new DocUnderstandingAgent.BusinessFactExtraction();
+        DocUnderstandingAgent.BusinessDomain domain = new DocUnderstandingAgent.BusinessDomain();
+        domain.setName("订单域");
+        domain.setDescription("订单业务");
+        domain.setConfidence(0.9);
+        DocUnderstandingAgent.BusinessProcess process = new DocUnderstandingAgent.BusinessProcess();
+        process.setKey("order-submit");
+        process.setName("订单提交");
+        process.setConfidence(0.8);
+        DocUnderstandingAgent.BusinessObject object = new DocUnderstandingAgent.BusinessObject();
+        object.setName("订单");
+        object.setConfidence(0.8);
+        DocUnderstandingAgent.BusinessRule rule = new DocUnderstandingAgent.BusinessRule();
+        rule.setName("库存校验");
+        rule.setExpression("提交前库存必须充足");
+        rule.setConfidence(0.7);
+        DocUnderstandingAgent.StatusTransition transition = new DocUnderstandingAgent.StatusTransition();
+        transition.setBusinessObject("订单");
+        transition.setFromStatus("待支付");
+        transition.setToStatus("已支付");
+        transition.setTrigger("支付成功");
+        transition.setConfidence(0.75);
+        extraction.setBusinessDomains(List.of(domain));
+        extraction.setBusinessProcesses(List.of(process));
+        extraction.setBusinessObjects(List.of(object));
+        extraction.setBusinessRules(List.of(rule));
+        extraction.setRoles(List.of("买家"));
+        extraction.setStatusTransitions(List.of(transition));
+        extraction.setFeatures(List.of("提交订单"));
+        when(docUnderstandingAgent.extractBusinessFacts(eq("proj-1"), anyString(), eq(docPath.toString())))
+                .thenReturn(extraction);
 
         orchestrator.orchestrate("proj-1", "v1", config);
 
-        // DOC_EXTRACT 子任务被创建并以 SUCCESS 完成（无内容时不报错）
-        verify(scanTaskRepository, atLeastOnce()).insert(any(ScanTask.class));
-        verify(scanTaskRepository, atLeastOnce()).updateById(argThat((ScanTask t) ->
-                "AI_DOC_EXTRACT".equals(t.getTaskType()) && "SUCCESS".equals(t.getTaskStatus())));
-        // 无可读内容 → 不调用抽取 Agent
-        verifyNoInteractions(docUnderstandingAgent);
+        ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
+        verify(factRepository, times(7)).insert(factCaptor.capture());
+        List<String> factTypes = factCaptor.getAllValues().stream().map(Fact::getFactType).toList();
+        assertTrue(factTypes.contains("BUSINESS_DOMAIN"));
+        assertTrue(factTypes.contains("BUSINESS_PROCESS"));
+        assertTrue(factTypes.contains("BUSINESS_OBJECT"));
+        assertTrue(factTypes.contains("BUSINESS_RULE"));
+        assertTrue(factTypes.contains("BUSINESS_ROLE"));
+        assertTrue(factTypes.contains("STATUS_TRANSITION"));
+        assertTrue(factTypes.contains("FEATURE"));
+        verify(businessGraphBuilder).buildBusinessGraph("proj-1", "v1", extraction);
     }
 }

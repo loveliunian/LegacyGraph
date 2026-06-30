@@ -1,5 +1,6 @@
 <template>
   <div
+    v-if="node"
     class="custom-node"
     :class="[`node-${node.data?.type || 'default'}`, { 'node-selected': selected, 'node-pending': node.data?.status === 'pending' }]"
     :style="{ borderColor: nodeColor }"

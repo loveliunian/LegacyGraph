@@ -18,6 +18,10 @@ const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 app.use(pinia)
 
+// 在挂载之前初始化主题（仅操作 document.documentElement，不依赖 DOM 挂载）
+const appStore = useAppStore()
+appStore.initTheme()
+
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component as any)
 }
@@ -31,6 +35,3 @@ app.use(ElementPlus, {
 })
 
 app.mount('#app')
-
-const appStore = useAppStore()
-appStore.initTheme()

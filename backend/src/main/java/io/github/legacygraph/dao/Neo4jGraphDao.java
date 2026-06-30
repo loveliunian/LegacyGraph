@@ -323,6 +323,36 @@ public class Neo4jGraphDao {
         return 0;
     }
 
+    /**
+     * 一次查询获取项目图统计信息（节点数、边数、确认率、置信度等）。
+     * 使用单次 Cypher 聚合避免多次往返和全量节点加载，显著提升概览接口性能。
+     */
+    public Map<String, Object> graphStats(String projectId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId " +
+                "WITH count(n) AS totalNodes, " +
+                "     count(CASE WHEN n.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedNodes, " +
+                "     count(CASE WHEN n.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingNodes, " +
+                "     coalesce(avg(n.confidence), 0.0) AS avgConfidence, " +
+                "     count(CASE WHEN n.evidenceIds IS NOT NULL AND n.evidenceIds <> '' THEN 1 END) AS withEvidenceCount " +
+                "OPTIONAL MATCH ()-[r]->() WHERE r.projectId = $projectId " +
+                "RETURN totalNodes, confirmedNodes, pendingNodes, avgConfidence, withEvidenceCount, " +
+                "       count(r) AS totalEdges, " +
+                "       count(CASE WHEN r.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedEdges, " +
+                "       count(CASE WHEN r.status IN ['PENDING', 'PENDING_CONFIRM'] THEN 1 END) AS pendingEdges";
+            Result result = session.run(cypher, Map.of("projectId", projectId));
+            if (result.hasNext()) {
+                return result.next().asMap();
+            }
+        }
+        return Map.of(
+            "totalNodes", 0L, "confirmedNodes", 0L, "pendingNodes", 0L,
+            "avgConfidence", 0.0, "withEvidenceCount", 0L,
+            "totalEdges", 0L, "confirmedEdges", 0L, "pendingEdges", 0L
+        );
+    }
+
     /** 更新边 */
     public void updateEdge(GraphEdge edge) {
         try (Session session = neo4jDriver.session()) {
@@ -523,6 +553,8 @@ public class Neo4jGraphDao {
             session.run("CREATE INDEX project_version_idx IF NOT EXISTS FOR (n) ON (n.projectId, n.versionId)");
             session.run("CREATE INDEX node_id_idx IF NOT EXISTS FOR (n) ON (n.id)");
             session.run("CREATE INDEX node_key_lookup IF NOT EXISTS FOR (n) ON (n.nodeKey)");
+            // 关系属性索引：加速按 projectId 统计边数量
+            session.run("CREATE INDEX edge_project_id_idx IF NOT EXISTS FOR ()-[r]-() ON (r.projectId)");
             log.info("Created Neo4j indexes");
         }
     }

@@ -1,8 +1,6 @@
 <template>
   <el-config-provider :locale="elementLocale">
-    <div id="app">
-      <router-view />
-    </div>
+    <router-view />
   </el-config-provider>
 </template>
 
@@ -26,7 +24,8 @@ window.addEventListener('locale-changed', ((e: CustomEvent<LocaleType>) => {
 </script>
 
 <style>
-#app {
+/* 全局样式通过 index.html 中的 #app 应用 */
+body > #app {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

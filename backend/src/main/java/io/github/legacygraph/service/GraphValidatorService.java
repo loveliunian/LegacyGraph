@@ -26,13 +26,16 @@ public class GraphValidatorService {
     private final Neo4jGraphDao neo4jGraphDao;
     private final TestCaseRepository testCaseRepository;
     private final TestResultRepository testResultRepository;
+    private final GraphCacheInvalidator graphCacheInvalidator;
 
     public GraphValidatorService(Neo4jGraphDao neo4jGraphDao,
                                TestCaseRepository testCaseRepository,
-                               TestResultRepository testResultRepository) {
+                               TestResultRepository testResultRepository,
+                               GraphCacheInvalidator graphCacheInvalidator) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
+        this.graphCacheInvalidator = graphCacheInvalidator;
     }
 
     /** 根据测试结果更新整个版本的置信度 */

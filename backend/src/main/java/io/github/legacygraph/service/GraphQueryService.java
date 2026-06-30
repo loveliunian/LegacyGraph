@@ -31,24 +31,53 @@ public class GraphQueryService {
     private final ScanTaskRepository scanTaskRepository;
     private final FactRepository factRepository;
     private final Driver neo4jDriver;
+    private final CacheService cacheService;
+
+    /** 图谱只读结果缓存 TTL（同版本内结果稳定） */
+    private static final Duration GRAPH_CACHE_TTL = Duration.ofMinutes(30);
 
     public GraphQueryService(Neo4jGraphDao neo4jGraphDao,
                             ScanVersionRepository scanVersionRepository,
                             ScanTaskRepository scanTaskRepository,
                             FactRepository factRepository,
-                            Driver neo4jDriver) {
+                            Driver neo4jDriver,
+                            CacheService cacheService) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
         this.neo4jDriver = neo4jDriver;
+        this.cacheService = cacheService;
+    }
+
+    /** 图谱缓存 key：graph:{versionId}:{view}:{paramHash} */
+    private String graphKey(String versionId, String view, String... params) {
+        String v = normalizeVersionId(versionId);
+        return "graph:" + v + ":" + view + ":" + Integer.toHexString(Arrays.hashCode(params));
+    }
+
+    /**
+     * 按版本失效所有图谱只读缓存（合并/审核确认/重新扫描后调用）。
+     */
+    public void evictGraphCache(String versionId) {
+        if (versionId == null) {
+            return;
+        }
+        cacheService.evictByPrefix("graph:" + normalizeVersionId(versionId) + ":");
     }
 
     /**
      * 查询接口完整调用链: ApiEndpoint -> Controller -> Method -> Service -> Mapper -> SQL -> Table
      * 增加 projectId/versionId 过滤，避免同名 API 跨版本串数据。
      */
+    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> getApiCallChain(String projectId, String versionId, String apiKey) {
+        String key = graphKey(versionId, "api-chain", projectId, apiKey);
+        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
+                () -> getApiCallChainUncached(projectId, versionId, apiKey));
+    }
+
+    private List<Map<String, Object>> getApiCallChainUncached(String projectId, String versionId, String apiKey) {
         versionId = normalizeVersionId(versionId);
         String cypher = """
                 MATCH p = (api:ApiEndpoint {nodeKey: $apiKey, projectId: $projectId, versionId: $versionId})
@@ -87,7 +116,14 @@ public class GraphQueryService {
      * 查询表被哪些接口影响
      * 增加 projectId/versionId 过滤，避免同名表跨版本串数据。
      */
+    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> getTableImpact(String projectId, String versionId, String tableName) {
+        String key = graphKey(versionId, "table-impact", projectId, tableName);
+        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
+                () -> getTableImpactUncached(projectId, versionId, tableName));
+    }
+
+    private List<Map<String, Object>> getTableImpactUncached(String projectId, String versionId, String tableName) {
         versionId = normalizeVersionId(versionId);
         String cypher = """
                 MATCH p = (api:ApiEndpoint {projectId: $projectId, versionId: $versionId})
@@ -117,7 +153,14 @@ public class GraphQueryService {
      * 当 module 未稳定写入时，返回该版本所有 Feature/Page/ApiEndpoint/Service/Repository 子图，
      * 并在结果中标记 moduleMissing = true。
      */
+    @SuppressWarnings("unchecked")
     public Map<String, Object> getFeatureView(String projectId, String versionId, String module) {
+        String key = graphKey(versionId, "feature-view", projectId, module);
+        return cacheService.getOrLoad(key, Map.class, GRAPH_CACHE_TTL,
+                () -> getFeatureViewUncached(projectId, versionId, module));
+    }
+
+    private Map<String, Object> getFeatureViewUncached(String projectId, String versionId, String module) {
         versionId = normalizeVersionId(versionId);
         boolean hasModule = module != null && !module.isBlank();
         String cypher;
@@ -221,7 +264,14 @@ public class GraphQueryService {
      * 当 domain 属性未稳定写入时，从 BusinessDomain 节点名和
      * BELONGS_TO/PART_OF/IMPLEMENTS 边扩展子图。
      */
+    @SuppressWarnings("unchecked")
     public Map<String, Object> getBusinessView(String projectId, String versionId, String domain) {
+        String key = graphKey(versionId, "business-view", projectId, domain);
+        return cacheService.getOrLoad(key, Map.class, GRAPH_CACHE_TTL,
+                () -> getBusinessViewUncached(projectId, versionId, domain));
+    }
+
+    private Map<String, Object> getBusinessViewUncached(String projectId, String versionId, String domain) {
         versionId = normalizeVersionId(versionId);
         boolean hasDomain = domain != null && !domain.isBlank();
         String cypher;
@@ -323,7 +373,15 @@ public class GraphQueryService {
      * 获取统一图谱全量数据（支持按状态过滤、返回空视图结构化原因）
      * 从 Neo4j 查询指定扫描版本的所有节点和边，按置信度+状态过滤后返回
      */
+    @SuppressWarnings("unchecked")
     public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence, String statusFilter) {
+        String key = graphKey(versionId, "unified",
+                String.valueOf(minConfidence), String.valueOf(statusFilter));
+        return cacheService.getOrLoad(key, Map.class, GRAPH_CACHE_TTL,
+                () -> getUnifiedGraphUncached(versionId, minConfidence, statusFilter));
+    }
+
+    private Map<String, Object> getUnifiedGraphUncached(String versionId, Double minConfidence, String statusFilter) {
         // 标准化 versionId：PG JDBC 返回带横线格式，Neo4j 存储不带横线
         String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
 

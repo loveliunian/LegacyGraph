@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 public class SysDictItem {
 
     @TableId(type = IdType.ASSIGN_UUID)
-    @TableField(typeHandler = MybatisPlusConfig.StringUuidTypeHandler.class)
     private String id;
 
     /**

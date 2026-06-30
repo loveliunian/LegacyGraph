@@ -31,6 +31,8 @@ class GraphValidatorServiceTest {
     private TestCaseRepository testCaseRepository;
     @Mock
     private TestResultRepository testResultRepository;
+    @Mock
+    private GraphCacheInvalidator graphCacheInvalidator;
 
     private GraphValidatorService graphValidatorService;
 
@@ -42,7 +44,7 @@ class GraphValidatorServiceTest {
 
     @BeforeEach
     void setUp() {
-        graphValidatorService = new GraphValidatorService(neo4jGraphDao, testCaseRepository, testResultRepository);
+        graphValidatorService = new GraphValidatorService(neo4jGraphDao, testCaseRepository, testResultRepository, graphCacheInvalidator);
 
         passedResult = new TestResult();
         passedResult.setVersionId("version-1");

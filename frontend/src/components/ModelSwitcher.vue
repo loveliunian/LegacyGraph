@@ -5,7 +5,7 @@
         <el-tag
           size="small"
           effect="plain"
-          :type="currentProvider?.isActive ? '' : 'info'"
+          :type="currentProvider?.isActive ? undefined : 'info'"
         >
           {{ currentLabel }}
         </el-tag>

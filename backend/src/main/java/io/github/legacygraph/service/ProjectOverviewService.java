@@ -8,6 +8,7 @@ import io.github.legacygraph.repository.*;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -117,32 +118,18 @@ public class ProjectOverviewService {
     private ProjectOverviewResponse.GraphStats buildGraphStats(String projectId) {
         ProjectOverviewResponse.GraphStats stats = new ProjectOverviewResponse.GraphStats();
 
-        List<GraphNode> allNodes = neo4jGraphDao.queryNodes(projectId, null, null, null, null, null, 0);
-        long totalNodes = allNodes.size();
-        long totalEdges = neo4jGraphDao.countEdges(projectId, null, null);
-        double avgConfidence = allNodes.stream()
-                .mapToDouble(n -> n.getConfidence() != null ? n.getConfidence().doubleValue() : 0.0)
-                .average().orElse(0.0);
-        long confirmedNodes = allNodes.stream()
-                .filter(n -> "CONFIRMED".equals(n.getStatus()) || "APPROVED".equals(n.getStatus()))
-                .count();
-        long pendingNodes = allNodes.stream()
-                .filter(n -> "PENDING".equals(n.getStatus()) || "PENDING_CONFIRM".equals(n.getStatus()))
-                .count();
-        long withEvidenceCount = allNodes.stream()
-                .filter(n -> n.getEvidenceIds() != null && !n.getEvidenceIds().isEmpty())
-                .count();
-        double nodeConfirmationRate = totalNodes > 0 ? (double) confirmedNodes / totalNodes * 100 : 0;
-        double edgeConfirmationRate = 0;
-        long confirmedEdges = 0;
-        long pendingEdges = 0;
+        Map<String, Object> raw = neo4jGraphDao.graphStats(projectId);
+        long totalNodes = toLong(raw.get("totalNodes"));
+        long totalEdges = toLong(raw.get("totalEdges"));
+        long confirmedNodes = toLong(raw.get("confirmedNodes"));
+        long confirmedEdges = toLong(raw.get("confirmedEdges"));
+        long pendingNodes = toLong(raw.get("pendingNodes"));
+        long pendingEdges = toLong(raw.get("pendingEdges"));
+        double avgConfidence = toDouble(raw.get("avgConfidence"));
+        long withEvidenceCount = toLong(raw.get("withEvidenceCount"));
 
-        if (totalEdges > 0) {
-            confirmedEdges = neo4jGraphDao.countEdges(projectId, null, "CONFIRMED");
-            pendingEdges = neo4jGraphDao.countEdges(projectId, null, "PENDING")
-                          + neo4jGraphDao.countEdges(projectId, null, "PENDING_CONFIRM");
-            edgeConfirmationRate = (double) confirmedEdges / totalEdges * 100;
-        }
+        double nodeConfirmationRate = totalNodes > 0 ? (double) confirmedNodes / totalNodes * 100 : 0;
+        double edgeConfirmationRate = totalEdges > 0 ? (double) confirmedEdges / totalEdges * 100 : 0;
 
         stats.setTotalNodes(totalNodes);
         stats.setTotalEdges(totalEdges);
@@ -158,5 +145,15 @@ public class ProjectOverviewService {
         stats.setWithEvidenceCount(withEvidenceCount);
 
         return stats;
+    }
+
+    private long toLong(Object val) {
+        if (val instanceof Number n) return n.longValue();
+        return 0L;
+    }
+
+    private double toDouble(Object val) {
+        if (val instanceof Number n) return n.doubleValue();
+        return 0.0;
     }
 }

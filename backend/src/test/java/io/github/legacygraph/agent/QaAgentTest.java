@@ -1,6 +1,8 @@
 package io.github.legacygraph.agent;
 
 import io.github.legacygraph.dto.QaAnswer;
+import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.llm.LlmGateway;
@@ -32,6 +34,8 @@ class QaAgentTest {
     private LlmGateway llmGateway;
     @Mock
     private VectorRetrievalService vectorRetrievalService;
+    @Mock
+    private Neo4jGraphDao neo4jGraphDao;
 
     @InjectMocks
     private QaAgent qaAgent;
@@ -97,6 +101,48 @@ class QaAgentTest {
         assertTrue(context.contains("api:/user/register"));
         assertTrue(context.contains("t_user"));
         assertEquals("用户注册涉及哪些表？", variablesCaptor.getValue().get("question"));
+    }
+
+    @Test
+    void testAnswer_ExpandsOneHopGraphNeighborhoodIntoContext() {
+        GraphNode neighbor = new GraphNode();
+        neighbor.setId("n2");
+        neighbor.setNodeType("Service");
+        neighbor.setNodeKey("service:ProfileService");
+        neighbor.setNodeName("ProfileService");
+        neighbor.setDescription("维护用户资料");
+        neighbor.setConfidence(new BigDecimal("0.8"));
+
+        GraphEdge edge = new GraphEdge();
+        edge.setId("e1");
+        edge.setFromNodeId("n1");
+        edge.setToNodeId("n2");
+        edge.setEdgeType("CALLS");
+        edge.setConfidence(new BigDecimal("0.7"));
+        edge.setStatus("CONFIRMED");
+
+        when(vectorRetrievalService.semanticSearch(eq("proj-1"), eq("v1"), anyString(), anyInt(), isNull()))
+                .thenReturn(List.of());
+        when(vectorRetrievalService.findSimilarNodes(eq("proj-1"), eq("v1"), anyString(), anyDouble()))
+                .thenReturn(List.of(node));
+        when(neo4jGraphDao.queryEdges(eq("proj-1"), eq("v1"), isNull(), isNull(), eq("n1"), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(edge));
+        when(neo4jGraphDao.findNodesByIds(eq(List.of("n2")))).thenReturn(List.of(neighbor));
+
+        QaAnswer llmAnswer = new QaAnswer();
+        llmAnswer.setAnswer("用户注册会调用 ProfileService。");
+        llmAnswer.setConfidence(0.8);
+        when(llmGateway.callWithTemplate(eq("proj-1"), eq("qa-answer"), anyMap(), eq(QaAnswer.class)))
+                .thenReturn(llmAnswer);
+
+        QaAnswer result = qaAgent.answer("proj-1", "v1", "用户注册调用哪些服务？");
+
+        verify(llmGateway).callWithTemplate(eq("proj-1"), eq("qa-answer"),
+                variablesCaptor.capture(), eq(QaAnswer.class));
+        String context = variablesCaptor.getValue().get("context");
+        assertTrue(context.contains("ProfileService"));
+        assertTrue(context.contains("CALLS"));
+        assertTrue(result.getEvidences().stream().anyMatch(e -> "GRAPH_EDGE".equals(e.getSourceKind())));
     }
 
     @Test

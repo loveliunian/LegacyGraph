@@ -335,6 +335,13 @@ import type { Node, Edge } from '@vue-flow/core'
 import type { Evidence } from '@/types'
 
 const route = useRoute()
+
+const projectId = computed(() => route.params.projectId as string)
+
+// 从 URL query 参数读取初始值（必须在 ref 初始化之前）
+const urlVersionId = (route.query.versionId as string) || ''
+const urlMinConfidence = route.query.minConfidence ? Number(route.query.minConfidence) : undefined
+
 const loading = ref(false)
 const useOptimizedViewer = ref(false)
 
@@ -342,14 +349,12 @@ const currentViewer = computed(() => {
   return useOptimizedViewer.value ? GraphViewerOptimized : GraphViewer
 })
 const currentVersion = ref<string>('')
-const minConfidence = ref(0.5)
+const minConfidence = ref(urlMinConfidence ?? 0.5)
 const selectedNodeTypes = ref<string[]>([])
 const selectedReviewStatus = ref<string[]>(['CONFIRMED', 'PENDING_CONFIRM', 'approved', 'pending'])
 const selectedNode = ref<Node | null>(null)
 const evidenceDrawerVisible = ref(false)
 const nodeEvidence = ref<Evidence[]>([])
-
-const projectId = computed(() => route.params.projectId as string)
 const versions = ref<Record<string, any>[]>([])
 
 const nodeTypes = [
@@ -395,7 +400,8 @@ const filteredNodes = computed(() => {
     const type = node.data?.type
 
     if (confidence < minConfidence.value) return false
-    if (selectedReviewStatus.value.length > 0 && !selectedReviewStatus.value.includes(status)) return false
+    // 状态过滤：未设置状态(null/undefined)的节点默认可见
+    if (status && selectedReviewStatus.value.length > 0 && !selectedReviewStatus.value.includes(status)) return false
     if (selectedNodeTypes.value.length > 0 && !selectedNodeTypes.value.includes(type)) return false
 
     return true
@@ -689,8 +695,11 @@ function emitFocusNode(nodeId: string) {
 
 onMounted(async () => {
   await loadVersions()
-  // 自动选择第一个版本并加载图谱
-  if (versions.value.length > 0) {
+  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+  if (urlVersionId && versions.value.some(v => v.id === urlVersionId)) {
+    currentVersion.value = urlVersionId
+    await loadGraph(urlVersionId)
+  } else if (versions.value.length > 0) {
     currentVersion.value = versions.value[0].id
     await loadGraph(currentVersion.value)
   }

@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 public class SysUserRole {
 
     @TableId(type = IdType.ASSIGN_UUID)
-    @TableField(typeHandler = MybatisPlusConfig.StringUuidTypeHandler.class)
     private String id;
 
     /**

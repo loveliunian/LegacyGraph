@@ -232,11 +232,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(savedPosition || { top: 0 })
-      }, 0)
-    })
+    return savedPosition || { top: 0 }
   }
 })
 

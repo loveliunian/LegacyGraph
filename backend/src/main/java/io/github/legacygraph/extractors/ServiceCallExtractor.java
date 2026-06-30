@@ -2,6 +2,8 @@ package io.github.legacygraph.extractors;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.ParserConfiguration.LanguageLevel;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -29,7 +31,10 @@ public class ServiceCallExtractor {
     private final JavaParser javaParser;
 
     public ServiceCallExtractor() {
-        this.javaParser = new JavaParser();
+        ParserConfiguration config = new ParserConfiguration();
+        // 使用当前javaparser支持的最高语言级别（3.28.2 → JAVA_26），兼容 Java 8~26 所有语法
+        config.setLanguageLevel(LanguageLevel.JAVA_26);
+        this.javaParser = new JavaParser(config);
     }
 
     /**

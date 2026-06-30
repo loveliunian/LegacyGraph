@@ -10,7 +10,7 @@
         <el-menu
           :default-active="activeMenu"
           class="sidebar-menu"
-          router
+          @select="handleMenuSelect"
         >
           <el-menu-item :index="`/projects/${projectId}/overview`">
             <el-icon><DataBoard /></el-icon>
@@ -113,7 +113,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   DataBoard,
   FolderOpened,
@@ -128,6 +128,7 @@ import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'
 
 const route = useRoute()
+const router = useRouter()
 const projectStore = useProjectStore()
 const taskStore = useTaskStore()
 
@@ -144,6 +145,10 @@ onMounted(async () => {
     await projectStore.fetchCurrentProject()
   }
 })
+
+function handleMenuSelect(index: string) {
+  router.push(index)
+}
 </script>
 
 <style scoped>

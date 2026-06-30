@@ -1,6 +1,8 @@
 package io.github.legacygraph.agent;
 
 import io.github.legacygraph.dto.QaAnswer;
+import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.llm.LlmGateway;
@@ -12,8 +14,10 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * QaAgent - 自然语言知识库问答（RAG）
@@ -31,10 +35,15 @@ public class QaAgent {
     @Autowired
     private VectorRetrievalService vectorRetrievalService;
 
+    @Autowired
+    private Neo4jGraphDao neo4jGraphDao;
+
     /** 文档片段召回数量 */
     private static final int DOC_TOP_K = 5;
     /** 相似节点召回阈值 */
     private static final double NODE_SIM_THRESHOLD = 0.0;
+    /** 每个命中节点扩展的一跳边上限 */
+    private static final int GRAPH_EDGE_TOP_K = 5;
 
     /**
      * 回答自然语言问题
@@ -52,10 +61,11 @@ public class QaAgent {
 
         // 2. 图邻域：与问题语义相似的节点
         List<GraphNode> nodes = safeFindSimilarNodes(projectId, versionId, question);
+        GraphNeighborhood neighborhood = safeExpandGraphNeighborhood(projectId, versionId, nodes);
 
         // 3. 拼装上下文 + 收集证据明细
         List<QaAnswer.EvidenceItem> evidences = new ArrayList<>();
-        String context = buildContext(docs, nodes, evidences);
+        String context = buildContext(docs, nodes, neighborhood, evidences);
 
         // 4. LLM 生成
         Map<String, String> variables = new HashMap<>();
@@ -76,6 +86,7 @@ public class QaAgent {
 
     /** 拼装供 LLM 使用的上下文文本，并同步填充结构化证据明细 */
     private String buildContext(List<VectorDocument> docs, List<GraphNode> nodes,
+                                GraphNeighborhood neighborhood,
                                 List<QaAnswer.EvidenceItem> evidences) {
         StringBuilder sb = new StringBuilder();
 
@@ -98,6 +109,52 @@ public class QaAgent {
                 ev.setExcerpt(node.getDescription());
                 ev.setSourcePath(node.getSourcePath());
                 ev.setScore(node.getConfidence() != null ? node.getConfidence().doubleValue() : null);
+                evidences.add(ev);
+            }
+        }
+
+        if (neighborhood != null && (!neighborhood.nodes().isEmpty() || !neighborhood.edges().isEmpty())) {
+            sb.append("\n## 图谱一跳邻域\n");
+            Map<String, GraphNode> nodeById = new LinkedHashMap<>();
+            for (GraphNode node : nodes) {
+                nodeById.put(node.getId(), node);
+            }
+            for (GraphNode node : neighborhood.nodes()) {
+                nodeById.put(node.getId(), node);
+                String ref = node.getNodeKey() != null ? node.getNodeKey() : node.getId();
+                sb.append("- 邻接节点 [").append(node.getNodeType()).append("] ")
+                        .append(node.getNodeName() != null ? node.getNodeName() : "")
+                        .append(" (key=").append(ref).append(")");
+                if (node.getDescription() != null && !node.getDescription().isBlank()) {
+                    sb.append(" — ").append(node.getDescription());
+                }
+                sb.append("\n");
+
+                QaAnswer.EvidenceItem ev = new QaAnswer.EvidenceItem();
+                ev.setSourceKind("GRAPH_NODE");
+                ev.setRef(ref);
+                ev.setTitle(node.getNodeName());
+                ev.setExcerpt(node.getDescription());
+                ev.setSourcePath(node.getSourcePath());
+                ev.setScore(node.getConfidence() != null ? node.getConfidence().doubleValue() : null);
+                evidences.add(ev);
+            }
+            for (GraphEdge edge : neighborhood.edges()) {
+                GraphNode from = nodeById.get(edge.getFromNodeId());
+                GraphNode to = nodeById.get(edge.getToNodeId());
+                String fromName = from != null ? from.getNodeName() : edge.getFromNodeId();
+                String toName = to != null ? to.getNodeName() : edge.getToNodeId();
+                sb.append("- 关系 ").append(fromName)
+                        .append(" -[").append(edge.getEdgeType()).append("]-> ")
+                        .append(toName)
+                        .append(" (status=").append(edge.getStatus()).append(")\n");
+
+                QaAnswer.EvidenceItem ev = new QaAnswer.EvidenceItem();
+                ev.setSourceKind("GRAPH_EDGE");
+                ev.setRef(edge.getId() != null ? edge.getId() : edge.getEdgeKey());
+                ev.setTitle(edge.getEdgeType());
+                ev.setExcerpt(fromName + " -> " + toName);
+                ev.setScore(edge.getConfidence() != null ? edge.getConfidence().doubleValue() : null);
                 evidences.add(ev);
             }
         }
@@ -144,6 +201,50 @@ public class QaAgent {
         }
     }
 
+    private GraphNeighborhood safeExpandGraphNeighborhood(String projectId, String versionId, List<GraphNode> seeds) {
+        if (seeds == null || seeds.isEmpty() || neo4jGraphDao == null) {
+            return new GraphNeighborhood(List.of(), List.of());
+        }
+        try {
+            Map<String, GraphNode> seedById = new LinkedHashMap<>();
+            for (GraphNode seed : seeds) {
+                if (seed.getId() != null) {
+                    seedById.put(seed.getId(), seed);
+                }
+            }
+            Map<String, GraphEdge> edgeById = new LinkedHashMap<>();
+            Set<String> neighborIds = new LinkedHashSet<>();
+            for (String seedId : seedById.keySet()) {
+                List<GraphEdge> edges = neo4jGraphDao.queryEdges(
+                        projectId, versionId, null, null, seedId, null, null, GRAPH_EDGE_TOP_K);
+                if (edges == null) {
+                    continue;
+                }
+                for (GraphEdge edge : edges) {
+                    String edgeId = edge.getId() != null ? edge.getId()
+                            : edge.getFromNodeId() + "->" + edge.getToNodeId() + ":" + edge.getEdgeType();
+                    edgeById.putIfAbsent(edgeId, edge);
+                    if (edge.getFromNodeId() != null && !seedById.containsKey(edge.getFromNodeId())) {
+                        neighborIds.add(edge.getFromNodeId());
+                    }
+                    if (edge.getToNodeId() != null && !seedById.containsKey(edge.getToNodeId())) {
+                        neighborIds.add(edge.getToNodeId());
+                    }
+                }
+            }
+            List<GraphNode> neighbors = neighborIds.isEmpty()
+                    ? List.of()
+                    : neo4jGraphDao.findNodesByIds(new ArrayList<>(neighborIds));
+            if (neighbors == null) {
+                neighbors = List.of();
+            }
+            return new GraphNeighborhood(neighbors, new ArrayList<>(edgeById.values()));
+        } catch (Exception e) {
+            log.warn("QA graph neighborhood expansion failed: {}", e.getMessage());
+            return new GraphNeighborhood(List.of(), List.of());
+        }
+    }
+
     /** 按内容去重，保持顺序（重排序的轻量版） */
     private List<VectorDocument> dedupeDocs(List<VectorDocument> docs) {
         if (docs == null) {
@@ -164,5 +265,8 @@ public class QaAgent {
             return "";
         }
         return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+    private record GraphNeighborhood(List<GraphNode> nodes, List<GraphEdge> edges) {
     }
 }

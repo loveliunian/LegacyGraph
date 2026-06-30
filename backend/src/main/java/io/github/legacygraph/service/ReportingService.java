@@ -1,6 +1,8 @@
 package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.agent.ReportInsightAgent;
+import io.github.legacygraph.dto.ReportInsight;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;
 import io.github.legacygraph.dto.report.GraphMetricsReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
@@ -20,6 +22,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +52,7 @@ public class ReportingService {
     private final MinioClient minioClient;
     private final ObjectMapper objectMapper;
     private final ReportExportService reportExportService;
+    private final ReportInsightAgent reportInsightAgent;
 
     private final String bucketName = "legacygraph-reports";
     public ReportingService(ReportRepository reportRepository,
@@ -58,7 +62,8 @@ public class ReportingService {
                            io.github.legacygraph.repository.NodeEvidenceRepository nodeEvidenceRepository,
                            MinioClient minioClient,
                            ObjectMapper objectMapper,
-                           ReportExportService reportExportService) {
+                           ReportExportService reportExportService,
+                           ReportInsightAgent reportInsightAgent) {
         this.reportRepository = reportRepository;
         this.neo4jGraphDao = neo4jGraphDao;
         this.testResultRepository = testResultRepository;
@@ -67,6 +72,7 @@ public class ReportingService {
         this.minioClient = minioClient;
         this.objectMapper = objectMapper;
         this.reportExportService = reportExportService;
+        this.reportInsightAgent = reportInsightAgent;
     }
 
     /**
@@ -203,6 +209,7 @@ public class ReportingService {
     /**
      * 生成置信度趋势报告
      */
+    @Cacheable(cacheNames = "report-confidence-trend", key = "#projectId + ':' + #versionId")
     public ConfidenceTrendReport generateConfidenceTrend(String projectId, String versionId) {
         log.info("Generating confidence trend report for project {}, version {}", projectId, versionId);
 
@@ -280,6 +287,7 @@ public class ReportingService {
     /**
      * 生成测试覆盖率报告
      */
+    @Cacheable(cacheNames = "report-test-coverage", key = "#projectId + ':' + #versionId")
     public TestCoverageReport generateTestCoverageReport(String projectId, String versionId) {
         log.info("Generating test coverage report for project {}, version {}", projectId, versionId);
 
@@ -357,6 +365,7 @@ public class ReportingService {
     /**
      * 生成图谱质量报告
      */
+    @Cacheable(cacheNames = "report-graph-quality", key = "#projectId + ':' + #versionId")
     public GraphQualityReport generateGraphQualityReport(String projectId, String versionId) {
         log.info("Generating graph quality report for project {}, version {}", projectId, versionId);
 
@@ -460,9 +469,21 @@ public class ReportingService {
     }
 
     /**
+     * 失效所有报告缓存（图谱发生写入：合并/审核确认/重新扫描后调用）。
+     * 报告为重聚合且变更频率远低于读取，整体清空成本可接受。
+     */
+    @org.springframework.cache.annotation.CacheEvict(cacheNames = {
+            "report-confidence-trend", "report-test-coverage",
+            "report-graph-quality", "report-graph-metrics"}, allEntries = true)
+    public void evictReportCaches() {
+        log.debug("Report caches evicted due to graph mutation");
+    }
+
+    /**
      * 生成图谱质量度量汇总（P2-3）
      * 输出覆盖率、证据完备度、待审核比例、测试通过率、运行时验证比例。
      */
+    @Cacheable(cacheNames = "report-graph-metrics", key = "#projectId + ':' + #versionId")
     public GraphMetricsReport generateGraphMetrics(String projectId, String versionId) {
         log.info("Generating graph metrics for project {}, version {}", projectId, versionId);
 
@@ -508,6 +529,127 @@ public class ReportingService {
         report.setTestPassRatio(computeTestPassRatio(projectId, versionId));
 
         return report;
+    }
+
+    /**
+     * 生成报告洞察与行动建议。
+     * 将图谱指标、低置信节点、孤立节点、高置信未覆盖节点整理为 LLM 输入。
+     */
+    public ReportInsight generateReportInsights(String projectId, String versionId) {
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, 0);
+        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 0);
+
+        Set<String> coveredNodeIds = findCoveredNodeIds(projectId, versionId);
+        Set<String> connectedNodeIds = new HashSet<>();
+        for (GraphEdge edge : edges) {
+            connectedNodeIds.add(edge.getFromNodeId());
+            connectedNodeIds.add(edge.getToNodeId());
+        }
+
+        List<Map<String, Object>> highConfidenceUncovered = new ArrayList<>();
+        List<Map<String, Object>> lowConfidenceNodes = new ArrayList<>();
+        List<Map<String, Object>> isolatedNodes = new ArrayList<>();
+        for (GraphNode node : nodes) {
+            BigDecimal confidence = node.getConfidence() != null ? node.getConfidence() : BigDecimal.ZERO;
+            if (confidence.compareTo(BigDecimal.valueOf(0.8)) >= 0 && !coveredNodeIds.contains(node.getId())) {
+                highConfidenceUncovered.add(nodeSummary(node));
+            }
+            if (confidence.compareTo(BigDecimal.valueOf(0.5)) < 0) {
+                lowConfidenceNodes.add(nodeSummary(node));
+            }
+            if (nodes.size() > 1 && !connectedNodeIds.contains(node.getId())) {
+                isolatedNodes.add(nodeSummary(node));
+            }
+        }
+
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("totalNodes", nodes.size());
+        metrics.put("totalEdges", edges.size());
+        metrics.put("averageConfidence", calculateOverallConfidence(nodes));
+        metrics.put("coveredNodeCount", coveredNodeIds.size());
+        metrics.put("pendingReviewRatio", ratio(
+                nodes.stream().filter(n -> "PENDING_CONFIRM".equals(n.getStatus()) || "PENDING".equals(n.getStatus())).count(),
+                nodes.size()));
+        metrics.put("testPassRatio", computeTestPassRatio(projectId, versionId));
+
+        Map<String, Object> gaps = new LinkedHashMap<>();
+        gaps.put("highConfidenceUncovered", highConfidenceUncovered);
+        gaps.put("lowConfidenceNodes", lowConfidenceNodes);
+        gaps.put("isolatedNodes", isolatedNodes);
+
+        try {
+            return reportInsightAgent.generateInsights(projectId,
+                    objectMapper.writeValueAsString(metrics),
+                    objectMapper.writeValueAsString(gaps));
+        } catch (Exception e) {
+            log.warn("ReportInsightAgent failed, using rule-based fallback: projectId={}, versionId={}, error={}",
+                    projectId, versionId, e.getMessage());
+            return fallbackReportInsight(highConfidenceUncovered, lowConfidenceNodes, isolatedNodes);
+        }
+    }
+
+    private Set<String> findCoveredNodeIds(String projectId, String versionId) {
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TestResult> trQuery =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+        trQuery.eq(TestResult::getProjectId, projectId)
+                .eq(TestResult::getVersionId, versionId)
+                .eq(TestResult::getResultStatus, "PASSED");
+        Set<String> coveredNodeIds = new HashSet<>();
+        for (TestResult result : testResultRepository.selectList(trQuery)) {
+            TestCase testCase = testCaseRepository.selectById(result.getTestCaseId());
+            if (testCase != null && testCase.getTargetNodeId() != null) {
+                coveredNodeIds.add(testCase.getTargetNodeId());
+            }
+        }
+        return coveredNodeIds;
+    }
+
+    private Map<String, Object> nodeSummary(GraphNode node) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("id", node.getId());
+        summary.put("name", node.getNodeName());
+        summary.put("type", node.getNodeType());
+        summary.put("confidence", node.getConfidence());
+        summary.put("status", node.getStatus());
+        return summary;
+    }
+
+    private ReportInsight fallbackReportInsight(List<Map<String, Object>> highConfidenceUncovered,
+                                                List<Map<String, Object>> lowConfidenceNodes,
+                                                List<Map<String, Object>> isolatedNodes) {
+        ReportInsight insight = new ReportInsight();
+        insight.setSummary("AI 洞察暂不可用，已按图谱缺口生成规则建议");
+        List<ReportInsight.ActionItem> actions = new ArrayList<>();
+        if (!highConfidenceUncovered.isEmpty()) {
+            actions.add(action("补充高置信节点测试", "GENERATE_TEST", "HIGH",
+                    "高置信节点尚未被通过用例覆盖", highConfidenceUncovered));
+        }
+        if (!lowConfidenceNodes.isEmpty()) {
+            actions.add(action("优先审核低置信节点", "REVIEW_LOW_CONFIDENCE", "HIGH",
+                    "低置信节点会拉低迁移就绪度", lowConfidenceNodes));
+        }
+        if (!isolatedNodes.isEmpty()) {
+            actions.add(action("补全孤立节点关系", "FIX_GRAPH_LINKS", "MEDIUM",
+                    "孤立节点缺少上下游关系，影响影响面分析", isolatedNodes));
+        }
+        insight.setActions(actions);
+        return insight;
+    }
+
+    private ReportInsight.ActionItem action(String title, String actionType, String priority,
+                                            String rationale, List<Map<String, Object>> nodes) {
+        ReportInsight.ActionItem action = new ReportInsight.ActionItem();
+        action.setTitle(title);
+        action.setActionType(actionType);
+        action.setPriority(priority);
+        action.setSource("rule-fallback");
+        action.setRationale(rationale);
+        action.setExpectedBenefit("提升报告可信度和后续迁移决策质量");
+        action.setTargets(nodes.stream()
+                .limit(5)
+                .map(n -> String.valueOf(n.get("name")))
+                .toList());
+        return action;
     }
 
     private BigDecimal computeTestPassRatio(String projectId, String versionId) {
@@ -595,7 +737,7 @@ public class ReportingService {
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(bucketName)
                     .object(objectName)
-                    .stream(new ByteArrayInputStream(jsonBytes), jsonBytes.length, -1L)
+                    .stream(new ByteArrayInputStream(jsonBytes), (long) jsonBytes.length, -1L)
                     .contentType("application/json")
                     .build());
 

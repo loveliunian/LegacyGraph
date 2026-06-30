@@ -1,6 +1,7 @@
 package io.github.legacygraph.controller;
 
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.dto.ReportInsight;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;
 import io.github.legacygraph.dto.report.GraphMetricsReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
@@ -79,6 +80,16 @@ public class ReportController {
             @RequestParam String versionId) {
         GraphMetricsReport report = reportingService.generateGraphMetrics(projectId, versionId);
         return Result.success(report);
+    }
+
+    @GetMapping("/reports/insights")
+    @Operation(summary = "获取 AI 报告洞察",
+            description = "根据图谱指标、低置信/孤立/未覆盖缺口生成行动建议")
+    public Result<ReportInsight> getReportInsights(
+            @PathVariable String projectId,
+            @RequestParam String versionId) {
+        ReportInsight insight = reportingService.generateReportInsights(projectId, versionId);
+        return Result.success(insight);
     }
 
     @GetMapping("/reports/{reportId}/download")
