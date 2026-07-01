@@ -9,6 +9,7 @@ import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.extractors.JavaStructureExtractor;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
@@ -419,6 +420,73 @@ public class GraphBuilder {
         normalized = normalized.replaceAll("/\\$\\{[^}]+\\}", "/{id}");
         // 数字路径段保留，不做归一化，因为可能不是参数
         return normalized;
+    }
+
+    /**
+     * 构建 Java 类/方法结构图谱。
+     */
+    @Transactional
+    public List<GraphNode> buildJavaStructureGraph(String projectId, String versionId,
+            List<JavaStructureExtractor.JavaClassInfo> classes) {
+        List<GraphNode> nodes = new ArrayList<>();
+        if (classes == null || classes.isEmpty()) {
+            return nodes;
+        }
+
+        for (JavaStructureExtractor.JavaClassInfo classInfo : classes) {
+            if (classInfo.getQualifiedName() == null || classInfo.getQualifiedName().isBlank()) {
+                continue;
+            }
+            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName());
+            GraphNode classNode = findOrCreateNode(
+                    projectId, versionId,
+                    classNodeType.name(),
+                    classInfo.getQualifiedName(),
+                    classInfo.getClassName(),
+                    classInfo.getClassName(),
+                    null,
+                    SourceType.CODE_AST.name(),
+                    classInfo.getSourcePath(),
+                    classInfo.getStartLine(),
+                    classInfo.getEndLine(),
+                    BigDecimal.ONE,
+                    NodeStatus.CONFIRMED
+            );
+            nodes.add(classNode);
+
+            if (classInfo.getMethods() == null || classInfo.getMethods().isEmpty()) {
+                continue;
+            }
+            for (JavaStructureExtractor.JavaMethodInfo methodInfo : classInfo.getMethods()) {
+                if (methodInfo.getQualifiedName() == null || methodInfo.getQualifiedName().isBlank()) {
+                    continue;
+                }
+                GraphNode methodNode = findOrCreateNode(
+                        projectId, versionId,
+                        NodeType.Method.name(),
+                        methodInfo.getQualifiedName(),
+                        methodInfo.getMethodName(),
+                        methodInfo.getMethodName(),
+                        null,
+                        SourceType.CODE_AST.name(),
+                        classInfo.getSourcePath(),
+                        methodInfo.getStartLine(),
+                        methodInfo.getEndLine(),
+                        BigDecimal.ONE,
+                        NodeStatus.CONFIRMED
+                );
+                nodes.add(methodNode);
+                createEdge(projectId, versionId,
+                        classNode.getId(), methodNode.getId(),
+                        EdgeType.CONTAINS.name(),
+                        classInfo.getQualifiedName() + "->contains->" + methodInfo.getQualifiedName(),
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE,
+                        NodeStatus.CONFIRMED
+                );
+            }
+        }
+        return nodes;
     }
 
     /**

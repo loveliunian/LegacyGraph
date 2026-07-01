@@ -1,7 +1,9 @@
 package io.github.legacygraph.extractors.adapter;
 
 import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.extractors.JavaControllerExtractor;
+import io.github.legacygraph.extractors.JavaStructureExtractor;
 import io.github.legacygraph.model.ApiFact;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -30,6 +32,7 @@ public class JavaCodeAdapter implements ExtractionAdapter {
 
     private final GraphBuilder graphBuilder;
     private final JavaControllerExtractor controllerExtractor = new JavaControllerExtractor();
+    private final JavaStructureExtractor structureExtractor = new JavaStructureExtractor();
 
     public JavaCodeAdapter(GraphBuilder graphBuilder) {
         this.graphBuilder = graphBuilder;
@@ -58,11 +61,17 @@ public class JavaCodeAdapter implements ExtractionAdapter {
         try {
             Path file = asset.getFile();
 
+            List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(file);
+            List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
+                    context.getProjectId(), context.getVersionId(), structures);
+
             List<ApiFact> apiFacts = controllerExtractor.extractFromFile(file);
             if (apiFacts.isEmpty()) {
                 return ExtractionResult.builder()
                         .processedAssets(1)
-                        .summary("Java controller: no APIs found")
+                        .nodeCount(structureNodes.size())
+                        .evidenceCount(structureNodes.size())
+                        .summary("Java controller: " + structureNodes.size() + " structure nodes, no APIs found")
                         .build();
             }
 
@@ -72,10 +81,11 @@ public class JavaCodeAdapter implements ExtractionAdapter {
 
             return ExtractionResult.builder()
                     .processedAssets(1)
-                    .nodeCount(nodes.size())
+                    .nodeCount(structureNodes.size() + nodes.size())
                     .edgeCount(apiFacts.size() * 3)
-                    .evidenceCount(nodes.size())
-                    .summary(String.format("Java controller: %d APIs extracted", apiFacts.size()))
+                    .evidenceCount(structureNodes.size() + nodes.size())
+                    .summary(String.format("Java controller: %d structure nodes, %d APIs extracted",
+                            structureNodes.size(), apiFacts.size()))
                     .build();
 
         } catch (IOException e) {

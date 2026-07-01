@@ -1,6 +1,7 @@
 package io.github.legacygraph.config;
 
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.llm.LlmGateway;
 import io.github.legacygraph.service.GraphQueryService;
 import io.github.legacygraph.service.LlmProviderService;
@@ -21,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,7 +36,13 @@ public class H2TestConfig {
     @Bean
     @Primary
     public LlmGateway llmGateway() {
-        return mock(LlmGateway.class);
+        LlmGateway gateway = mock(LlmGateway.class);
+        // 为 callWithTemplate 提供安全的默认返回值，避免 Controller 测试因 LLM 调用返回 null 导致 NPE
+        when(gateway.callWithTemplate(anyString(), anyString(), any(), eq(FactExtractionResult.class)))
+                .thenReturn(new FactExtractionResult());
+        when(gateway.callWithTemplate(anyString(), anyString(), any(), eq(io.github.legacygraph.agent.DocUnderstandingAgent.BusinessFactExtraction.class)))
+                .thenReturn(new io.github.legacygraph.agent.DocUnderstandingAgent.BusinessFactExtraction());
+        return gateway;
     }
 
     @Bean

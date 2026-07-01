@@ -244,7 +244,6 @@ class AiScanOrchestratorTest {
         when(documentRepository.selectList(any())).thenReturn(List.of(doc));
         when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
-        when(factRepository.selectCount(any())).thenReturn(0L);
 
         DocUnderstandingAgent.BusinessFactExtraction extraction = new DocUnderstandingAgent.BusinessFactExtraction();
         DocUnderstandingAgent.BusinessDomain domain = new DocUnderstandingAgent.BusinessDomain();
@@ -281,7 +280,7 @@ class AiScanOrchestratorTest {
         orchestrator.orchestrate("proj-1", "v1", config);
 
         ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
-        verify(factRepository, times(7)).insert(factCaptor.capture());
+        verify(factRepository, times(7)).upsert(factCaptor.capture());
         List<String> factTypes = factCaptor.getAllValues().stream().map(Fact::getFactType).toList();
         assertTrue(factTypes.contains("BUSINESS_DOMAIN"));
         assertTrue(factTypes.contains("BUSINESS_PROCESS"));

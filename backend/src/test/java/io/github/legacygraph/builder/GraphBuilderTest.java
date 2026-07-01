@@ -1,10 +1,13 @@
 package io.github.legacygraph.builder;
 
+import io.github.legacygraph.common.EdgeType;
+import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.extractors.JavaStructureExtractor;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.model.MapperSqlFact;
 import org.junit.jupiter.api.Test;
@@ -83,5 +86,64 @@ class GraphBuilderTest {
         // 仍构建 Mapper、SqlStatement、Table 等节点与 CONTAINS/READS/EXECUTES 等边
         verify(writer, atLeast(2)).upsertNode(any(GraphNodeClaim.class));
         verify(writer, atLeast(1)).upsertEdge(any(GraphEdgeClaim.class));
+    }
+
+    @Test
+    void buildJavaStructureGraph_createsClassAndMethodNodesForPlainJavaClasses() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
+        when(writer.upsertNode(any(GraphNodeClaim.class))).thenAnswer(invocation -> {
+            GraphNodeClaim claim = invocation.getArgument(0);
+            GraphNode node = new GraphNode();
+            node.setId(claim.getNodeType() + ":" + claim.getNodeKey());
+            node.setProjectId(claim.getProjectId());
+            node.setVersionId(claim.getVersionId());
+            node.setNodeType(claim.getNodeType());
+            node.setNodeKey(claim.getNodeKey());
+            node.setNodeName(claim.getNodeName());
+            node.setSourcePath(claim.getSourcePath());
+            return node;
+        });
+        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenAnswer(invocation -> {
+            GraphEdgeClaim claim = invocation.getArgument(0);
+            GraphEdge edge = new GraphEdge();
+            edge.setId(claim.getEdgeType() + ":" + claim.getEdgeKey());
+            edge.setProjectId(claim.getProjectId());
+            edge.setVersionId(claim.getVersionId());
+            edge.setFromNodeId(claim.getFromNodeId());
+            edge.setToNodeId(claim.getToNodeId());
+            edge.setEdgeType(claim.getEdgeType());
+            edge.setEdgeKey(claim.getEdgeKey());
+            return edge;
+        });
+
+        JavaStructureExtractor.JavaMethodInfo createMethod =
+                new JavaStructureExtractor.JavaMethodInfo("create", "com.demo.OrderService.create", 8, 10);
+        JavaStructureExtractor.JavaMethodInfo cancelMethod =
+                new JavaStructureExtractor.JavaMethodInfo("cancel", "com.demo.OrderService.cancel", 12, 14);
+        JavaStructureExtractor.JavaClassInfo classInfo = new JavaStructureExtractor.JavaClassInfo(
+                "OrderService",
+                "com.demo",
+                "com.demo.OrderService",
+                "CLASS",
+                "/tmp/OrderService.java",
+                5,
+                15,
+                List.of(createMethod, cancelMethod)
+        );
+
+        graphBuilder.buildJavaStructureGraph("project-1", "v1", List.of(classInfo));
+
+        var nodeCaptor = org.mockito.ArgumentCaptor.forClass(GraphNodeClaim.class);
+        verify(writer, times(3)).upsertNode(nodeCaptor.capture());
+        List<GraphNodeClaim> nodes = nodeCaptor.getAllValues();
+        assertTrue(nodes.stream().anyMatch(n ->
+                NodeType.Service.name().equals(n.getNodeType())
+                        && "com.demo.OrderService".equals(n.getNodeKey())));
+        assertEquals(2, nodes.stream().filter(n -> NodeType.Method.name().equals(n.getNodeType())).count());
+
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(GraphEdgeClaim.class);
+        verify(writer, times(2)).upsertEdge(edgeCaptor.capture());
+        assertTrue(edgeCaptor.getAllValues().stream()
+                .allMatch(e -> EdgeType.CONTAINS.name().equals(e.getEdgeType())));
     }
 }

@@ -1,6 +1,8 @@
 package io.github.legacygraph.extractors.adapter;
 
 import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.extractors.JavaStructureExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,6 +25,7 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
     private final GraphBuilder graphBuilder;
     private final FactPersister factPersister;
     private final ServiceCallExtractor callExtractor = new ServiceCallExtractor();
+    private final JavaStructureExtractor structureExtractor = new JavaStructureExtractor();
 
     public JavaServiceCallAdapter(GraphBuilder graphBuilder, FactPersister factPersister) {
         this.graphBuilder = graphBuilder;
@@ -45,9 +48,18 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
     @Override
     public ExtractionResult extract(ScanContext context, SourceAsset asset) {
         try {
+            List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(asset.getFile());
+            List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
+                    context.getProjectId(), context.getVersionId(), structures);
+
             List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(asset.getFile().toFile());
             if (calls.isEmpty()) {
-                return ExtractionResult.builder().processedAssets(1).summary("Java service: no calls").build();
+                return ExtractionResult.builder()
+                        .processedAssets(1)
+                        .nodeCount(structureNodes.size())
+                        .evidenceCount(structureNodes.size())
+                        .summary("Java service: " + structureNodes.size() + " structure nodes, no calls")
+                        .build();
             }
             for (ServiceCallExtractor.CallRelation call : calls) {
                 factPersister.saveFact(context.getProjectId(), context.getVersionId(),
@@ -60,9 +72,11 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
             graphBuilder.buildServiceCallGraph(context.getProjectId(), context.getVersionId(), calls);
             return ExtractionResult.builder()
                     .processedAssets(1)
+                    .nodeCount(structureNodes.size())
                     .edgeCount(calls.size())
-                    .evidenceCount(calls.size())
-                    .summary("Java service: " + calls.size() + " calls")
+                    .evidenceCount(structureNodes.size() + calls.size())
+                    .summary("Java service: " + structureNodes.size() + " structure nodes, "
+                            + calls.size() + " calls")
                     .build();
         } catch (IOException e) {
             log.warn("JavaServiceCallAdapter failed for {}: {}", asset.getRelativePath(), e.getMessage());
@@ -81,3 +95,4 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
                 .priority(20)
                 .build();
     }
+}

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -60,7 +61,8 @@ class ReportControllerTest {
     @Test
     void testGenerateConfidenceTrend_Success() throws Exception {
         mockMvc.perform(post("/lg/projects/{projectId}/reports/confidence-trend/generate", testProjectId)
-                        .param("versionId", "version-1"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"versionId\":\"version-1\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
     }
@@ -68,7 +70,8 @@ class ReportControllerTest {
     @Test
     void testGenerateTestCoverage_Success() throws Exception {
         mockMvc.perform(post("/lg/projects/{projectId}/reports/test-coverage/generate", testProjectId)
-                        .param("versionId", "version-1"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"versionId\":\"version-1\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
     }
@@ -76,7 +79,8 @@ class ReportControllerTest {
     @Test
     void testGenerateGraphQuality_Success() throws Exception {
         mockMvc.perform(post("/lg/projects/{projectId}/reports/graph-quality/generate", testProjectId)
-                        .param("versionId", "version-1"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"versionId\":\"version-1\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
     }
