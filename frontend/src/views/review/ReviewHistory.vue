@@ -48,7 +48,7 @@
       </el-table-column>
       <el-table-column prop="status" label="审核状态" width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="getStatusType(row.status)">{{ row.status }}</el-tag>
+          <el-tag size="small" :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="comment" label="审核意见" min-width="200" show-overflow-tooltip />
@@ -85,7 +85,7 @@
             <el-progress :percentage="selectedItem.confidence * 100" :stroke-width="10" />
           </el-descriptions-item>
           <el-descriptions-item label="审核状态">
-            <el-tag size="small" :type="getStatusType(selectedItem.status)">{{ selectedItem.status }}</el-tag>
+            <el-tag size="small" :type="getStatusType(selectedItem.status)">{{ getStatusText(selectedItem.status) }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="审核人">{{ selectedItem.reviewedBy }}</el-descriptions-item>
           <el-descriptions-item label="审核时间" :span="2">{{ formatTime(selectedItem.reviewedAt) }}</el-descriptions-item>
@@ -115,7 +115,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { reviewApi } from '@/api'
-import type { PageResult } from '@/types'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -153,6 +153,8 @@ const getStatusType = (status: string) => {
   }
   return map[status] || 'info'
 }
+
+const getStatusText = (status: string) => dictLabel('review_status', status)
 
 const loadData = async () => {
   loading.value = true
@@ -193,6 +195,7 @@ const handleSizeChange = (size: number) => {
 }
 
 onMounted(() => {
+  preloadDicts(['review_status'])
   loadData()
 })
 </script>

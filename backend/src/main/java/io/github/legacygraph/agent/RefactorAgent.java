@@ -2,8 +2,8 @@ package io.github.legacygraph.agent;
 
 import io.github.legacygraph.dto.RefactorSuggestion;
 import io.github.legacygraph.llm.LlmGateway;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -14,10 +14,10 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class RefactorAgent {
 
-    @Autowired
-    private LlmGateway llmGateway;
+    private final LlmGateway llmGateway;
 
     /**
      * 针对代码异味生成重构建议

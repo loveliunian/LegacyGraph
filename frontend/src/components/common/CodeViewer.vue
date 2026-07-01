@@ -14,7 +14,6 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import { CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 

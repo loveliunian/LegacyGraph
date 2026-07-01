@@ -88,16 +88,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
-import { useProjectStore } from '@/stores/project'
 import { systemApi } from '@/api'
 import BaseTable from '@/components/common/BaseTable.vue'
 import SearchForm from '@/components/common/SearchForm.vue'
 import type { User } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-const projectStore = useProjectStore()
 
 const loading = ref(false)
 const list = ref<User[]>([])

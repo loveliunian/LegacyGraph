@@ -88,7 +88,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { Bell, CircleCheck, InfoFilled, WarningFilled, CircleClose, ArrowRight, Tools, Document } from '@element-plus/icons-vue'
+import { Bell, CircleCheck, InfoFilled, WarningFilled, CircleClose, ArrowRight, Tools } from '@element-plus/icons-vue'
 import { get } from '@/utils/request'
 
 export interface NotificationAction {

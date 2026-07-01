@@ -155,14 +155,17 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { get, del, post } from '@/utils/request'
+import { get, post } from '@/utils/request'
 import { useProjectStore } from '@/stores/project'
 import { testApi } from '@/api'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const router = useRouter()
@@ -213,6 +216,7 @@ async function loadData() {
 }
 
 onMounted(() => {
+  preloadDicts(['test_case_type', 'test_case_status'])
   loadData()
 })
 
@@ -220,15 +224,7 @@ const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
-const getCaseTypeText = (type: string) => {
-  const map: Record<string, string> = {
-    API: 'API测试',
-    E2E: '端到端测试',
-    DB_ASSERTION: '数据库断言',
-    BUSINESS_RULE: '业务规则测试'
-  }
-  return map[type] || type
-}
+const getCaseTypeText = (type: string) => dictLabel('test_case_type', type)
 
 const getCaseTypeColor = (type: string) => {
   const map: Record<string, string> = {
@@ -240,14 +236,7 @@ const getCaseTypeColor = (type: string) => {
   return map[type] || 'info'
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = {
-    DRAFT: '草稿',
-    CONFIRMED: '已确认',
-    DISABLED: '已禁用'
-  }
-  return map[status] || status
-}
+const getStatusText = (status: string) => dictLabel('test_case_status', status)
 
 const viewDetail = (row: any) => {
   selectedCase.value = row

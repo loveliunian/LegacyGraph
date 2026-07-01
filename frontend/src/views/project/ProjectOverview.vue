@@ -176,7 +176,7 @@
                 <div class="scan-name">{{ scan.taskName }}</div>
                 <div class="scan-type">{{ scan.taskType }}</div>
                 <el-tag size="small" :type="getScanStatusType(scan.status)">
-                  {{ scan.status }}
+                  {{ getScanStatusText(scan.status) }}
                 </el-tag>
               </div>
             </el-timeline-item>
@@ -204,7 +204,7 @@
                 <div class="review-target">{{ review.targetName }}</div>
                 <div class="review-type">{{ review.targetType }}</div>
                 <el-tag size="small" :type="getReviewStatusType(review.status)">
-                  {{ review.status }}
+                  {{ getReviewStatusText(review.status) }}
                 </el-tag>
               </div>
             </el-timeline-item>
@@ -232,9 +232,11 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { get } from '@/utils/request'
+import { projectApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import {
   FolderOpened,
@@ -249,6 +251,7 @@ import {
   DocumentChecked
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const router = useRouter()
 const route = useRoute()
@@ -285,6 +288,10 @@ const getReviewStatusType = (status: string): string => {
   return map[status] || 'info'
 }
 
+const getScanStatusText = (status: string) => dictLabel('scan_status', status)
+
+const getReviewStatusText = (status: string) => dictLabel('review_status', status)
+
 const goToSources = () => {
   router.push(`/projects/${projectId}/repos`)
 }
@@ -310,8 +317,9 @@ const generateTestCases = () => {
 }
 
 onMounted(async () => {
+  preloadDicts(['scan_status', 'review_status'])
   try {
-    const res = await get(`/lg/projects/${projectId}/overview`)
+    const res = await projectApi.overview(projectId)
     overview.value = res
     graphStats.value = res.graphStats
     recentScans.value = res.recentScanVersions || []

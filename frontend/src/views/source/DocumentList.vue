@@ -114,6 +114,7 @@ import dayjs from 'dayjs'
 import { sourceApi } from '@/api/source.api'
 import { Marked } from 'marked'
 import hljs from 'highlight.js'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -154,16 +155,7 @@ const formatSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
-const getDocTypeText = (type: string) => {
-  const map: Record<string, string> = {
-    PRODUCT: '产品文档',
-    API: '接口文档',
-    MANUAL: '操作手册',
-    DB_DESIGN: '数据库设计',
-    MIGRATION: '迁移文档'
-  }
-  return map[type] || type
-}
+const getDocTypeText = (type: string) => dictLabel('doc_type', type)
 
 const getDocIcon = (type: string) => {
   const map: Record<string, any> = {
@@ -210,13 +202,13 @@ const beforeUpload = (file: File) => {
   return true
 }
 
-const handleUploadSuccess = (response: any) => {
+const handleUploadSuccess = (_response: any) => {
   ElMessage.success('上传成功')
   loadDocList(1)
 }
 
 const handleUploadError = () => {
-  ElMessage.error('上传失败')
+  // 上传错误已由响应拦截器统一展示
 }
 
 /**
@@ -308,9 +300,9 @@ const parseDoc = async (row: any) => {
       row.factCount = 0
       ElMessage.success('解析完成')
     }
-  } catch (error) {
+  } catch {
     row.parseStatus = 'FAILED'
-    ElMessage.error('解析失败')
+    // 错误消息已由响应拦截器统一展示
   }
 }
 
@@ -336,8 +328,8 @@ const loadDocList = async (page?: number) => {
     const result = await sourceApi.listDocuments(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
     docList.value = result.list
     total.value = result.total
-  } catch (error) {
-    ElMessage.error('获取文档列表失败')
+  } catch {
+    // 错误消息已由响应拦截器统一展示
   } finally {
     loading.value = false
   }
@@ -348,6 +340,7 @@ const handlePageChange = (page: number) => {
 }
 
 onMounted(async () => {
+  preloadDicts(['doc_type'])
   await loadDocList()
 })
 </script>

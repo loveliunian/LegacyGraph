@@ -51,11 +51,14 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { graphApi } from '@/api'
 import { post } from '@/utils/request'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const props = defineProps<{ projectId: string; versionId: string }>()
 
@@ -72,11 +75,7 @@ function driftTypeTag(t: string) {
   return m[t] || 'info'
 }
 function driftTypeLabel(t: string) {
-  const m: Record<string, string> = {
-    static_only: '仅静态', dynamic_only: '仅运行时', doc_only: '仅文档',
-    low_confidence: '低置信度', test_failed: '测试失败'
-  }
-  return m[t] || t
+  return dictLabel('drift_type', t)
 }
 function severityTag(s: string) {
   if (s === 'HIGH') return 'danger'
@@ -117,7 +116,7 @@ async function createReview(row: any) {
   }
 }
 
-onMounted(() => { loadDrift() })
+onMounted(() => { preloadDicts(['drift_type']); loadDrift() })
 </script>
 
 <style scoped>

@@ -28,7 +28,7 @@
 
           <el-tooltip content="切换主题" placement="bottom">
             <el-button
-              :icon="Sunny"
+              :icon="themeIcon"
               text
               circle
               @click="toggleTheme"
@@ -81,7 +81,8 @@ import {
   User,
   Setting,
   SwitchButton,
-  Sunny
+  Sunny,
+  Moon
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
@@ -93,6 +94,7 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 
 const userInfo = computed(() => userStore.userInfo)
+const themeIcon = computed(() => appStore.isDark ? Sunny : Moon)
 
 const toggleTheme = () => {
   appStore.toggleTheme()
@@ -118,7 +120,7 @@ const handleUserCommand = async (command: string) => {
       router.push('/dashboard')
       break
     case 'settings':
-      router.push('/system/prompts')
+      router.push('/system/dictionaries')
       break
   }
 }

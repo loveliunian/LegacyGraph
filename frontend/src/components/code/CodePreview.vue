@@ -139,7 +139,7 @@ const props = withDefaults(defineProps<Props>(), {
   lineWrapping: false
 })
 
-const emit = defineEmits<{
+defineEmits<{
   retry: []
   lineClick: [lineNumber: number]
 }>()
@@ -279,17 +279,6 @@ function toggleFullscreen() {
   } else {
     document.exitFullscreen()
     isFullscreen.value = false
-  }
-}
-
-function handleLineClick(event: MouseEvent) {
-  const target = event.target as HTMLElement
-  if (target.tagName === 'SPAN' && target.classList.contains('hljs')) {
-    const rect = target.getBoundingClientRect()
-    const lineHeight = 20
-    const line = Math.floor((event.clientY - rect.top) / lineHeight) + 1
-    currentLine.value = line
-    emit('lineClick', line)
   }
 }
 

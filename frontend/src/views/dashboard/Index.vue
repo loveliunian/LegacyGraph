@@ -348,11 +348,12 @@
 </template>
 
 <script setup lang="ts">
+// ⚠️ TODO F-H7: 本组件 937 行，建议拆分为子组件 + composable：
+// DashboardStats / ProjectQuickActions / RecentActivity 等
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { projectApi, reportApi, sourceApi } from '@/api'
-import { get } from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import {
   Folder, FolderOpened, Coin, Document, CircleCheck,
@@ -493,7 +494,7 @@ async function loadDashboard() {
   try {
     const [project, overview] = await Promise.all([
       projectApi.detail(pid).catch(() => null) as any,
-      get(`/lg/projects/${pid}/overview`).catch(() => null),
+      projectApi.overview(pid).catch(() => null),
     ])
     currentProject.value = project as any
 

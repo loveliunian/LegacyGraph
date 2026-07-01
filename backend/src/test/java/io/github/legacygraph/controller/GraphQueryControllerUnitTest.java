@@ -4,7 +4,6 @@ import io.github.legacygraph.builder.FeatureSliceBuilder;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.graph.FeatureSlice;
-import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.service.GraphMergeService;
 import io.github.legacygraph.service.GraphQueryService;
 import org.junit.jupiter.api.Test;
@@ -12,7 +11,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -68,14 +66,10 @@ class GraphQueryControllerUnitTest {
 
     @Test
     void getDriftQueueReturnsStaticOnlyEdges() {
-        GraphEdge edge = new GraphEdge();
-        edge.setId("edge-1");
-        edge.setEdgeKey("A->B");
-        edge.setEdgeType("CALLS");
-        edge.setRelationStatus("static_only_candidate");
-        edge.setConfidence(BigDecimal.valueOf(0.9));
-        when(neo4jGraphDao.queryEdges("project-1", null, null, null, 200))
-                .thenReturn(List.of(edge));
+        Map<String, Object> driftQueue = Map.of(
+                "items", List.of(Map.of("id", "edge-1", "type", "static_only")),
+                "summary", Map.of("staticOnly", 1L));
+        when(graphQueryService.getDriftQueue("project-1", "static_only")).thenReturn(driftQueue);
 
         GraphQueryController controller = newController();
 

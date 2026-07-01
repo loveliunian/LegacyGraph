@@ -98,7 +98,7 @@ public class BusinessGraphBuilder {
                     null,
                     null,
                     BigDecimal.valueOf(domain.getConfidence()),
-                    domain.getConfidence() >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
+                    domain.getConfidence() >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
             );
             domainNodes.add(domainNode);
         }
@@ -119,7 +119,7 @@ public class BusinessGraphBuilder {
                     null,
                     null,
                     BigDecimal.valueOf(process.getConfidence()),
-                    process.getConfidence() >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
+                    process.getConfidence() >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
             );
 
             // 每个步骤对应一个功能
@@ -166,7 +166,7 @@ public class BusinessGraphBuilder {
                     null,
                     null,
                     BigDecimal.valueOf(obj.getConfidence()),
-                    obj.getConfidence() >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
+                    obj.getConfidence() >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
             );
         }
 
@@ -184,7 +184,7 @@ public class BusinessGraphBuilder {
                     null,
                     null,
                     BigDecimal.valueOf(rule.getConfidence()),
-                    rule.getConfidence() >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
+                    rule.getConfidence() >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
             );
         }
 
@@ -250,7 +250,7 @@ public class BusinessGraphBuilder {
                             feature.getNodeKey() + "->exposed_by->" + page.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score * 0.8),
-                            score >= 0.8 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
+                            score >= 0.8 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
                     );
                     mappedCount++;
                 }
@@ -269,7 +269,7 @@ public class BusinessGraphBuilder {
                             feature.getNodeKey() + "->implemented_by->" + api.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score * 0.7),
-                            score >= 0.7 ? NodeStatus.PENDING_CONFIRM : NodeStatus.PENDING_CONFIRM
+                            score >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
                     );
                     mappedCount++;
                 }

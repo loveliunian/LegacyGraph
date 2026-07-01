@@ -61,22 +61,10 @@
           <template #header>
             <div class="graph-header">
               <span>图谱视图</span>
-              <div class="graph-actions">
-                <el-switch
-                  v-model="useOptimizedViewer"
-                  active-text="高性能模式"
-                  inactive-text="标准模式"
-                  size="small"
-                />
-                <el-tooltip content="大数据量时建议使用高性能模式">
-                  <el-icon><InfoFilled /></el-icon>
-                </el-tooltip>
-              </div>
             </div>
           </template>
 
-          <component
-            :is="currentViewer"
+          <GraphViewerOptimized
             :nodes="filteredNodes"
             :edges="filteredEdges"
             height="calc(100vh - 255px)"
@@ -260,6 +248,8 @@
 </template>
 
 <script setup lang="ts">
+// ⚠️ TODO F-H7: 本组件 915 行，混入图谱加载/过滤/状态管理/节点定位。
+// 建议提取 composable useUnifiedGraph + 子组件 GraphFilters / NodeLocator
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -275,7 +265,6 @@ import {
   Close,
   Document,
   Location,
-  InfoFilled,
   CircleClose,
   Files,
   Operation,
@@ -286,9 +275,7 @@ import {
   QuestionFilled
 } from '@element-plus/icons-vue'
 import { graphApi, reviewApi, factApi } from '@/api'
-import { projectApi } from '@/api'
 import { loadScanVersions } from '@/utils/versionsCache'
-import GraphViewer from '@/components/graph/GraphViewer.vue'
 import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
 import EvidencePanel from '@/components/EvidencePanel.vue'
 import type { Node, Edge } from '@vue-flow/core'
@@ -303,12 +290,8 @@ const urlVersionId = (route.query.versionId as string) || ''
 const urlMinConfidence = route.query.minConfidence ? Number(route.query.minConfidence) : undefined
 
 const loading = ref(false)
-const useOptimizedViewer = ref(false)
 const defaultVisibleStatusGroups = ['approved', 'pending']
 
-const currentViewer = computed(() => {
-  return useOptimizedViewer.value ? GraphViewerOptimized : GraphViewer
-})
 const currentVersion = ref<string>('')
 const minConfidence = ref(urlMinConfidence ?? 0.5)
 const selectedNodeTypes = ref<string[]>([])

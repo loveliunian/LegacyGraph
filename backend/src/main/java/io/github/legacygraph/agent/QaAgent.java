@@ -7,8 +7,8 @@ import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.llm.LlmGateway;
 import io.github.legacygraph.service.VectorRetrievalService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -27,16 +27,14 @@ import java.util.Set;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class QaAgent {
 
-    @Autowired
-    private LlmGateway llmGateway;
+    private final LlmGateway llmGateway;
 
-    @Autowired
-    private VectorRetrievalService vectorRetrievalService;
+    private final VectorRetrievalService vectorRetrievalService;
 
-    @Autowired
-    private Neo4jGraphDao neo4jGraphDao;
+    private final Neo4jGraphDao neo4jGraphDao;
 
     /** 文档片段召回数量 */
     private static final int DOC_TOP_K = 5;

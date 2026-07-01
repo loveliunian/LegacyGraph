@@ -10,7 +10,7 @@ import './styles/variables.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
-import i18n, { getLocale, setLocale } from './locales'
+import i18n, { getLocale } from './locales'
 import { useAppStore } from './stores/app'
 
 const app = createApp(App)

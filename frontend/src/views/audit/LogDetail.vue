@@ -98,6 +98,8 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
@@ -107,7 +109,6 @@ import { get } from '@/utils/request'
 
 const router = useRouter()
 const route = useRoute()
-const projectId = route.params.projectId as string
 
 const logDetail = ref<any>(null)
 

@@ -67,13 +67,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { testRunApi } from '@/api'
-import type { TestRun, TestResult } from '@/types'
+import type { TestResult } from '@/types'
 import { ElMessage } from 'element-plus'
 
-const router = useRouter()
 const route = useRoute()
 const projectStore = useProjectStore()
 

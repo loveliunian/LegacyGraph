@@ -1,11 +1,11 @@
 package io.github.legacygraph.config;
 
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.llm.LlmGateway;
+import io.github.legacygraph.service.GraphQueryService;
 import io.github.legacygraph.service.LlmProviderService;
 import io.github.legacygraph.service.PromptTemplateService;
-import io.github.legacygraph.service.ScanVersionService;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -13,7 +13,13 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -24,12 +30,6 @@ import static org.mockito.Mockito.when;
  */
 @Configuration
 public class H2TestConfig {
-
-    @Bean
-    @Primary
-    public OpenAiChatModel openAiChatModel() {
-        return mock(OpenAiChatModel.class);
-    }
 
     @Bean
     @Primary
@@ -55,6 +55,36 @@ public class H2TestConfig {
         EmbeddingModel mockModel = mock(EmbeddingModel.class);
         when(mockModel.embed(anyString())).thenReturn(new float[]{0.1f, 0.2f, 0.3f});
         return mockModel;
+    }
+
+    @Bean
+    @Primary
+    public Neo4jGraphDao neo4jGraphDao() {
+        Neo4jGraphDao dao = mock(Neo4jGraphDao.class);
+        when(dao.findNodeById(anyString())).thenReturn(Optional.empty());
+        when(dao.findNodesByIds(any())).thenReturn(List.of());
+        when(dao.queryNodes(anyString(), any(), any(), any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(dao.queryNodes(anyString(), any(), any(), any(), any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(dao.graphStats(anyString())).thenReturn(Map.of());
+        when(dao.versionGraphStats(anyString(), anyString())).thenReturn(Map.of());
+        return dao;
+    }
+
+    @Bean
+    @Primary
+    public GraphQueryService graphQueryService() {
+        GraphQueryService service = mock(GraphQueryService.class);
+        when(service.getApiCallChain(anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(service.getTableImpact(anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(service.getTablesNodes(anyString(), anyString())).thenReturn(List.of());
+        when(service.getFeatureView(anyString(), anyString(), anyString())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
+        when(service.getBusinessView(anyString(), anyString(), anyString())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
+        when(service.getUnifiedGraph(anyString(), any(), any())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
+        when(service.getDriftQueue(anyString(), anyString())).thenReturn(Map.of(
+                "items", List.of(),
+                "summary", Map.of("staticOnly", 0L, "runtimeOnly", 0L, "docOnly", 0L, "lowConfidence", 0L)
+        ));
+        return service;
     }
 
     @Bean

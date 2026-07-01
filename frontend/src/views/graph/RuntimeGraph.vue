@@ -323,7 +323,7 @@ function selectInitialTrace() {
 /**
  * 加载指定链路的详细拓扑
  */
-function loadTraceDetail(traceId: string) {
+function loadTraceDetail(_traceId: string) {
   // 简化实现：从 services 数据生成拓扑节点
   traceNodes.value = services.value.slice(0, 5).map((s, idx) => ({
     id: s.id,

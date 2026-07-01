@@ -1,23 +1,17 @@
 package io.github.legacygraph.builder;
 
-import io.github.legacygraph.agent.SqlAdvisorAgent;
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.dto.SqlAdvisorResult;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.model.MapperSqlFact;
-import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,22 +25,21 @@ class GraphBuilderTest {
     private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private EvidenceGraphWriter writer;
-    @Mock
-    private SqlAdvisorAgent sqlAdvisorAgent;
-    @Mock
-    private ReviewRecordRepository reviewRecordRepository;
 
     private GraphBuilder graphBuilder;
 
     @Test
     void testConstruction() {
-        graphBuilder = new GraphBuilder(neo4jGraphDao, writer, sqlAdvisorAgent, reviewRecordRepository);
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
         assertNotNull(graphBuilder);
     }
 
+    /**
+     * C：扫描期不再调用 SQL 顾问 LLM，buildMapperSqlGraph 仅构建图谱节点/边。
+     */
     @Test
-    void testBuildMapperSqlGraph_CreatesReviewRecordForSqlAdvisorIssues() {
-        graphBuilder = new GraphBuilder(neo4jGraphDao, writer, sqlAdvisorAgent, reviewRecordRepository);
+    void testBuildMapperSqlGraph_BuildsGraphWithoutLlm() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
         when(writer.upsertNode(any(GraphNodeClaim.class))).thenAnswer(invocation -> {
             GraphNodeClaim claim = invocation.getArgument(0);
             GraphNode node = new GraphNode();
@@ -74,19 +67,6 @@ class GraphBuilderTest {
             edge.setStatus(claim.getStatus());
             return edge;
         });
-        when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
-
-        SqlAdvisorResult.SqlIssue issue = new SqlAdvisorResult.SqlIssue();
-        issue.setIssueType("SELECT_STAR");
-        issue.setSeverity("HIGH");
-        issue.setDescription("SELECT * 会放大 IO");
-        issue.setSuggestion("只查询需要字段");
-        SqlAdvisorResult result = new SqlAdvisorResult();
-        result.setSummary("存在高风险 SQL");
-        result.setOverallRisk("HIGH");
-        result.setIssues(List.of(issue));
-        when(sqlAdvisorAgent.analyze(eq("project-1"), eq("com.demo.OrderMapper.list"), any(), any()))
-                .thenReturn(result);
 
         MyBatisXmlExtractor.SqlStatement stmt = new MyBatisXmlExtractor.SqlStatement();
         stmt.setId("list");
@@ -100,12 +80,8 @@ class GraphBuilderTest {
 
         graphBuilder.buildMapperSqlGraph("project-1", "v1", mapper);
 
-        ArgumentCaptor<ReviewRecord> reviewCaptor = ArgumentCaptor.forClass(ReviewRecord.class);
-        verify(reviewRecordRepository).insert(reviewCaptor.capture());
-        ReviewRecord review = reviewCaptor.getValue();
-        assertEquals("PENDING", review.getStatus());
-        assertEquals("SqlStatement", review.getTargetType());
-        assertTrue(review.getComment().contains("存在高风险 SQL"));
-        assertTrue(review.getComment().contains("SELECT_STAR"));
+        // 仍构建 Mapper、SqlStatement、Table 等节点与 CONTAINS/READS/EXECUTES 等边
+        verify(writer, atLeast(2)).upsertNode(any(GraphNodeClaim.class));
+        verify(writer, atLeast(1)).upsertEdge(any(GraphEdgeClaim.class));
     }
 }

@@ -7,6 +7,8 @@ import io.github.legacygraph.llm.LlmCallException;
 import io.github.legacygraph.llm.LlmGateway;
 import io.github.legacygraph.llm.PiiMaskingService;
 import io.github.legacygraph.llm.PromptTemplateLoader;
+import io.github.legacygraph.llm.SecretScanService;
+import io.github.legacygraph.repository.AgentRunRepository;
 import io.github.legacygraph.repository.PromptRunRepository;
 import io.github.legacygraph.service.CacheService;
 import io.github.legacygraph.service.LlmProviderService;
@@ -16,8 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Map;
+import org.springframework.retry.support.RetryTemplate;
 
 import java.util.Map;
 
@@ -37,6 +38,8 @@ class LlmGatewayTest {
     @Mock
     private PromptRunRepository promptRunRepository;
     @Mock
+    private AgentRunRepository agentRunRepository;
+    @Mock
     private LlmProviderService llmProviderService;
 
     private LlmGateway llmGateway;
@@ -51,8 +54,9 @@ class LlmGatewayTest {
                 org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
         PromptTemplateLoader templateLoader = new PromptTemplateLoader(promptTemplateService);
         PiiMaskingService piiMaskingService = new PiiMaskingService();
-        llmGateway = new LlmGateway(objectMapper, promptRunRepository, templateLoader,
-                piiMaskingService, llmProviderService);
+        SecretScanService secretScanService = new SecretScanService();
+        llmGateway = new LlmGateway(objectMapper, promptRunRepository, agentRunRepository, templateLoader,
+                piiMaskingService, secretScanService, llmProviderService, new RetryTemplate());
     }
 
     @Test

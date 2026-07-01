@@ -13,7 +13,7 @@ export function showLoading(text = '加载中...') {
     loadingInstance = ElLoading.service({
       lock: true,
       text,
-      background: 'rgba(255, 255, 255, 0.7)',
+      background: 'var(--el-bg-color, rgba(255, 255, 255, 0.7))',
       fullscreen: true
     })
   }
@@ -65,6 +65,6 @@ export function createLocalLoading(target: HTMLElement | string, text?: string) 
     target,
     lock: true,
     text,
-    background: 'rgba(255, 255, 255, 0.7)'
+    background: 'var(--el-bg-color, rgba(255, 255, 255, 0.7))'
   })
 }

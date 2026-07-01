@@ -10,7 +10,7 @@ export { vectorApi } from './vector.api'
 export { traceApi } from './trace.api'
 
 // 保留原有导出向后兼容
-import request from '@/utils/request'
+import { get, post, del, put } from '@/utils/request'
 
 /**
  * 项目管理API
@@ -23,7 +23,7 @@ export const projectApi = {
    * @returns 分页后的项目列表
    */
   list: (params: { pageNum: number, pageSize: number, keyword?: string }) => {
-    return request.get('/lg/projects', { params })
+    return get('/lg/projects', { params })
   },
 
   /**
@@ -32,7 +32,7 @@ export const projectApi = {
    * @returns 创建结果
    */
   create: (data: { projectCode: string, projectName: string, description?: string }) => {
-    return request.post('/lg/projects', data)
+    return post('/lg/projects', data)
   },
 
   /**
@@ -41,7 +41,7 @@ export const projectApi = {
    * @returns 删除结果
    */
   delete: (id: string) => {
-    return request.delete(`/lg/projects/${id}`)
+    return del(`/lg/projects/${id}`)
   },
 
   /**
@@ -50,7 +50,12 @@ export const projectApi = {
    * @returns 项目详情
    */
   detail: (id: string) => {
-    return request.get(`/lg/projects/${id}`)
+    return get(`/lg/projects/${id}`)
+  },
+
+  /** 获取项目概览 */
+  overview: (id: string) => {
+    return get(`/lg/projects/${id}/overview`)
   }
 }
 
@@ -66,7 +71,7 @@ export const scanApi = {
    * @returns 创建结果
    */
   create: (projectId: string, data: { versionNo: string, branchName?: string }) => {
-    return request.post(`/lg/projects/${projectId}/scan-versions`, data)
+    return post(`/lg/projects/${projectId}/scan-versions`, data)
   },
 
   /**
@@ -76,7 +81,7 @@ export const scanApi = {
    * @returns 扫描进度信息
    */
   progress: (projectId: string, versionId: string) => {
-    return request.get(`/lg/projects/${projectId}/scan-versions/${versionId}/progress`)
+    return get(`/lg/projects/${projectId}/scan-versions/${versionId}/progress`)
   },
 
   /**
@@ -87,7 +92,8 @@ export const scanApi = {
    * @returns 启动结果
    */
   start: (projectId: string, versionId: string, baseDir?: string) => {
-    return request.post(`/lg/projects/${projectId}/scan-versions/${versionId}/start?baseDir=${baseDir || ''}`)
+    // F-M3：baseDir 可能含 & / # / 中文等特殊字符，必须 encodeURIComponent，否则破坏 URL
+    return post(`/lg/projects/${projectId}/scan-versions/${versionId}/start?baseDir=${encodeURIComponent(baseDir || '')}`)
   }
 }
 
@@ -105,7 +111,7 @@ export const graphApi = {
    * @returns 调用链节点列表
    */
   getApiChain: (projectId: string, versionId: string, api: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/api-chain`, { params: { versionId, api } })
+    return get(`/lg/projects/${projectId}/graph/api-chain`, { params: { versionId, api } })
   },
 
   /**
@@ -117,7 +123,7 @@ export const graphApi = {
    * @returns 影响范围列表
    */
   getTableImpact: (projectId: string, versionId: string, tableName: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/table-impact`, { params: { versionId, tableName } })
+    return get(`/lg/projects/${projectId}/graph/table-impact`, { params: { versionId, tableName } })
   },
 
   /**
@@ -129,7 +135,7 @@ export const graphApi = {
    * @returns 功能视图数据，包含节点和边
    */
   getFeatureView: (projectId: string, versionId: string, module: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/feature-view`, { params: { versionId, module } })
+    return get(`/lg/projects/${projectId}/graph/feature-view`, { params: { versionId, module } })
   },
 
   /**
@@ -141,7 +147,7 @@ export const graphApi = {
    * @returns 业务视图数据，包含节点和边
    */
   getBusinessView: (projectId: string, versionId: string, domain: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/business-view`, { params: { versionId, domain } })
+    return get(`/lg/projects/${projectId}/graph/business-view`, { params: { versionId, domain } })
   },
 
   /**
@@ -152,7 +158,7 @@ export const graphApi = {
    * @returns 合并候选对列表
    */
   getMergeCandidates: (projectId: string, nodeType: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/merge/candidates`, { params: { nodeType } })
+    return get(`/lg/projects/${projectId}/graph/merge/candidates`, { params: { nodeType } })
   },
 
   /**
@@ -163,7 +169,7 @@ export const graphApi = {
    * @returns 合并决策结果
    */
   decideMerge: (projectId: string, candidate: { nodeAId: string, nodeBId: string }) => {
-    return request.post(`/lg/projects/${projectId}/graph/merge/decide`, candidate)
+    return post(`/lg/projects/${projectId}/graph/merge/decide`, candidate)
   },
 
   /**
@@ -175,14 +181,14 @@ export const graphApi = {
    * @returns 执行结果
    */
   executeMerge: (projectId: string, targetNodeId: string, mergeNodeId: string) => {
-    return request.post(`/lg/projects/${projectId}/graph/merge/execute`, null, {
+    return post(`/lg/projects/${projectId}/graph/merge/execute`, null, {
       params: { targetNodeId, mergeNodeId }
     })
   },
 
   /** 获取统一图谱全量数据 */
   getUnifiedGraph: (projectId: string, versionId: string, minConfidence: number = 0) => {
-    return request.get(`/lg/projects/${projectId}/graph/unified`, {
+    return get(`/lg/projects/${projectId}/graph/unified`, {
       params: { versionId, minConfidence }
     })
   },
@@ -191,7 +197,7 @@ export const graphApi = {
    * 获取功能切片列表（证据工作台）
    */
   getFeatureSlices: (projectId: string, versionId: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/feature-slices`, {
+    return get(`/lg/projects/${projectId}/graph/feature-slices`, {
       params: { versionId }
     })
   },
@@ -200,14 +206,14 @@ export const graphApi = {
    * 获取单个功能切片详情
    */
   getFeatureSliceDetail: (projectId: string, sliceId: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/feature-slices/${sliceId}`)
+    return get(`/lg/projects/${projectId}/graph/feature-slices/${sliceId}`)
   },
 
   /**
    * 获取图谱质量统计（含无证据节点/AI-only边/runtime-only边等）
    */
   getGraphQualityReport: (projectId: string, versionId?: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/quality`, {
+    return get(`/lg/projects/${projectId}/graph/quality`, {
       params: versionId ? { versionId } : {}
     })
   },
@@ -216,19 +222,19 @@ export const graphApi = {
    * 获取漂移队列
    */
   getDriftQueue: (projectId: string, type?: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/drift-queue`, {
+    return get(`/lg/projects/${projectId}/graph/drift-queue`, {
       params: type ? { type } : {}
     })
   },
 
   /** 获取数据库表节点列表（仅Table节点，轻量查询） */
   getTables: (projectId: string, versionId: string) => {
-    return request.get(`/lg/projects/${projectId}/graph/tables`, { params: { versionId } })
+    return get(`/lg/projects/${projectId}/graph/tables`, { params: { versionId } })
   },
 
   /** 获取项目扫描版本列表 */
   getScanVersions: (projectId: string) => {
-    return request.get(`/lg/projects/${projectId}/scan-versions`)
+    return get(`/lg/projects/${projectId}/scan-versions`)
   },
 }
 
@@ -250,7 +256,7 @@ export const reviewApi = {
     pageNum: number,
     pageSize: number
   }) => {
-    return request.get(`/lg/projects/${projectId}/reviews`, { params })
+    return get(`/lg/projects/${projectId}/reviews`, { params })
   },
 
   /**
@@ -265,7 +271,7 @@ export const reviewApi = {
     pageNum: number,
     pageSize: number
   }) => {
-    return request.get(`/lg/projects/${projectId}/reviews/history`, { params })
+    return get(`/lg/projects/${projectId}/reviews/history`, { params })
   },
 
   /**
@@ -275,7 +281,7 @@ export const reviewApi = {
    * @returns 审核详情
    */
   getDetail: (projectId: string, id: string) => {
-    return request.get(`/lg/projects/${projectId}/reviews/${id}`)
+    return get(`/lg/projects/${projectId}/reviews/${id}`)
   },
 
   /**
@@ -289,7 +295,7 @@ export const reviewApi = {
     targetType: string,
     comment?: string
   }) => {
-    return request.post(`/lg/projects/${projectId}/reviews/confirm`, data)
+    return post(`/lg/projects/${projectId}/reviews/confirm`, data)
   },
 
   /**
@@ -303,7 +309,7 @@ export const reviewApi = {
     targetType: string,
     comment?: string
   }) => {
-    return request.post(`/lg/projects/${projectId}/reviews/reject`, data)
+    return post(`/lg/projects/${projectId}/reviews/reject`, data)
   },
 
   /**
@@ -314,7 +320,7 @@ export const reviewApi = {
    * @returns 操作结果
    */
   batchConfirm: (projectId: string, ids: string[], comment?: string) => {
-    return request.post(`/lg/projects/${projectId}/reviews/batch-confirm`, ids, { params: { comment } })
+    return post(`/lg/projects/${projectId}/reviews/batch-confirm`, ids, { params: { comment } })
   }
 }
 
@@ -334,7 +340,7 @@ export const testApi = {
     caseType?: string
     status?: string
   }) => {
-    return request.get(`/lg/projects/${projectId}/test-cases`, { params })
+    return get(`/lg/projects/${projectId}/test-cases`, { params })
   },
 
   /**
@@ -343,7 +349,7 @@ export const testApi = {
    * @param id 用例ID
    */
   getDetail: (projectId: string, id: string) => {
-    return request.get(`/lg/projects/${projectId}/test-cases/${id}`)
+    return get(`/lg/projects/${projectId}/test-cases/${id}`)
   },
 
   /**
@@ -352,7 +358,7 @@ export const testApi = {
    * @param data 用例数据
    */
   create: (projectId: string, data: any) => {
-    return request.post(`/lg/projects/${projectId}/test-cases`, data)
+    return post(`/lg/projects/${projectId}/test-cases`, data)
   },
 
   /**
@@ -362,7 +368,7 @@ export const testApi = {
    * @param data 用例数据
    */
   update: (projectId: string, id: string, data: any) => {
-    return request.put(`/lg/projects/${projectId}/test-cases/${id}`, data)
+    return put(`/lg/projects/${projectId}/test-cases/${id}`, data)
   },
 
   /**
@@ -371,7 +377,7 @@ export const testApi = {
    * @param id 用例ID
    */
   delete: (projectId: string, id: string) => {
-    return request.delete(`/lg/projects/${projectId}/test-cases/${id}`)
+    return del(`/lg/projects/${projectId}/test-cases/${id}`)
   },
 
   /**
@@ -381,7 +387,7 @@ export const testApi = {
    * @returns 生成的测试用例列表
    */
   generate: (projectId: string, data: { versionId: string, scope: { nodeTypes: string[], priority: string[] } }) => {
-    return request.post(`/lg/projects/${projectId}/test-cases/generate`, data)
+    return post(`/lg/projects/${projectId}/test-cases/generate`, data)
   },
 
   /**
@@ -391,7 +397,7 @@ export const testApi = {
    * @returns 启动结果
    */
   startRun: (projectId: string, data: { versionId: string, caseIds: string[], environment: string }) => {
-    return request.post(`/lg/projects/${projectId}/test-runs/start`, data)
+    return post(`/lg/projects/${projectId}/test-runs/start`, data)
   }
 }
 
@@ -406,7 +412,7 @@ export const validationApi = {
    * @returns 验证报告数据
    */
   getReport: (versionId: string) => {
-    return request.get(`/lg/validation/report/${versionId}`)
+    return get(`/lg/validation/report/${versionId}`)
   },
 
   /**
@@ -416,7 +422,7 @@ export const validationApi = {
    * @returns 操作结果
    */
   updateConfidence: (versionId: string) => {
-    return request.post(`/lg/validation/update-confidence/${versionId}`)
+    return post(`/lg/validation/update-confidence/${versionId}`)
   },
 
   /**
@@ -425,8 +431,7 @@ export const validationApi = {
    * @returns 操作结果
    */
   confirm: (data: { targetType: string, targetId: string, reviewStatus: string, comment?: string }) => {
-    return request.post('/lg/validation/confirm', data)
+    return post('/lg/validation/confirm', data)
   }
 }
 
-export default request

@@ -3,8 +3,8 @@ package io.github.legacygraph.agent;
 import io.github.legacygraph.dto.TestFailureAnalysis;
 import io.github.legacygraph.llm.LlmGateway;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -18,10 +18,10 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class TestFailureAnalysisAgent {
 
-    @Autowired
-    private LlmGateway llmGateway;
+    private final LlmGateway llmGateway;
 
     @Data
     public static class FailureContext {

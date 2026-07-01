@@ -25,11 +25,7 @@ public class ProjectOverviewController {
     @Operation(summary = "获取项目概览", description = "获取项目的资料接入状态、图谱统计、最近扫描版本和审核记录")
     public Result<ProjectOverviewResponse> getOverview(
             @PathVariable String projectId) {
-        try {
-            ProjectOverviewResponse response = projectOverviewService.getOverview(projectId);
-            return Result.success(response);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        ProjectOverviewResponse response = projectOverviewService.getOverview(projectId);
+        return Result.success(response);
     }
 }

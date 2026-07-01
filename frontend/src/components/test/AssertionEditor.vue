@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, inject } from 'vue'
+import { ref, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 
 interface Assertion {

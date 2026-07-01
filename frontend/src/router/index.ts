@@ -1,6 +1,19 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import * as LoadingService from '@/utils/loading'
+
+/**
+ * F-H6：路由元信息类型增强。
+ * - requiresAuth：是否需要登录（默认 true）。
+ * - roles：允许访问的角色列表，留空表示任意已登录用户均可访问。
+ */
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    title?: string
+    /** 允许访问的角色，命中其一即可；缺省表示不限角色（F-H6） */
+    roles?: string[]
+  }
+}
 
 const routes: RouteRecordRaw[] = [
   {
@@ -201,35 +214,43 @@ const routes: RouteRecordRaw[] = [
         ]
       },
       {
-        path: 'system/users',
-        name: 'SystemUserList',
-        component: () => import('@/views/system/UserList.vue'),
-        meta: { title: 'menu.systemUsers' }
+        path: 'system',
+        component: () => import('@/components/SystemSettingsLayout.vue'),
+        meta: { requiresAuth: true, roles: ['ADMIN'] },
+        redirect: { name: 'SystemDictionaryList' },
+        children: [
+          {
+            path: 'users',
+            name: 'SystemUserList',
+            component: () => import('@/views/system/UserList.vue'),
+            meta: { title: '用户管理' }
+          },
+          {
+            path: 'dictionaries',
+            name: 'SystemDictionaryList',
+            component: () => import('@/views/system/DictionaryList.vue'),
+            meta: { title: '字典管理' }
+          },
+          {
+            path: 'settings',
+            name: 'SystemSettings',
+            component: () => import('@/views/system/Settings.vue'),
+            meta: { title: '系统配置' }
+          },
+          {
+            path: 'llm',
+            name: 'LlmProviderSettings',
+            component: () => import('@/views/system/LlmProviderSettings.vue'),
+            meta: { title: 'LLM 提供商' }
+          },
+          {
+            path: 'prompts',
+            name: 'PromptTemplateList',
+            component: () => import('@/views/system/PromptList.vue'),
+            meta: { title: '提示词管理' }
+          }
+        ]
       },
-      {
-        path: 'system/dictionaries',
-        name: 'SystemDictionaryList',
-        component: () => import('@/views/system/DictionaryList.vue'),
-        meta: { title: 'menu.systemDictionaries' }
-      },
-      {
-        path: 'system/settings',
-        name: 'SystemSettings',
-        component: () => import('@/views/system/Settings.vue'),
-        meta: { title: 'menu.systemSettings' }
-      },
-      {
-        path: 'system/llm',
-        name: 'LlmProviderSettings',
-        component: () => import('@/views/system/LlmProviderSettings.vue'),
-        meta: { title: 'LLM 提供商' }
-      },
-      {
-        path: 'system/prompts',
-        name: 'PromptTemplateList',
-        component: () => import('@/views/system/PromptList.vue'),
-        meta: { title: '提示词管理' }
-      }
     ]
   },
   {
@@ -249,17 +270,19 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior(to, from, savedPosition) {
+  scrollBehavior(_to, _from, savedPosition) {
     return savedPosition || { top: 0 }
   }
 })
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const userStore = useUserStore()
   const requiresAuth = to.meta.requiresAuth !== false
 
   if (requiresAuth) {
-    if (!userStore.accessToken) {
+    // F-H6：不仅校验 token 存在，还校验是否过期；过期则清登录态并回登录页。
+    if (!userStore.accessToken || userStore.isTokenExpired()) {
+      userStore.clearAuth()
       next('/login')
       return
     }
@@ -271,9 +294,15 @@ router.beforeEach(async (to, from, next) => {
         return
       }
     }
+    // F-H6：路由级角色守卫——meta.roles 命中其一才放行，否则跳 403。
+    const requiredRoles = to.meta.roles
+    if (requiredRoles && requiredRoles.length > 0 && !userStore.hasAnyRole(requiredRoles)) {
+      next('/403')
+      return
+    }
   }
 
-  if (to.path === '/login' && userStore.accessToken) {
+  if (to.path === '/login' && userStore.accessToken && !userStore.isTokenExpired()) {
     next('/dashboard')
     return
   }
@@ -281,13 +310,8 @@ router.beforeEach(async (to, from, next) => {
   next()
 })
 
-router.beforeResolve(async (to, from, next) => {
-  LoadingService.showLoading()
-  next()
-})
-
-router.afterEach(() => {
-  LoadingService.hideLoading()
-})
+// F-H11：移除路由级 beforeResolve/afterEach 的全屏 loading。
+// 原实现在每次导航都强制 showLoading，与首屏请求的 loading 双重叠加阻塞 UI；
+// 现改为按需 loading（请求层 _showLoading），导航不再叠加全局 loading。
 
 export default router

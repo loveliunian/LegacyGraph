@@ -26,7 +26,7 @@
               <el-checkbox v-for="repo in repoList" :key="repo.id" :label="repo.id">
                 <div class="checkbox-item">
                   <span class="item-name">{{ repo.repoName }}</span>
-                  <el-tag size="small" type="info">{{ repo.repoType === 'BACKEND' ? '后端' : '前端' }}</el-tag>
+                  <el-tag size="small" type="info">{{ repoTypeText(repo.repoType) }}</el-tag>
                 </div>
               </el-checkbox>
             </div>
@@ -214,10 +214,13 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { get, post } from '@/utils/request'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const router = useRouter()
@@ -257,16 +260,9 @@ const getDocName = (id: string) => {
   return doc ? doc.docName : id
 }
 
-const getScanTypeText = (type: string) => {
-  const map: Record<string, string> = {
-    CODE_SCAN: '代码扫描',
-    DB_SCAN: '数据库扫描',
-    DOC_PARSE: '文档解析',
-    GRAPH_BUILD: '图谱构建',
-    TEST_GENERATE: '测试生成'
-  }
-  return map[type] || type
-}
+const getScanTypeText = (type: string) => dictLabel('scan_type', type)
+
+const repoTypeText = (type: string) => dictLabel('repo_type', type)
 
 const canProceed = () => {
   if (currentStep.value === 0) {
@@ -366,6 +362,9 @@ const startScan = async () => {
 }
 
 onMounted(async () => {
+  // 预加载字典数据
+  preloadDicts(['repo_type', 'scan_type'])
+
   const now = new Date()
   scanForm.taskName = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} 全量扫描`
 

@@ -54,12 +54,8 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "创建扫描版本请求", required = true)
             @RequestBody CreateScanVersionRequest request) {
-        try {
-            ScanVersion version = scanVersionService.createScanVersion(projectId, request);
-            return Result.success(version.getId());
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        ScanVersion version = scanVersionService.createScanVersion(projectId, request);
+        return Result.success(version.getId());
     }
 
     /**
@@ -73,12 +69,8 @@ public class ScanController {
     public Result<ScanProgressResponse> progress(
             @Parameter(description = "扫描版本ID", required = true)
             @PathVariable String versionId) {
-        try {
-            ScanProgressResponse response = scanVersionService.getScanProgress(versionId);
-            return Result.success(response);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        ScanProgressResponse response = scanVersionService.getScanProgress(versionId);
+        return Result.success(response);
     }
 
     /**
@@ -102,14 +94,10 @@ public class ScanController {
             @PathVariable String versionId,
             @Parameter(description = "本地代码基础目录，可选，用于本地代码扫描")
             @RequestParam(required = false) String baseDir) {
-        try {
-            scanVersionService.updateScanStatus(versionId, "RUNNING");
-            // 异步启动完整扫描
-            projectScanner.startFullScan(projectId, versionId, baseDir);
-            return Result.success();
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        scanVersionService.updateScanStatus(versionId, "RUNNING");
+        // 异步启动完整扫描
+        projectScanner.startFullScan(projectId, versionId, baseDir);
+        return Result.success();
     }
 
     /**
@@ -126,12 +114,8 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
             @PathVariable String versionId) {
-        try {
-            scanVersionService.updateScanStatus(versionId, "PAUSED");
-            return Result.success();
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        scanVersionService.updateScanStatus(versionId, "PAUSED");
+        return Result.success();
     }
 
     /**
@@ -148,12 +132,8 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
             @PathVariable String versionId) {
-        try {
-            scanVersionService.updateScanStatus(versionId, "CANCELLED");
-            return Result.success();
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        scanVersionService.updateScanStatus(versionId, "CANCELLED");
+        return Result.success();
     }
 
     /**
@@ -173,13 +153,9 @@ public class ScanController {
             @PathVariable String versionId,
             @Parameter(description = "本地代码基础目录，可选")
             @RequestParam(required = false) String baseDir) {
-        try {
-            scanVersionService.updateScanStatus(versionId, "RUNNING");
-            projectScanner.resumeFullScan(projectId, versionId, baseDir);
-            return Result.success();
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        scanVersionService.updateScanStatus(versionId, "RUNNING");
+        projectScanner.resumeFullScan(projectId, versionId, baseDir);
+        return Result.success();
     }
 
     /**
@@ -200,11 +176,7 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
             @PathVariable String versionId) {
-        try {
-            scanVersionService.deleteScanVersion(versionId);
-            return Result.success();
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        scanVersionService.deleteScanVersion(versionId);
+        return Result.success();
     }
 }

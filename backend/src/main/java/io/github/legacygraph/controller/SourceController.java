@@ -31,7 +31,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -41,11 +43,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 资料接入控制器
  * 管理项目的三类数据源：代码仓库、数据库连接、文档资料
  * 这些资料将被用于知识图谱抽取和分析
+ *
+ * <p>⚠️ TODO B-H3：本类承担三个独立领域（代码仓库/DB连接/文档），应拆分为：</p>
+ * <ul>
+ *   <li>{@code RepoController} — 代码仓库 CRUD + git clone/pull</li>
+ *   <li>{@code DbConnectionController} — 数据库连接管理</li>
+ *   <li>{@code DocumentController} — 文档上传/解析/下载</li>
+ * </ul>
+ * <p>业务逻辑（git 进程操作、JDBC 连接测试、文档解析切片）同时下沉到对应 Service。</p>
  */
 @Slf4j
 @RestController
@@ -60,6 +71,7 @@ public class SourceController {
     private final ScanVersionService scanVersionService;
     private final ProjectScanner projectScanner;
     private final io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator;
+    private final io.github.legacygraph.service.SourceService sourceService;
 
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -83,7 +95,8 @@ public class SourceController {
                             DocChunkRepository docChunkRepository,
                             ScanVersionService scanVersionService,
                             ProjectScanner projectScanner,
-                            io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator) {
+                            io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator,
+                            io.github.legacygraph.service.SourceService sourceService) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
@@ -91,6 +104,7 @@ public class SourceController {
         this.scanVersionService = scanVersionService;
         this.projectScanner = projectScanner;
         this.graphCacheInvalidator = graphCacheInvalidator;
+        this.sourceService = sourceService;
     }
 
     // ==================== 代码仓库 ====================
@@ -282,24 +296,33 @@ public class SourceController {
 
         Map<String, Object> result = new HashMap<>();
         ProcessBuilder pb = new ProcessBuilder("git", "ls-remote", "--exit-code", repo.getGitUrl());
+        pb.redirectErrorStream(true);
         if (repo.getUsername() != null && !repo.getUsername().isEmpty()) {
             // 认证信息由git credential helper处理，这里简化
         }
         try {
             Process process = pb.start();
             int exitCode = process.waitFor();
+
+            // 读取输出用于诊断
+            String gitOutput;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                gitOutput = reader.lines().collect(Collectors.joining("\n"));
+            }
+
             if (exitCode == 0) {
                 result.put("success", true);
                 result.put("message", "连接测试成功");
                 log.info("Git repository connection test succeeded: {}", repo.getGitUrl());
             } else {
+                String shortError = extractGitError(gitOutput);
                 result.put("success", false);
-                result.put("message", "连接测试失败，exit code: " + exitCode);
-                log.warn("Git repository connection test failed with exit code: {}", exitCode);
+                result.put("message", "连接失败: " + shortError);
+                log.warn("Git repository connection test failed with exit code: {}, output: {}", exitCode, gitOutput);
             }
         } catch (Exception e) {
             result.put("success", false);
-            result.put("message", "连接测试失败: " + e.getMessage());
+            result.put("message", "连接测试异常: " + e.getMessage());
             log.error("Git repository connection test failed", e);
         }
         return Result.success(result);
@@ -331,21 +354,30 @@ public class SourceController {
 
         Map<String, Object> result = new HashMap<>();
         ProcessBuilder pb = new ProcessBuilder("git", "ls-remote", "--exit-code", gitUrl);
+        pb.redirectErrorStream(true);
         try {
             Process process = pb.start();
             int exitCode = process.waitFor();
+
+            // 读取输出用于诊断
+            String gitOutput;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                gitOutput = reader.lines().collect(Collectors.joining("\n"));
+            }
+
             if (exitCode == 0) {
                 result.put("success", true);
                 result.put("message", "连接测试成功");
                 log.info("Git URL test succeeded: {}", gitUrl);
             } else {
+                String shortError = extractGitError(gitOutput);
                 result.put("success", false);
-                result.put("message", "连接测试失败，exit code: " + exitCode);
-                log.warn("Git URL test failed with exit code: {}", exitCode);
+                result.put("message", "连接失败: " + shortError);
+                log.warn("Git URL test failed with exit code: {}, output: {}", exitCode, gitOutput);
             }
         } catch (Exception e) {
             result.put("success", false);
-            result.put("message", "连接测试失败: " + e.getMessage());
+            result.put("message", "连接测试异常: " + e.getMessage());
             log.error("Git URL test failed", e);
         }
         return Result.success(result);
@@ -378,6 +410,7 @@ public class SourceController {
         repo.setUpdatedAt(LocalDateTime.now());
         codeRepoRepository.updateById(repo);
 
+        String errorMessage = "拉取失败";
         try {
             String baseDir = System.getProperty("user.home") + "/.legacygraph/repos/" + projectId;
             Files.createDirectories(Path.of(baseDir));
@@ -394,14 +427,22 @@ public class SourceController {
                 pb = new ProcessBuilder("git", "clone", "--depth", "1", "--single-branch",
                         "-b", repo.getBranchName(), repo.getGitUrl(), localPath);
             }
+            pb.redirectErrorStream(true);
 
             Process process = pb.start();
             boolean finished = process.waitFor(5, java.util.concurrent.TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();
-                throw new RuntimeException("Git操作超时（5分钟），仓库过大或网络异常");
+                errorMessage = "Git操作超时（5分钟），仓库过大或网络异常";
+                throw new RuntimeException(errorMessage);
             }
             int exitCode = process.exitValue();
+
+            // 读取 git 命令输出，用于诊断失败原因
+            String gitOutput;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                gitOutput = reader.lines().collect(Collectors.joining("\n"));
+            }
 
             if (exitCode == 0) {
                 repo.setStatus("READY");
@@ -412,12 +453,18 @@ public class SourceController {
                 repo.setStatus("PULL_FAILED");
                 repo.setLastPullStatus("FAILED");
                 repo.setLastPullTime(LocalDateTime.now());
-                log.warn("Git repository pull failed with exit code: {}", exitCode);
+                // 提取 git 错误的关键行（fatal: / error: / remote: 开头）
+                String shortError = extractGitError(gitOutput);
+                errorMessage = "Git操作失败: " + shortError;
+                log.warn("Git repository pull failed with exit code: {}, output: {}", exitCode, gitOutput);
             }
         } catch (Exception e) {
             repo.setStatus("PULL_FAILED");
             repo.setLastPullStatus("FAILED");
             repo.setLastPullTime(LocalDateTime.now());
+            if ("拉取失败".equals(errorMessage)) {
+                errorMessage = "Git操作异常: " + e.getMessage();
+            }
             log.error("Git repository pull failed", e);
         }
 
@@ -427,7 +474,7 @@ public class SourceController {
         if ("READY".equals(repo.getStatus())) {
             return Result.success();
         } else {
-            return Result.error("拉取失败，请检查仓库地址、认证信息或网络连接");
+            return Result.error(errorMessage);
         }
     }
 
@@ -757,7 +804,7 @@ public class SourceController {
             dbType = "postgresql";
         }
         return switch (dbType.toLowerCase()) {
-            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s",
+            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s?sslmode=disable",
                     db.getHost(), db.getPort(), db.getDatabaseName());
             case "mysql" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true",
                     db.getHost(), db.getPort(), db.getDatabaseName());
@@ -1146,5 +1193,29 @@ public class SourceController {
         if (url == null) return false;
         // 只允许合法 Git URL 字符，排除可能用于命令注入的特殊字符（; | & ` $ ! ' " ( ) < > 空格 换行等）
         return url.matches("^(https?://|git@|ssh://|git://)[a-zA-Z0-9._~:/@%+#=-]+$");
+    }
+
+    /**
+     * 从 git 命令输出中提取关键错误行。
+     * 优先返回 fatal: / error: / remote: 开头的行，用于前端展示。
+     */
+    private String extractGitError(String gitOutput) {
+        if (gitOutput == null || gitOutput.isBlank()) return "未知错误";
+        // 提取 fatal:/error:/remote: 开头的行
+        String[] lines = gitOutput.split("\n");
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("fatal:") || trimmed.startsWith("error:") || trimmed.startsWith("remote:")) {
+                return trimmed;
+            }
+        }
+        // 兜底：返回最后一行非空内容（截断过长消息）
+        for (int i = lines.length - 1; i >= 0; i--) {
+            String trimmed = lines[i].trim();
+            if (!trimmed.isEmpty()) {
+                return trimmed.length() > 200 ? trimmed.substring(0, 200) + "..." : trimmed;
+            }
+        }
+        return "未知错误";
     }
 }

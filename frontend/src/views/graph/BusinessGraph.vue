@@ -121,7 +121,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, MagicStick } from '@element-plus/icons-vue'
 import type { Node as FlowNode, Edge as FlowEdge } from '@vue-flow/core'
-import GraphViewer from '@/components/graph/GraphViewer.vue'
+import GraphViewer from '@/components/graph/GraphViewerOptimized.vue'
 import { graphApi } from '@/api'
 import { loadScanVersions } from '@/utils/versionsCache'
 
@@ -163,12 +163,6 @@ async function loadVersions() {
   const pid = projectId.value
   if (!pid) return
   versions.value = await loadScanVersions(pid)
-}
-
-async function loadDomainTree() {
-  // 不再独立请求，由 loadGraph 一并填充
-  // 保留函数签名以兼容 handleDomainClick 调用
-  await loadGraph('')
 }
 
 function buildDomainTree(rawNodes: any[]) {

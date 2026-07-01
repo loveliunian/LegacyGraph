@@ -9,11 +9,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +29,10 @@ import java.util.Map;
 public class LlmProviderService {
 
     private final LlmProviderRepository llmProviderRepository;
+
+    /** B-S4：LLM 调用超时（秒），激活 application.yml 中 legacy-graph.ai.llm-timeout 死配置 */
+    @Value("${legacy-graph.ai.llm-timeout:120}")
+    private long llmTimeoutSeconds;
 
     /**
      * 获取所有提供商
@@ -126,6 +132,11 @@ public class LlmProviderService {
      */
     public OpenAiChatModel createChatModel(LlmProvider provider) {
         Map<String, Object> config = provider.getApiConfig();
+        // 防御：apiConfig 可能为 null（DB 中 JSONB 列无默认值时），统一降级为空 Map
+        if (config == null) {
+            log.warn("LlmProvider apiConfig is null for provider={}, falling back to empty config", provider.getProviderCode());
+            config = Map.of();
+        }
         String apiKey = (String) config.getOrDefault("api_key", "");
         String baseUrl = provider.getEndpoint();
 
@@ -135,6 +146,7 @@ public class LlmProviderService {
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
                 .credential(credential)
+                .timeout(Duration.ofSeconds(llmTimeoutSeconds)) // B-S4：激活 llm-timeout 配置
                 .build();
 
         var openAiClient = new OpenAIClientImpl(clientOptions);

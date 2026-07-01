@@ -87,12 +87,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { factApi } from '@/api'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,18 +133,7 @@ const getEvidenceTypeColor = (type: string): string => {
   return colorMap[type] || 'info'
 }
 
-const getEvidenceTypeText = (type: string): string => {
-  const textMap: Record<string, string> = {
-    FILE_LINE: '代码行',
-    SQL_STATEMENT: 'SQL语句',
-    DB_SCHEMA: '数据库模式',
-    DOC_PARAGRAPH: '文档段落',
-    API_DOC: 'API文档',
-    TEST_RESULT: '测试结果',
-    AI_REASONING: 'AI推理'
-  }
-  return textMap[type] || type
-}
+const getEvidenceTypeText = (type: string): string => dictLabel('evidence_type', type)
 
 const doSearch = async () => {
   if (!projectId) return
@@ -206,6 +195,7 @@ const viewRelated = (row: any) => {
 }
 
 onMounted(() => {
+  preloadDicts(['evidence_type'])
   if (projectId) {
     doSearch()
   }

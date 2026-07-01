@@ -1,28 +1,19 @@
 package io.github.legacygraph.builder;
 
-import io.github.legacygraph.agent.SqlAdvisorAgent;
-import io.github.legacygraph.common.EdgeType;
-import io.github.legacygraph.common.NodeStatus;
-import io.github.legacygraph.common.NodeType;
-import io.github.legacygraph.common.SourceType;
-import io.github.legacygraph.agent.SqlAdvisorAgent;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.dto.SqlAdvisorResult;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
-import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.extractors.SqlTableExtractor;
 import io.github.legacygraph.model.ApiFact;
 import io.github.legacygraph.model.MapperSqlFact;
-import io.github.legacygraph.repository.ReviewRecordRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,17 +35,11 @@ public class GraphBuilder {
 
     private final Neo4jGraphDao neo4jGraphDao;
     private final EvidenceGraphWriter writer;
-    private final SqlAdvisorAgent sqlAdvisorAgent;
-    private final ReviewRecordRepository reviewRecordRepository;
 
     public GraphBuilder(Neo4jGraphDao neo4jGraphDao,
-                       EvidenceGraphWriter writer,
-                       SqlAdvisorAgent sqlAdvisorAgent,
-                       ReviewRecordRepository reviewRecordRepository) {
+                       EvidenceGraphWriter writer) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.writer = writer;
-        this.sqlAdvisorAgent = sqlAdvisorAgent;
-        this.reviewRecordRepository = reviewRecordRepository;
     }
 
     /**
@@ -225,7 +210,7 @@ public class GraphBuilder {
 
             // 解析SQL表关系
             SqlTableExtractor.SqlTableResult tableResult = new SqlTableExtractor().extractTables(stmt.getSql());
-            analyzeSqlAndCreateReview(projectId, versionId, sqlKey, sqlNode, stmt, tableResult);
+            // SQL 性能顾问（LLM）已移出扫描主链路，改由 LlmAgentController 独立入口按需触发，避免逐 SQL 同步调用拖慢扫描。
 
             // 建立读写关系
             for (String readTable : tableResult.getReadTables()) {
@@ -277,85 +262,6 @@ public class GraphBuilder {
                     NodeStatus.CONFIRMED
             );
         }
-    }
-
-    private void analyzeSqlAndCreateReview(String projectId, String versionId, String sqlKey, GraphNode sqlNode,
-                                           MyBatisXmlExtractor.SqlStatement stmt,
-                                           SqlTableExtractor.SqlTableResult tableResult) {
-        if (sqlAdvisorAgent == null || stmt.getSql() == null || stmt.getSql().isBlank()) {
-            return;
-        }
-        try {
-            SqlAdvisorResult result = sqlAdvisorAgent.analyze(projectId, sqlKey,
-                    stmt.getExpandedSql() != null && !stmt.getExpandedSql().isBlank()
-                            ? stmt.getExpandedSql() : stmt.getSql(),
-                    buildSchemaInfo(tableResult));
-            if (result == null || result.getIssues() == null || result.getIssues().isEmpty()) {
-                return;
-            }
-            long exists = reviewRecordRepository.selectCount(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ReviewRecord>()
-                            .eq(ReviewRecord::getProjectId, projectId)
-                            .eq(ReviewRecord::getTargetId, sqlNode.getId())
-                            .eq(ReviewRecord::getStatus, "PENDING"));
-            if (exists > 0) {
-                return;
-            }
-            ReviewRecord review = new ReviewRecord();
-            review.setId(UUID.randomUUID().toString());
-            review.setProjectId(projectId);
-            review.setVersionId(versionId);
-            review.setTargetType(NodeType.SqlStatement.name());
-            review.setTargetId(sqlNode.getId());
-            review.setTargetName(sqlNode.getDisplayName());
-            review.setGraphType("SQL");
-            review.setConfidence(sqlNode.getConfidence() != null ? sqlNode.getConfidence().doubleValue() : 1.0);
-            review.setPriority(toPriority(result));
-            review.setStatus("PENDING");
-            review.setComment(buildSqlAdvisorComment(result));
-            review.setCreatedAt(LocalDateTime.now());
-            reviewRecordRepository.insert(review);
-        } catch (Exception e) {
-            log.warn("SQL advisor failed for {}: {}", sqlKey, e.getMessage());
-        }
-    }
-
-    private String buildSchemaInfo(SqlTableExtractor.SqlTableResult tableResult) {
-        if (tableResult == null) {
-            return "（无表结构信息）";
-        }
-        return "readTables=" + tableResult.getReadTables()
-                + ", writeTables=" + tableResult.getWriteTables()
-                + ", joinTables=" + tableResult.getJoinTables();
-    }
-
-    private String toPriority(SqlAdvisorResult result) {
-        if (result.getIssues().stream().anyMatch(i -> "HIGH".equalsIgnoreCase(i.getSeverity()))
-                || "HIGH".equalsIgnoreCase(result.getOverallRisk())) {
-            return "HIGH";
-        }
-        if (result.getIssues().stream().anyMatch(i -> "MEDIUM".equalsIgnoreCase(i.getSeverity()))
-                || "MEDIUM".equalsIgnoreCase(result.getOverallRisk())) {
-            return "MEDIUM";
-        }
-        return "LOW";
-    }
-
-    private String buildSqlAdvisorComment(SqlAdvisorResult result) {
-        StringBuilder comment = new StringBuilder("SQL 性能顾问: ")
-                .append(result.getSummary() != null ? result.getSummary() : "发现 SQL 优化问题");
-        for (SqlAdvisorResult.SqlIssue issue : result.getIssues()) {
-            comment.append("\n- ")
-                    .append(issue.getIssueType() != null ? issue.getIssueType() : "SQL_ISSUE")
-                    .append(": ")
-                    .append(issue.getDescription() != null ? issue.getDescription() : "")
-                    .append(" 建议: ")
-                    .append(issue.getSuggestion() != null ? issue.getSuggestion() : "");
-        }
-        if (result.getOptimizedSql() != null && !result.getOptimizedSql().isBlank()) {
-            comment.append("\n优化后 SQL: ").append(result.getOptimizedSql());
-        }
-        return comment.toString();
     }
 
     /**
@@ -427,6 +333,8 @@ public class GraphBuilder {
 
     /**
      * 查找或创建节点（委托给 EvidenceGraphWriter）。
+     * ⚠️ B-M3：本方法与 FrontendGraphBuilder/BusinessGraphBuilder 中的同名方法均为 thin wrapper，
+     * 可进一步收敛为 Builder 直接调用 writer.upsertNode()。
      */
     private GraphNode findOrCreateNode(String projectId, String versionId,
             String nodeType, String nodeKey, String nodeName,

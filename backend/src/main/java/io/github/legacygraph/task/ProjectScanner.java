@@ -145,6 +145,15 @@ public class ProjectScanner {
             scanVersionRepository.updateById(version);
         }
 
+        runScanBody(projectId, versionId, baseDir, version);
+    }
+
+    /**
+     * 扫描主体逻辑（同步）。由 {@link #startFullScan} / {@link #resumeFullScan} 两个 @Async 入口调用，
+     * 避免同类内部直接调用 @Async 方法导致 Spring AOP 代理失效（B-H8：原 resumeFullScan 内部
+     * 调用 startFullScan 时 @Async 不生效，实际同步执行）。
+     */
+    private void runScanBody(String projectId, String versionId, String baseDir, ScanVersion version) {
         try {
             // 读取 CodeRepo 配置，获取子路径和 include/exclude 规则
             List<CodeRepo> repos = codeRepoRepository.selectList(
@@ -273,6 +282,8 @@ public class ProjectScanner {
 
         } catch (Exception e) {
             log.error("Scan failed: versionId={}", versionId, e);
+            // ⚠️ B-H9 扫描无自动重试：失败仅置 FAILED，需手动调用 resumeFullScan 续扫。
+            //   建议：引入状态机 + 自动重试（Spring Retry @Retryable 或 Quartz 调度）对瞬时失败自动续扫。
             if (version != null) {
                 version.setScanStatus("FAILED");
                 version.setErrorMessage(e.getMessage());
@@ -639,7 +650,7 @@ public class ProjectScanner {
                     }
                 }
             }
-        } catch (IOException ignored) {}
+        } catch (IOException e) { log.debug("IO skipped: {}", e.getMessage()); }
         return null;
     }
 
@@ -704,7 +715,7 @@ public class ProjectScanner {
                         existing.setFileType(detectFileType(docFile.getFileName().toString()));
                         try {
                             existing.setFileSize(Files.size(docFile));
-                        } catch (IOException ignored) {}
+                        } catch (IOException e) { log.debug("IO skipped: {}", e.getMessage()); }
                         existing.setParseStatus("DISCOVERED");
                         existing.setUpdatedAt(LocalDateTime.now());
                         documentRepository.updateById(existing);
@@ -718,7 +729,7 @@ public class ProjectScanner {
                         doc.setFileType(detectFileType(docFile.getFileName().toString()));
                         try {
                             doc.setFileSize(Files.size(docFile));
-                        } catch (IOException ignored) {}
+                        } catch (IOException e) { log.debug("IO skipped: {}", e.getMessage()); }
                         doc.setParseStatus("DISCOVERED");
                         doc.setUploadedBy("auto-discovery");
                         doc.setCreatedAt(LocalDateTime.now());
@@ -773,7 +784,7 @@ public class ProjectScanner {
         String dbType = conn.getDbType();
         if (dbType == null) dbType = "postgresql";
         return switch (dbType.toLowerCase()) {
-            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s",
+            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s?sslmode=disable",
                     conn.getHost(), conn.getPort(), conn.getDatabaseName());
             case "mysql" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true",
                     conn.getHost(), conn.getPort(), conn.getDatabaseName());
@@ -858,7 +869,7 @@ public class ProjectScanner {
         long size = 0L;
         try {
             size = Files.size(file);
-        } catch (IOException ignored) {}
+        } catch (IOException e) { log.debug("IO skipped: {}", e.getMessage()); }
         return SourceAsset.builder()
                 .file(file)
                 .relativePath(relativePath)
@@ -1073,6 +1084,8 @@ public class ProjectScanner {
         return s == null || s.isBlank();
     }
 
+    // ⚠️ B-M1：createTask/completeTask 与 AiScanOrchestrator 中的实现逐行重复。
+    // 建议提取到共享工具类 ScanTaskHelper，消除重复并统一差异（startedAt、null guard）。
     private ScanTask createTask(String projectId, String versionId, String taskType, String taskName) {
         ScanTask task = new ScanTask();
         task.setId(UUID.randomUUID().toString());
@@ -1141,22 +1154,19 @@ public class ProjectScanner {
     @Async
     public void resumeFullScan(String projectId, String versionId, String baseDir) {
         log.info("Resuming full scan: projectId={}, versionId={}, baseDir={}", projectId, versionId, baseDir);
+        // 续扫同样会重建图谱，失效该版本只读缓存与项目概览（与 startFullScan 保持一致）
+        if (graphCacheInvalidator != null) {
+            graphCacheInvalidator.invalidateVersion(versionId);
+            graphCacheInvalidator.invalidateProjectOverview(projectId);
+        }
         ScanVersion version = scanVersionRepository.getById(versionId);
         if (version != null) {
             version.setScanStatus("RUNNING");
             scanVersionRepository.updateById(version);
         }
-        try {
-            startFullScan(projectId, versionId, baseDir);
-        } catch (Exception e) {
-            log.error("Resume scan failed: versionId={}", versionId, e);
-            if (version != null) {
-                version.setScanStatus("FAILED");
-                version.setErrorMessage(e.getMessage());
-                version.setFinishedAt(LocalDateTime.now());
-                scanVersionRepository.updateById(version);
-            }
-        }
+        // 直接调用同步主体（runScanBody 内部已处理异常并置 FAILED），
+        // 不再自调用 startFullScan 以免 @Async 代理失效（B-H8）。
+        runScanBody(projectId, versionId, baseDir, version);
     }
 
     /**

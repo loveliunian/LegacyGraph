@@ -174,74 +174,69 @@ public class TestCaseController {
         log.info("Test case generation requested for project {}, version {}", projectId, request.getVersionId());
 
         // 获取所有 API 节点，用 TestCaseAgent 生成测试用例
-        try {
-            // Query nodes from Neo4j — loop over nodeTypes since queryNodes supports single type
-            List<GraphNode> apiNodes = new ArrayList<>();
-            String[] types = {"ApiEndpoint", "Feature", "Controller"};
-            for (String t : types) {
-                apiNodes.addAll(neo4jGraphDao.queryNodes(
-                        projectId, request.getVersionId(), t, null, null, null, Integer.MAX_VALUE));
-            }
+        // Query nodes from Neo4j — loop over nodeTypes since queryNodes supports single type
+        List<GraphNode> apiNodes = new ArrayList<>();
+        String[] types = {"ApiEndpoint", "Feature", "Controller"};
+        for (String t : types) {
+            apiNodes.addAll(neo4jGraphDao.queryNodes(
+                    projectId, request.getVersionId(), t, null, null, null, Integer.MAX_VALUE));
+        }
 
-            if (apiNodes.isEmpty()) {
-                log.info("No API/Feature nodes found for test generation");
-                return Result.success(Map.of(
-                        "projectId", projectId,
-                        "versionId", request.getVersionId(),
-                        "status", "completed",
-                        "generated", 0,
-                        "message", "未找到可生成测试用例的节点"
-                ));
-            }
-
-            Scope scope = request.getScope();
-            List<String> targetTypes = (scope != null && scope.getNodeTypes() != null)
-                    ? scope.getNodeTypes() : List.of("ApiEndpoint");
-
-            int totalGenerated = 0;
-            for (GraphNode node : apiNodes) {
-                if (!targetTypes.contains(node.getNodeType())) continue;
-
-                TestCaseAgent.TestGenerationRequest genReq = new TestCaseAgent.TestGenerationRequest();
-                genReq.setProjectId(projectId);
-                genReq.setFeatureKey(node.getNodeKey());
-                genReq.setFeatureName(node.getNodeName());
-                genReq.setApiEndpoint(node.getNodeKey());
-                genReq.setHttpMethod("GET");
-
-                List<GeneratedTestCase> generated = testCaseAgent.generateTestCases(genReq);
-
-                for (GeneratedTestCase genCase : generated) {
-                    TestCase tc = new TestCase();
-                    tc.setProjectId(projectId);
-                    tc.setVersionId(request.getVersionId());
-                    tc.setCaseCode("TC-" + System.currentTimeMillis() + "-" + totalGenerated);
-                    tc.setCaseName(genCase.getCaseName() != null ? genCase.getCaseName() : node.getNodeName() + " 测试");
-                    tc.setCaseType(genCase.getCaseType() != null ? genCase.getCaseType().name() : "API");
-                    tc.setTargetNodeId(node.getId());
-                    tc.setSteps(genCase.getSteps() != null ? String.join("\\n", genCase.getSteps()) : "");
-                    tc.setExpectedResult("验证接口返回符合预期");
-                    tc.setStatus("ENABLED");
-                    tc.setGeneratedBy("LLM");
-                    tc.setCreatedAt(LocalDateTime.now());
-                    testCaseRepository.insert(tc);
-                    totalGenerated++;
-                }
-            }
-
-            log.info("Test case generation completed for project {}, version {}: generated {} cases",
-                    projectId, request.getVersionId(), totalGenerated);
-
+        if (apiNodes.isEmpty()) {
+            log.info("No API/Feature nodes found for test generation");
             return Result.success(Map.of(
                     "projectId", projectId,
                     "versionId", request.getVersionId(),
                     "status", "completed",
-                    "generated", totalGenerated
+                    "generated", 0,
+                    "message", "未找到可生成测试用例的节点"
             ));
-        } catch (Exception e) {
-            log.error("Test case generation failed", e);
-            return Result.error("生成测试用例失败: " + e.getMessage());
         }
+
+        Scope scope = request.getScope();
+        List<String> targetTypes = (scope != null && scope.getNodeTypes() != null)
+                ? scope.getNodeTypes() : List.of("ApiEndpoint");
+
+        int totalGenerated = 0;
+        for (GraphNode node : apiNodes) {
+            if (!targetTypes.contains(node.getNodeType())) continue;
+
+            TestCaseAgent.TestGenerationRequest genReq = new TestCaseAgent.TestGenerationRequest();
+            genReq.setProjectId(projectId);
+            genReq.setFeatureKey(node.getNodeKey());
+            genReq.setFeatureName(node.getNodeName());
+            genReq.setApiEndpoint(node.getNodeKey());
+            genReq.setHttpMethod("GET");
+
+            List<GeneratedTestCase> generated = testCaseAgent.generateTestCases(genReq);
+
+            for (GeneratedTestCase genCase : generated) {
+                TestCase tc = new TestCase();
+                tc.setProjectId(projectId);
+                tc.setVersionId(request.getVersionId());
+                tc.setCaseCode("TC-" + System.currentTimeMillis() + "-" + totalGenerated);
+                tc.setCaseName(genCase.getCaseName() != null ? genCase.getCaseName() : node.getNodeName() + " 测试");
+                tc.setCaseType(genCase.getCaseType() != null ? genCase.getCaseType().name() : "API");
+                tc.setTargetNodeId(node.getId());
+                tc.setSteps(genCase.getSteps() != null ? String.join("\\n", genCase.getSteps()) : "");
+                tc.setExpectedResult("验证接口返回符合预期");
+                tc.setStatus("ENABLED");
+                tc.setGeneratedBy("LLM");
+                tc.setCreatedAt(LocalDateTime.now());
+                testCaseRepository.insert(tc);
+                totalGenerated++;
+            }
+        }
+
+        log.info("Test case generation completed for project {}, version {}: generated {} cases",
+                projectId, request.getVersionId(), totalGenerated);
+
+        return Result.success(Map.of(
+                "projectId", projectId,
+                "versionId", request.getVersionId(),
+                "status", "completed",
+                "generated", totalGenerated
+        ));
     }
 
     @PostMapping("/test-cases/{id}/run")

@@ -43,7 +43,7 @@
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="getStatusType(row.status)">
-            {{ row.status }}
+            {{ getStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -123,6 +123,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Coin } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { sourceApi } from '@/api/source.api'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -160,6 +161,8 @@ const getStatusType = (status: string): string => {
   }
   return map[status] || 'info'
 }
+
+const getStatusText = (status: string) => dictLabel('db_status', status)
 
 const showCreateDialog = () => {
   Object.assign(dbForm, {
@@ -199,8 +202,8 @@ const createDb = async () => {
     ElMessage.success('添加成功')
     createDialogVisible.value = false
     await loadDbList()
-  } catch (error) {
-    ElMessage.error('添加失败')
+  } catch {
+    // 错误消息已由响应拦截器统一展示
   }
 }
 
@@ -217,9 +220,9 @@ const testConnection = async (row: any) => {
         ElMessage.error('连接失败: ' + (res?.message || ''))
       }
     }
-  } catch (error) {
+  } catch {
     row.status = 'FAILED'
-    ElMessage.error('连接失败')
+    // 错误消息已由响应拦截器统一展示
   }
 }
 
@@ -233,8 +236,8 @@ const scanSchema = async (row: any) => {
     }
     row.lastScanTime = new Date().toISOString()
     ElMessage.success(`扫描完成，共发现 ${row.tableCount} 张表`)
-  } catch (error) {
-    ElMessage.error('扫描失败')
+  } catch {
+    // 错误消息已由响应拦截器统一展示
   }
 }
 
@@ -260,8 +263,8 @@ const loadDbList = async (page?: number) => {
     const res = await sourceApi.listDbConnections(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
     dbList.value = res.list
     total.value = res.total
-  } catch (error) {
-    ElMessage.error('获取数据库连接列表失败')
+  } catch {
+    // 错误消息已由响应拦截器统一展示
   } finally {
     loading.value = false
   }
@@ -272,6 +275,7 @@ const handlePageChange = (page: number) => {
 }
 
 onMounted(async () => {
+  preloadDicts(['db_status'])
   await loadDbList()
 })
 </script>

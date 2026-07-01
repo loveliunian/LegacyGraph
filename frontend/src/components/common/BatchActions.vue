@@ -84,11 +84,6 @@ const props = withDefaults(defineProps<Props>(), {
   showClear: true
 })
 
-const emit = defineEmits<{
-  action: [key: string, items: any[]]
-  clear: []
-}>()
-
 const selectedCount = computed(() => props.selectedItems.length)
 </script>
 

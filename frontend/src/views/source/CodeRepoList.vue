@@ -43,7 +43,7 @@
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
           <el-tag v-if="row.status !== 'INIT'" size="small" :type="getStatusType(row.status)">
-            {{ row.status }}
+            {{ getStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -140,6 +140,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, FolderOpened } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { sourceApi } from '@/api/source.api'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -182,6 +183,8 @@ const getStatusType = (status: string): string => {
   }
   return map[status] || 'info'
 }
+
+const getStatusText = (status: string) => dictLabel('repo_status', status)
 
 /** 重置表单 */
 const resetForm = () => {
@@ -256,8 +259,8 @@ const saveRepo = async () => {
     }
     dialogVisible.value = false
     await loadRepoList()
-  } catch (error) {
-    ElMessage.error(editingId.value ? '修改失败' : '添加失败')
+  } catch {
+    // 错误消息已由响应拦截器统一展示
   }
 }
 
@@ -277,7 +280,7 @@ const testRepoUrl = async () => {
       ElMessage.error('连接失败: ' + (res?.message || '无法连接到仓库'))
     }
   } catch {
-    ElMessage.error('连接测试失败')
+    // 错误消息已由响应拦截器统一展示
   } finally {
     testingUrl.value = false
   }
@@ -291,9 +294,9 @@ const pullRepo = async (row: any) => {
     row.status = 'READY'
     row.lastPullTime = new Date().toISOString()
     ElMessage.success('拉取完成')
-  } catch (error) {
+  } catch {
     row.status = 'FAILED'
-    ElMessage.error('拉取失败')
+    // 错误消息已由响应拦截器统一展示（包含 git 具体失败原因）
   }
 }
 
@@ -305,9 +308,9 @@ const scanRepo = async (row: any) => {
     row.lastScanTime = new Date().toISOString()
     row.status = 'READY'
     ElMessage.success('扫描已启动: ' + (res?.message || ''))
-  } catch (error) {
+  } catch {
     row.status = 'FAILED'
-    ElMessage.error('扫描启动失败')
+    // 错误消息已由响应拦截器统一展示
   }
 }
 
@@ -333,8 +336,8 @@ const loadRepoList = async (page?: number) => {
     const result = await sourceApi.listCodeRepo(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
     repoList.value = result.list
     total.value = result.total
-  } catch (error) {
-    ElMessage.error('获取仓库列表失败')
+  } catch {
+    // 错误消息已由响应拦截器统一展示
   } finally {
     loading.value = false
   }
@@ -345,6 +348,7 @@ const handlePageChange = (page: number) => {
 }
 
 onMounted(async () => {
+  preloadDicts(['repo_status'])
   await loadRepoList()
 })
 </script>

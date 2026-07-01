@@ -249,6 +249,14 @@
             <scope>test</scope>
         </dependency>
         <!-- H2 内存数据库（测试环境使用） -->
+        <!-- ArchUnit 架构测试 -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>1.4.1</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>

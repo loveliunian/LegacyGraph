@@ -84,8 +84,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { testRunApi } from '@/api'
 import StatusTag from '@/components/common/StatusTag.vue'
@@ -93,7 +93,6 @@ import type { TestRun } from '@/types'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
-const route = useRoute()
 const projectStore = useProjectStore()
 
 const loading = ref(false)

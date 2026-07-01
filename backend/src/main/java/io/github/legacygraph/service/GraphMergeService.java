@@ -1,5 +1,9 @@
 package io.github.legacygraph.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphEdge;
@@ -26,6 +30,8 @@ import java.util.*;
 @Slf4j
 @Service
 public class GraphMergeService {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final Neo4jGraphDao neo4jGraphDao;
     private final GraphCacheInvalidator graphCacheInvalidator;
@@ -206,21 +212,10 @@ public class GraphMergeService {
     }
 
     private Set<String> getNeighborIds(String projectId, String nodeId) {
-        Set<String> neighborIds = new HashSet<>();
-        // 出边邻居
-        for (EdgeType et : EdgeType.values()) {
-            List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, null,
-                    0.0, null, 50);
-            for (GraphEdge edge : edges) {
-                if (nodeId.equals(edge.getFromNodeId())) {
-                    neighborIds.add(edge.getToNodeId());
-                }
-                if (nodeId.equals(edge.getToNodeId())) {
-                    neighborIds.add(edge.getFromNodeId());
-                }
-            }
-        }
-        return neighborIds;
+        // B-S3: 旧实现对每个 EdgeType 执行 queryEdges(projectId, null, 0.0, null, 50)
+        // （查全项目边前 50 条）再 Java 端按 nodeId 过滤，既不是目标节点邻居又有 N+1 放大。
+        // 改为单次 Cypher 直查目标节点的邻居 id。
+        return neo4jGraphDao.findNeighborNodeIds(projectId, nodeId);
     }
 
     // ==================== 共享证据分 ====================
@@ -337,24 +332,38 @@ public class GraphMergeService {
      */
     private void recordLineage(GraphNode targetNode, GraphNode mergeNode) {
         String existingProps = targetNode.getProperties() != null ? targetNode.getProperties() : "{}";
-        String lineageEntry = String.format(
-                "{\"id\":\"%s\",\"name\":\"%s\",\"type\":\"%s\",\"mergedAt\":\"%s\"}",
-                mergeNode.getId(),
-                escapeJson(mergeNode.getNodeName()),
-                mergeNode.getNodeType(),
-                java.time.LocalDateTime.now().toString());
+        ObjectNode properties = parseProperties(existingProps);
 
-        String mergedFrom;
-        if (existingProps.contains("\"mergedFrom\"")) {
-            // 追加到已有数组
-            mergedFrom = existingProps.replaceFirst(
-                    "\"mergedFrom\"\\s*:\\s*\\[", "\"mergedFrom\":[" + lineageEntry + ",");
+        ArrayNode mergedFrom;
+        JsonNode existingLineage = properties.get("mergedFrom");
+        if (existingLineage != null && existingLineage.isArray()) {
+            mergedFrom = (ArrayNode) existingLineage;
         } else {
-            mergedFrom = existingProps.replaceFirst("\\{",
-                    "{\"mergedFrom\":[" + lineageEntry + "],");
+            mergedFrom = OBJECT_MAPPER.createArrayNode();
+            properties.set("mergedFrom", mergedFrom);
         }
-        targetNode.setProperties(mergedFrom);
+
+        ObjectNode lineageEntry = OBJECT_MAPPER.createObjectNode();
+        lineageEntry.put("id", mergeNode.getId());
+        lineageEntry.put("name", mergeNode.getNodeName());
+        lineageEntry.put("type", mergeNode.getNodeType());
+        lineageEntry.put("mergedAt", java.time.LocalDateTime.now().toString());
+        mergedFrom.add(lineageEntry);
+
+        targetNode.setProperties(properties.toString());
         neo4jGraphDao.updateNode(targetNode);
+    }
+
+    private ObjectNode parseProperties(String properties) {
+        try {
+            JsonNode parsed = OBJECT_MAPPER.readTree(properties);
+            if (parsed != null && parsed.isObject()) {
+                return (ObjectNode) parsed;
+            }
+        } catch (Exception e) {
+            log.warn("Invalid node properties JSON, reset before recording lineage: {}", e.getMessage());
+        }
+        return OBJECT_MAPPER.createObjectNode();
     }
 
     // ==================== 辅助方法 ====================
@@ -397,8 +406,4 @@ public class GraphMergeService {
         return dp[m][n];
     }
 
-    private String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
 }

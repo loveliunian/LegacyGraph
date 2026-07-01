@@ -73,15 +73,11 @@ public class GraphQueryController {
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
-            @RequestParam String versionId,
+            @RequestParam(required = false) String versionId,
             @Parameter(description = "API接口路径或方法签名", required = true)
             @RequestParam String api) {
-        try {
-            List<Map<String, Object>> result = graphQueryService.getApiCallChain(projectId, versionId, api);
-            return Result.success(result);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        List<Map<String, Object>> result = graphQueryService.getApiCallChain(projectId, versionId, api);
+        return Result.success(result);
     }
 
     /**
@@ -98,15 +94,11 @@ public class GraphQueryController {
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
-            @RequestParam String versionId,
+            @RequestParam(required = false) String versionId,
             @Parameter(description = "数据库表名", required = true)
             @RequestParam String tableName) {
-        try {
-            List<Map<String, Object>> result = graphQueryService.getTableImpact(projectId, versionId, tableName);
-            return Result.success(result);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        List<Map<String, Object>> result = graphQueryService.getTableImpact(projectId, versionId, tableName);
+        return Result.success(result);
     }
 
     /**
@@ -119,13 +111,9 @@ public class GraphQueryController {
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
-            @RequestParam String versionId) {
-        try {
-            List<Map<String, Object>> result = graphQueryService.getTablesNodes(projectId, versionId);
-            return Result.success(result);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+            @RequestParam(required = false) String versionId) {
+        List<Map<String, Object>> result = graphQueryService.getTablesNodes(projectId, versionId);
+        return Result.success(result);
     }
 
     /**
@@ -142,15 +130,11 @@ public class GraphQueryController {
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
-            @RequestParam String versionId,
-            @Parameter(description = "模块名称", required = true)
-            @RequestParam String module) {
-        try {
-            Map<String, Object> result = graphQueryService.getFeatureView(projectId, versionId, module);
-            return Result.success(result);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+            @RequestParam(required = false) String versionId,
+            @Parameter(description = "模块名称", required = false)
+            @RequestParam(required = false) String module) {
+        Map<String, Object> result = graphQueryService.getFeatureView(projectId, versionId, module);
+        return Result.success(result);
     }
 
     /**
@@ -167,15 +151,11 @@ public class GraphQueryController {
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
-            @RequestParam String versionId,
-            @Parameter(description = "业务域名称", required = true)
-            @RequestParam String domain) {
-        try {
-            Map<String, Object> result = graphQueryService.getBusinessView(projectId, versionId, domain);
-            return Result.success(result);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+            @RequestParam(required = false) String versionId,
+            @Parameter(description = "业务域名称", required = false)
+            @RequestParam(required = false) String domain) {
+        Map<String, Object> result = graphQueryService.getBusinessView(projectId, versionId, domain);
+        return Result.success(result);
     }
 
     // ==================== 图谱合并接口 ====================
@@ -228,17 +208,13 @@ public class GraphQueryController {
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
-            @RequestParam String versionId,
+            @RequestParam(required = false) String versionId,
             @Parameter(description = "最低置信度", required = false)
             @RequestParam(defaultValue = "0.0") Double minConfidence,
             @Parameter(description = "状态过滤：CONFIRMED/PENDING_CONFIRM/REJECTED", required = false)
             @RequestParam(required = false) String statusFilter) {
-        try {
-            Map<String, Object> result = graphQueryService.getUnifiedGraph(versionId, minConfidence, statusFilter);
-            return Result.success(result);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        Map<String, Object> result = graphQueryService.getUnifiedGraph(versionId, minConfidence, statusFilter);
+        return Result.success(result);
     }
 
     /**
@@ -248,7 +224,7 @@ public class GraphQueryController {
     @Operation(summary = "获取功能切片列表", description = "按 Feature 节点构建功能切片投影视图")
     public Result<List<FeatureSlice>> getFeatureSlices(
             @PathVariable String projectId,
-            @RequestParam String versionId) {
+            @RequestParam(required = false) String versionId) {
         return Result.success(featureSliceBuilder.buildAllSlices(projectId, versionId));
     }
 
@@ -279,47 +255,14 @@ public class GraphQueryController {
     }
 
     /**
-     * 获取漂移队列。
+     * 获取漂移队列（已下沉到 GraphQueryService）。
      */
     @GetMapping("/graph/drift-queue")
     @Operation(summary = "获取漂移队列", description = "返回静态-only、运行时-only、文档-only、低置信等待处理项")
     public Result<Map<String, Object>> getDriftQueue(
             @PathVariable String projectId,
             @RequestParam(required = false, defaultValue = "all") String type) {
-        List<Map<String, Object>> allItems = new ArrayList<>();
-
-        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, null, null, null, 200);
-        for (GraphEdge edge : edges) {
-            if ("static_only_candidate".equals(edge.getRelationStatus())) {
-                allItems.add(edgeDriftItem(edge, "static_only", "静态图谱存在但运行时尚未观测", "MEDIUM"));
-            } else if ("dynamic_only_candidate".equals(edge.getRelationStatus())
-                    || "RUNTIME_TRACE".equals(edge.getSourceType())) {
-                allItems.add(edgeDriftItem(edge, "dynamic_only", "运行时观测到但静态图谱未确认", "HIGH"));
-            }
-        }
-
-        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, null, null, null, null, null, 200);
-        for (GraphNode node : nodes) {
-            if ("DOC_AI".equals(node.getSourceType())) {
-                allItems.add(nodeDriftItem(node, "doc_only", "文档 AI 节点需要与代码/运行时证据对齐", "MEDIUM"));
-            }
-            BigDecimal confidence = node.getConfidence();
-            if (confidence != null && confidence.compareTo(BigDecimal.valueOf(0.5)) < 0) {
-                allItems.add(nodeDriftItem(node, "low_confidence", "低置信节点需要人工确认", "HIGH"));
-            }
-        }
-
-        String normalizedType = type == null || type.isBlank() ? "all" : type;
-        List<Map<String, Object>> items = "all".equals(normalizedType)
-                ? allItems
-                : allItems.stream()
-                .filter(item -> normalizedType.equals(item.get("driftType")))
-                .toList();
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("items", items);
-        response.put("summary", driftSummary(allItems));
-        return Result.success(response);
+        return Result.success(graphQueryService.getDriftQueue(projectId, type));
     }
 
     /**
@@ -335,13 +278,9 @@ public class GraphQueryController {
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             PageQuery query) {
-        try {
-            PageResult<Map<String, Object>> result = graphQueryService.getScanVersions(
-                    projectId, query.getPageNum(), query.getPageSize());
-            return Result.success(result);
-        } catch (Exception e) {
-            return Result.error(e.getMessage());
-        }
+        PageResult<Map<String, Object>> result = graphQueryService.getScanVersions(
+                projectId, query.getPageNum(), query.getPageSize());
+        return Result.success(result);
     }
 
     private void ensureQualityDefaults(Map<String, Object> stats) {
@@ -358,48 +297,4 @@ public class GraphQueryController {
         stats.putIfAbsent("noEvidenceEdges", 0L);
         stats.putIfAbsent("aiOnlyEdges", 0L);
         stats.putIfAbsent("runtimeOnlyEdges", 0L);
-    }
-
-    private Map<String, Object> edgeDriftItem(GraphEdge edge, String driftType,
-                                              String description, String severity) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("id", edge.getId());
-        item.put("elementId", edge.getId());
-        item.put("targetType", "EDGE");
-        item.put("driftType", driftType);
-        item.put("elementName", edge.getEdgeKey() != null ? edge.getEdgeKey() : edge.getEdgeType());
-        item.put("description", description);
-        item.put("severity", severity);
-        item.put("confidence", edge.getConfidence());
-        item.put("createdAt", edge.getCreatedAt());
-        return item;
-    }
-
-    private Map<String, Object> nodeDriftItem(GraphNode node, String driftType,
-                                              String description, String severity) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("id", node.getId());
-        item.put("elementId", node.getId());
-        item.put("targetType", "NODE");
-        item.put("driftType", driftType);
-        item.put("elementName", node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName());
-        item.put("description", description);
-        item.put("severity", severity);
-        item.put("confidence", node.getConfidence());
-        item.put("createdAt", node.getCreatedAt());
-        return item;
-    }
-
-    private Map<String, Object> driftSummary(List<Map<String, Object>> items) {
-        Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("staticOnly", countDrift(items, "static_only"));
-        summary.put("dynamicOnly", countDrift(items, "dynamic_only"));
-        summary.put("docOnly", countDrift(items, "doc_only"));
-        summary.put("lowConfidence", countDrift(items, "low_confidence"));
-        return summary;
-    }
-
-    private long countDrift(List<Map<String, Object>> items, String driftType) {
-        return items.stream().filter(item -> driftType.equals(item.get("driftType"))).count();
-    }
-}
+    }}

@@ -221,6 +221,8 @@ export interface User {
   email: string
   avatar: string
   status: string
+  /** 用户角色列表，如 ['ADMIN', 'USER']（F-H6：路由 meta.roles 守卫依赖此字段） */
+  roles: string[]
   permissions: string[]
   password?: string
   createdAt: string
@@ -415,16 +417,30 @@ export interface GraphMergeDecision {
   reasoning: string
 }
 
-// 字典
-export interface Dictionary {
+// 字典类型（对应后端 SysDict）
+export interface DictType {
   id: string
-  dictType: string
   dictCode: string
   dictName: string
-  dictValue: string
-  sort: number
+  description?: string
+  sortOrder: number
   status: string
 }
+
+// 字典项（对应后端 SysDictItem）
+export interface DictItem {
+  id: string
+  dictId: string
+  itemValue: string
+  itemLabel: string
+  description?: string
+  sortOrder: number
+  isDefault: boolean
+  status: string
+}
+
+/** @deprecated 请使用 DictType */
+export type Dictionary = DictType
 
 // 系统配置
 export interface SystemConfig {
@@ -435,7 +451,7 @@ export interface SystemConfig {
 }
 
 // 枚举定义
-export type ThemeMode = 'light' | 'dark'
+export type ThemeMode = 'light' | 'dark' | 'auto'
 
 export enum GraphNodeType {
   API_ENDPOINT = 'ApiEndpoint',

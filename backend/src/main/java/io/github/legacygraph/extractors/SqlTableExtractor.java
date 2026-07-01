@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * SQL表关系抽取器
@@ -33,35 +34,104 @@ public class SqlTableExtractor {
         private String sqlType;
     }
 
+    // MyBatis 占位符模式：#{xxx} 和 ${xxx}
+    private static final Pattern MYBATIS_PARAM_PATTERN = Pattern.compile("#\\{[^}]*\\}");
+    private static final Pattern MYBATIS_DYNAMIC_PATTERN = Pattern.compile("\\$\\{[^}]*\\}");
+
     /**
-     * 解析SQL，提取表读写关系
+     * 解析SQL，提取表读写关系。
+     * 对 MyBatis 动态 SQL 片段做预处理：清洗占位符，包装不完整片段后重试。
      */
     public SqlTableResult extractTables(String sql) {
         SqlTableResult result = new SqlTableResult();
 
-        try {
-            Statement statement = CCJSqlParserUtil.parse(sql);
-
-            if (statement instanceof Select) {
-                result.setSqlType("SELECT");
-                extractSelectTables((Select) statement, result);
-            } else if (statement instanceof Insert) {
-                result.setSqlType("INSERT");
-                extractInsertTables((Insert) statement, result);
-            } else if (statement instanceof Update) {
-                result.setSqlType("UPDATE");
-                extractUpdateTables((Update) statement, result);
-            } else if (statement instanceof Delete) {
-                result.setSqlType("DELETE");
-                extractDeleteTables((Delete) statement, result);
-            }
-
-        } catch (Exception e) {
-            log.warn("Failed to parse SQL: {}", e.getMessage());
-            // 解析失败不抛出，继续返回空结果
+        if (sql == null || sql.isBlank()) {
+            return result;
         }
 
+        String cleaned = cleanMyBatisSql(sql);
+
+        // 尝试直接解析
+        Statement statement = tryParse(cleaned);
+        if (statement == null) {
+            // 尝试包装常见片段后重试
+            String wrapped = wrapFragment(cleaned);
+            if (wrapped != null) {
+                statement = tryParse(wrapped);
+            }
+        }
+
+        if (statement == null) {
+            log.debug("Failed to parse SQL (first 100 chars): {}", 
+                    sql.substring(0, Math.min(sql.length(), 100)).replace('\n', ' '));
+            return result;
+        }
+
+        classifyStatement(statement, result);
         return result;
+    }
+
+    /**
+     * 清洗 MyBatis 动态 SQL：
+     * 1. #{xxx} → ?（JDBC 参数占位符，JSqlParser 原生支持）
+     * 2. ${xxx} → 'dyn_val'（动态字符串替换）
+     */
+    private String cleanMyBatisSql(String sql) {
+        String cleaned = MYBATIS_PARAM_PATTERN.matcher(sql).replaceAll("?");
+        cleaned = MYBATIS_DYNAMIC_PATTERN.matcher(cleaned).replaceAll("'dyn_val'");
+        return cleaned.replaceAll("\\s+", " ").trim();
+    }
+
+    /**
+     * 尝试用 JSqlParser 解析，失败返回 null。
+     */
+    private Statement tryParse(String sql) {
+        try {
+            return CCJSqlParserUtil.parse(sql);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 对 SQL 片段做包装，使其成为合法的完整语句：
+     * - 以 WHERE/AND/OR 开头 → SELECT * FROM __DUAL__ <fragment>
+     * - 以 SET 开头 → UPDATE __DUAL__ <fragment>
+     * - 其他碎片不包装，返回 null
+     */
+    private String wrapFragment(String sql) {
+        String upper = sql.toUpperCase().trim();
+        if (upper.startsWith("WHERE ") || upper.startsWith("AND ") || upper.startsWith("OR ")) {
+            return "SELECT * FROM __DUAL__ " + sql;
+        }
+        if (upper.startsWith("SET ")) {
+            return "UPDATE __DUAL__ " + sql;
+        }
+        // 以 ORDER BY / GROUP BY / LIMIT 等开头也尝试包装
+        if (upper.startsWith("ORDER ") || upper.startsWith("GROUP ") || upper.startsWith("LIMIT ")
+                || upper.startsWith("HAVING ")) {
+            return "SELECT * FROM __DUAL__ " + sql;
+        }
+        return null;
+    }
+
+    /**
+     * 根据语句类型分发到对应的表提取方法。
+     */
+    private void classifyStatement(Statement statement, SqlTableResult result) {
+        if (statement instanceof Select) {
+            result.setSqlType("SELECT");
+            extractSelectTables((Select) statement, result);
+        } else if (statement instanceof Insert) {
+            result.setSqlType("INSERT");
+            extractInsertTables((Insert) statement, result);
+        } else if (statement instanceof Update) {
+            result.setSqlType("UPDATE");
+            extractUpdateTables((Update) statement, result);
+        } else if (statement instanceof Delete) {
+            result.setSqlType("DELETE");
+            extractDeleteTables((Delete) statement, result);
+        }
     }
 
     /**

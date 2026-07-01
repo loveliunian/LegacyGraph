@@ -131,6 +131,8 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -138,6 +140,7 @@ import { Plus, Loading } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { t } from '@/locales'
 import { get, del, post } from '@/utils/request'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const router = useRouter()
@@ -174,18 +177,10 @@ const formatDuration = (seconds: number) => {
 
 const getScanTypeText = (type: string) => {
   if (!type) return '-'
-  // type可能是JSON字符串，尝试提取可读信息
   try {
     const parsed = JSON.parse(type)
     if (parsed.scanTypes && Array.isArray(parsed.scanTypes)) {
-      const map: Record<string, string> = {
-        CODE_SCAN: '代码扫描',
-        DB_SCAN: '数据库扫描',
-        DOC_PARSE: '文档解析',
-        GRAPH_BUILD: '图谱构建',
-        TEST_GENERATE: '测试生成'
-      }
-      return parsed.scanTypes.map((t: string) => map[t] || t).join('+') || '全量扫描'
+      return parsed.scanTypes.map((t: string) => dictLabel('scan_type', t) || t).join('+') || '全量扫描'
     }
   } catch {}
   return type.length > 30 ? '全量扫描' : type
@@ -206,32 +201,9 @@ const getStatusType = (status: string): string => {
   return map[status] || 'info'
 }
 
-const getStatusText = (status: string): string => {
-  const map: Record<string, string> = {
-    CREATED: '已创建',
-    PENDING: '等待中',
-    RUNNING: '运行中',
-    PROCESSING: '处理中',
-    SUCCESS: '已完成',
-    COMPLETED: '已完成',
-    FAILED: '失败',
-    CANCELLED: '已取消',
-    PAUSED: '已暂停'
-  }
-  return map[status] || status || '-'
-}
+const getStatusText = (status: string): string => dictLabel('scan_status', status)
 
-const getStageText = (stage: string): string => {
-  const map: Record<string, string> = {
-    CODE_SCAN: '代码扫描中',
-    DB_SCAN: '数据库扫描中',
-    DOC_PARSE: '文档解析中',
-    GRAPH_BUILD: '图谱构建中',
-    TEST_GENERATE: '测试生成中',
-    COMPLETED: '已完成'
-  }
-  return map[stage] || stage
-}
+const getStageText = (stage: string): string => dictLabel('scan_stage', stage)
 
 const goToCreate = () => {
   router.push(`/projects/${projectId}/scan-versions/create`)
@@ -347,6 +319,7 @@ const managePolling = () => {
 }
 
 onMounted(async () => {
+  preloadDicts(['scan_type', 'scan_status', 'scan_stage'])
   await loadVersionList()
 })
 

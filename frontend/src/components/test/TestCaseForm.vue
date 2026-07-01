@@ -123,10 +123,6 @@ import { Plus, Delete } from '@element-plus/icons-vue'
 import AssertionEditor from './AssertionEditor.vue'
 import type { TestCase, NodeOption } from '@/types'
 
-interface Precondition {
-  type: string
-  value: string
-}
 
 interface KeyValue {
   key: string

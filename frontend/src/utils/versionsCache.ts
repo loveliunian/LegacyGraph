@@ -5,7 +5,6 @@
 import { get } from '@/utils/request'
 import type { Ref } from 'vue'
 
-const cache = new Map<string, { data: any[]; time: number }>()
 const TTL = 5 * 60 * 1000 // 5 分钟
 
 let cachedVersions: any[] = []

@@ -1,11 +1,16 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
+import ElementPlus from 'unplugin-element-plus/vite'
+import Icons from 'unplugin-icons/vite'
+import IconsResolver from 'unplugin-icons/resolver'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [
     vue(),
+    ElementPlus({}),
+    Icons({ autoInstall: true, compiler: 'vue3' }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt'],
@@ -13,7 +18,7 @@ export default defineConfig({
         name: 'LegacyGraph - 代码知识图谱',
         short_name: 'LegacyGraph',
         description: '企业级代码分析与知识图谱平台',
-        theme_color: '#409eff',
+        theme_color: '#5e5ce6',
         background_color: '#ffffff',
         icons: [
           {
@@ -38,7 +43,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/api\//,
+            urlPattern: /\/api\/.*/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

@@ -18,7 +18,7 @@
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="getStatusType(row.status)">
-            {{ row.status }}
+            {{ getStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -106,12 +106,16 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { get, post } from '@/utils/request'
+import { graphApi } from '@/api'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const router = useRouter()
@@ -135,28 +139,11 @@ const formatDuration = (seconds: number) => {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
 }
 
-const getTaskTypeText = (type: string) => {
-  const map: Record<string, string> = {
-    CODE_SCAN: '代码扫描',
-    DB_SCAN: '数据库扫描',
-    DOC_PARSE: '文档解析',
-    GRAPH_BUILD: '图谱构建',
-    TEST_GENERATE: '测试生成'
-  }
-  return map[type] || type
-}
+const getTaskTypeText = (type: string) => dictLabel('scan_type', type)
 
-const getStageText = (stage: string) => {
-  const map: Record<string, string> = {
-    CODE_SCAN: '代码扫描中',
-    DB_SCAN: '数据库扫描中',
-    DOC_PARSE: '文档解析中',
-    GRAPH_BUILD: '图谱构建中',
-    TEST_GENERATE: '测试生成中',
-    COMPLETED: '已完成',
-  }
-  return map[stage] || stage
-}
+const getStageText = (stage: string) => dictLabel('scan_stage', stage)
+
+const getStatusText = (status: string) => dictLabel('scan_status', status)
 
 const getStatusType = (status: string): string => {
   const map: Record<string, string> = {
@@ -220,6 +207,7 @@ const retryTask = async (row: any) => {
 }
 
 onMounted(() => {
+  preloadDicts(['scan_type', 'scan_stage', 'scan_status'])
   loadTaskList()
 })
 
@@ -227,10 +215,7 @@ async function loadTaskList(page?: number) {
   if (page) pageNum.value = page
   loading.value = true
   try {
-    const res = await get(`/lg/projects/${projectId}/scan-versions`, {
-      pageNum: pageNum.value,
-      pageSize: pageSize.value
-    })
+    const res = await graphApi.getScanVersions(projectId)
     const list = Array.isArray(res) ? res : (res.list || [])
     total.value = res.total || list.length
     taskList.value = list.map((v: any) => ({

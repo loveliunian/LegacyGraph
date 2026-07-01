@@ -1,0 +1,12 @@
+@@ -304,11 +304,6 @@
+   }
+ }
+ 
+-async function loadCoverage() {
+-  // 不再独立请求，由 loadGraph 一并计算
+-  await loadGraph('')
+-}
+-
+ function computeCoverage(rawNodes: any[]) {
+   const nodes = rawNodes.map((n: any) => {
+     const props = n.properties || n

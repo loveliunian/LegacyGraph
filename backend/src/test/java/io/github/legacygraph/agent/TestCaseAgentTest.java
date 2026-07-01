@@ -11,7 +11,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -47,8 +46,7 @@ class TestCaseAgentTest {
 
     @BeforeEach
     void setUp() {
-        testCaseAgent = new TestCaseAgent();
-        ReflectionTestUtils.setField(testCaseAgent, "llmGateway", llmGateway);
+        testCaseAgent = new TestCaseAgent(llmGateway);
     }
 
     private TestGenerationRequest fullRequest() {

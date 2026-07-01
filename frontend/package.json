@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vue-tsc --noEmit && vite build",
     "type-check": "vue-tsc --noEmit",
     "preview": "vite preview",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
@@ -20,13 +20,13 @@
   },
   "dependencies": {
     "@antv/g6": "^5.0.12",
-    "@element-plus/icons-vue": "^2.3.1",
+    "@element-plus/icons-vue": "^2.3.2",
     "@vue-flow/core": "^1.33.0",
     "axios": "^1.6.8",
     "dayjs": "^1.11.10",
     "diff": "^5.1.0",
     "echarts": "^5.5.0",
-    "element-plus": "^2.6.0",
+    "element-plus": "^2.14.2",
     "highlight.js": "^11.9.0",
     "lodash-es": "^4.17.21",
     "marked": "^18.0.5",
@@ -37,6 +37,7 @@
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
+    "@iconify/json": "^2.2.493",
     "@playwright/test": "^1.42.1",
     "@types/diff": "^5.0.9",
     "@types/lodash-es": "^4.17.12",
@@ -52,6 +53,8 @@
     "pinia-plugin-persistedstate": "^3.2.1",
     "prettier": "^3.2.5",
     "typescript": "^5.4.2",
+    "unplugin-element-plus": "^0.11.2",
+    "unplugin-icons": "^23.0.1",
     "vite": "^5.1.6",
     "vite-plugin-pwa": "^0.19.8",
     "vitest": "^1.4.0",

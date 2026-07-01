@@ -123,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
@@ -179,8 +179,6 @@ const emit = defineEmits<{
 
 const viewMode = ref<'split' | 'unified'>('split')
 const expanded = ref(true)
-const oldLineNumber = ref(1)
-const newLineNumber = ref(1)
 
 const diffResult = computed(() => {
   return Diff.diffLines(props.oldCode || '', props.newCode || '')
@@ -297,7 +295,7 @@ function getLineSymbol(type: string): string {
   }
 }
 
-function highlightLine(content: string, language: string, type: string): string {
+function highlightLine(content: string, language: string, _type: string): string {
   try {
     const highlighted = hljs.highlight(content || ' ', { language }).value
     return highlighted

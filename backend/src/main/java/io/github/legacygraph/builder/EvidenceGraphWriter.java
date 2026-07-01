@@ -37,6 +37,12 @@ import java.util.UUID;
 @Component
 public class EvidenceGraphWriter {
 
+    // ⚠️ B-S1 跨存储事务不一致：本类多处方法标注 @Transactional（见 upsertNode/upsertEdge 等），
+    //   但同时写 Neo4j（Neo4jGraphDao）与 PostgreSQL（JPA Repository：Evidence/NodeEvidence/EdgeEvidence）。
+    //   Spring @Transactional 仅管理 JDBC/DataSource，不覆盖 Neo4j。Neo4j 写成功后 PG 写失败，
+    //   Neo4j 数据不会回滚 → 数据不一致。建议：注册 Neo4jTransactionManager 并用 ChainedTransactionManager
+    //   链式管理 JDBC + Neo4j，或对最终一致场景改用补偿事务 + 幂等写入。
+
     private final Neo4jGraphDao neo4jGraphDao;
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
@@ -73,15 +79,7 @@ public class EvidenceGraphWriter {
      */
     @Transactional
     public GraphNode upsertNode(GraphNodeClaim claim) {
-        // 1. 去重查找
-        Optional<GraphNode> existing = neo4jGraphDao.findNode(
-                claim.getProjectId(), claim.getVersionId(),
-                claim.getNodeType(), claim.getNodeKey());
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        // 2. 创建节点
+        // 构造节点声明（id 为新建候选；MERGE 命中已存在节点时以库内 id 为准）
         GraphNode node = new GraphNode();
         node.setId(UUID.randomUUID().toString());
         node.setProjectId(claim.getProjectId());
@@ -101,15 +99,17 @@ public class EvidenceGraphWriter {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        neo4jGraphDao.createNode(node);
+        // 一次 MERGE 完成去重 + 创建（替代原 findNode + createNode 两次远程往返）
+        Neo4jGraphDao.NodeUpsert upsert = neo4jGraphDao.mergeNode(node);
+        GraphNode merged = upsert.node();
 
-        // 3. 有来源路径或 AI 声明时，创建证据并关联。AI 证据允许没有文件路径，但必须可追溯到项目/版本/节点。
-        if (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType())) {
-            createEvidenceForNode(node, claim.getSourceType(), claim.getSourcePath(),
+        // 仅新建节点时创建证据（命中已存在节点则跳过，避免重复 evidence）
+        if (upsert.created() && (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType()))) {
+            createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
                     claim.getStartLine(), claim.getEndLine());
         }
 
-        return node;
+        return merged;
     }
 
     // ==================== 边操作 ====================
@@ -129,16 +129,7 @@ public class EvidenceGraphWriter {
      */
     @Transactional
     public GraphEdge upsertEdge(GraphEdgeClaim claim) {
-        // 1. 去重查找
-        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(
-                claim.getProjectId(), claim.getVersionId(),
-                claim.getFromNodeId(), claim.getToNodeId(),
-                claim.getEdgeType(), claim.getEdgeKey());
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-
-        // 2. 创建边
+        // 构造边声明（id 为新建候选；MERGE 命中已存在边时以库内 id 为准）
         GraphEdge edge = new GraphEdge();
         edge.setId(UUID.randomUUID().toString());
         edge.setProjectId(claim.getProjectId());
@@ -154,12 +145,20 @@ public class EvidenceGraphWriter {
         edge.setCreatedAt(LocalDateTime.now());
         edge.setUpdatedAt(LocalDateTime.now());
 
-        neo4jGraphDao.createEdge(edge);
+        // 一次 MERGE 完成去重 + 创建（替代原 findEdge + createEdge 两次远程往返）
+        Neo4jGraphDao.EdgeUpsert upsert = neo4jGraphDao.mergeEdge(edge);
+        if (upsert.edge() == null) {
+            // from/to 节点不存在，无法建边（与原 createEdge 静默失败语义一致）
+            return edge;
+        }
+        GraphEdge merged = upsert.edge();
 
-        // 3. 边证据继承：从源节点继承证据
-        inheritEvidenceForEdge(edge, claim.getFromNodeId());
+        // 仅新建边时继承源节点证据（命中已存在边则跳过，避免重复继承）
+        if (upsert.created()) {
+            inheritEvidenceForEdge(merged, claim.getFromNodeId());
+        }
 
-        return edge;
+        return merged;
     }
 
     // ==================== 证据操作 ====================

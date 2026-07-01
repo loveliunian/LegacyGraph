@@ -4,7 +4,7 @@
       <el-aside width="220px" class="sidebar">
         <div class="project-info">
           <h3>{{ currentProject?.projectName || '项目详情' }}</h3>
-          <el-tag v-if="currentProject?.status" size="small">{{ currentProject.status }}</el-tag>
+          <el-tag v-if="currentProject?.status" size="small">{{ getProjectStatusText(currentProject.status) }}</el-tag>
         </div>
         
         <el-menu
@@ -132,6 +132,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const router = useRouter()
@@ -145,7 +146,10 @@ const runningTasksCount = computed(() => taskStore.runningTasks.length)
 
 const activeMenu = computed(() => route.path)
 
+const getProjectStatusText = (status: string) => dictLabel('project_status', status)
+
 onMounted(async () => {
+  preloadDicts(['project_status'])
   if (projectId.value) {
     projectStore.setCurrentProject(projectId.value)
     await projectStore.fetchCurrentProject()

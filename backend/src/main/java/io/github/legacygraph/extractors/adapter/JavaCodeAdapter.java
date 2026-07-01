@@ -99,4 +99,14 @@ public class JavaCodeAdapter implements ExtractionAdapter {
                 .priority(10)
                 .build();
     }
+
+    /**
+     * 判断文件路径是否为 Controller 类（按命名约定）。
+     * 供兄弟 Adapter 使用，避免重复处理。
+     */
+    public static boolean isControllerFile(String relativePath) {
+        if (relativePath == null) return false;
+        String name = relativePath.toLowerCase();
+        return name.contains("controller") || name.contains("controller/");
+    }
 }

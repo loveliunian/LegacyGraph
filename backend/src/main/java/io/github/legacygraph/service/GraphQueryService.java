@@ -19,12 +19,17 @@ import org.neo4j.driver.Session;
 import org.neo4j.driver.types.Path;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class GraphQueryService {
+
+    // ⚠️ B-H2 Service 绕过 DAO 执行原生 Cypher：本类直接注入 org.neo4j.driver.Driver 并在多处
+    //   执行原生 Cypher（neo4jDriver.session()），与 Neo4jGraphDao 职责重叠，DAO 抽象形同虚设。
+    //   应将所有 Cypher 收敛到 Neo4jGraphDao，Service 只调 DAO。
 
     private final Neo4jGraphDao neo4jGraphDao;
     private final ScanVersionRepository scanVersionRepository;
@@ -185,11 +190,13 @@ public class GraphQueryService {
         }
 
         try (Session session = neo4jDriver.session()) {
-            Result queryResult = session.run(cypher, Map.of(
-                    "projectId", projectId,
-                    "versionId", versionId,
-                    "module", module
-            ));
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", versionId);
+            if (hasModule) {
+                params.put("module", module);
+            }
+            Result queryResult = session.run(cypher, params);
 
             Set<String> nodeIds = new HashSet<>();
             List<Map<String, Object>> nodes = new ArrayList<>();
@@ -297,11 +304,13 @@ public class GraphQueryService {
         }
 
         try (Session session = neo4jDriver.session()) {
-            Result queryResult = session.run(cypher, Map.of(
-                    "projectId", projectId,
-                    "versionId", versionId,
-                    "domain", domain
-            ));
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", versionId);
+            if (hasDomain) {
+                params.put("domain", domain);
+            }
+            Result queryResult = session.run(cypher, params);
 
             Set<String> nodeIds = new HashSet<>();
             List<Map<String, Object>> nodes = new ArrayList<>();
@@ -406,9 +415,9 @@ public class GraphQueryService {
         // 标准化 versionId：PG JDBC 返回带横线格式，Neo4j 存储不带横线
         String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
 
-        // 从 scanVersionRepository 获取 projectId
+        // 从 scanVersionRepository 获取 projectId（使用标准化 versionId 匹配 MyBatis-Plus 生成的无横线 UUID）
         ScanVersion version = scanVersionRepository.lambdaQuery()
-                .eq(ScanVersion::getId, versionId)
+                .eq(ScanVersion::getId, normalizedVersionId)
                 .one();
         if (version == null) {
             Map<String, Object> errorResult = new HashMap<>();
@@ -669,5 +678,92 @@ public class GraphQueryService {
      */
     private String normalizeVersionId(String versionId) {
         return versionId != null ? versionId.replace("-", "") : null;
+    }
+
+    // ==================== 漂移队列 ====================
+
+    /**
+     * 获取漂移队列：静态-only、运行时-only、文档-only、低置信等待处理项。
+     * @param projectId 项目ID
+     * @param type 过滤类型（all/static_only/dynamic_only/doc_only/low_confidence）
+     */
+    public Map<String, Object> getDriftQueue(String projectId, String type) {
+        List<Map<String, Object>> allItems = new ArrayList<>();
+
+        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, null, null, null, 200);
+        for (GraphEdge edge : edges) {
+            if ("static_only_candidate".equals(edge.getRelationStatus())) {
+                allItems.add(edgeDriftItem(edge, "static_only", "静态图谱存在但运行时尚未观测", "MEDIUM"));
+            } else if ("dynamic_only_candidate".equals(edge.getRelationStatus())
+                    || "RUNTIME_TRACE".equals(edge.getSourceType())) {
+                allItems.add(edgeDriftItem(edge, "dynamic_only", "运行时观测到但静态图谱未确认", "HIGH"));
+            }
+        }
+
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, null, null, null, null, null, 200);
+        for (GraphNode node : nodes) {
+            if ("DOC_AI".equals(node.getSourceType())) {
+                allItems.add(nodeDriftItem(node, "doc_only", "文档 AI 节点需要与代码/运行时证据对齐", "MEDIUM"));
+            }
+            BigDecimal confidence = node.getConfidence();
+            if (confidence != null && confidence.compareTo(BigDecimal.valueOf(0.5)) < 0) {
+                allItems.add(nodeDriftItem(node, "low_confidence", "低置信节点需要人工确认", "HIGH"));
+            }
+        }
+
+        String normalizedType = type == null || type.isBlank() ? "all" : type;
+        List<Map<String, Object>> items = "all".equals(normalizedType)
+                ? allItems
+                : allItems.stream()
+                .filter(item -> normalizedType.equals(item.get("driftType")))
+                .toList();
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("items", items);
+        response.put("summary", driftSummary(allItems));
+        return response;
+    }
+
+    private Map<String, Object> edgeDriftItem(GraphEdge edge, String driftType,
+                                              String description, String severity) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", edge.getId());
+        item.put("elementId", edge.getId());
+        item.put("targetType", "EDGE");
+        item.put("driftType", driftType);
+        item.put("elementName", edge.getEdgeKey() != null ? edge.getEdgeKey() : edge.getEdgeType());
+        item.put("description", description);
+        item.put("severity", severity);
+        item.put("confidence", edge.getConfidence());
+        item.put("createdAt", edge.getCreatedAt());
+        return item;
+    }
+
+    private Map<String, Object> nodeDriftItem(GraphNode node, String driftType,
+                                              String description, String severity) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", node.getId());
+        item.put("elementId", node.getId());
+        item.put("targetType", "NODE");
+        item.put("driftType", driftType);
+        item.put("elementName", node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName());
+        item.put("description", description);
+        item.put("severity", severity);
+        item.put("confidence", node.getConfidence());
+        item.put("createdAt", node.getCreatedAt());
+        return item;
+    }
+
+    private Map<String, Object> driftSummary(List<Map<String, Object>> items) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("staticOnly", countDrift(items, "static_only"));
+        summary.put("dynamicOnly", countDrift(items, "dynamic_only"));
+        summary.put("docOnly", countDrift(items, "doc_only"));
+        summary.put("lowConfidence", countDrift(items, "low_confidence"));
+        return summary;
+    }
+
+    private long countDrift(List<Map<String, Object>> items, String driftType) {
+        return items.stream().filter(item -> driftType.equals(item.get("driftType"))).count();
     }
 }

@@ -27,7 +27,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { ElTable } from 'element-plus'
 
 interface SortInfo {
   prop: string

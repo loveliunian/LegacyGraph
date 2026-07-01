@@ -158,8 +158,6 @@ export function exportPDF<T = any>(
     columns.map(col => String(formatValue(row, col, index)))
   )
 
-  const pageWidth = orientation === 'landscape' ? '297mm' : '210mm'
-  const pageHeight = orientation === 'landscape' ? '210mm' : '297mm'
 
   let html = `
 <!DOCTYPE html>

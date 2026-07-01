@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, shallowRef, markRaw } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, markRaw } from 'vue'
 import {
   VueFlow,
   useVueFlow,
@@ -213,7 +213,7 @@ function applyNodeAggregation(nodes: Node<GraphNodeData>[]) {
   const aggregated: Node<GraphNodeData>[] = []
   let groupIndex = 0
 
-  groups.forEach((groupNodes, key) => {
+  groups.forEach((groupNodes, _key) => {
     if (groupNodes.length <= 5) {
       aggregated.push(...groupNodes)
     } else {
@@ -390,7 +390,6 @@ function applyLayoutSync(layout: string) {
       })
       break
     case '分层':
-      const rows = Math.ceil(nodeCount / 6)
       visibleNodes.value.forEach((node, index) => {
         node.position = {
           x: 50 + (index % 6) * 220,

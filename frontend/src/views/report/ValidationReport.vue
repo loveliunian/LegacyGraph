@@ -237,11 +237,14 @@
 </template>
 
 <script setup lang="ts">
+// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Connection, Link, CircleCheck, Warning, Opportunity, Star } from '@element-plus/icons-vue'
 import { get } from '@/utils/request'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -276,19 +279,7 @@ const coverageData = ref({
   uncoveredCriticalPaths: 0,
 })
 
-const getRiskTypeText = (type: string) => {
-  const map: Record<string, string> = {
-    COMPLEX_CALL_CHAIN: '复杂调用链',
-    TABLE_COUPLING: '表耦合',
-    MISSING_DOC: '文档缺失',
-    MISSING_TEST: '测试缺失',
-    EXTERNAL_DEPENDENCY: '外部依赖',
-    LOW_CONFIDENCE: '低置信度',
-    UNCLEAR_LINEAGE: '血缘不清',
-    UNCLEAR_PERMISSION: '权限不明'
-  }
-  return map[type] || type
-}
+const getRiskTypeText = (type: string) => dictLabel('risk_type', type)
 
 const exportReport = () => {
   ElMessage.success('报告导出中...')
@@ -311,6 +302,7 @@ const loadAiInsights = async () => {
 }
 
 onMounted(async () => {
+  preloadDicts(['risk_type'])
   if (!projectId) return
   try {
     const [versionsRes, overviewRes] = await Promise.all([

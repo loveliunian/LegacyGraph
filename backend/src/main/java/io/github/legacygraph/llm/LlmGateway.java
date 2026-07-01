@@ -14,8 +14,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -45,6 +45,7 @@ public class LlmGateway {
     private final PiiMaskingService piiMaskingService;
     private final SecretScanService secretScanService;
     private final LlmProviderService llmProviderService;
+    private final RetryTemplate llmRetryTemplate;
 
     /** 缓存已创建的 ChatModel，按 providerCode 缓存 */
     private final Map<String, OpenAiChatModel> chatModelCache = new ConcurrentHashMap<>();
@@ -65,7 +66,8 @@ public class LlmGateway {
                       PromptTemplateLoader templateLoader,
                       PiiMaskingService piiMaskingService,
                       SecretScanService secretScanService,
-                      LlmProviderService llmProviderService) {
+                      LlmProviderService llmProviderService,
+                      RetryTemplate llmRetryTemplate) {
         this.objectMapper = objectMapper;
         this.promptRunRepository = promptRunRepository;
         this.agentRunRepository = agentRunRepository;
@@ -73,13 +75,13 @@ public class LlmGateway {
         this.piiMaskingService = piiMaskingService;
         this.secretScanService = secretScanService;
         this.llmProviderService = llmProviderService;
+        this.llmRetryTemplate = llmRetryTemplate;
     }
 
     /**
      * 调用 LLM（无显式合约 — 自动构造默认合约，agentType=templateName）。
      * 现有 Agent 无需改动即获得合约审计。
      */
-    @Transactional
     public <T> T callWithTemplate(String projectId, String templateName,
                                    Map<String, String> variables, Class<T> responseType) {
         AgentRunContract contract = AgentRunContract.builder()
@@ -99,7 +101,6 @@ public class LlmGateway {
      *                 selfCorrectionCount / needsHumanReview 由网关回填
      * @throws LlmCallException 调用失败或输出经自我修复仍无法反序列化时抛出
      */
-    @Transactional
     public <T> T callWithTemplate(String projectId, String templateName,
                                    Map<String, String> variables, Class<T> responseType,
                                    AgentRunContract contract) {
@@ -284,14 +285,23 @@ public class LlmGateway {
 
     /**
      * 实际调用 ChatModel，返回 ChatResponse（含 token 用量）。
+     * <p>
+     * B-S4：用 {@link RetryTemplate} 包裹真实调用（3 次尝试，2s 固定退避）。因本方法为同类内部私有调用，
+     * {@code @Retryable} 注解会因 AOP 代理失效，故采用编程式重试。底层 HTTP 超时由
+     * {@code legacy-graph.ai.llm-timeout} 在 {@code LlmProviderService#createChatModel} 处注入。
      */
     private ChatResponse invokeModel(String prompt) {
         OpenAiChatModel chatModel = getChatModel();
         ChatClient chatClient = ChatClient.create(chatModel);
-        return chatClient.prompt()
-                .user(prompt)
-                .call()
-                .chatResponse();
+        return llmRetryTemplate.execute(ctx -> {
+            if (ctx.getRetryCount() > 0) {
+                log.warn("LLM call retry #{} after backoff", ctx.getRetryCount());
+            }
+            return chatClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .chatResponse();
+        });
     }
 
     private String extractText(ChatResponse chatResponse) {

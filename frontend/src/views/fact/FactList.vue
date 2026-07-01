@@ -116,9 +116,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { factApi } from '@/api'
@@ -192,7 +191,7 @@ const viewDetail = async (row: any) => {
     try {
       const related = await factApi.getRelatedNodes(projectId, row.id)
       if (related && Array.isArray(related)) {
-        relatedNodes.value = related.map((id: string, idx: number) => ({
+        relatedNodes.value = related.map((id: string, _idx: number) => ({
           nodeName: id,
           nodeType: 'UNKNOWN',
           confidence: 0.5,

@@ -2,8 +2,8 @@ package io.github.legacygraph.agent;
 
 import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.llm.LlmGateway;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -19,10 +19,10 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CodeFactAgent {
 
-    @Autowired
-    private LlmGateway llmGateway;
+    private final LlmGateway llmGateway;
 
     /**
      * 处理代码片段，提取结构化事实

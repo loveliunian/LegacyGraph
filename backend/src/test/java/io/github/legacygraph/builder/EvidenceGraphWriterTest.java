@@ -6,6 +6,7 @@ import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.NodeEvidence;
+import io.github.legacygraph.llm.SecretScanService;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
@@ -40,12 +41,13 @@ class EvidenceGraphWriterTest {
 
     @Test
     void aiNodeWithoutSourcePathStillCreatesEvidenceAndStaysPending() {
-        when(neo4jGraphDao.findNode("project-1", "v1", "Feature", "create-order"))
-                .thenReturn(Optional.empty());
-        when(neo4jGraphDao.createNode(any(GraphNode.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        // MERGE 化后 upsertNode 单次 mergeNode 完成去重+创建；此处模拟本次新建（created=true）
+        when(neo4jGraphDao.mergeNode(any(GraphNode.class))).thenAnswer(invocation ->
+                new Neo4jGraphDao.NodeUpsert(invocation.getArgument(0), true));
 
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
-                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
+                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
+                new SecretScanService());
 
         GraphNode node = writer.upsertNode(GraphNodeClaim.builder()
                 .projectId("project-1")
@@ -78,7 +80,8 @@ class EvidenceGraphWriterTest {
         when(neo4jGraphDao.findNodeById("node-1")).thenReturn(Optional.of(node));
 
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
-                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
+                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
+                new SecretScanService());
 
         writer.attachEvidence("node-1", EvidenceRecord.builder()
                 .evidenceType("doc")

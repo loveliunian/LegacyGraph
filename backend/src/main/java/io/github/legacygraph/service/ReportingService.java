@@ -37,6 +37,9 @@ import java.util.*;
 /**
  * 报告生成服务
  * 生成各种分析报告：迁移就绪度、置信度趋势、测试覆盖率、图谱质量
+ *
+ * <p>⚠️ TODO B-H11：本类承担 5 种报告 + LLM 洞察 + MinIO 上传 + 缓存，依赖 9 个 Bean。
+ * 建议按报告类型拆分为 MigrationReportService / QualityReportService / InsightReportService。</p>
  */
 @Slf4j
 @Service
@@ -52,7 +55,8 @@ public class ReportingService {
     private final ReportExportService reportExportService;
     private final ReportInsightAgent reportInsightAgent;
 
-    private final String bucketName = "legacygraph-reports";
+    // B-M7：原为 "legacygraph-reports"，与 application.yml 的 minio.bucket-name 不一致，统一为 legacy-graph
+    private final String bucketName = "legacy-graph";
     public ReportingService(ReportRepository reportRepository,
                            Neo4jGraphDao neo4jGraphDao,
                            TestResultRepository testResultRepository,
@@ -187,7 +191,13 @@ public class ReportingService {
     private LocalDate toLocalDate(Object val) {
         if (val instanceof LocalDate d) return d;
         if (val instanceof String s) {
-            try { return LocalDate.parse(s); } catch (Exception ignored) {}
+            try {
+                return LocalDate.parse(s);
+            } catch (Exception e) {
+                // B-M11：原实现静默吞掉解析异常并回退 LocalDate.now()，会产出错误日期且无迹可查。
+                // 改为记录告警，仍回退到当天以保证图表不空，但异常可见。
+                log.warn("无法解析日期字符串，回退为当天: raw={}", s);
+            }
         }
         return LocalDate.now();
     }

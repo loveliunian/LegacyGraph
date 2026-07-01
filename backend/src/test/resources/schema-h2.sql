@@ -275,6 +275,8 @@ CREATE TABLE lg_evidence (
     sql_hash        VARCHAR(128),
     chunk_id        BIGINT,
     related_node_ids TEXT,
+    privacy_level   VARCHAR(20) NOT NULL DEFAULT 'INTERNAL',
+    redaction_policy VARCHAR(20) NOT NULL DEFAULT 'none',
     deleted         SMALLINT NOT NULL DEFAULT 0,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

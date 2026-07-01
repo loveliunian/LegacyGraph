@@ -1,5 +1,6 @@
 package io.github.legacygraph.dao;
 
+import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import lombok.extern.slf4j.Slf4j;
@@ -66,6 +67,43 @@ public class Neo4jGraphDao {
             return node;
         }
     }
+
+    /**
+     * 查找或创建节点（MERGE 原子去重）。
+     * <p>
+     * 一条 Cypher 完成原 findNode + createNode 两步，把每个节点的远程往返从 2 次降到 1 次。
+     * 去重键与 {@link #findNode} 一致：(projectId, versionId, nodeKey)。
+     *
+     * @return 节点（id 取自库内已存在或新建节点）+ 是否本次新建的标志
+     */
+    public NodeUpsert mergeNode(GraphNode node) {
+        String label = node.getNodeType();
+        try (Session session = neo4jDriver.session()) {
+            String cypher = String.format(
+                    "MERGE (n:%s {projectId: $projectId, versionId: $versionId, nodeKey: $nodeKey}) " +
+                    "ON CREATE SET n.id = $id, n.nodeName = $nodeName, n.displayName = $displayName, " +
+                    "n.description = $description, n.sourceType = $sourceType, n.sourcePath = $sourcePath, " +
+                    "n.startLine = $startLine, n.endLine = $endLine, n.confidence = $confidence, " +
+                    "n.status = $status, n.properties = $properties, " +
+                    "n.verifiedScore = $verifiedScore, n.runtimeVerified = $runtimeVerified, " +
+                    "n.lastSeenAt = $lastSeenAt, n.traceCount = $traceCount, " +
+                    "n.createdAt = $createdAt, n.updatedAt = $updatedAt " +
+                    "ON MATCH SET n.updatedAt = $updatedAt " +
+                    "RETURN n, (n.createdAt = $createdAt) AS created",
+                    label);
+            Map<String, Object> params = nodeToParams(node);
+            org.neo4j.driver.Record record = session.run(cypher, params).single();
+            GraphNode merged = recordToNode(record.get("n").asNode());
+            boolean created = record.get("created").asBoolean();
+            if (created) {
+                log.debug("Merged-created Neo4j node: type={}, key={}", label, node.getNodeKey());
+            }
+            return new NodeUpsert(merged, created);
+        }
+    }
+
+    /** mergeNode 的返回结果：节点 + 是否本次新建 */
+    public record NodeUpsert(GraphNode node, boolean created) {}
 
     /** 查找节点（projectId + versionId + nodeType + nodeKey 唯一约束） */
     public Optional<GraphNode> findNode(String projectId, String versionId, String nodeType, String nodeKey) {
@@ -297,6 +335,61 @@ public class Neo4jGraphDao {
     }
 
     /**
+     * 查找或创建边（MERGE 原子去重）。
+     * <p>
+     * 一条 Cypher 完成原 findEdge + createEdge 两步，把每条边的远程往返从 2 次降到 1 次。
+     * 去重键与 {@link #findEdge} 一致：(projectId, versionId, edgeKey) + 两端节点 id。
+     *
+     * @return 边（两端节点 id 取自库内）+ 是否本次新建的标志；from/to 节点不存在时返回 null
+     */
+    public EdgeUpsert mergeEdge(GraphEdge edge) {
+        String edgeType = edge.getEdgeType();
+        try (Session session = neo4jDriver.session()) {
+            String cypher = String.format(
+                    "MATCH (from {id: $fromId}), (to {id: $toId}) " +
+                    "MERGE (from)-[r:%s {projectId: $projectId, versionId: $versionId, edgeKey: $edgeKey}]->(to) " +
+                    "ON CREATE SET r.id = $id, r.edgeType = $edgeType, r.sourceType = $sourceType, " +
+                    "r.confidence = $confidence, r.status = $status, r.properties = $properties, " +
+                    "r.evidenceIds = $evidenceIds, r.relationStatus = $relationStatus, " +
+                    "r.createdAt = $createdAt, r.updatedAt = $updatedAt " +
+                    "ON MATCH SET r.updatedAt = $updatedAt " +
+                    "RETURN r, from, to, (r.createdAt = $createdAt) AS created",
+                    edgeType);
+            Map<String, Object> params = new HashMap<>();
+            params.put("id", edge.getId());
+            params.put("fromId", edge.getFromNodeId());
+            params.put("toId", edge.getToNodeId());
+            params.put("projectId", edge.getProjectId());
+            params.put("versionId", edge.getVersionId());
+            params.put("edgeKey", edge.getEdgeKey() != null ? edge.getEdgeKey() : "");
+            params.put("edgeType", edgeType);
+            params.put("sourceType", edge.getSourceType() != null ? edge.getSourceType() : "");
+            params.put("confidence", edge.getConfidence() != null ? edge.getConfidence().doubleValue() : 1.0);
+            params.put("status", edge.getStatus() != null ? edge.getStatus() : "");
+            params.put("properties", edge.getProperties() != null ? edge.getProperties() : "{}");
+            params.put("evidenceIds", edge.getEvidenceIds() != null ? edge.getEvidenceIds() : "");
+            params.put("relationStatus", edge.getRelationStatus() != null ? edge.getRelationStatus() : "");
+            params.put("createdAt", edge.getCreatedAt() != null ? edge.getCreatedAt().toString() : LocalDateTime.now().toString());
+            params.put("updatedAt", edge.getUpdatedAt() != null ? edge.getUpdatedAt().toString() : LocalDateTime.now().toString());
+            Result result = session.run(cypher, params);
+            if (!result.hasNext()) {
+                // from/to 节点不存在，无法建边
+                return new EdgeUpsert(null, false);
+            }
+            org.neo4j.driver.Record record = result.next();
+            GraphEdge merged = recordToEdge(
+                    record.get("r").asRelationship(),
+                    record.get("from").asNode(),
+                    record.get("to").asNode());
+            boolean created = record.get("created").asBoolean();
+            return new EdgeUpsert(merged, created);
+        }
+    }
+
+    /** mergeEdge 的返回结果：边 + 是否本次新建 */
+    public record EdgeUpsert(GraphEdge edge, boolean created) {}
+
+    /**
      * 查找已存在的边（用于去重）。
      * 按 (projectId, versionId, fromNodeId, toNodeId, edgeType, edgeKey) 唯一标识一条边。
      */
@@ -520,14 +613,41 @@ public class Neo4jGraphDao {
         }
     }
 
-    /** 按 ID 查找边 */
+    /**
+     * 查询某节点在指定项目内的全部邻居节点 id（应用 UUID），单次 Cypher 直查，
+     * 替代旧实现中"查全项目边前 50 + Java 过滤"的 N+1 全量加载方式（B-S3）。
+     */
+    public Set<String> findNeighborNodeIds(String projectId, String nodeId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n {id: $nodeId, projectId: $projectId})-[r]-(m) " +
+                "WHERE r.projectId = $projectId AND m.id IS NOT NULL " +
+                "RETURN DISTINCT m.id AS neighborId";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "nodeId", nodeId));
+            Set<String> ids = new HashSet<>();
+            while (result.hasNext()) {
+                ids.add(result.next().get("neighborId").asString());
+            }
+            return ids;
+        }
+    }
+
+    /** 按 ID 查找边（返回两端节点 id 属性，而非 Neo4j 内部 elementId） */
     public Optional<GraphEdge> findEdgeById(String edgeId) {
         try (Session session = neo4jDriver.session()) {
+            // B-S2: 必须同时取两端节点，用其应用 id 属性（UUID），
+            // 而非 rel.startNodeElementId()/endNodeElementId()（Neo4j 内部 elementId 形如 "4:xxx:0"）。
             Result result = session.run(
-                    "MATCH ()-[r {id: $id}]->() RETURN r LIMIT 1",
+                    "MATCH (from)-[r {id: $id}]->(to) RETURN r, from, to LIMIT 1",
                     Map.of("id", edgeId));
             if (result.hasNext()) {
-                return Optional.of(recordToEdge(result.next().get("r").asRelationship()));
+                org.neo4j.driver.Record rec = result.next();
+                org.neo4j.driver.types.Relationship rel = rec.get("r").asRelationship();
+                org.neo4j.driver.types.Node fromNode = rec.get("from").asNode();
+                org.neo4j.driver.types.Node toNode = rec.get("to").asNode();
+                return Optional.of(recordToEdge(rel, fromNode, toNode));
             }
         }
         return Optional.empty();
@@ -848,33 +968,34 @@ public class Neo4jGraphDao {
         }
     }
 
-    /** 创建约束（服务启动时初始化） */
+    /** 创建约束（服务启动时初始化）。覆盖 NodeType 全部类型，避免新增类型遗漏索引导致全标签扫描。 */
     public void createConstraints() {
         try (Session session = neo4jDriver.session()) {
-            String[] nodeTypes = {
-                    "Project", "ApiEndpoint", "Table", "Method", "Controller", "Service", "Mapper",
-                    "BusinessDomain", "BusinessProcess", "BusinessObject", "BusinessRule",
-                    "Feature", "Page", "Role", "Repository"
-            };
-            for (String type : nodeTypes) {
+            for (NodeType type : NodeType.values()) {
+                String label = type.name();
                 String cypher = String.format(
                         "CREATE CONSTRAINT %s_id_key IF NOT EXISTS FOR (n:%s) REQUIRE n.id IS UNIQUE",
-                        type.toLowerCase(), type);
+                        label.toLowerCase(), label);
                 session.run(cypher);
             }
-            log.info("Created Neo4j constraints for {} node types", nodeTypes.length);
+            log.info("Created Neo4j constraints for {} node types", NodeType.values().length);
         }
     }
 
-    /** 创建索引 */
+    /** 创建索引（Neo4j 5.x 要求 FOR (n:Label) 语法）。覆盖 NodeType 全部类型。 */
     public void createIndexes() {
         try (Session session = neo4jDriver.session()) {
-            session.run("CREATE INDEX project_version_idx IF NOT EXISTS FOR (n) ON (n.projectId, n.versionId)");
-            session.run("CREATE INDEX node_id_idx IF NOT EXISTS FOR (n) ON (n.id)");
-            session.run("CREATE INDEX node_key_lookup IF NOT EXISTS FOR (n) ON (n.nodeKey)");
-            // 关系属性索引：加速按 projectId 统计边数量
-            session.run("CREATE INDEX edge_project_id_idx IF NOT EXISTS FOR ()-[r]-() ON (r.projectId)");
-            log.info("Created Neo4j indexes");
+            for (NodeType type : NodeType.values()) {
+                String label = type.name();
+                // 复合索引：加速按 projectId + versionId 查询
+                session.run(String.format(
+                        "CREATE INDEX IF NOT EXISTS FOR (n:%s) ON (n.projectId, n.versionId)", label));
+                // nodeKey 索引：加速按 nodeKey 点查（MERGE/去重的关键索引）
+                session.run(String.format(
+                        "CREATE INDEX IF NOT EXISTS FOR (n:%s) ON (n.nodeKey)", label));
+            }
+            // id 属性已在 createConstraints 中通过 UNIQUE 约束自动索引，无需重复建
+            log.info("Created Neo4j indexes for {} node types", NodeType.values().length);
         }
     }
 
@@ -940,31 +1061,6 @@ public class Neo4jGraphDao {
         Object ua = props.get("updatedAt");
         if (ua instanceof String) node.setUpdatedAt(LocalDateTime.parse((String) ua));
         return node;
-    }
-
-    private GraphEdge recordToEdge(org.neo4j.driver.types.Relationship rel) {
-        GraphEdge edge = new GraphEdge();
-        Map<String, Object> props = rel.asMap();
-        edge.setId((String) props.get("id"));
-        edge.setProjectId((String) props.get("projectId"));
-        edge.setVersionId((String) props.get("versionId"));
-        edge.setFromNodeId(rel.startNodeElementId());
-        edge.setToNodeId(rel.endNodeElementId());
-        edge.setEdgeType(rel.type());
-        edge.setEdgeKey((String) props.get("edgeKey"));
-        edge.setSourceType((String) props.get("sourceType"));
-        Object conf = props.get("confidence");
-        if (conf instanceof Double) edge.setConfidence(BigDecimal.valueOf((Double) conf));
-        else if (conf instanceof String) edge.setConfidence(new BigDecimal((String) conf));
-        edge.setStatus((String) props.get("status"));
-        edge.setProperties((String) props.get("properties"));
-        edge.setEvidenceIds((String) props.get("evidenceIds"));
-        edge.setRelationStatus((String) props.get("relationStatus"));
-        Object ca = props.get("createdAt");
-        if (ca instanceof String) edge.setCreatedAt(LocalDateTime.parse((String) ca));
-        Object ua = props.get("updatedAt");
-        if (ua instanceof String) edge.setUpdatedAt(LocalDateTime.parse((String) ua));
-        return edge;
     }
 
     /** 从关系+节点构建 GraphEdge（使用节点 id 属性而不是 elementId） */

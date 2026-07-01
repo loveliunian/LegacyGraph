@@ -1,47 +1,48 @@
 import { get, post, put, del } from '@/utils/request'
-import type { PageResult } from '@/types'
+import type { PageResult, User } from '@/types'
 
 /**
- * 系统用户实体
+ * 字典类型实体（对应后端 SysDict）
  */
-export interface User {
-  /** 用户ID */
+export interface DictType {
+  /** 字典类型ID */
   id: string
-  /** 用户名 */
-  username: string
-  /** 用户昵称 */
-  nickname: string
-  /** 邮箱 */
-  email: string
-  /** 头像URL */
-  avatar: string
-  /** 用户状态：ACTIVE/DISABLED */
-  status: string
-  /** 权限列表 */
-  permissions: string[]
-  /** 创建时间 */
-  createdAt: string
-}
-
-/**
- * 字典项实体
- */
-export interface Dictionary {
-  /** 字典ID */
-  id: string
-  /** 字典类型 */
-  dictType: string
-  /** 字典编码 */
+  /** 字典编码（唯一标识，如 repo_type） */
   dictCode: string
-  /** 字典名称 */
+  /** 字典名称（如 仓库类型） */
   dictName: string
-  /** 字典值 */
-  dictValue: string
-  /** 排序权重 */
-  sort: number
+  /** 描述 */
+  description?: string
+  /** 排序 */
+  sortOrder: number
   /** 状态：ACTIVE/DISABLED */
   status: string
 }
+
+/**
+ * 字典项实体（对应后端 SysDictItem）
+ */
+export interface DictItem {
+  /** 字典项ID */
+  id: string
+  /** 所属字典类型ID */
+  dictId: string
+  /** 项值（如 BACKEND） */
+  itemValue: string
+  /** 项标签（如 后端） */
+  itemLabel: string
+  /** 描述 */
+  description?: string
+  /** 排序 */
+  sortOrder: number
+  /** 是否默认项 */
+  isDefault: boolean
+  /** 状态 */
+  status: string
+}
+
+// 保持向后兼容的别名
+export type Dictionary = DictType
 
 /**
  * 系统配置实体
@@ -59,14 +60,11 @@ export interface SystemConfig {
 
 /**
  * 系统管理API
- * 提供用户管理、字典管理、系统配置管理功能
+ * 提供用户管理、字典管理（类型+项）、系统配置管理功能
  */
 export const systemApi = {
-  /**
-   * 分页查询用户列表
-   * @param params 查询参数，包含分页、关键词、状态筛选
-   * @returns 分页后的用户列表
-   */
+  // ==================== 用户管理 ====================
+
   listUsers: (params: {
     pageNum: number
     pageSize: number
@@ -76,81 +74,105 @@ export const systemApi = {
     return get<PageResult<User>>('/lg/system/users/list', params)
   },
 
-  /**
-   * 创建用户
-   * @param data 用户数据
-   * @returns 创建的用户信息
-   */
   createUser: (data: Partial<User>) => {
     return post<User>('/lg/system/users', data)
   },
 
-  /**
-   * 更新用户
-   * @param id 用户ID
-   * @param data 更新数据
-   * @returns 更新结果
-   */
   updateUser: (id: string, data: Partial<User>) => {
     return put(`/lg/system/users/${id}`, data)
   },
 
-  /**
-   * 删除用户
-   * @param id 用户ID
-   * @returns 删除结果
-   */
   deleteUser: (id: string) => {
     return del(`/lg/system/users/${id}`)
   },
 
-  /**
-   * 分页查询字典类型列表
-   * @param params 查询参数，包含分页和类型筛选
-   * @returns 分页后的字典列表
-   */
-  listDictionaries: (params: {
+  // ==================== 字典类型管理 ====================
+
+  /** 分页查询字典类型列表 */
+  listDictTypes: (params: {
     pageNum: number
     pageSize: number
-    dictType?: string
+    keyword?: string
     status?: string
   }) => {
-    return get<PageResult<Dictionary>>('/lg/system/dicts/list', params)
+    return get<PageResult<DictType>>('/lg/system/dicts/list', params)
   },
 
-  /**
-   * 创建字典类型
-   * @param data 字典数据
-   * @returns 创建的字典信息
-   */
-  createDictionary: (data: Partial<Dictionary>) => {
-    return post<Dictionary>('/lg/system/dicts', data)
+  /** 获取所有激活的字典类型 */
+  listAllDictTypes: () => {
+    return get<DictType[]>('/lg/system/dicts/all')
   },
 
-  /**
-   * 更新字典类型
-   * @param id 字典ID
-   * @param data 更新数据
-   * @returns 更新结果
-   */
-  updateDictionary: (id: string, data: Partial<Dictionary>) => {
+  /** 创建字典类型 */
+  createDictType: (data: Partial<DictType>) => {
+    return post<DictType>('/lg/system/dicts', data)
+  },
+
+  /** 更新字典类型 */
+  updateDictType: (id: string, data: Partial<DictType>) => {
     return put(`/lg/system/dicts/${id}`, data)
   },
 
-  /**
-   * 删除字典类型
-   * @param id 字典ID
-   * @returns 删除结果
-   */
-  deleteDictionary: (id: string) => {
+  /** 删除字典类型 */
+  deleteDictType: (id: string) => {
     return del(`/lg/system/dicts/${id}`)
   },
 
-  /**
-   * 分页查询系统配置列表
-   * @param params 查询参数，包含分页和键筛选
-   * @returns 分页后的配置列表
-   */
+  // ==================== 字典项管理 ====================
+
+  /** 获取字典类型下的所有项 */
+  getDictItems: (dictId: string) => {
+    return get<DictItem[]>(`/lg/system/dicts/${dictId}/items`)
+  },
+
+  /** 根据字典编码获取所有项 */
+  getDictItemsByCode: (dictCode: string) => {
+    return get<DictItem[]>(`/lg/system/dicts/code/${encodeURIComponent(dictCode)}/items`)
+  },
+
+  /** 根据字典编码获取值→标签映射 */
+  getDictItemMap: (dictCode: string) => {
+    return get<Record<string, string>>(
+      `/lg/system/dicts/code/${encodeURIComponent(dictCode)}/map`
+    )
+  },
+
+  /** 创建字典项 */
+  createDictItem: (data: Partial<DictItem>) => {
+    return post<DictItem>('/lg/system/dicts/items', data)
+  },
+
+  /** 更新字典项 */
+  updateDictItem: (id: string, data: Partial<DictItem>) => {
+    return put(`/lg/system/dicts/items/${id}`, data)
+  },
+
+  /** 删除字典项 */
+  deleteDictItem: (id: string) => {
+    return del(`/lg/system/dicts/items/${id}`)
+  },
+
+  // ==================== 向后兼容（deprecated，请使用新方法） ====================
+
+  /** @deprecated 请使用 listDictTypes */
+  listDictionaries: (params: {
+    pageNum: number
+    pageSize: number
+    keyword?: string
+    status?: string
+  }) => systemApi.listDictTypes(params),
+
+  /** @deprecated 请使用 createDictType */
+  createDictionary: (data: Partial<DictType>) => systemApi.createDictType(data),
+
+  /** @deprecated 请使用 updateDictType */
+  updateDictionary: (id: string, data: Partial<DictType>) => systemApi.updateDictType(id, data),
+
+  /** @deprecated 请使用 deleteDictType */
+  deleteDictionary: (id: string) => systemApi.deleteDictType(id),
+
+  // ==================== 系统配置 ====================
+
   listConfigs: (params: {
     pageNum: number
     pageSize: number
@@ -159,12 +181,6 @@ export const systemApi = {
     return get<PageResult<SystemConfig>>('/lg/system/configs/list', params)
   },
 
-  /**
-   * 更新系统配置
-   * @param id 配置ID
-   * @param data 更新数据
-   * @returns 更新结果
-   */
   updateConfig: (id: string, data: Partial<SystemConfig>) => {
     return put(`/lg/system/configs/${id}`, data)
   }

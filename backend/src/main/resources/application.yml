@@ -65,7 +65,7 @@ spring:
     uri: ${NEO4J_URI:bolt://localhost:7687}
     authentication:
       username: ${NEO4J_USERNAME:neo4j}
-      password: ${NEO4J_PASSWORD}
+      password: ${NEO4J_PASSWORD:neo4j}
 
   # Spring AI OpenAI 配置（兼容 DeepSeek）
   # api-key 从数据库 lg_llm_provider 表读取，此处仅做占位
@@ -107,8 +107,8 @@ minio:
   bucket-name: legacy-graph
 
 # JWT 配置
+# jwt.secret 默认值在 JwtUtil.java 的 @Value 中定义，通过 JWT_SECRET 环境变量覆盖
 jwt:
-  secret: ${JWT_SECRET}
   expiration: 86400000
 
 # 日志配置

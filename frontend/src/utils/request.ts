@@ -1,7 +1,7 @@
 /**
  * HTTP请求工具模块
  * 基于axios封装，统一处理请求拦截、响应拦截、错误处理、loading提示
- * 支持自动添加Authorization令牌、请求追踪ID生成
+ * 支持自动添加Authorization令牌、请求追踪ID生成、401 token 刷新
  */
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -13,30 +13,73 @@ import { showLoading, hideLoading, forceHideLoading } from '@/utils/loading'
  */
 declare module 'axios' {
   interface AxiosRequestConfig {
-    /** 是否显示loading，默认true */
+    /** 是否显示 loading。F-H10：改为按需开启，默认 false */
     _showLoading?: boolean
     /** loading提示文字 */
     _loadingText?: string
     /** 请求追踪ID */
     _traceId?: string
+    /** 跳过响应拦截器的统一错误处理（内部刷新令牌等场景使用） */
+    _skipErrorHandler?: boolean
   }
 }
 
 /**
  * 创建axios实例
- * 配置基础URL和超时时间
+ * F-S3：baseURL 读取环境变量 VITE_API_BASE_URL，缺失时回退 /api，支持多环境部署
  */
 const request = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 30000
 })
+
+/**
+ * F-M1：统一 401 未授权处理（清除鉴权、提示重新登录、刷新页面）。
+ * 原实现在响应成功/错误两个分支各写一遍，此处收口为单一函数。
+ */
+let unauthorizedHandling = false
+function handleUnauthorized(): void {
+  if (unauthorizedHandling) return
+  unauthorizedHandling = true
+  const userStore = useUserStore()
+  userStore.clearAuth()
+  ElMessageBox.confirm(
+    '登录状态已过期，请重新登录',
+    '系统提示',
+    {
+      confirmButtonText: '重新登录',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).finally(() => {
+    unauthorizedHandling = false
+    window.location.reload()
+  })
+}
+
+/**
+ * F-M2：token 刷新机制（防并发重复刷新）。
+ * 401 时用 refreshToken 换取新 accessToken；刷新期间并发的其它请求挂起队列，
+ * 刷新成功后统一重试，刷新失败则走 handleUnauthorized。
+ */
+let isRefreshing = false
+let pendingRequests: Array<(token: string) => void> = []
+
+function flushPendingRequests(token: string): void {
+  pendingRequests.forEach(cb => cb(token))
+  pendingRequests = []
+}
+
+function rejectPendingRequests(): void {
+  pendingRequests = []
+}
 
 /**
  * 请求拦截器
  * 在请求发送前：
  * 1. 自动添加Authorization令牌
  * 2. 生成请求追踪ID X-Trace-Id
- * 3. 自动显示loading（除非关闭）
+ * 3. 按需显示 loading（F-H10：默认不显示，需显式 _showLoading: true）
  */
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -47,15 +90,12 @@ request.interceptors.request.use(
     }
     if (userStore.accessToken) {
       config.headers['Authorization'] = `Bearer ${userStore.accessToken}`
-      console.debug('[Request] Added Authorization token')
-    } else {
-      console.debug('[Request] No access token available')
     }
     const traceId = generateTraceId()
     config.headers['X-Trace-Id'] = traceId
     config._traceId = traceId
 
-    if (config._showLoading !== false) {
+    if (config._showLoading === true) {
       showLoading(config._loadingText)
     }
 
@@ -70,65 +110,47 @@ request.interceptors.request.use(
 
 /**
  * 响应拦截器
- * 统一处理响应：
- * 1. 隐藏loading
- * 2. 根据code判断请求是否成功
- * 3. 401自动跳转到登录
- * 4. 统一错误消息提示
+ * 统一处理响应：隐藏 loading、按 code 判断成功、401 触发 token 刷新、统一错误提示。
  */
 request.interceptors.response.use(
   (response: AxiosResponse) => {
-    hideLoading()
+    if (response.config?._showLoading === true) {
+      hideLoading()
+    }
     const res = response.data
+    // 内部刷新调用：跳过业务码校验，直接返回完整响应体
+    if (response.config?._skipErrorHandler) {
+      return res
+    }
     if (res.code !== 0 && res.code !== 200) {
+      if (res.code === 401) {
+        return handleTokenExpired(response.config)
+      }
       ElMessage.error({
         message: res.message || '请求错误',
         duration: 5000
       })
-      if (res.code === 401) {
-        const userStore = useUserStore()
-        ElMessageBox.confirm(
-          '登录状态已过期，请重新登录',
-          '系统提示',
-          {
-            confirmButtonText: '重新登录',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }
-        ).then(() => {
-          userStore.clearAuth()
-          window.location.reload()
-        })
-      }
       return Promise.reject(new Error(res.message || '请求错误'))
     }
     return res.data
   },
   (error: AxiosError) => {
-    hideLoading()
+    if (error.config?._showLoading === true) {
+      hideLoading()
+    }
+    if (error.config?._skipErrorHandler) {
+      return Promise.reject(error)
+    }
     console.error('Response error:', error)
     const { response } = error
     if (response) {
       if (response.status === 401) {
-        const userStore = useUserStore()
-        ElMessageBox.confirm(
-          '登录状态已过期，请重新登录',
-          '系统提示',
-          {
-            confirmButtonText: '重新登录',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }
-        ).then(() => {
-          userStore.clearAuth()
-          window.location.reload()
-        })
-      } else {
-        ElMessage.error({
-          message: response.statusText || `请求失败 ${response.status}`,
-          duration: 5000
-        })
+        return handleTokenExpired(error.config)
       }
+      ElMessage.error({
+        message: response.statusText || `请求失败 ${response.status}`,
+        duration: 5000
+      })
     } else {
       ElMessage.error({
         message: '网络错误，请检查网络连接',
@@ -138,6 +160,59 @@ request.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+/**
+ * F-M2：401 处理 — 尝试用 refreshToken 刷新，成功则重试原请求，失败则踢登录。
+ */
+function handleTokenExpired(config?: InternalAxiosRequestConfig): Promise<any> {
+  const userStore = useUserStore()
+  const refreshTokenValue = userStore.refreshToken
+
+  // 无 refreshToken 直接踢登录
+  if (!refreshTokenValue) {
+    handleUnauthorized()
+    return Promise.reject(new Error('登录状态已过期'))
+  }
+
+  // 已在刷新中：把当前请求挂起，等刷新完成后用新 token 重试
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      pendingRequests.push((newToken: string) => {
+        if (config?.headers) {
+          config.headers['Authorization'] = `Bearer ${newToken}`
+        }
+        request(config!).then(resolve).catch(reject)
+      })
+    })
+  }
+
+  isRefreshing = true
+  // 用原始 axios 实例发起刷新，_skipErrorHandler 避免响应拦截器递归
+  return request.post('/lg/auth/refresh', refreshTokenValue, {
+    headers: { 'Content-Type': 'text/plain' },
+    _skipErrorHandler: true
+  } as AxiosRequestConfig).then((res: any) => {
+    const data = res?.data ?? res
+    const newAccess: string = data.accessToken
+    const newRefresh: string = data.refreshToken ?? refreshTokenValue
+    if (!newAccess) {
+      throw new Error('刷新令牌失败')
+    }
+    userStore.setTokens(newAccess, newRefresh)
+    flushPendingRequests(newAccess)
+    // 重试原请求
+    if (config?.headers) {
+      config.headers['Authorization'] = `Bearer ${newAccess}`
+    }
+    return config ? request(config) : Promise.reject(new Error('缺少原始请求配置'))
+  }).catch((e) => {
+    rejectPendingRequests()
+    handleUnauthorized()
+    return Promise.reject(e)
+  }).finally(() => {
+    isRefreshing = false
+  })
+}
 
 /**
  * 生成请求追踪ID

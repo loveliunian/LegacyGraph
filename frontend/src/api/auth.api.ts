@@ -1,4 +1,5 @@
 import { post, get } from '@/utils/request'
+import type { User } from '@/types'
 
 /**
  * 登录请求参数
@@ -20,28 +21,6 @@ export interface LoginResponse {
   refreshToken: string
   /** 用户信息 */
   user: User
-}
-
-/**
- * 用户信息
- */
-export interface User {
-  /** 用户ID */
-  id: string
-  /** 用户名 */
-  username: string
-  /** 用户昵称 */
-  nickname: string
-  /** 邮箱 */
-  email: string
-  /** 头像URL */
-  avatar: string
-  /** 权限列表 */
-  permissions: string[]
-  /** 用户状态 */
-  status: string
-  /** 创建时间 */
-  createdAt: string
 }
 
 /**
@@ -72,5 +51,16 @@ export const authApi = {
    */
   getCurrentUser: () => {
     return get<User>('/lg/auth/me')
+  },
+
+  /**
+   * 刷新访问令牌（F-M2）
+   * @param refreshToken 刷新令牌
+   * @returns 新的登录响应，包含新的访问令牌和刷新令牌
+   */
+  refreshToken: (refreshToken: string) => {
+    return post<LoginResponse>('/lg/auth/refresh', refreshToken, {
+      headers: { 'Content-Type': 'text/plain' }
+    })
   }
 }

@@ -42,7 +42,7 @@ export const validators = {
   ],
 
   range: (min: number, max: number, required = true): FormItemRule[] => [
-    { validator: (rule, value, callback) => {
+    { validator: (_rule, value, callback) => {
         if (required && (value === undefined || value === null || value === '')) {
           callback(new Error('请输入数值'))
         } else if (value !== undefined && value !== null && value !== '') {
@@ -86,7 +86,7 @@ export const validators = {
   }),
 
   confirmPassword: (passwordField: string): FormItemRule => ({
-    validator: (rule, value, callback, source) => {
+    validator: (_rule, value, callback, source) => {
       if (!value) {
         callback(new Error('请再次输入密码'))
       } else if (value !== source[passwordField]) {

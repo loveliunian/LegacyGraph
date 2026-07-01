@@ -2,8 +2,8 @@ package io.github.legacygraph.agent;
 
 import io.github.legacygraph.dto.SqlAdvisorResult;
 import io.github.legacygraph.llm.LlmGateway;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -17,10 +17,10 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class SqlAdvisorAgent {
 
-    @Autowired
-    private LlmGateway llmGateway;
+    private final LlmGateway llmGateway;
 
     /**
      * 分析单条 SQL 的性能问题

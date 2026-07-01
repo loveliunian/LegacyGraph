@@ -159,34 +159,6 @@ function openFileSelector() {
   fileInputRef.value?.click()
 }
 
-function handleDragEnter(e: DragEvent) {
-  if (props.disabled) return
-  isDragOver.value = true
-}
-
-function handleDragOver(e: DragEvent) {
-  if (props.disabled) return
-  e.preventDefault()
-  e.dataTransfer!.dropEffect = 'copy'
-}
-
-function handleDragLeave(e: DragEvent) {
-  if (props.disabled) return
-  if (!e.relatedTarget || !(e.relatedTarget as Node).parentNode) {
-    isDragOver.value = false
-  }
-}
-
-function handleDrop(e: DragEvent) {
-  if (props.disabled) return
-  isDragOver.value = false
-
-  const files = Array.from(e.dataTransfer?.files || [])
-  if (files.length > 0) {
-    processFiles(files)
-  }
-}
-
 function handleFileInputChange(e: Event) {
   const target = e.target as HTMLInputElement
   const files = Array.from(target.files || [])

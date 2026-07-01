@@ -1,6 +1,7 @@
 package io.github.legacygraph.builder;
 
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.llm.SecretScanService;
 import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +27,8 @@ class FrontendGraphBuilderTest {
     @Test
     void testConstruction() {
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
-                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository);
+                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
+                new SecretScanService());
         frontendGraphBuilder = new FrontendGraphBuilder(neo4jGraphDao, writer);
         assertNotNull(frontendGraphBuilder);
     }

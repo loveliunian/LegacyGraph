@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { get } from '@/utils/request'
+import { graphApi } from '@/api'
 import FeatureSliceWorkbench from './FeatureSliceWorkbench.vue'
 import DriftQueue from './DriftQueue.vue'
 import QualityPanel from './QualityPanel.vue'
@@ -40,7 +40,7 @@ const versions = ref<any[]>([])
 
 async function loadVersions() {
   try {
-    const res: any = await get(`/lg/projects/${projectId}/scan-versions`)
+    const res: any = await graphApi.getScanVersions(projectId)
     versions.value = Array.isArray(res) ? res : (res?.list || [])
     if (versions.value.length > 0 && !currentVersion.value) {
       currentVersion.value = versions.value[0].id

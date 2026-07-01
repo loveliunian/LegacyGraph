@@ -103,7 +103,6 @@ spring:
 
 # MyBatis-Plus
 mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
   type-aliases-package: io.github.legacygraph.entity
   configuration:
     map-underscore-to-camel-case: true

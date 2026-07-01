@@ -45,7 +45,7 @@
               :stroke-width="8"
             />
           </el-descriptions-item>
-          <el-descriptions-item label="状态">{{ nodeInfo.status }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ getNodeStatusText(nodeInfo.status) }}</el-descriptions-item>
           <el-descriptions-item label="描述">{{ nodeInfo.description }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -71,11 +71,14 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { graphApi, reviewApi } from '@/api'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 import type { RiskItem, GraphNode } from '@/types'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const projectStore = useProjectStore()
+
+const getNodeStatusText = (status: string) => dictLabel('review_status', status)
 
 const loading = ref(false)
 const risk = ref<RiskItem | null>(null)
@@ -208,6 +211,7 @@ function markIgnored() {
 }
 
 onMounted(() => {
+  preloadDicts(['review_status'])
   loadRiskDetail()
 })
 </script>

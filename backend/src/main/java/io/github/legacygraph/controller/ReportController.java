@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 报告控制器
@@ -49,7 +50,8 @@ public class ReportController {
     @Operation(summary = "生成置信度趋势报告", description = "查看置信度随时间变化趋势")
     public Result<ConfidenceTrendReport> generateConfidenceTrend(
             @PathVariable String projectId,
-            @RequestParam String versionId) {
+            @RequestBody Map<String, String> body) {
+        String versionId = body != null ? body.get("versionId") : null;
         ConfidenceTrendReport report = reportingService.generateConfidenceTrend(projectId, versionId);
         return Result.success(report);
     }
@@ -58,7 +60,8 @@ public class ReportController {
     @Operation(summary = "生成测试覆盖率报告", description = "统计哪些节点已经被测试覆盖")
     public Result<TestCoverageReport> generateTestCoverage(
             @PathVariable String projectId,
-            @RequestParam String versionId) {
+            @RequestBody Map<String, String> body) {
+        String versionId = body != null ? body.get("versionId") : null;
         TestCoverageReport report = reportingService.generateTestCoverageReport(projectId, versionId);
         return Result.success(report);
     }
@@ -67,7 +70,8 @@ public class ReportController {
     @Operation(summary = "生成图谱质量报告", description = "评估图谱整体质量，识别问题节点")
     public Result<GraphQualityReport> generateGraphQuality(
             @PathVariable String projectId,
-            @RequestParam String versionId) {
+            @RequestBody Map<String, String> body) {
+        String versionId = body != null ? body.get("versionId") : null;
         GraphQualityReport report = reportingService.generateGraphQualityReport(projectId, versionId);
         return Result.success(report);
     }
@@ -77,7 +81,7 @@ public class ReportController {
             description = "一次性返回覆盖率、证据完备度、待审核比例、测试通过率、运行时验证比例")
     public Result<GraphMetricsReport> getGraphMetrics(
             @PathVariable String projectId,
-            @RequestParam String versionId) {
+            @RequestParam(required = false) String versionId) {
         GraphMetricsReport report = reportingService.generateGraphMetrics(projectId, versionId);
         return Result.success(report);
     }
@@ -87,7 +91,7 @@ public class ReportController {
             description = "根据图谱指标、低置信/孤立/未覆盖缺口生成行动建议")
     public Result<ReportInsight> getReportInsights(
             @PathVariable String projectId,
-            @RequestParam String versionId) {
+            @RequestParam(required = false) String versionId) {
         ReportInsight insight = reportingService.generateReportInsights(projectId, versionId);
         return Result.success(insight);
     }

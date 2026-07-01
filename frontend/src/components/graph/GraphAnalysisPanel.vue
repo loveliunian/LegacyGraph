@@ -151,7 +151,7 @@
                   highlight-current
                   @node-click="handleImpactNodeClick"
                 >
-                  <template #default="{ node, data }">
+                  <template #default="{ data }">
                     <span class="tree-node">
                       <el-tag size="small" :type="data.type === 'target' ? 'danger' : 'info'">
                         {{ data.label }}
@@ -292,6 +292,8 @@
 </template>
 
 <script setup lang="ts">
+// ⚠️ TODO F-H7: 本组件 1030 行，含 path/impact/neighbor/aggregate 四模式 + ~25 函数。
+// 建议拆为子组件：PathAnalysis / ImpactAnalysis / NeighborExplorer + composable useGraphAnalysis
 import { ref, computed, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
@@ -305,7 +307,7 @@ import {
   Grid,
   FolderOpened,
   ArrowDown,
-  ArrowUp
+
 } from '@element-plus/icons-vue'
 import type { Node, Edge } from '@vue-flow/core'
 

@@ -119,7 +119,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Grid, Refresh } from '@element-plus/icons-vue'
 import type { Node as FlowNode, Edge as FlowEdge } from '@vue-flow/core'
-import GraphViewer from '@/components/graph/GraphViewer.vue'
+import GraphViewer from '@/components/graph/GraphViewerOptimized.vue'
 import { graphApi, testApi, factApi } from '@/api'
 import { loadScanVersions } from '@/utils/versionsCache'
 
@@ -302,11 +302,6 @@ function handleGraphNodeClick(node: FlowNode<FlowNodeData>) {
     id: node.id,
     ...node.data
   }
-}
-
-async function loadCoverage() {
-  // 不再独立请求，由 loadGraph 一并计算
-  await loadGraph('')
 }
 
 function computeCoverage(rawNodes: any[]) {

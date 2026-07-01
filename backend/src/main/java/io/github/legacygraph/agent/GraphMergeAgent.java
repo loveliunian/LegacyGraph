@@ -3,8 +3,8 @@ package io.github.legacygraph.agent;
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.llm.LlmGateway;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,10 +23,10 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class GraphMergeAgent {
 
-    @Autowired
-    private LlmGateway llmGateway;
+    private final LlmGateway llmGateway;
 
     /**
      * 决策两个节点是否应该合并

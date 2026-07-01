@@ -11,7 +11,7 @@ import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
 
-const isDark = computed(() => appStore.theme === 'dark')
+const isDark = computed(() => appStore.isDark)
 
 function toggleTheme() {
   appStore.toggleTheme()

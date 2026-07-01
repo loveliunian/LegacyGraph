@@ -14,8 +14,8 @@
             v-for="option in modeOptions"
             :key="option.value"
             class="mode-option"
-            :class="{ active: themeStore.mode === option.value }"
-            @click="themeStore.setMode(option.value as ThemeMode)"
+            :class="{ active: themeStore.theme === option.value }"
+            @click="themeStore.setTheme(option.value as ThemeMode)"
           >
             <div class="mode-preview" :class="option.value">
               <div class="preview-header"></div>
@@ -28,7 +28,7 @@
               </div>
             </div>
             <span class="mode-label">{{ option.label }}</span>
-            <el-icon v-if="themeStore.mode === option.value" class="check-icon">
+            <el-icon v-if="themeStore.theme === option.value" class="check-icon">
               <Check />
             </el-icon>
           </div>
@@ -131,10 +131,10 @@
 import { reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
-import { useThemeStore } from '@/stores/theme'
+import { useAppStore } from '@/stores/app'
 import type { ThemeMode } from '@/types'
 
-const themeStore = useThemeStore()
+const themeStore = useAppStore()
 
 const modeOptions = [
   { value: 'light', label: '浅色模式' },
@@ -143,11 +143,11 @@ const modeOptions = [
 ]
 
 const colorOptions = reactive([
-  { key: 'primaryColor', label: '主色调', value: themeStore.config.primaryColor },
-  { key: 'successColor', label: '成功色', value: themeStore.config.successColor },
-  { key: 'warningColor', label: '警告色', value: themeStore.config.warningColor },
-  { key: 'dangerColor', label: '危险色', value: themeStore.config.dangerColor },
-  { key: 'infoColor', label: '信息色', value: themeStore.config.infoColor }
+  { key: 'primaryColor', label: '主色调', value: themeStore.themeConfig.primaryColor },
+  { key: 'successColor', label: '成功色', value: themeStore.themeConfig.successColor },
+  { key: 'warningColor', label: '警告色', value: themeStore.themeConfig.warningColor },
+  { key: 'dangerColor', label: '危险色', value: themeStore.themeConfig.dangerColor },
+  { key: 'infoColor', label: '信息色', value: themeStore.themeConfig.infoColor }
 ])
 
 const colorPresets = [
@@ -204,7 +204,7 @@ const colorPresets = [
 ]
 
 function updateThemeColors() {
-  themeStore.updateConfig({
+  themeStore.updateThemeConfig({
     primaryColor: colorOptions[0].value,
     successColor: colorOptions[1].value,
     warningColor: colorOptions[2].value,
@@ -214,7 +214,7 @@ function updateThemeColors() {
 }
 
 function applyColorPreset(preset: typeof colorPresets[0]) {
-  themeStore.updateConfig(preset.colors)
+  themeStore.updateThemeConfig(preset.colors)
   colorOptions[0].value = preset.colors.primaryColor
   colorOptions[1].value = preset.colors.successColor
   colorOptions[2].value = preset.colors.warningColor
@@ -224,16 +224,16 @@ function applyColorPreset(preset: typeof colorPresets[0]) {
 }
 
 function resetColors() {
-  themeStore.resetConfig()
-  colorOptions[0].value = themeStore.config.primaryColor
-  colorOptions[1].value = themeStore.config.successColor
-  colorOptions[2].value = themeStore.config.warningColor
-  colorOptions[3].value = themeStore.config.dangerColor
-  colorOptions[4].value = themeStore.config.infoColor
+  themeStore.resetThemeConfig()
+  colorOptions[0].value = themeStore.themeConfig.primaryColor
+  colorOptions[1].value = themeStore.themeConfig.successColor
+  colorOptions[2].value = themeStore.themeConfig.warningColor
+  colorOptions[3].value = themeStore.themeConfig.dangerColor
+  colorOptions[4].value = themeStore.themeConfig.infoColor
   ElMessage.success('已恢复默认配色')
 }
 
-watch(() => themeStore.config, (newConfig) => {
+watch(() => themeStore.themeConfig, (newConfig) => {
   colorOptions[0].value = newConfig.primaryColor
   colorOptions[1].value = newConfig.successColor
   colorOptions[2].value = newConfig.warningColor
