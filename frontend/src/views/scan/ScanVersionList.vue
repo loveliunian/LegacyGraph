@@ -9,27 +9,43 @@
     </div>
 
     <el-table :data="versionList" v-loading="loading" border stripe>
-      <el-table-column prop="versionNumber" label="版本号" width="100" />
-      <el-table-column prop="versionName" label="版本名称" min-width="180" />
-      <el-table-column prop="scanType" label="扫描类型" width="120">
+      <!-- 版本号 + 版本名称合并为一列 -->
+      <el-table-column label="版本信息" min-width="200">
         <template #default="{ row }">
-          <el-tag size="small">{{ getScanTypeText(row.scanType) }}</el-tag>
+          <div class="version-info">
+            <span class="version-no" :title="row.versionNumber">{{ truncateText(row.versionNumber, 20) }}</span>
+            <span class="version-name" :title="row.versionName">{{ truncateText(row.versionName, 24) }}</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="100">
+      <el-table-column label="扫描类型" width="160">
+        <template #default="{ row }">
+          <div class="scan-types">
+            <el-tag
+              v-for="t in parseScanTypes(row.scanType)"
+              :key="t"
+              size="small"
+              type="primary"
+              class="scan-type-tag"
+            >{{ dictLabel('scan_type', t) }}</el-tag>
+            <span v-if="parseScanTypes(row.scanType).length === 0" class="text-gray">-</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="getStatusType(row.status)">
             {{ getStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="进度" width="200">
+      <el-table-column label="进度" width="170">
         <template #default="{ row }">
           <div class="progress-wrapper">
             <el-progress
               :percentage="row.progress || 0"
               :status="row.status === 'FAILED' ? 'exception' : (row.progress === 100 ? 'success' : undefined)"
-              :stroke-width="14"
+              :stroke-width="12"
             />
             <span v-if="row.taskCount > 0" class="progress-text">
               {{ row.completedTaskCount }}/{{ row.taskCount }} 任务
@@ -37,49 +53,50 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="stage" label="当前阶段" width="140">
+      <el-table-column label="当前阶段" width="120">
         <template #default="{ row }">
           <span v-if="row.stage && row.stage !== '-'" class="stage-text">
             <el-icon class="is-loading" v-if="row.status === 'RUNNING'"><Loading /></el-icon>
-            {{ getStageText(row.stage) }}
+            <el-tag size="small" :type="getStageTagType(row.stage)">{{ getStageText(row.stage) }}</el-tag>
           </span>
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="nodeCount" label="节点数" width="80" align="center">
+      <el-table-column label="图谱统计" width="200">
         <template #default="{ row }">
-          <el-tag v-if="row.nodeCount" size="small" type="primary">{{ row.nodeCount }}</el-tag>
+          <div class="graph-stats">
+            <span class="stat-item" v-if="row.nodeCount">
+              <span class="stat-val">{{ row.nodeCount }}</span>
+              <span class="stat-lbl">节点</span>
+            </span>
+            <span class="stat-item" v-if="row.edgeCount">
+              <span class="stat-val">{{ row.edgeCount }}</span>
+              <span class="stat-lbl">关系</span>
+            </span>
+            <span class="stat-item" v-if="row.factCount">
+              <span class="stat-val">{{ row.factCount }}</span>
+              <span class="stat-lbl">事实</span>
+            </span>
+            <span v-if="!row.nodeCount && !row.edgeCount && !row.factCount" class="text-gray">-</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="耗时" width="90" align="center">
+        <template #default="{ row }">
+          <span v-if="row.duration" class="duration-text">{{ formatDuration(row.duration) }}</span>
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="edgeCount" label="关系数" width="80" align="center">
+      <el-table-column label="创建时间" width="160">
         <template #default="{ row }">
-          <el-tag v-if="row.edgeCount" size="small" type="warning">{{ row.edgeCount }}</el-tag>
-          <span v-else class="text-gray">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="factCount" label="事实数" width="80" align="center">
-        <template #default="{ row }">
-          <el-tag v-if="row.factCount" size="small" type="success">{{ row.factCount }}</el-tag>
-          <span v-else class="text-gray">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="duration" label="耗时" width="100">
-        <template #default="{ row }">
-          <span v-if="row.duration">{{ formatDuration(row.duration) }}</span>
-          <span v-else class="text-gray">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="createdAt" label="创建时间" width="170">
-        <template #default="{ row }">
-          <span v-if="row.createdAt">{{ formatTime(row.createdAt) }}</span>
+          <span v-if="row.createdAt" class="time-text">{{ formatTime(row.createdAt) }}</span>
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
-          <el-button type="warning" link size="small" @click="compareWithPrevious(row)">对比</el-button>
+          <el-button type="primary" link size="small" @click="compareWithPrevious(row)">对比</el-button>
           <el-button v-if="row.status === 'RUNNING'" type="warning" link size="small" @click="pauseScan(row)">暂停</el-button>
           <el-button v-if="row.status === 'PAUSED'" type="success" link size="small" @click="resumeScan(row)">恢复</el-button>
           <el-button v-if="row.status === 'RUNNING'" type="danger" link size="small" @click="stopScan(row)">停止</el-button>
@@ -107,9 +124,24 @@
       <el-descriptions :column="2" border v-if="currentVersion">
         <el-descriptions-item label="版本号">{{ currentVersion.versionNumber }}</el-descriptions-item>
         <el-descriptions-item label="版本名称">{{ currentVersion.versionName }}</el-descriptions-item>
-        <el-descriptions-item label="扫描类型">{{ getScanTypeText(currentVersion.scanType) }}</el-descriptions-item>
+        <el-descriptions-item label="扫描类型">
+          <el-tag
+            v-for="t in parseScanTypes(currentVersion.scanType)"
+            :key="t"
+            size="small"
+            type="primary"
+            style="margin-right: 4px;"
+          >{{ dictLabel('scan_type', t) }}</el-tag>
+          <span v-if="parseScanTypes(currentVersion.scanType).length === 0">-</span>
+        </el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag size="small" :type="getStatusType(currentVersion.status)">{{ getStatusText(currentVersion.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="当前阶段">
+          <el-tag v-if="currentVersion.stage && currentVersion.stage !== '-'" size="small" :type="getStageTagType(currentVersion.stage)">
+            {{ getStageText(currentVersion.stage) }}
+          </el-tag>
+          <span v-else>-</span>
         </el-descriptions-item>
         <el-descriptions-item label="进度">
           <el-progress :percentage="currentVersion.progress || 0" :stroke-width="14" style="width: 200px;" />
@@ -133,8 +165,6 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
-
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -156,14 +186,18 @@ const total = ref(0)
 const detailDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
 
-// 轮询定时器
 let pollTimer: ReturnType<typeof setInterval> | null = null
-const POLL_INTERVAL = 3000 // 3秒轮询一次
+const POLL_INTERVAL = 3000
 
-// 是否有运行中的任务
 const hasRunningTasks = computed(() =>
   versionList.value.some(v => v.status === 'RUNNING')
 )
+
+// 文本截断，超出长度加 ...
+const truncateText = (text: string, maxLen: number): string => {
+  if (!text) return '-'
+  return text.length > maxLen ? text.substring(0, maxLen) + '...' : text
+}
 
 const formatTime = (time: string) => {
   if (!time) return '-'
@@ -177,15 +211,24 @@ const formatDuration = (seconds: number) => {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
 }
 
-const getScanTypeText = (type: string) => {
-  if (!type) return '-'
+// 解析 scanType JSON，返回扫描类型数组
+const parseScanTypes = (scanType: string): string[] => {
+  if (!scanType) return []
   try {
-    const parsed = JSON.parse(type)
+    const parsed = JSON.parse(scanType)
     if (parsed.scanTypes && Array.isArray(parsed.scanTypes)) {
-      return parsed.scanTypes.map((t: string) => dictLabel('scan_type', t) || t).join('+') || '全量扫描'
+      return parsed.scanTypes
     }
   } catch {}
-  return type.length > 30 ? '全量扫描' : type
+  // 非 JSON 格式：可能是逗号分隔或单个值
+  if (scanType.includes(',')) {
+    return scanType.split(',').map(t => t.trim()).filter(Boolean)
+  }
+  // 单个值（如 CODE_SCAN、FULL_SCAN）
+  if (scanType && scanType.length < 30) {
+    return [scanType]
+  }
+  return []
 }
 
 const getStatusType = (status: string): string => {
@@ -206,6 +249,12 @@ const getStatusType = (status: string): string => {
 const getStatusText = (status: string): string => dictLabel('scan_status', status)
 
 const getStageText = (stage: string): string => dictLabel('scan_stage', stage)
+
+// 当前阶段的 tag 类型
+const getStageTagType = (stage: string): string => {
+  if (stage === 'COMPLETED') return 'success'
+  return '' // 默认色
+}
 
 const goToCreate = () => {
   router.push(`/projects/${projectId}/scan-versions/create`)
@@ -313,8 +362,6 @@ const loadVersionList = async (page?: number) => {
       createdAt: v.createdAt,
       createdBy: v.createdBy || '-'
     }))
-
-    // 管理轮询：有运行中任务则启动，否则停止
     managePolling()
   } catch (err) {
     console.error('获取扫描版本列表失败:', err)
@@ -327,7 +374,6 @@ const handlePageChange = (page: number) => {
   loadVersionList(page)
 }
 
-// 轮询管理
 const startPolling = () => {
   if (pollTimer) return
   pollTimer = setInterval(() => {
@@ -383,16 +429,45 @@ onUnmounted(() => {
   color: #909399;
 }
 
-.pagination-wrapper {
+/* 版本信息：号 + 名上下排列 */
+.version-info {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
 }
 
+.version-no {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  color: #409eff;
+  font-weight: 500;
+}
+
+.version-name {
+  font-size: 13px;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 扫描类型标签组 */
+.scan-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.scan-type-tag {
+  margin: 0;
+}
+
+/* 进度条 */
 .progress-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .progress-wrapper .progress-text {
@@ -401,10 +476,52 @@ onUnmounted(() => {
   text-align: right;
 }
 
+/* 当前阶段 */
 .stage-text {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
+  gap: 5px;
+}
+
+/* 图谱统计：内联紧凑排列 */
+.graph-stats {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.stat-val {
+  font-weight: 600;
+  font-size: 14px;
+  color: #303133;
+}
+
+.stat-lbl {
+  font-size: 11px;
+  color: #909399;
+}
+
+.duration-text {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  color: #606266;
+}
+
+.time-text {
+  font-size: 12px;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

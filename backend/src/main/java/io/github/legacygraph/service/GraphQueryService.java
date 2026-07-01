@@ -413,12 +413,12 @@ public class GraphQueryService {
     }
 
     private Map<String, Object> getUnifiedGraphUncached(String versionId, Double minConfidence, String statusFilter) {
-        // 标准化 versionId：PG JDBC 返回带横线格式，Neo4j 存储不带横线
-        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        // 标准化 versionId：Neo4j 存储无横线格式，PG 查询用原始带横线格式
+        String neo4jVersionId = versionId != null ? versionId.replace("-", "") : null;
 
-        // 从 scanVersionRepository 获取 projectId（使用标准化 versionId 匹配 MyBatis-Plus 生成的无横线 UUID）
+        // 从 scanVersionRepository 获取 projectId（用原始带横线 versionId 查询 PG UUID 列）
         ScanVersion version = scanVersionRepository.lambdaQuery()
-                .eq(ScanVersion::getId, normalizedVersionId)
+                .eq(ScanVersion::getId, versionId)
                 .one();
         if (version == null) {
             Map<String, Object> errorResult = new HashMap<>();
@@ -428,12 +428,12 @@ public class GraphQueryService {
         }
         String projectId = version.getProjectId();
 
-        // 从Neo4j查询节点
+        // 从Neo4j查询节点（用无横线 versionId）
         String effectiveStatus = (statusFilter != null && !statusFilter.isBlank()) ? statusFilter : null;
-        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, normalizedVersionId, null, null, minConfidence, effectiveStatus, 0);
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, neo4jVersionId, null, null, minConfidence, effectiveStatus, 0);
 
-        // 从Neo4j查询边
-        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, normalizedVersionId, minConfidence, effectiveStatus, 0);
+        // 从Neo4j查询边（用无横线 versionId）
+        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, neo4jVersionId, minConfidence, effectiveStatus, 0);
 
         Map<String, Object> result = new HashMap<>();
         result.put("versionId", versionId);
@@ -482,7 +482,7 @@ public class GraphQueryService {
                 reasons.add("Neo4j 不可达: " + neo4jEx.getMessage());
             }
             // 检查是否有该版本的任何节点（不过滤状态）
-            long totalNodes = neo4jGraphDao.countNodes(projectId, normalizedVersionId, null);
+            long totalNodes = neo4jGraphDao.countNodes(projectId, neo4jVersionId, null);
             if (totalNodes == 0) {
                 reasons.add("该版本尚未扫描或扫描未生成图谱数据");
             } else {
@@ -491,7 +491,7 @@ public class GraphQueryService {
             }
             // 检查是否同步到 Neo4j
             if (totalNodes > 0) {
-                long confirmedNodes = neo4jGraphDao.countNodes(projectId, normalizedVersionId, "CONFIRMED");
+                long confirmedNodes = neo4jGraphDao.countNodes(projectId, neo4jVersionId, "CONFIRMED");
                 long pendingNodes = totalNodes - confirmedNodes;
                 if (pendingNodes > 0) {
                     reasons.add(pendingNodes + " 个节点状态为 PENDING_CONFIRM");

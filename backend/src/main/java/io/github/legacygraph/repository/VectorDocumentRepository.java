@@ -48,7 +48,8 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
             @Param("topK") int topK);
 
     /**
-     * 通用方法：根据是否有chunkType选择不同查询
+     * 通用方法：根据是否有chunkType选择不同查询。
+     * pgvector 扩展未安装或 embedding 列不存在时，静默返回空列表。
      */
     default List<VectorDocument> findSimilar(String projectId, String versionId, List<Double> embedding, int topK, String chunkType) {
         // 将List<Double>转换为PostgreSQL vector格式: [x,y,z]
@@ -60,10 +61,15 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
         sb.append("]");
         String embeddingStr = sb.toString();
 
-        if (chunkType != null && !chunkType.isBlank()) {
-            return findSimilarByEmbeddingWithType(projectId, versionId, embeddingStr, topK, chunkType);
-        } else {
-            return findSimilarByEmbeddingWithoutType(projectId, versionId, embeddingStr, topK);
+        try {
+            if (chunkType != null && !chunkType.isBlank()) {
+                return findSimilarByEmbeddingWithType(projectId, versionId, embeddingStr, topK, chunkType);
+            } else {
+                return findSimilarByEmbeddingWithoutType(projectId, versionId, embeddingStr, topK);
+            }
+        } catch (Exception e) {
+            // pgvector 扩展未安装或 embedding 列不存在时静默降级
+            return java.util.Collections.emptyList();
         }
     }
 }

@@ -15,7 +15,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -173,7 +177,7 @@ public class EvidenceGraphWriter {
     @Transactional
     public void attachEvidence(String graphElementId, EvidenceRecord evidence, EvidenceRole role) {
         Optional<GraphNode> node = neo4jGraphDao.findNodeById(graphElementId);
-        // 1. 落库证据
+        // 1. 构造证据实体
         Evidence ev = new Evidence();
         ev.setId(UUID.randomUUID().toString());
         ev.setProjectId(hasText(evidence.getProjectId())
@@ -195,14 +199,33 @@ public class EvidenceGraphWriter {
         ev.setSqlHash(evidence.getSqlHash());
         applyPrivacy(ev, evidence);
         ev.setCreatedAt(LocalDateTime.now());
-        evidenceRepository.insert(ev);
 
-        // 2. 判断是节点证据还是边证据
+        // 2. 去重落库：有 contentHash 走 upsert，无则直接 insert
+        Evidence persisted;
+        if (hasText(ev.getContentHash())) {
+            int rows = evidenceRepository.insertOrIgnore(ev);
+            if (rows > 0) {
+                persisted = ev; // 新插入成功
+            } else {
+                // 冲突：已有相同 contentHash 的证据，复用已有记录
+                persisted = evidenceRepository.findByContentHash(ev.getContentHash());
+                if (persisted == null) {
+                    // 极端情况回退：直接 insert
+                    evidenceRepository.insert(ev);
+                    persisted = ev;
+                }
+            }
+        } else {
+            evidenceRepository.insert(ev);
+            persisted = ev;
+        }
+
+        // 3. 判断是节点证据还是边证据，建立关联
         if (node.isPresent()) {
             NodeEvidence ne = new NodeEvidence();
             ne.setId(UUID.randomUUID().toString());
             ne.setNodeId(graphElementId);
-            ne.setEvidenceId(ev.getId());
+            ne.setEvidenceId(persisted.getId());
             ne.setRelationType(role.name());
             ne.setCreatedAt(LocalDateTime.now());
             nodeEvidenceRepository.insert(ne);
@@ -210,7 +233,7 @@ public class EvidenceGraphWriter {
             EdgeEvidence ee = new EdgeEvidence();
             ee.setId(UUID.randomUUID().toString());
             ee.setEdgeId(graphElementId);
-            ee.setEvidenceId(ev.getId());
+            ee.setEvidenceId(persisted.getId());
             ee.setRelationType(role.name());
             ee.setCreatedAt(LocalDateTime.now());
             edgeEvidenceRepository.insert(ee);
@@ -261,7 +284,7 @@ public class EvidenceGraphWriter {
     }
 
     /**
-     * 为节点创建证据记录并建立关联。
+     * 为节点创建证据记录并建立关联（含去重保护）。
      */
     private void createEvidenceForNode(GraphNode node, String sourceType, String sourcePath,
                                        Integer startLine, Integer endLine) {
@@ -274,6 +297,10 @@ public class EvidenceGraphWriter {
         evidence.setSourceName(node.getDisplayName());
         evidence.setStartLine(startLine);
         evidence.setEndLine(endLine);
+        // 基于位置签名生成 contentHash，使 DB 层唯一索引也能拦截重复
+        evidence.setContentHash(locationHash(node.getProjectId(), node.getVersionId(),
+                evidence.getEvidenceType(), sourcePath, node.getDisplayName(),
+                startLine, endLine));
         // 无内容证据默认 INTERNAL（节点指针型证据不含源码正文）
         if (evidence.getPrivacyLevel() == null) {
             evidence.setPrivacyLevel(PrivacyLevel.INTERNAL.name());
@@ -282,12 +309,24 @@ public class EvidenceGraphWriter {
             evidence.setRedactionPolicy("none");
         }
         evidence.setCreatedAt(LocalDateTime.now());
-        evidenceRepository.insert(evidence);
+
+        // 去重落库：优先 upsert by contentHash
+        int rows = evidenceRepository.insertOrIgnore(evidence);
+        Evidence persisted;
+        if (rows > 0) {
+            persisted = evidence;
+        } else {
+            persisted = evidenceRepository.findByContentHash(evidence.getContentHash());
+            if (persisted == null) {
+                evidenceRepository.insert(evidence);
+                persisted = evidence;
+            }
+        }
 
         NodeEvidence nodeEvidence = new NodeEvidence();
         nodeEvidence.setId(UUID.randomUUID().toString());
         nodeEvidence.setNodeId(node.getId());
-        nodeEvidence.setEvidenceId(evidence.getId());
+        nodeEvidence.setEvidenceId(persisted.getId());
         nodeEvidence.setRelationType(EvidenceRole.PRIMARY_SOURCE.name());
         nodeEvidence.setCreatedAt(LocalDateTime.now());
         nodeEvidenceRepository.insert(nodeEvidence);
@@ -385,6 +424,24 @@ public class EvidenceGraphWriter {
     }
 
     // ==================== 证据角色枚举 ====================
+
+    /**
+     * 基于位置签名生成 SHA-256 哈希，用于节点指针型证据的去重。
+     */
+    private static String locationHash(String projectId, String versionId, String evidenceType,
+                                       String sourcePath, String sourceName,
+                                       Integer startLine, Integer endLine) {
+        String input = String.format("%s|%s|%s|%s|%s|%d|%d",
+                projectId, versionId, evidenceType, sourcePath, sourceName,
+                startLine != null ? startLine : 0, endLine != null ? endLine : 0);
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
 
     /**
      * 证据关联角色。

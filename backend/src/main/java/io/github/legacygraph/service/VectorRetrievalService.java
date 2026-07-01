@@ -20,23 +20,24 @@ import java.util.List;
 @Service
 public class VectorRetrievalService {
 
-    private final EmbeddingModel embeddingModel;
     private final VectorDocumentRepository vectorDocumentRepository;
     private final Neo4jGraphDao neo4jGraphDao;
     private final VectorizationService vectorizationService;
 
-    /** 语义检索结果缓存（可选）：相同问题复用，短 TTL（向量库随扫描更新） */
+    /** EmbeddingModel 可选：设置 SILICONFLOW_API_KEY 环境变量后可用 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private EmbeddingModel embeddingModel;
+
+    /** 语义检索结果缓存（可选） */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private CacheService cacheService;
 
     /** 语义检索缓存 TTL */
     private static final java.time.Duration SEARCH_CACHE_TTL = java.time.Duration.ofMinutes(3);
 
-    public VectorRetrievalService(EmbeddingModel embeddingModel,
-                               VectorDocumentRepository vectorDocumentRepository,
+    public VectorRetrievalService(VectorDocumentRepository vectorDocumentRepository,
                                Neo4jGraphDao neo4jGraphDao,
                                VectorizationService vectorizationService) {
-        this.embeddingModel = embeddingModel;
         this.vectorDocumentRepository = vectorDocumentRepository;
         this.neo4jGraphDao = neo4jGraphDao;
         this.vectorizationService = vectorizationService;
@@ -106,6 +107,10 @@ public class VectorRetrievalService {
     }
 
     private List<VectorDocument> doSemanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
+        if (embeddingModel == null) {
+            log.debug("EmbeddingModel not available (SILICONFLOW_API_KEY not set)");
+            return Collections.emptyList();
+        }
         try {
             // 对查询进行向量化 - Spring AI 1.0+ API
             float[] embedding = embeddingModel.embed(query);
@@ -127,6 +132,10 @@ public class VectorRetrievalService {
     public List<GraphNode> findSimilarNodes(String projectId, String versionId, String searchText, double similarityThreshold) {
         log.info("Find similar nodes: projectId={}, searchText={}, threshold={}", projectId, searchText, similarityThreshold);
 
+        if (embeddingModel == null) {
+            log.debug("EmbeddingModel not available (SILICONFLOW_API_KEY not set)");
+            return Collections.emptyList();
+        }
         try {
             // 对查询进行向量化
             float[] embedding = embeddingModel.embed(searchText);

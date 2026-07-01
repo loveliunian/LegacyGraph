@@ -51,7 +51,8 @@ public class ServiceCallExtractor {
             result = javaParser.parse(content);
         }
         if (!result.isSuccessful() || result.getResult().isEmpty()) {
-            log.debug("Failed to parse Java file: {}", file.getAbsolutePath());
+            log.warn("Failed to parse Java file for service call (after retry): {}", file.getAbsolutePath());
+            log.warn("Parse problems: {}", result.getProblems());
             return relations;
         }
 

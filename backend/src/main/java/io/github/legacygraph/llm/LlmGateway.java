@@ -291,7 +291,7 @@ public class LlmGateway {
      * {@code legacy-graph.ai.llm-timeout} 在 {@code LlmProviderService#createChatModel} 处注入。
      */
     private ChatResponse invokeModel(String prompt) {
-        OpenAiChatModel chatModel = getChatModel();
+        OpenAiChatModel chatModel = getChatModelWithHealing(null);
         ChatClient chatClient = ChatClient.create(chatModel);
         return llmRetryTemplate.execute(ctx -> {
             if (ctx.getRetryCount() > 0) {
@@ -411,6 +411,32 @@ public class LlmGateway {
                     provider.getProviderCode(), provider.getModelId(), provider.getEndpoint());
             return model;
         });
+    }
+
+    /**
+     * LLM 调用失败时的自愈机制：若错误提示凭证缺失，清空 ChatModel 缓存并重试一次。
+     * 解决 apiConfig 更新后内存缓存未同步的 stale cache 问题。
+     */
+    private OpenAiChatModel getChatModelWithHealing(String providerCode) {
+        try {
+            return getChatModel(providerCode);
+        } catch (IllegalStateException e) {
+            // 非凭证问题，直接抛出
+            throw e;
+        } catch (Exception e) {
+            // 凭证类错误：清缓存 + 重试一次
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("credential") || msg.contains("apiKey") || msg.contains("api_key")) {
+                log.warn("LLM credential error detected, clearing chatModelCache and retrying: {}", msg);
+                chatModelCache.clear();
+                // 同时刷新 DB 缓存（Redis/@Cacheable）
+                try {
+                    llmProviderService.getActiveDefault(); // 触发重新加载
+                } catch (Exception ignore) {}
+                return getChatModel(providerCode);
+            }
+            throw e;
+        }
     }
 
     /**

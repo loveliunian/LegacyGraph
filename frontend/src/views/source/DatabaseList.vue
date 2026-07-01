@@ -25,8 +25,8 @@
       <el-table-column label="地址" width="200">
         <template #default="{ row }">{{ row.host }}:{{ row.port }}</template>
       </el-table-column>
-      <el-table-column prop="database" label="数据库名" width="150" />
-      <el-table-column prop="schema" label="Schema" width="120" />
+      <el-table-column prop="databaseName" label="数据库名" width="150" />
+      <el-table-column prop="schemaName" label="Schema" width="120" />
       <el-table-column prop="username" label="用户名" width="120" />
       <el-table-column label="表数量" width="100">
         <template #default="{ row }">

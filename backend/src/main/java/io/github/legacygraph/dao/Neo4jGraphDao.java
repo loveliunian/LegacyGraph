@@ -33,6 +33,17 @@ public class Neo4jGraphDao {
         this.neo4jDriver = neo4jDriver;
     }
 
+    /**
+     * 归一化 UUID 格式：去除横线。
+     * Neo4j 中 versionId 由 MyBatis-Plus ASSIGN_UUID 生成，存储为 32 位 hex（无横线），
+     * 但 PostgreSQL uuid 列读取时返回 36 位带横线格式，导致前端传入的 versionId 无法匹配。
+     * 统一归一化确保读写一致。
+     */
+    static String normalizeId(String id) {
+        if (id == null) return null;
+        return id.replace("-", "");
+    }
+
     private String nodeCacheKey(String nodeId) {
         return "graph:node:" + nodeId;
     }
@@ -113,7 +124,7 @@ public class Neo4jGraphDao {
                     nodeType);
             Result result = session.run(cypher, Map.of(
                     "projectId", projectId,
-                    "versionId", versionId,
+                    "versionId", normalizeId(versionId),
                     "nodeKey", nodeKey));
             if (result.hasNext()) {
                 return Optional.of(recordToNode(result.next().get("n").asNode()));
@@ -171,7 +182,7 @@ public class Neo4jGraphDao {
             params.put("projectId", projectId);
             if (versionId != null) {
                 cypher.append(" AND n.versionId = $versionId");
-                params.put("versionId", versionId);
+                params.put("versionId", normalizeId(versionId));
             }
             if (nodeType != null) {
                 cypher.append(" AND $nodeType IN labels(n)");
@@ -213,7 +224,7 @@ public class Neo4jGraphDao {
             params.put("projectId", projectId);
             if (versionId != null) {
                 cypher.append(" AND n.versionId = $versionId");
-                params.put("versionId", versionId);
+                params.put("versionId", normalizeId(versionId));
             } else {
                 // versionId 为空时仍需此参数占位
                 params.put("versionId", null);
@@ -259,7 +270,7 @@ public class Neo4jGraphDao {
             params.put("projectId", projectId);
             if (versionId != null) {
                 cypher.append(" AND n.versionId = $versionId");
-                params.put("versionId", versionId);
+                params.put("versionId", normalizeId(versionId));
             }
             if (status != null) {
                 cypher.append(" AND n.status = $status");
@@ -318,7 +329,7 @@ public class Neo4jGraphDao {
             params.put("fromId", edge.getFromNodeId());
             params.put("toId", edge.getToNodeId());
             params.put("projectId", edge.getProjectId());
-            params.put("versionId", edge.getVersionId());
+            params.put("versionId", normalizeId(edge.getVersionId()));
             params.put("edgeKey", edge.getEdgeKey() != null ? edge.getEdgeKey() : "");
             params.put("edgeType", edge.getEdgeType());
             params.put("sourceType", edge.getSourceType() != null ? edge.getSourceType() : "");
@@ -360,7 +371,7 @@ public class Neo4jGraphDao {
             params.put("fromId", edge.getFromNodeId());
             params.put("toId", edge.getToNodeId());
             params.put("projectId", edge.getProjectId());
-            params.put("versionId", edge.getVersionId());
+            params.put("versionId", normalizeId(edge.getVersionId()));
             params.put("edgeKey", edge.getEdgeKey() != null ? edge.getEdgeKey() : "");
             params.put("edgeType", edgeType);
             params.put("sourceType", edge.getSourceType() != null ? edge.getSourceType() : "");
@@ -403,7 +414,7 @@ public class Neo4jGraphDao {
                     "RETURN r, from, to LIMIT 1";
             Map<String, Object> params = new HashMap<>();
             params.put("projectId", projectId);
-            params.put("versionId", versionId);
+            params.put("versionId", normalizeId(versionId));
             params.put("fromId", fromNodeId);
             params.put("toId", toNodeId);
             params.put("edgeType", edgeType);
@@ -431,7 +442,7 @@ public class Neo4jGraphDao {
             params.put("projectId", projectId);
             if (versionId != null) {
                 cypher.append(" AND r.versionId = $versionId");
-                params.put("versionId", versionId);
+                params.put("versionId", normalizeId(versionId));
             }
             if (minConfidence != null) {
                 cypher.append(" AND r.confidence >= $minConfidence");
@@ -466,7 +477,7 @@ public class Neo4jGraphDao {
             params.put("projectId", projectId);
             if (versionId != null) {
                 cypher.append(" AND r.versionId = $versionId");
-                params.put("versionId", versionId);
+                params.put("versionId", normalizeId(versionId));
             }
             if (status != null) {
                 cypher.append(" AND r.status = $status");
@@ -665,7 +676,7 @@ public class Neo4jGraphDao {
             params.put("projectId", projectId);
             if (versionId != null) {
                 cypher.append(" AND r.versionId = $versionId");
-                params.put("versionId", versionId);
+                params.put("versionId", normalizeId(versionId));
             }
             if (edgeType != null) {
                 cypher.append(" AND type(r) = $edgeType");
@@ -728,7 +739,7 @@ public class Neo4jGraphDao {
                 "       count(CASE WHEN r.evidenceIds IS NULL OR r.evidenceIds = '' THEN 1 END) AS noEvidenceEdges, " +
                 "       count(CASE WHEN r.sourceType IN ['AI_INFERENCE', 'AI_FEATURE_MAPPING', 'DOC_AI'] THEN 1 END) AS aiOnlyEdges, " +
                 "       count(CASE WHEN r.sourceType = 'RUNTIME_TRACE' THEN 1 END) AS runtimeOnlyEdges";
-            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", normalizeId(versionId)));
             if (result.hasNext()) return result.next().asMap();
         }
         Map<String, Object> emptyStats = new LinkedHashMap<>();
@@ -761,7 +772,7 @@ public class Neo4jGraphDao {
                 "       count(*) AS newNodes, " +
                 "       count(CASE WHEN n.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedNodes " +
                 "ORDER BY date";
-            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", normalizeId(versionId)));
             List<Map<String, Object>> rows = new ArrayList<>();
             while (result.hasNext()) rows.add(result.next().asMap());
             return rows;
@@ -782,7 +793,7 @@ public class Neo4jGraphDao {
                 "  sum(CASE WHEN c >= 0.4 AND c < 0.6 THEN 1 ELSE 0 END) AS bin2, " +
                 "  sum(CASE WHEN c >= 0.6 AND c < 0.8 THEN 1 ELSE 0 END) AS bin3, " +
                 "  sum(CASE WHEN c >= 0.8 AND c <= 1.0 THEN 1 ELSE 0 END) AS bin4";
-            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", normalizeId(versionId)));
             if (result.hasNext()) {
                 List<Map<String, Object>> list = new ArrayList<>();
                 list.add(result.next().asMap());
@@ -803,7 +814,7 @@ public class Neo4jGraphDao {
                 "AND coalesce(n.confidence, 0.0) < $threshold " +
                 "RETURN n ORDER BY n.confidence ASC LIMIT $limit";
             Result result = session.run(cypher, Map.of(
-                    "projectId", projectId, "versionId", versionId,
+                    "projectId", projectId, "versionId", normalizeId(versionId),
                     "threshold", threshold, "limit", (long) limit));
             List<GraphNode> nodes = new ArrayList<>();
             while (result.hasNext()) nodes.add(recordToNode(result.next().get("n").asNode()));
@@ -822,7 +833,7 @@ public class Neo4jGraphDao {
                 "WITH n, count(r) AS edgeCount WHERE edgeCount = 0 " +
                 "RETURN n LIMIT $limit";
             Result result = session.run(cypher, Map.of(
-                    "projectId", projectId, "versionId", versionId,
+                    "projectId", projectId, "versionId", normalizeId(versionId),
                     "limit", (long) limit));
             List<GraphNode> nodes = new ArrayList<>();
             while (result.hasNext()) nodes.add(recordToNode(result.next().get("n").asNode()));
@@ -840,7 +851,7 @@ public class Neo4jGraphDao {
                 "AND r.projectId = $projectId AND r.versionId = $versionId " +
                 "WITH n, count(r) AS degree " +
                 "RETURN coalesce(avg(degree), 0.0) AS avgDegree";
-            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", versionId));
+            Result result = session.run(cypher, Map.of("projectId", projectId, "versionId", normalizeId(versionId)));
             if (result.hasNext()) {
                 Object v = result.next().get("avgDegree");
                 if (v instanceof Number n) return n.doubleValue();
@@ -861,7 +872,7 @@ public class Neo4jGraphDao {
                 "AND (from.id IN $nodeIds OR to.id IN $nodeIds) " +
                 "RETURN count(DISTINCT r) AS cnt";
             Result result = session.run(cypher, Map.of(
-                    "projectId", projectId, "versionId", versionId,
+                    "projectId", projectId, "versionId", normalizeId(versionId),
                     "nodeIds", nodeIds));
             if (result.hasNext()) return result.next().get("cnt").asLong();
         }
@@ -875,7 +886,7 @@ public class Neo4jGraphDao {
         try (Session session = neo4jDriver.session()) {
             session.run(
                     "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId DETACH DELETE n",
-                    Map.of("projectId", projectId, "versionId", versionId));
+                    Map.of("projectId", projectId, "versionId", normalizeId(versionId)));
             log.info("Deleted Neo4j graph: projectId={}, versionId={}", projectId, versionId);
         }
     }
@@ -885,7 +896,7 @@ public class Neo4jGraphDao {
         try (Session session = neo4jDriver.session()) {
             session.run(
                     "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId AND n.id = $nodeId DETACH DELETE n",
-                    Map.of("projectId", projectId, "versionId", versionId, "nodeId", nodeId));
+                    Map.of("projectId", projectId, "versionId", normalizeId(versionId), "nodeId", nodeId));
         }
         evictNodeCache(nodeId);
     }
@@ -1005,7 +1016,7 @@ public class Neo4jGraphDao {
         Map<String, Object> params = new HashMap<>();
         params.put("id", node.getId());
         params.put("projectId", node.getProjectId());
-        params.put("versionId", node.getVersionId());
+        params.put("versionId", normalizeId(node.getVersionId()));
         params.put("nodeKey", node.getNodeKey());
         params.put("nodeName", node.getNodeName() != null ? node.getNodeName() : "");
         params.put("displayName", node.getDisplayName() != null ? node.getDisplayName() : "");

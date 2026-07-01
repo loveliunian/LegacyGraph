@@ -38,8 +38,8 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
         if (JavaCodeAdapter.isControllerFile(asset.getRelativePath())) {
             return false;
         }
-        return isServiceOrMapperFile(asset.getRelativePath())
-                && asset.getFile() != null && Files.isReadable(asset.getFile());
+        // 不依赖文件命名，基于 AST 实际内容判定调用关系
+        return asset.getFile() != null && Files.isReadable(asset.getFile());
     }
 
     @Override
@@ -81,14 +81,3 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
                 .priority(20)
                 .build();
     }
-
-    static boolean isServiceOrMapperFile(String relativePath) {
-        if (relativePath == null) return false;
-        String name = relativePath;
-        int slash = Math.max(relativePath.lastIndexOf('/'), relativePath.lastIndexOf('\\'));
-        if (slash >= 0) name = relativePath.substring(slash + 1);
-        return name.endsWith("Service.java") || name.contains("Service")
-                || name.endsWith("Mapper.java") || name.contains("Mapper")
-                || name.endsWith("Dao.java") || name.contains("Dao");
-    }
-}

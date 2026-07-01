@@ -46,18 +46,32 @@ public class DatabaseMetadataExtractor {
     }
 
     /**
-     * 从指定schema抽取所有表元数据
+     * 从指定schema抽取所有表元数据。
+     * @param schema 对于 PostgreSQL 是 schema 名（如 public），对于 MySQL 传 null 即可
      */
     public List<TableMetadata> extractFromSchema(DataSource dataSource, String schema) throws SQLException {
+        return extractFromSchema(dataSource, schema, false);
+    }
+
+    /**
+     * 从指定schema抽取所有表元数据。
+     * @param isMySql 是否为 MySQL/MariaDB（此时 schema 用作 catalog）
+     */
+    public List<TableMetadata> extractFromSchema(DataSource dataSource, String schema, boolean isMySql) throws SQLException {
         List<TableMetadata> tables = new ArrayList<>();
 
         try (Connection conn = dataSource.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
 
+            // MySQL/MariaDB：catalog = database name，schema = null
+            // PostgreSQL：catalog = null，schema = schema name
+            String catalog = isMySql ? conn.getCatalog() : null;
+            String schemaPattern = isMySql ? null : schema;
+
             // 获取所有表
             ResultSet tablesRs = metaData.getTables(
-                    conn.getCatalog(),
-                    schema,
+                    catalog,
+                    schemaPattern,
                     "%",
                     new String[]{"TABLE"}
             );

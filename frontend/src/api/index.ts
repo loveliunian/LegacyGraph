@@ -150,7 +150,7 @@ export const graphApi = {
    * @returns 调用链节点列表
    */
   getApiChain: (projectId: string, versionId: string, api: string) => {
-    return get(`/lg/projects/${projectId}/graph/api-chain`, { params: { versionId, api } })
+    return get(`/lg/projects/${projectId}/graph/api-chain`, { versionId, api })
   },
 
   /**
@@ -162,7 +162,7 @@ export const graphApi = {
    * @returns 影响范围列表
    */
   getTableImpact: (projectId: string, versionId: string, tableName: string) => {
-    return get(`/lg/projects/${projectId}/graph/table-impact`, { params: { versionId, tableName } })
+    return get(`/lg/projects/${projectId}/graph/table-impact`, { versionId, tableName })
   },
 
   /**
@@ -174,7 +174,7 @@ export const graphApi = {
    * @returns 功能视图数据，包含节点和边
    */
   getFeatureView: (projectId: string, versionId: string, module: string) => {
-    return get(`/lg/projects/${projectId}/graph/feature-view`, { params: { versionId, module } })
+    return get(`/lg/projects/${projectId}/graph/feature-view`, { versionId, module })
   },
 
   /**
@@ -186,7 +186,7 @@ export const graphApi = {
    * @returns 业务视图数据，包含节点和边
    */
   getBusinessView: (projectId: string, versionId: string, domain: string) => {
-    return get(`/lg/projects/${projectId}/graph/business-view`, { params: { versionId, domain } })
+    return get(`/lg/projects/${projectId}/graph/business-view`, { versionId, domain })
   },
 
   /**
@@ -197,7 +197,7 @@ export const graphApi = {
    * @returns 合并候选对列表
    */
   getMergeCandidates: (projectId: string, nodeType: string) => {
-    return get(`/lg/projects/${projectId}/graph/merge/candidates`, { params: { nodeType } })
+    return get(`/lg/projects/${projectId}/graph/merge/candidates`, { nodeType })
   },
 
   /**
@@ -227,18 +227,14 @@ export const graphApi = {
 
   /** 获取统一图谱全量数据 */
   getUnifiedGraph: (projectId: string, versionId: string, minConfidence: number = 0) => {
-    return get(`/lg/projects/${projectId}/graph/unified`, {
-      params: { versionId, minConfidence }
-    })
+    return get(`/lg/projects/${projectId}/graph/unified`, { versionId, minConfidence })
   },
 
   /**
    * 获取功能切片列表（证据工作台）
    */
   getFeatureSlices: (projectId: string, versionId: string) => {
-    return get(`/lg/projects/${projectId}/graph/feature-slices`, {
-      params: { versionId }
-    })
+    return get(`/lg/projects/${projectId}/graph/feature-slices`, { versionId })
   },
 
   /**
@@ -252,23 +248,19 @@ export const graphApi = {
    * 获取图谱质量统计（含无证据节点/AI-only边/runtime-only边等）
    */
   getGraphQualityReport: (projectId: string, versionId?: string) => {
-    return get(`/lg/projects/${projectId}/graph/quality`, {
-      params: versionId ? { versionId } : {}
-    })
+    return get(`/lg/projects/${projectId}/graph/quality`, versionId ? { versionId } : {})
   },
 
   /**
    * 获取漂移队列
    */
   getDriftQueue: (projectId: string, type?: string) => {
-    return get(`/lg/projects/${projectId}/graph/drift-queue`, {
-      params: type ? { type } : {}
-    })
+    return get(`/lg/projects/${projectId}/graph/drift-queue`, type ? { type } : {})
   },
 
   /** 获取数据库表节点列表（仅Table节点，轻量查询） */
   getTables: (projectId: string, versionId: string) => {
-    return get(`/lg/projects/${projectId}/graph/tables`, { params: { versionId } })
+    return get(`/lg/projects/${projectId}/graph/tables`, { versionId })
   },
 
   /** 获取项目扫描版本列表 */

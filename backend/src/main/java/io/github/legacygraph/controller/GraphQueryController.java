@@ -212,7 +212,12 @@ public class GraphQueryController {
             @Parameter(description = "最低置信度", required = false)
             @RequestParam(defaultValue = "0.0") Double minConfidence,
             @Parameter(description = "状态过滤：CONFIRMED/PENDING_CONFIRM/REJECTED", required = false)
-            @RequestParam(required = false) String statusFilter) {
+            @RequestParam(required = false) String statusFilter,
+            jakarta.servlet.http.HttpServletRequest request) {
+        // 兼容前端 ?params[versionId]=xxx 嵌套格式
+        if (versionId == null || versionId.isBlank()) {
+            versionId = request.getParameter("params[versionId]");
+        }
         Map<String, Object> result = graphQueryService.getUnifiedGraph(versionId, minConfidence, statusFilter);
         return Result.success(result);
     }

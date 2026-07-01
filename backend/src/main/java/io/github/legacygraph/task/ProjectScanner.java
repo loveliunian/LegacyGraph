@@ -1058,12 +1058,14 @@ public class ProjectScanner {
 
     private boolean isAdapterCandidate(Path path) {
         String name = path.getFileName().toString().toLowerCase();
-        // 仅包含有适配器能处理的文件类型（.ts/.js 无适配器，已移除）
+        // 仅包含有适配器能处理的文件类型
         return name.endsWith(".java")
                 || name.endsWith(".xml")
                 || name.endsWith(".vue")
                 || name.endsWith(".jsx")
                 || name.endsWith(".tsx")
+                || name.endsWith(".ts")
+                || name.endsWith(".js")
                 || name.endsWith(".md")
                 || name.endsWith(".pdf")
                 || name.endsWith(".docx")
@@ -1135,6 +1137,7 @@ public class ProjectScanner {
 
             var visited = new java.util.concurrent.atomic.AtomicInteger(0);
             var count = new java.util.concurrent.atomic.AtomicInteger(0);
+            var failed = new java.util.concurrent.atomic.AtomicInteger(0);
             java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
             try {
                 List<java.util.concurrent.Callable<Void>> tasks = javaFiles.stream()
@@ -1153,6 +1156,10 @@ public class ProjectScanner {
                                 }
                             } catch (IOException e) {
                                 log.warn("Failed to parse Java file: {}", file, e);
+                                failed.incrementAndGet();
+                            } catch (RuntimeException e) {
+                                log.warn("Unexpected error parsing Java file: {} — {}", file, e.getMessage());
+                                failed.incrementAndGet();
                             } finally {
                                 int v = visited.incrementAndGet();
                                 if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
@@ -1165,6 +1172,8 @@ public class ProjectScanner {
             } finally {
                 executor.shutdown();
             }
+            log.info("Java controller scan finished: {} APIs from {} files ({} failed parse)",
+                    count.get(), total, failed.get());
             return count.get();
         } catch (IOException | InterruptedException e) {
             log.error("Failed to walk directory for Java scan", e);
@@ -1257,6 +1266,7 @@ public class ProjectScanner {
 
             var visited = new java.util.concurrent.atomic.AtomicInteger(0);
             var count = new java.util.concurrent.atomic.AtomicInteger(0);
+            var failed = new java.util.concurrent.atomic.AtomicInteger(0);
             java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
             try {
                 List<java.util.concurrent.Callable<Void>> tasks = vueFiles.stream()
@@ -1285,6 +1295,10 @@ public class ProjectScanner {
                                 }
                             } catch (IOException e) {
                                 log.warn("Failed to parse Vue file: {}", vueFile, e);
+                                failed.incrementAndGet();
+                            } catch (RuntimeException e) {
+                                log.warn("Unexpected error parsing Vue file: {} — {}", vueFile, e.getMessage());
+                                failed.incrementAndGet();
                             } finally {
                                 int v = visited.incrementAndGet();
                                 if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
@@ -1297,6 +1311,8 @@ public class ProjectScanner {
             } finally {
                 executor.shutdown();
             }
+            log.info("Frontend scan finished: {} items from {} files ({} failed parse)",
+                    count.get(), total, failed.get());
             return count.get();
         } catch (IOException | InterruptedException e) {
             log.error("Failed to walk directory for frontend scan", e);
@@ -1315,18 +1331,21 @@ public class ProjectScanner {
         if (baseDir == null) return 0;
         ServiceCallExtractor extractor = new ServiceCallExtractor();
         try {
+            // 扫描所有 Java 文件，由提取器基于 AST 实际内容判定调用关系，不依赖文件命名
+            // 仅排除 Controller 文件 — 它们由 scanJavaControllers 处理
             List<Path> javaFiles = Files.walk(Paths.get(baseDir))
                     .filter(Files::isRegularFile)
                     .filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> isServiceOrMapperFile(p))
+                    .filter(p -> !isControllerFile(p))
                     .collect(Collectors.toList());
 
             int total = javaFiles.size();
-            if (total == 0) { logTaskProgress(task, 0, 0, "service/mapper Java files"); return 0; }
-            logTaskProgress(task, 0, total, "service/mapper Java files");
+            if (total == 0) { logTaskProgress(task, 0, 0, "Java files (non-controller)"); return 0; }
+            logTaskProgress(task, 0, total, "Java files (non-controller)");
 
             var visited = new java.util.concurrent.atomic.AtomicInteger(0);
             var count = new java.util.concurrent.atomic.AtomicInteger(0);
+            var failed = new java.util.concurrent.atomic.AtomicInteger(0);
             java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
             try {
                 List<java.util.concurrent.Callable<Void>> tasks = javaFiles.stream()
@@ -1346,10 +1365,14 @@ public class ProjectScanner {
                                 }
                             } catch (IOException e) {
                                 log.warn("Failed to parse Java file for service call: {}", javaFile, e);
+                                failed.incrementAndGet();
+                            } catch (RuntimeException e) {
+                                log.warn("Unexpected error parsing Java file for service call: {} — {}", javaFile, e.getMessage());
+                                failed.incrementAndGet();
                             } finally {
                                 int v = visited.incrementAndGet();
                                 if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
-                                    logTaskProgress(task, v, total, "service/mapper Java files");
+                                    logTaskProgress(task, v, total, "Java files (non-controller)");
                                 }
                             }
                             return null;
@@ -1358,6 +1381,8 @@ public class ProjectScanner {
             } finally {
                 executor.shutdown();
             }
+            log.info("Service call scan finished: {} calls from {} files ({} failed parse)",
+                    count.get(), total, failed.get());
             return count.get();
         } catch (IOException | InterruptedException e) {
             log.error("Failed to walk directory for service call scan", e);
@@ -1372,16 +1397,10 @@ public class ProjectScanner {
                fileName.contains("mapper") && fileName.endsWith(".xml");
     }
 
-    private boolean isServiceOrMapperFile(Path path) {
-        String fileName = path.getFileName().toString();
-        return fileName.endsWith("Service.java") || fileName.contains("Service") ||
-               fileName.endsWith("Mapper.java") || fileName.contains("Mapper") ||
-               fileName.endsWith("Dao.java") || fileName.contains("Dao");
-    }
-
     private boolean isVueFile(Path path) {
         String fileName = path.getFileName().toString();
-        return fileName.endsWith(".vue") || fileName.endsWith(".jsx") || fileName.endsWith(".tsx");
+        return fileName.endsWith(".vue") || fileName.endsWith(".jsx") || fileName.endsWith(".tsx")
+                || fileName.endsWith(".ts") || fileName.endsWith(".js");
     }
 
     // ==================== 工具方法 ====================

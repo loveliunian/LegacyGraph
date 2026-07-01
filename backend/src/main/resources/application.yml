@@ -67,20 +67,22 @@ spring:
       username: ${NEO4J_USERNAME:neo4j}
       password: ${NEO4J_PASSWORD:Liucl157}
 
-  # Spring AI OpenAI 配置（兼容 DeepSeek）
-  # api-key 从数据库 lg_llm_provider 表读取，此处仅做占位
+  # Spring AI OpenAI 配置
+  # Chat: 从数据库 lg_llm_provider 表读取（LlmProviderService.createChatModel），此处仅占位
+  # Embedding: 使用硅基流动 SiliconFlow（OpenAI 兼容 API）
   ai:
     openai:
-      api-key: ${DEEPSEEK_API_KEY}
+      api-key: ${DEEP...-…»}
       base-url: https://api.deepseek.com/v1
       chat:
         options:
           model: deepseek-chat
           temperature: 0.1
       embedding:
+        api-key: ${SILICONFLOW_API_KEY:sk-dmpbcavsgtsljcridggoyxxpxixibtxbborqpdzdjdjzfnqo}
+        base-url: https://api.siliconflow.cn/v1
         options:
-          model: text-embedding-3-small
-          dimensions: 768
+          model: BAAI/bge-large-zh-v1.5
 
 # MyBatis-Plus 配置
 mybatis-plus:

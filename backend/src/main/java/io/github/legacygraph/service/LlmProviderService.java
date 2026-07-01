@@ -138,6 +138,13 @@ public class LlmProviderService {
             config = Map.of();
         }
         String apiKey = (String) config.getOrDefault("api_key", "");
+        // 防御：OpenAI Java Client 4.x 不接受空字符串作为 apiKey，给出明确错误
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "LLM 提供商 " + provider.getProviderCode() + " 的 api_key 未配置。" +
+                    "请在数据库 lg_llm_provider 表中为该提供商设置有效的 api_config，或通过环境变量 DEEPSEEK_API_KEY / OPENAI_API_KEY 注入。" +
+                    " 当前 apiConfig=" + config);
+        }
         String baseUrl = provider.getEndpoint();
 
         // 使用 OpenAI Java Client 4.x API — ClientOptions + SpringAiOpenAiHttpClient（OkHttp）
@@ -162,6 +169,8 @@ public class LlmProviderService {
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model(provider.getModelId())
+                .apiKey(apiKey)
+                .baseUrl(baseUrl)
                 .temperature(temperature)
                 .maxTokens(maxTokens)
                 .build();

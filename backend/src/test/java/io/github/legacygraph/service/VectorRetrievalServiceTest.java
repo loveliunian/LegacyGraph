@@ -37,7 +37,18 @@ class VectorRetrievalServiceTest {
     @BeforeEach
     void setUp() {
         vectorRetrievalService = new VectorRetrievalService(
-                embeddingModel, vectorDocumentRepository, neo4jGraphDao, vectorizationService);
+                vectorDocumentRepository, neo4jGraphDao, vectorizationService);
+        setField(vectorRetrievalService, "embeddingModel", embeddingModel);
+    }
+
+    private void setField(Object target, String fieldName, Object value) {
+        try {
+            var f = target.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            f.set(target, value);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -162,9 +173,11 @@ class VectorRetrievalServiceTest {
     void testEndToEnd_ChunkEmbedStoreThenSearch() {
         // 真实分片 + 真实存储逻辑，仅 mock 外部 embedding 与 repository
         VectorizationService realVectorization =
-                new VectorizationService(embeddingModel, vectorDocumentRepository);
+                new VectorizationService(vectorDocumentRepository);
         VectorRetrievalService retrieval = new VectorRetrievalService(
-                embeddingModel, vectorDocumentRepository, neo4jGraphDao, realVectorization);
+                vectorDocumentRepository, neo4jGraphDao, realVectorization);
+        setField(realVectorization, "embeddingModel", embeddingModel);
+        setField(retrieval, "embeddingModel", embeddingModel);
 
         // 任意文本都返回固定向量；插入时回填自增主键
         when(embeddingModel.embed(anyString())).thenReturn(new float[]{0.1f, 0.2f, 0.3f});

@@ -768,7 +768,10 @@ public class SourceController {
             try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, db.getUsername(), db.getPassword())) {
                 java.sql.DatabaseMetaData metaData = conn.getMetaData();
                 String[] types = {"TABLE"};
-                java.sql.ResultSet rs = metaData.getTables(null, db.getSchemaName(), "%", types);
+                // MySQL/MariaDB 用 catalog（数据库名），PostgreSQL 用 schema
+                String catalog = isMySql(db) ? db.getDatabaseName() : null;
+                String schemaPattern = isMySql(db) ? null : db.getSchemaName();
+                java.sql.ResultSet rs = metaData.getTables(catalog, schemaPattern, "%", types);
                 while (rs.next()) {
                     tableCount++;
                 }
@@ -1187,6 +1190,13 @@ public class SourceController {
     }
 
     // ==================== 工具方法 ====================
+
+    /** 判断是否为 MySQL/MariaDB 类型 */
+    private boolean isMySql(DbConnection db) {
+        if (db.getDbType() == null) return false;
+        String t = db.getDbType().toLowerCase();
+        return "mysql".equals(t) || "mariadb".equals(t);
+    }
 
     /**
      * 校验 Git URL 合法性，防止命令注入

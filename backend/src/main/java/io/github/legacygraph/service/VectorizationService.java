@@ -22,22 +22,27 @@ import java.util.List;
 @Service
 public class VectorizationService {
 
-    private final EmbeddingModel embeddingModel;
     private final VectorDocumentRepository vectorDocumentRepository;
 
-    public VectorizationService(EmbeddingModel embeddingModel,
-                               VectorDocumentRepository vectorDocumentRepository) {
-        this.embeddingModel = embeddingModel;
+    /** EmbeddingModel 可选：设置 SILICONFLOW_API_KEY 环境变量后可用 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private EmbeddingModel embeddingModel;
+
+    public VectorizationService(VectorDocumentRepository vectorDocumentRepository) {
         this.vectorDocumentRepository = vectorDocumentRepository;
     }
 
     /**
      * 对单个文档分片进行向量化并存储
-     * @return 存储后的记录 ID
+     * @return 存储后的记录 ID，EmbeddingModel 不可用时返回 null
      */
     @Transactional
     public Long embedAndStore(Long projectId, String versionId, String chunkType, String sourceUri,
                               int chunkIndex, String content, String embeddingModelName) {
+        if (embeddingModel == null) {
+            log.debug("EmbeddingModel not available, skip vectorization for chunk {}", chunkIndex);
+            return null;
+        }
         log.info("Vectorizing: projectId={}, chunkIndex={}, length={}", projectId, chunkIndex, content.length());
 
         // 计算 hash 用于去重

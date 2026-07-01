@@ -15,6 +15,9 @@ VALUES ('deepseek', 'deepseek-chat', 'https://api.deepseek.com/v1', 'cloud',
         '{"api_key": "${DEEPSEEK_API_KEY:your-deepseek-api-key-here}", "temperature": 0.1, "max_tokens": 8192}'::JSONB,
         TRUE, TRUE)
 ON CONFLICT (provider_code) DO UPDATE SET
+    model_id   = EXCLUDED.model_id,
+    endpoint   = EXCLUDED.endpoint,
+    api_config = EXCLUDED.api_config,
     is_default = TRUE,
     is_active  = TRUE;
 

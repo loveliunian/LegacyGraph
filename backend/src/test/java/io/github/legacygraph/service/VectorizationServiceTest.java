@@ -29,7 +29,14 @@ class VectorizationServiceTest {
 
     @BeforeEach
     void setUp() {
-        vectorizationService = new VectorizationService(embeddingModel, vectorDocumentRepository);
+        vectorizationService = new VectorizationService(vectorDocumentRepository);
+        try {
+            var f = VectorizationService.class.getDeclaredField("embeddingModel");
+            f.setAccessible(true);
+            f.set(vectorizationService, embeddingModel);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
