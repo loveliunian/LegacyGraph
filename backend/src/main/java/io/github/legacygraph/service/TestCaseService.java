@@ -44,7 +44,7 @@ public class TestCaseService {
     private final E2eTestExecutor e2eTestExecutor;
     private final TestResultUpdateService testResultUpdateService;
 
-    private final ExecutorService testExecutor = Executors.newFixedThreadPool(4);
+    private final ExecutorService testExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     public TestCaseService(Neo4jGraphDao neo4jGraphDao,
                           TestCaseRepository testCaseRepository,

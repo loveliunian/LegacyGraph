@@ -2,7 +2,7 @@ package io.github.legacygraph.service;
 
 import com.openai.client.OpenAIClientImpl;
 import com.openai.core.ClientOptions;
-import com.openai.credential.BearerTokenCredential;
+import org.springframework.ai.openai.http.okhttp.SpringAiOpenAiHttpClient;
 import io.github.legacygraph.entity.LlmProvider;
 import io.github.legacygraph.repository.LlmProviderRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +30,7 @@ public class LlmProviderService {
 
     private final LlmProviderRepository llmProviderRepository;
 
-    /** B-S4：LLM 调用超时（秒），激活 application.yml 中 legacy-graph.ai.llm-timeout 死配置 */
+    /** B-S4：LLM 调用超时（秒），激活 application.yml 中 legacy-graph.ai.llm-timeout 配置 */
     @Value("${legacy-graph.ai.llm-timeout:120}")
     private long llmTimeoutSeconds;
 
@@ -140,13 +140,15 @@ public class LlmProviderService {
         String apiKey = (String) config.getOrDefault("api_key", "");
         String baseUrl = provider.getEndpoint();
 
-        // 使用 OpenAI Java Client 4.x API 创建 ClientOptions -> OpenAIClient
-        var credential = BearerTokenCredential.create(apiKey);
+        // 使用 OpenAI Java Client 4.x API — ClientOptions + SpringAiOpenAiHttpClient（OkHttp）
+        var httpClient = SpringAiOpenAiHttpClient.builder()
+                .timeout(Duration.ofSeconds(llmTimeoutSeconds))
+                .build();
+
         var clientOptions = ClientOptions.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
-                .credential(credential)
-                .timeout(Duration.ofSeconds(llmTimeoutSeconds)) // B-S4：激活 llm-timeout 配置
+                .httpClient(httpClient)
                 .build();
 
         var openAiClient = new OpenAIClientImpl(clientOptions);

@@ -114,6 +114,7 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
             @PathVariable String versionId) {
+        projectScanner.requestCancel(versionId);
         scanVersionService.updateScanStatus(versionId, "PAUSED");
         return Result.success();
     }
@@ -132,6 +133,7 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
             @PathVariable String versionId) {
+        projectScanner.requestCancel(versionId);
         scanVersionService.updateScanStatus(versionId, "CANCELLED");
         return Result.success();
     }
@@ -176,6 +178,7 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID", required = true)
             @PathVariable String versionId) {
+        projectScanner.requestCancel(versionId);
         scanVersionService.deleteScanVersion(versionId);
         return Result.success();
     }

@@ -46,7 +46,12 @@ public class ServiceCallExtractor {
         String content = Files.readString(file.toPath());
         ParseResult<CompilationUnit> result = javaParser.parse(content);
         if (!result.isSuccessful() || result.getResult().isEmpty()) {
-            log.warn("Failed to parse Java file: {}", file.getAbsolutePath());
+            // 偶发 I/O 竞争导致读入不完整 → 重试一次
+            content = Files.readString(file.toPath());
+            result = javaParser.parse(content);
+        }
+        if (!result.isSuccessful() || result.getResult().isEmpty()) {
+            log.debug("Failed to parse Java file: {}", file.getAbsolutePath());
             return relations;
         }
 

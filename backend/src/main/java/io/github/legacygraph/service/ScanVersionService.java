@@ -2,10 +2,12 @@ package io.github.legacygraph.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import io.github.legacygraph.common.ErrorCode;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.github.legacygraph.dto.ScanProgressResponse;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
+import io.github.legacygraph.exception.BusinessException;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
 import org.springframework.stereotype.Service;
@@ -13,8 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanVersion> {
@@ -38,14 +42,51 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         this.cacheService = cacheService;
     }
 
+    /** 版本号日期格式 */
+    private static final DateTimeFormatter VERSION_DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+
+    /**
+     * 生成不易重复的版本号：scan-YYYYMMDD-HHmmss-XXXX
+     */
+    private static String generateVersionNo() {
+        String datePart = LocalDateTime.now().format(VERSION_DATE_FMT);
+        String randPart = Integer.toHexString(ThreadLocalRandom.current().nextInt(0x10000));
+        return "scan-" + datePart + "-" + randPart;
+    }
+
     /**
      * 创建扫描版本
      */
     @Transactional
     public ScanVersion createScanVersion(String projectId, CreateScanVersionRequest request) {
+        // 版本号自动生成（空时兜底）
+        String versionNo = request.getVersionNo();
+        if (versionNo == null || versionNo.isBlank()) {
+            versionNo = generateVersionNo();
+        }
+
+        // 检查同项目下版本号是否已存在
+        LambdaQueryWrapper<ScanVersion> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ScanVersion::getProjectId, projectId);
+        wrapper.eq(ScanVersion::getVersionNo, versionNo);
+        if (scanVersionRepository.selectCount(wrapper) > 0) {
+            // 如果是自动生成的仍然碰撞（极端情况），重试一次
+            if (request.getVersionNo() == null || request.getVersionNo().isBlank()) {
+                versionNo = generateVersionNo() + "-r";
+                wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(ScanVersion::getProjectId, projectId);
+                wrapper.eq(ScanVersion::getVersionNo, versionNo);
+                if (scanVersionRepository.selectCount(wrapper) > 0) {
+                    throw new BusinessException(ErrorCode.SERVER_ERROR, "版本号生成冲突，请重试");
+                }
+            } else {
+                throw new BusinessException(ErrorCode.PARAM_ERROR, "扫描版本已存在: " + request.getVersionNo());
+            }
+        }
+
         ScanVersion version = new ScanVersion();
         version.setProjectId(projectId);
-        version.setVersionNo(request.getVersionNo());
+        version.setVersionNo(versionNo);
         version.setBranchName(request.getBranchName());
         version.setCommitId(request.getCommitId());
         version.setScanScope(request.getScanScope());

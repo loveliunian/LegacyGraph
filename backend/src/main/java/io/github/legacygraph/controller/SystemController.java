@@ -234,6 +234,13 @@ public class SystemController {
         return Result.success(map);
     }
 
+    @GetMapping("/dicts/all/maps")
+    @Operation(summary = "获取所有字典的全量映射", description = "返回 { dictCode: { value: label } }，供前端一次加载全量字典")
+    public Result<Map<String, Map<String, String>>> getAllDictItemMaps() {
+        Map<String, Map<String, String>> maps = sysDictService.getAllItemMaps();
+        return Result.success(maps);
+    }
+
     @PostMapping("/dicts/items")
     @Operation(summary = "创建字典项")
     @Log(value = "创建字典项", type = Log.OperationType.CREATE)

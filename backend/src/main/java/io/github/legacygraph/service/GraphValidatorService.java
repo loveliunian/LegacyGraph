@@ -38,7 +38,14 @@ public class GraphValidatorService {
         this.graphCacheInvalidator = graphCacheInvalidator;
     }
 
-    /** 根据测试结果更新整个版本的置信度 */
+    /**
+     * 根据测试结果更新整个版本的置信度（版本级入口）。
+     * <p>
+     * 职责边界（见 doc §两套回写服务的确切差异与统一方案）：本方法用于版本级批量刷新，
+     * 按 targetNodeId 邻域精确更新边置信度；细粒度、执行级回写请用
+     * {@code TestResultUpdateService.updateConfidenceByTestResults(executionId)}（写 verifiedScore）。
+     * </p>
+     */
     @Transactional
     public void updateConfidenceByTestResults(String versionId) {
         List<TestResult> results = testResultRepository.lambdaQuery()
@@ -64,9 +71,11 @@ public class GraphValidatorService {
         String targetNodeId = testCase.getTargetNodeId();
         if (targetNodeId == null) return 0;
 
-        // 找到指向目标节点的关系
+        // 只取指向目标节点的边（Cypher 内 toNodeId 过滤），替代原先加载全版本边后 Java 过滤，
+        // 消除 O(N×E) 全量扫描与 projectId=null 的跨项目串读风险（见 doc §两套回写服务的确切差异与统一方案）。
         List<GraphEdge> edges = neo4jGraphDao.queryEdges(
-                null, result.getVersionId(), null, null, 0);
+                testCase.getProjectId(), result.getVersionId(),
+                null, targetNodeId, null, null, null, 0);
         for (GraphEdge edge : edges) {
             if (!targetNodeId.equals(edge.getToNodeId())) continue;
             BigDecimal newConfidence = edge.getConfidence().add(BigDecimal.valueOf(0.05));
@@ -97,8 +106,9 @@ public class GraphValidatorService {
                         updated++;
                     }
                 } else {
+                    // 仅惩罚与被测目标节点相连的边，而非全版本同类边（见 doc §两套回写服务的确切差异与统一方案 隐患2）
                     List<GraphEdge> edges = neo4jGraphDao.queryEdges(
-                            projectId, result.getVersionId(), null, null, 0);
+                            projectId, result.getVersionId(), null, null, targetNodeId, null, null, 0);
                     for (GraphEdge edge : edges) {
                         if (!targetNodeId.equals(edge.getToNodeId())) continue;
                         if (!"IMPLEMENTED_BY".equals(edge.getEdgeType()) && !"EXPOSED_BY".equals(edge.getEdgeType()))
@@ -114,7 +124,10 @@ public class GraphValidatorService {
                 break;
 
             case "DB_ASSERTION":
-                List<GraphEdge> dbEdges = neo4jGraphDao.queryEdges(projectId, result.getVersionId(), null, null, 0);
+                // 只降与被测目标节点相连的 READS/WRITES 边，避免一条断言失败惩罚全版本读写边
+                List<GraphEdge> dbEdges = targetNodeId != null
+                        ? neo4jGraphDao.queryEdges(projectId, result.getVersionId(), null, null, targetNodeId, null, null, 0)
+                        : List.of();
                 for (GraphEdge edge : dbEdges) {
                     if (!"READS".equals(edge.getEdgeType()) && !"WRITES".equals(edge.getEdgeType())) continue;
                     BigDecimal newConfidence = edge.getConfidence().subtract(BigDecimal.valueOf(0.15));
@@ -126,7 +139,10 @@ public class GraphValidatorService {
                 break;
 
             case "PERMISSION":
-                List<GraphEdge> permEdges = neo4jGraphDao.queryEdges(projectId, result.getVersionId(), null, null, 0);
+                // 只降与被测目标节点相连的 REQUIRES_PERMISSION 边
+                List<GraphEdge> permEdges = targetNodeId != null
+                        ? neo4jGraphDao.queryEdges(projectId, result.getVersionId(), null, null, targetNodeId, null, null, 0)
+                        : List.of();
                 for (GraphEdge edge : permEdges) {
                     if (!"REQUIRES_PERMISSION".equals(edge.getEdgeType())) continue;
                     BigDecimal newConfidence = edge.getConfidence().subtract(BigDecimal.valueOf(0.2));

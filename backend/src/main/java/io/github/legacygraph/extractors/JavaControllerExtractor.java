@@ -44,7 +44,11 @@ public class JavaControllerExtractor {
 
         ParseResult<CompilationUnit> resultCU = javaParser.parse(javaFile);
         if (!resultCU.isSuccessful() || resultCU.getResult().isEmpty()) {
-            log.warn("Failed to parse Java file: {}", javaFile);
+            // 偶发 I/O 竞争导致读入不完整 → 重试一次
+            resultCU = javaParser.parse(javaFile);
+        }
+        if (!resultCU.isSuccessful() || resultCU.getResult().isEmpty()) {
+            log.debug("Failed to parse Java file: {}", javaFile);
             return result;
         }
 

@@ -1,6 +1,5 @@
 package io.github.legacygraph.extractors.adapter;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.repository.FactRepository;
@@ -28,22 +27,13 @@ public class FactPersister {
     }
 
     /**
-     * 保存抽取事实（唯一约束：project_id + version_id + fact_type + fact_key，重复跳过）。
+     * 保存抽取事实（使用 DB 级 INSERT ... ON CONFLICT DO NOTHING，消除 check-then-insert 竞态）。
      */
     public void saveFact(String projectId, String versionId, String sourceType, String factType,
                          String factKey, String factName, String sourcePath,
                          Integer startLine, Integer endLine, Object data,
                          BigDecimal confidence, String status) {
         try {
-            long exists = factRepository.selectCount(
-                    new LambdaQueryWrapper<Fact>()
-                            .eq(Fact::getProjectId, projectId)
-                            .eq(Fact::getVersionId, versionId)
-                            .eq(Fact::getFactType, factType)
-                            .eq(Fact::getFactKey, factKey));
-            if (exists > 0) {
-                return;
-            }
             Fact fact = new Fact();
             fact.setId(UUID.randomUUID().toString());
             fact.setProjectId(projectId);
@@ -60,7 +50,7 @@ public class FactPersister {
             fact.setStatus(status);
             fact.setCreatedAt(LocalDateTime.now());
             fact.setUpdatedAt(LocalDateTime.now());
-            factRepository.insert(fact);
+            factRepository.upsert(fact);
         } catch (Exception e) {
             log.error("Failed to save fact", e);
         }

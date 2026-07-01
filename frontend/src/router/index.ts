@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { loadAllDicts } from '@/utils/dict'
 
 /**
  * F-H6：路由元信息类型增强。
@@ -210,6 +211,24 @@ const routes: RouteRecordRaw[] = [
             name: 'EvidenceWorkbench',
             component: () => import('@/views/workbench/EvidenceWorkbench.vue'),
             meta: { title: '证据工作台' }
+          },
+          {
+            path: 'change-tasks',
+            name: 'ChangeTaskList',
+            component: () => import('@/views/change/ChangeTaskList.vue'),
+            meta: { title: '变更任务' }
+          },
+          {
+            path: 'qa',
+            name: 'GraphQa',
+            component: () => import('@/views/graph/GraphQa.vue'),
+            meta: { title: '图谱问答' }
+          },
+          {
+            path: 'agents',
+            name: 'AgentHub',
+            component: () => import('@/views/agent/AgentHub.vue'),
+            meta: { title: 'AI 助手' }
           }
         ]
       },
@@ -289,11 +308,19 @@ router.beforeEach(async (to, _from, next) => {
     if (!userStore.userInfo && userStore.accessToken) {
       try {
         await userStore.fetchCurrentUser()
-      } catch (error) {
+      } catch {
+        // fetchCurrentUser 内部已 clearAuth，此处兜底
+        next('/login')
+        return
+      }
+      // fetchCurrentUser 失败时内部已清除 token，跳回登录页
+      if (!userStore.accessToken) {
         next('/login')
         return
       }
     }
+    // 确保字典已加载到内存（页面刷新后缓存丢失，需重新加载）
+    loadAllDicts()
     // F-H6：路由级角色守卫——meta.roles 命中其一才放行，否则跳 403。
     const requiredRoles = to.meta.roles
     if (requiredRoles && requiredRoles.length > 0 && !userStore.hasAnyRole(requiredRoles)) {

@@ -6,6 +6,7 @@ import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ReviewConfirmRequest;
+import io.github.legacygraph.dto.ReviewCreateRequest;
 import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.ReviewRecordRepository;
@@ -95,6 +96,48 @@ public class ReviewController {
                 query.getPageSize()
         );
         return Result.success(result);
+    }
+
+    @PostMapping
+    @Operation(summary = "创建待审核项")
+    public Result<ReviewRecord> createReview(
+            @PathVariable String projectId,
+            @RequestBody ReviewCreateRequest request) {
+
+        if (request == null || !StringUtils.hasText(request.getTargetId())) {
+            return Result.error("目标ID不能为空");
+        }
+
+        String targetType = StringUtils.hasText(request.getTargetType()) ? request.getTargetType() : "NODE";
+        LambdaQueryWrapper<ReviewRecord> existingWrapper = new LambdaQueryWrapper<>();
+        existingWrapper.eq(ReviewRecord::getProjectId, projectId)
+                .eq(ReviewRecord::getTargetType, targetType)
+                .eq(ReviewRecord::getTargetId, request.getTargetId())
+                .in(ReviewRecord::getStatus, "PENDING", "NEED_REVIEW")
+                .last("LIMIT 1");
+
+        ReviewRecord existing = reviewRecordRepository.selectOne(existingWrapper);
+        if (existing != null) {
+            return Result.success(existing);
+        }
+
+        ReviewRecord record = new ReviewRecord();
+        record.setId(UUID.randomUUID().toString());
+        record.setProjectId(projectId);
+        record.setVersionId(resolveVersionId(projectId, request.getVersionId()));
+        record.setTargetType(targetType);
+        record.setTargetId(request.getTargetId());
+        record.setTargetName(StringUtils.hasText(request.getTargetName()) ? request.getTargetName() : request.getTargetId());
+        record.setGraphType(StringUtils.hasText(request.getGraphType()) ? request.getGraphType() : "DRIFT");
+        record.setConfidence(request.getConfidence() != null ? request.getConfidence() : 0.5D);
+        record.setEvidenceCount(request.getEvidenceCount());
+        record.setPriority(StringUtils.hasText(request.getPriority()) ? request.getPriority() : "MEDIUM");
+        record.setStatus("PENDING");
+        record.setComment(request.getComment());
+        record.setCreatedAt(LocalDateTime.now());
+
+        reviewRecordRepository.insert(record);
+        return Result.success(record);
     }
 
     @GetMapping("/history")

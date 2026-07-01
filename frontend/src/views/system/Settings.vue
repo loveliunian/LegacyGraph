@@ -4,6 +4,10 @@
       <template #header>
         <div class="card-header">
           <span>系统配置</span>
+          <el-button type="primary" size="small" @click="showCreateDialog">
+            <el-icon><Plus /></el-icon>
+            新建配置
+          </el-button>
         </div>
       </template>
 
@@ -29,7 +33,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="configDesc" label="描述" min-width="200" />
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="editingId !== row.id"
@@ -39,26 +43,62 @@
             >
               编辑
             </el-button>
+            <el-button
+              link
+              size="small"
+              type="danger"
+              @click="handleDelete(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- 新建配置对话框 -->
+    <el-dialog v-model="dialogVisible" title="新建系统配置" width="500px" destroy-on-close>
+      <el-form :model="formData" label-width="80px">
+        <el-form-item label="配置键" required>
+          <el-input v-model="formData.configKey" placeholder="如：scan.defaultTimeout" />
+        </el-form-item>
+        <el-form-item label="配置值" required>
+          <el-input v-model="formData.configValue" placeholder="配置值" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="formData.configDesc" placeholder="配置说明" type="textarea" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreate" :loading="submitting">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { systemApi } from '@/api'
 import SearchForm from '@/components/common/SearchForm.vue'
 import type { SystemConfig } from '@/types'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const list = ref<SystemConfig[]>([])
 const editingId = ref<string | null>(null)
+const dialogVisible = ref(false)
+const submitting = ref(false)
 
 const filterParams = ref({
   configKey: '',
+})
+
+const formData = reactive({
+  configKey: '',
+  configValue: '',
+  configDesc: '',
 })
 
 async function loadData() {
@@ -96,6 +136,54 @@ async function handleSave(row: SystemConfig) {
   } catch (error) {
     console.error(error)
     ElMessage.error('保存失败')
+  }
+}
+
+async function handleDelete(row: SystemConfig) {
+  try {
+    await ElMessageBox.confirm(`确定删除配置「${row.configKey}」吗？`, '确认删除', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await systemApi.deleteConfig(row.id)
+    ElMessage.success('已删除')
+    loadData()
+  } catch {
+    // cancelled
+  }
+}
+
+function showCreateDialog() {
+  formData.configKey = ''
+  formData.configValue = ''
+  formData.configDesc = ''
+  dialogVisible.value = true
+}
+
+async function handleCreate() {
+  if (!formData.configKey.trim()) {
+    ElMessage.warning('请填写配置键')
+    return
+  }
+  if (!formData.configValue.trim()) {
+    ElMessage.warning('请填写配置值')
+    return
+  }
+  submitting.value = true
+  try {
+    await systemApi.createConfig({
+      configKey: formData.configKey,
+      configValue: formData.configValue,
+      configDesc: formData.configDesc,
+    })
+    ElMessage.success('创建成功')
+    dialogVisible.value = false
+    loadData()
+  } catch {
+    ElMessage.error('创建失败')
+  } finally {
+    submitting.value = false
   }
 }
 

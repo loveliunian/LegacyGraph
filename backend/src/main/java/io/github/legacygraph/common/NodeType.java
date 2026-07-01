@@ -33,7 +33,14 @@ public enum NodeType {
     ExternalSystem("外部系统"),
     TestCase("测试用例"),
     Assertion("断言"),
-    Evidence("证据");
+    Evidence("证据"),
+
+    // ========== 变更闭环节点（增强版2：ChangeTask 管道） ==========
+    ChangeTask("变更任务"),
+    Patch("补丁"),
+    PullRequest("PR"),
+    Dependency("依赖"),
+    VersionRisk("版本风险");
 
     private final String description;
 

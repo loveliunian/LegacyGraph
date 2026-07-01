@@ -183,5 +183,54 @@ export const systemApi = {
 
   updateConfig: (id: string, data: Partial<SystemConfig>) => {
     return put(`/lg/system/configs/${id}`, data)
+  },
+
+  /**
+   * 创建系统配置
+   * @param data 配置数据
+   */
+  createConfig: (data: Partial<SystemConfig>) => {
+    return post<SystemConfig>('/lg/system/configs', data)
+  },
+
+  /**
+   * 删除系统配置
+   * @param id 配置ID
+   */
+  deleteConfig: (id: string) => {
+    return del(`/lg/system/configs/${id}`)
+  },
+
+  /**
+   * 根据配置键获取配置
+   * @param key 配置键
+   */
+  getConfigByKey: (key: string) => {
+    return get<SystemConfig>(`/lg/system/configs/key/${encodeURIComponent(key)}`)
+  },
+
+  /**
+   * 获取所有系统配置
+   */
+  getAllConfigs: () => {
+    return get<SystemConfig[]>('/lg/system/configs/all')
+  },
+
+  /**
+   * 根据配置键更新配置
+   * @param key 配置键
+   * @param data 配置数据
+   */
+  updateConfigByKey: (key: string, data: Partial<SystemConfig>) => {
+    return put(`/lg/system/configs/key/${encodeURIComponent(key)}`, data)
+  },
+
+  /**
+   * 切换用户启用/禁用状态
+   * @param id 用户ID
+   * @param data 状态数据（包含 status 字段）
+   */
+  toggleUserStatus: (id: string, data: { status: string }) => {
+    return put(`/lg/system/users/${id}/status`, data)
   }
 }

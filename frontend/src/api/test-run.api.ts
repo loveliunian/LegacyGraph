@@ -157,5 +157,22 @@ export const testRunApi = {
    */
   rerunFailed: (projectId: string, runId: string) => {
     return post<string>(`/lg/projects/${projectId}/test-runs/${runId}/rerun-failed`)
+  },
+
+  /**
+   * 取消测试运行
+   * @param projectId 项目ID
+   * @param runId 测试运行ID
+   */
+  cancelRun: (projectId: string, runId: string) => {
+    return post(`/lg/projects/${projectId}/test-runs/${runId}/cancel`)
+  },
+
+  /**
+   * 获取测试运行统计
+   * @param projectId 项目ID
+   */
+  getRunStats: (projectId: string) => {
+    return get(`/lg/projects/${projectId}/test-runs/stats`)
   }
 }

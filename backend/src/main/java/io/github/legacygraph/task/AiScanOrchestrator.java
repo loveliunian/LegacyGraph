@@ -529,15 +529,6 @@ public class AiScanOrchestrator {
     private boolean saveAiFact(String projectId, String versionId, String factType, String factKey,
                                String factName, String sourcePath, Object data, double confidence) {
         try {
-            long exists = factRepository.selectCount(
-                    new LambdaQueryWrapper<Fact>()
-                            .eq(Fact::getProjectId, projectId)
-                            .eq(Fact::getVersionId, versionId)
-                            .eq(Fact::getFactType, factType)
-                            .eq(Fact::getFactKey, factKey));
-            if (exists > 0) {
-                return false;
-            }
             Fact fact = new Fact();
             fact.setId(UUID.randomUUID().toString());
             fact.setProjectId(projectId);
@@ -554,7 +545,7 @@ public class AiScanOrchestrator {
             fact.setCreatedBy("ai-orchestrator");
             fact.setCreatedAt(LocalDateTime.now());
             fact.setUpdatedAt(LocalDateTime.now());
-            factRepository.insert(fact);
+            factRepository.upsert(fact);
             return true;
         } catch (Exception e) {
             log.warn("Failed to save AI fact {}: {}", factKey, e.getMessage());

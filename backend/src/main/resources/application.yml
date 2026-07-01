@@ -10,9 +10,9 @@ spring:
 
   # 数据源配置
   datasource:
-    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/legacy_graph}
-    username: ${POSTGRES_USERNAME:legacygraph}
-    password: ${POSTGRES_PASSWORD}
+    url: ${POSTGRES_URL:jdbc:postgresql://118.145.225.100:5432/legacy_graph}
+    username: ${POSTGRES_USERNAME:mumuai}
+    password: ${POSTGRES_PASSWORD:Liucl157}
     driver-class-name: org.postgresql.Driver
     hikari:
       minimum-idle: 5
@@ -37,9 +37,9 @@ spring:
   # Redis 配置
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:47.95.208.205}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD}
+      password: ${REDIS_PASSWORD:Liucl157}
       database: 11
       lettuce:
         pool:
@@ -62,10 +62,10 @@ spring:
 
   # Neo4j 配置
   neo4j:
-    uri: ${NEO4J_URI:bolt://localhost:7687}
+    uri: ${NEO4J_URI:bolt://118.145.225.100:7687}
     authentication:
       username: ${NEO4J_USERNAME:neo4j}
-      password: ${NEO4J_PASSWORD:neo4j}
+      password: ${NEO4J_PASSWORD:Liucl157}
 
   # Spring AI OpenAI 配置（兼容 DeepSeek）
   # api-key 从数据库 lg_llm_provider 表读取，此处仅做占位
@@ -101,14 +101,14 @@ mybatis-plus:
 
 # MinIO 配置
 minio:
-  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-  access-key: ${MINIO_ACCESS_KEY}
-  secret-key: ${MINIO_SECRET_KEY}
+  endpoint: ${MINIO_ENDPOINT:http://47.95.208.205:9000}
+  access-key: ${MINIO_ACCESS_KEY:admin}
+  secret-key: ${MINIO_SECRET_KEY:Liucl@157}
   bucket-name: legacy-graph
 
 # JWT 配置
-# jwt.secret 默认值在 JwtUtil.java 的 @Value 中定义，通过 JWT_SECRET 环境变量覆盖
 jwt:
+  secret: legacy-graph-secret-key-for-jwt-token-authentication-2026
   expiration: 86400000
 
 # 日志配置
@@ -138,6 +138,10 @@ legacy-graph:
     allow-production-test: false
     # 测试执行超时时间 (秒)
     execution-timeout: 300
+    base-url:
+      dev: ${LEGACYGRAPH_TEST_BASE_URL_DEV:http://localhost:8080}
+      test: ${LEGACYGRAPH_TEST_BASE_URL_TEST:http://localhost:8080}
+      prod: ${LEGACYGRAPH_TEST_BASE_URL_PROD:http://localhost:8080}
   ai:
     # LLM 超时时间 (秒)
     llm-timeout: 120

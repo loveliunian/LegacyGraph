@@ -9,6 +9,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -100,6 +101,17 @@ public class GlobalExceptionHandler {
     public Result<Void> handleAccessDeniedException(AccessDeniedException e) {
         log.warn("权限异常: {}", e.getMessage());
         return Result.code(ErrorCode.FORBIDDEN.getCode(), "无权限访问");
+    }
+
+    /**
+     * 处理缺少必填请求参数异常
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleMissingServletRequestParameterException(MissingServletRequestParameterException e) {
+        log.warn("缺少必填参数: {}", e.getMessage());
+        return Result.code(ErrorCode.PARAM_ERROR.getCode(),
+                "缺少必填参数: " + e.getParameterName());
     }
 
     /**

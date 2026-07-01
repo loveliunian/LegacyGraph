@@ -390,6 +390,7 @@ public class GraphQueryService {
             m.put("id", node.getId());
             m.put("key", node.getNodeKey());
             m.put("label", node.getDisplayName());
+            m.put("name", node.getNodeName());          // Cypher 查询匹配用 nodeName
             m.put("type", node.getNodeType());
             m.put("confidence", node.getConfidence());
             m.put("status", node.getStatus());

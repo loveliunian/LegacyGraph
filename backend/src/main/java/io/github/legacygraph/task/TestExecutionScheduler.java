@@ -8,6 +8,7 @@ import io.github.legacygraph.service.GraphValidatorService;
 import io.github.legacygraph.test.ApiTestExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class TestExecutionScheduler {
     private final TestResultRepository testResultRepository;
     private final ApiTestExecutor apiTestExecutor;
     private final GraphValidatorService graphValidatorService;
+    private final io.github.legacygraph.service.TestResultUpdateService testResultUpdateService;
 
     // 线程池配置 - 控制最大并发数
     private final ExecutorService executorService;
@@ -39,25 +41,30 @@ public class TestExecutionScheduler {
     // 统计
     private final AtomicInteger activeTasks = new AtomicInteger(0);
 
+    // 测试环境 base URL（可通过配置覆盖，见 doc §ValidationGateRunner 与现有测试执行链的衔接）
+    @Value("${legacy-graph.test.base-url.dev:http://localhost:8080}")
+    private String devBaseUrl;
+    @Value("${legacy-graph.test.base-url.test:http://localhost:8080}")
+    private String testBaseUrl;
+    @Value("${legacy-graph.test.base-url.prod:http://localhost:8080}")
+    private String prodBaseUrl;
+
     @Autowired
     public TestExecutionScheduler(
             TestCaseRepository testCaseRepository,
             TestResultRepository testResultRepository,
             ApiTestExecutor apiTestExecutor,
-            GraphValidatorService graphValidatorService) {
+            GraphValidatorService graphValidatorService,
+            io.github.legacygraph.service.TestResultUpdateService testResultUpdateService) {
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
         this.apiTestExecutor = apiTestExecutor;
         this.graphValidatorService = graphValidatorService;
+        this.testResultUpdateService = testResultUpdateService;
 
-        // 默认最大并发数：可通过配置读取
+        // 使用虚拟线程执行测试（Semaphore 控制并发数，默认最大 5）
         int maxConcurrency = 5;
-        this.executorService = new ThreadPoolExecutor(
-                2, maxConcurrency,
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(100),
-                new ThreadPoolExecutor.CallerRunsPolicy()
-        );
+        this.executorService = Executors.newVirtualThreadPerTaskExecutor();
         this.concurrencySemaphore = new Semaphore(maxConcurrency);
     }
 
@@ -123,7 +130,10 @@ public class TestExecutionScheduler {
 
             }
 
-            // 更新图谱置信度
+            // 更新图谱置信度（统一回写，见 doc §两套回写服务的确切差异与统一方案）：
+            // ① 执行级细粒度回写：按 targetNodeId 写 verifiedScore（唯一测试验证累加字段）
+            testResultUpdateService.updateConfidenceByTestResults(runId);
+            // ② 版本级报表刷新：按 targetNodeId 邻域精确更新（已修全量扫描/过度降分），并失效缓存
             graphValidatorService.updateConfidenceByTestResults(versionId);
 
             log.info("Test run completed: {}, passed={}, failed={}", runId, passed, failed);
@@ -187,15 +197,14 @@ public class TestExecutionScheduler {
     }
 
     /**
-     * 根据环境获取base URL
+     * 根据环境获取 base URL（从配置读取，未配置时回退 localhost）。
      */
     private String getBaseUrl(String environment) {
-        // 实际应该从配置或数据库读取
-        return switch (environment) {
-            case "dev" -> "http://localhost:8080";
-            case "test" -> "http://test-api.example.com";
-            case "prod" -> "https://api.example.com";
-            default -> "http://localhost:8080";
+        return switch (environment != null ? environment : "") {
+            case "dev" -> devBaseUrl;
+            case "test" -> testBaseUrl;
+            case "prod" -> prodBaseUrl;
+            default -> devBaseUrl;
         };
     }
 

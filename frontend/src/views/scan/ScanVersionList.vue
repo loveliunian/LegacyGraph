@@ -80,6 +80,8 @@
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
           <el-button type="warning" link size="small" @click="compareWithPrevious(row)">对比</el-button>
+          <el-button v-if="row.status === 'RUNNING'" type="warning" link size="small" @click="pauseScan(row)">暂停</el-button>
+          <el-button v-if="row.status === 'PAUSED'" type="success" link size="small" @click="resumeScan(row)">恢复</el-button>
           <el-button v-if="row.status === 'RUNNING'" type="danger" link size="small" @click="stopScan(row)">停止</el-button>
           <el-button type="danger" link size="small" @click="deleteVersion(row)">删除</el-button>
         </template>
@@ -228,6 +230,36 @@ const stopScan = async (row: any) => {
     })
     await post(`/lg/projects/${projectId}/scan-versions/${row.id}/cancel`)
     ElMessage.success('扫描已停止')
+    await loadVersionList()
+  } catch {
+    // cancelled
+  }
+}
+
+const pauseScan = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(`确定暂停「${row.versionName}」吗？`, '提示', {
+      confirmButtonText: '确定暂停',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await post(`/lg/projects/${projectId}/scan-versions/${row.id}/pause`)
+    ElMessage.success('扫描已暂停')
+    await loadVersionList()
+  } catch {
+    // cancelled
+  }
+}
+
+const resumeScan = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(`确定恢复「${row.versionName}」吗？`, '提示', {
+      confirmButtonText: '确定恢复',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+    await post(`/lg/projects/${projectId}/scan-versions/${row.id}/resume`)
+    ElMessage.success('扫描已恢复')
     await loadVersionList()
   } catch {
     // cancelled

@@ -40,6 +40,7 @@ class ProjectScannerCoreTest {
                 documentRepository,
                 null,  // graphBuilder
                 null,  // frontendGraphBuilder
+                null,  // neo4jGraphDao
                 objectMapper,
                 null,  // aiScanOrchestrator
                 null,  // dbSchemaAnalysisAgent

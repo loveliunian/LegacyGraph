@@ -1,6 +1,6 @@
 # LegacyGraph 三类图谱共建、Markdown 导出与 AI 修复重构升级的可实施详细设计与落地方案
 
-## Executive Summary
+## 执行摘要
 
 这份方案的核心判断是：**三类图谱本身并不等于“全面理解老项目”**。真正能支撑后续自动修复 bug、重构系统、升级依赖与框架的，不只是业务图谱、功能图谱、代码图谱，还必须补上**证据层、置信度层、测试验证层、运行链路层、版本与变更层**。否则图谱只能“好看”，不能“可信”，更不能成为 AI 生成补丁与 PR 的可靠上下文。现有 LegacyGraph 方案已经明确了输入层→扫描层→抽取层→事实层→图谱层→AI 层→验证层→展示层的整体架构，也已经列出了 CodeFactAgent、DocUnderstandingAgent、FeatureMappingAgent、GraphMergeAgent、TestCaseAgent、ReviewAgent 等基础角色，这为下一步引入 LLM 与静态分析共建三类图谱提供了很好的起点。
 
@@ -883,7 +883,19 @@ PatchPlan 进入落盘前必须做三类校验：
 
 ## 差距分析、前端页面、CI/CD 与里程碑
 
-当前方案距离“图谱驱动 AI 修复、重构、升级”的理想状态，核心差距不在单个 Agent，而在**五个缺口**：一是**事实层已经能跑，但抽取覆盖还不完整**；二是**运行验证层已有 Trace/Test 回写入口，但链路粒度还偏粗**；三是**Markdown 已支持报告级导出，但未支持 FeatureSlice/ChangeTask 审计导出**；四是**变更类 Agent 已有建议接口，但还没有 PR 级自动化任务管道**；五是**缺少持续评估基线与验收指标**。这和代码现状是一致的：基础设施已具备，下一阶段要做的是围绕现有主线补闭环，而不是推倒重来。
+当前方案距离“图谱驱动 AI 修复、重构、升级”的理想状态，核心差距不在单个 Agent，而在**五个缺口**：
+
+一是**事实层已经能跑，但抽取覆盖还不完整**；
+
+二是**运行验证层已有 Trace/Test 回写入口，但链路粒度还偏粗**；
+
+三是**Markdown 已支持报告级导出，但未支持 FeatureSlice/ChangeTask 审计导出**；
+
+四是**变更类 Agent 已有建议接口，但还没有 PR 级自动化任务管道**；
+
+五是**缺少持续评估基线与验收指标**。
+
+这和代码现状是一致的：基础设施已具备，下一阶段要做的是围绕现有主线补闭环，而不是推倒重来。
 
 更具体地说，仅靠三类图谱还缺以下**六个支撑层**：
 
@@ -1082,3 +1094,120 @@ jobs:
 - **统一置信度回写**：可行性**高但必须先做**，否则变更任务门禁的“通过/失败”信号会被双轨字段与全量扫描污染，是整个闭环的可信度地基。
 
 落地顺序仍是：**先把“事实—证据—图谱—测试”这条链做硬（含统一回写），再把“LLM—Markdown—修复/重构/升级”这条链接上去；不要反过来。** 这样做出来的 LegacyGraph，才不是“会解释代码的演示系统”，而是真正能帮助团队持续维护老项目、修复 bug、重构系统并安全升级的工程平台。
+
+## 附录 C：实施完成情况（增强版1 + ChangeTask 数据模型）
+
+> 本轮已按本文档实施“增强版1 全部 + 增强版2 的 ChangeTask 数据模型地基”，代码改动在 `main` 上完成。后端 `mvn compile` / `test-compile` 通过；相关单测 `GraphValidatorServiceTest`(15) / `ChangeReportServiceTest`(3) / `ReportExportServiceTest`(10, 2 skip) / `TestResultUpdateServiceTest`(2) / `ReportExportControllerTest`(9) / 三个 Builder 测试 + `GraphQueryControllerUnitTest` 全部 PASS。**未做**：PatchPlanAgent / ImpactSubgraphService / ValidationGateRunner 执行体 / ChangeTaskController / 前端变更任务中心（属可用版及以后）。
+
+### C.1 已完成项与代码落点
+
+| 里程碑项 | 状态 | 代码落点 |
+|---|---|---|
+| 枚举扩展（5 NodeType + 4 EdgeType） | ✅ 完成 | `common/NodeType.java`（+ChangeTask/Patch/PullRequest/Dependency/VersionRisk）、`common/EdgeType.java`（+AFFECTS/FIXED_BY/MIGRATES_TO/DEPENDS_ON） |
+| ChangeTask 数据模型（4 实体 + 4 仓储 + 迁移） | ✅ 完成 | `entity/ChangeTask.java`、`PatchFile.java`、`ValidationGate.java`、`PrTask.java`；`repository/*Repository.java`（4 个）；`db/migration/V9__change_task.sql`；H2 测试 schema 同步 |
+| FeatureSlice/ChangeTask Markdown 装配 | ✅ 完成 | 新增 `service/ChangeReportService.java`（`generateFeatureSliceMarkdown` / `generateChangeTaskMarkdown`），直接消费 `FeatureSliceBuilder.buildSliceById` 与 ChangeTask 管道实体，按 CODE/SQL/DOC/UI/TEST 分组证据、拉取最近测试结果 |
+| ReportType 扩展 + 范围级导出入口 | ✅ 完成 | `ReportExportService`：`ReportType` 增 `FEATURE_SLICE`/`CHANGE_TASK`；新增 `exportScopedReport(projectId, scopeId, type, format)`，PDF 复用 flexmark→openhtmltopdf；MD/PDF 支持，Excel 明确抛出不支持 |
+| 导出路由 | ✅ 完成 | `ReportExportController`：`GET /reports/feature-slice/{projectId}/{sliceId}?format=MD\|PDF`、`GET /reports/change-task/{projectId}/{taskId}?format=MD\|PDF` |
+| 统一测试置信度回写（修隐患1/2） | ✅ 完成 | `GraphValidatorService`：`updateByPassedResult` 改用 8 参 `queryEdges(projectId, versionId, null, targetNodeId, ...)`，消除 `projectId=null` 全量扫描与跨项目串读；DB_ASSERTION/PERMISSION 失败改为按 `connectedNodeId=targetNodeId` 邻域降分，不再惩罚全版本同类边；补 Javadoc 明确“版本级 vs 执行级”职责边界 |
+| 单测 | ✅ 完成 | 新增 `ChangeReportServiceTest`；`GraphValidatorServiceTest` 按新 `queryEdges` 签名更新桩；`ReportExportServiceTest` 构造器补 `ChangeReportService` mock |
+
+### C.2 与文档设计的偏差说明
+
+1. **范围级导出走独立入口而非复用 `exportReport`**：因 FEATURE_SLICE/CHANGE_TASK 以 sliceId/taskId 为范围（非 versionId），若塞进原 `exportReport(projectId, versionId, ...)` 会污染语义。故新增 `exportScopedReport(...)`，原三处 `switch` 对这两个枚举值显式抛错引导到新入口。
+2. **Markdown 装配独立成 `ChangeReportService`**：而非直接堆进已有 900+ 行的 `ReportExportService`，保持后者聚焦格式转换。`ReportExportService` 仅注入并委托。
+3. **`GraphValidatorService` 采取“修而不删”**：本轮先修全量扫描与过度降分两处隐患（隐患1/2），使其可安全用作版本级刷新；文档建议的“最终以 `verifiedScore` 为唯一累加字段、彻底移除对 `confidence` 的直写”涉及 `TestExecutionScheduler`/`TestCaseController` 回写入口切换，风险较高，留待增强版2 随 ValidationGateRunner 一并收敛。隐患3（`graphPath`/`recentTrace` 空串）同理留待 ImpactSubgraphService 就绪后填充。
+4. **迁移脚本双方言**：`V9__change_task.sql` 用 Postgres（UUID/JSONB），`schema-h2.sql` 同步 4 张表（VARCHAR(36)/TEXT），与仓库既有测试约定一致。
+
+### C.3 变更闭环编排（增强版2 第二批，本轮新增）
+
+> 在 C.1 的数据模型地基上，本轮补齐 ChangeTask 管道的**编排层**：影响子图提取、PatchPlan 契约与适配器、任务状态机与 REST 入口。后端 `mvn compile` 通过；新增单测 `PatchPlanValidatorTest`(5) / `ImpactSubgraphServiceTest`(2) / `ChangeTaskServiceTest`(3) 全绿，连同既有受影响套件共 **49 测试 PASS（2 pre-existing skip）**。
+
+| 里程碑项 | 状态 | 代码落点 |
+|---|---|---|
+| ImpactSubgraphService | ✅ 完成 | `service/ImpactSubgraphService.java` + `dto/graph/ImpactSubgraph.java`：用 8 参 `queryEdges(connectedNodeId)` 取目标节点邻域（非全量扫描），产出 nodeIds/edgeIds/impactedFiles + 供 LLM 的 `dependencySummary`，回填 `ChangeImpactAgent.analyze` 的 dependencies 入参 |
+| PatchPlan 契约 | ✅ 完成 | `dto/graph/PatchPlan.java`：对齐 doc §PatchPlan 输出契约（impactedFiles/patches/newTests/validationGates/manualReviewNeeded） |
+| PatchPlan 三类校验 | ✅ 完成 | `service/PatchPlanValidator.java`：范围校验（越界文件）、格式校验（unified diff）、证据校验（每 patch 至少一条 evidence）；任一越界/缺证据 → needsReview |
+| Refactor/Migration Adapter | ✅ 完成 | `agent/adapter/RefactorAgentAdapter.java`、`MigrationAgentAdapter.java`：复用现有 Agent，把 RefactorSuggestion/MigrationConversion 适配为 PatchPlan 草案 |
+| ChangeTaskService 状态机 | ✅ 完成 | `service/ChangeTaskService.java`：createTask(OPEN) → refreshImpact(IMPACT_READY, 调 ChangeImpactAgent) → generatePatch(PATCH_DRAFTED / 越界或缺证据→REVIEW_PENDING+建 ReviewRecord) → registerGates(VALIDATING)；补丁落 `lg_patch_file`，门禁落 `lg_validation_gate` |
+| ChangeTaskController | ✅ 完成 | `controller/ChangeTaskController.java`：`POST /change-tasks`、`GET /change-tasks/{id}`、`POST /change-tasks/{id}/impact`、`/generate-patch`、`/run-validation` |
+| 单测 | ✅ 完成 | `PatchPlanValidatorTest` / `ImpactSubgraphServiceTest` / `ChangeTaskServiceTest`（含越界→REVIEW_PENDING、BUGFIX 未接 PatchPlanAgent 抛错两条关键路径） |
+
+本轮偏差说明：
+
+1. **RefactorAgent 输出骨架而非 diff**：`RefactorAgentAdapter` 把 `refactoredSkeleton` 作为 patchText 草案承载，并强制 `manualReviewNeeded=true`，由人工/后续 PatchPlanAgent 转成可应用 diff。这是现有 Agent 能力的诚实反映，不伪造 diff。
+2. **BUGFIX 暂无自动补丁生成器**：`generatePatch` 对 BUGFIX 显式抛错，等待 `PatchPlanAgent` 就绪；REFACTOR/UPGRADE 走对应 Adapter。
+3. **门禁只登记不执行**：`registerGates` 落 `lg_validation_gate` 记录并置 VALIDATING，真正的门禁执行体（复用 `TestExecutionScheduler`）属 `ValidationGateRunner`，见 C.4。
+4. **`ImpactSubgraphService` 采用节点邻域而非 FeatureSlice**：MVP 用 1 跳邻域即可覆盖“变更目标 + 直接依赖”，`FeatureSliceBuilder` 集成留待需要切片级范围时再加。
+
+### C.4 门禁执行与回写统一（增强版2 第三批，本轮新增）
+
+> 本轮打通“生成→验证→回写”闭环的验证段，并完成文档反复强调的**测试置信度回写统一**。后端 `mvn test-compile` 通过；新增/更新单测 `ValidationGateRunnerTest`(6) / `ChangeTaskServiceTest`(5，含 runValidation 通过/失败两条路径) 等，变更管道相关套件共 **38 测试 PASS**。`@SpringBootTest` 的 `ReportControllerTest` 全上下文可加载（新 Bean 均正确注入），其 3 个失败为预存在的 Neo4j 环境缺失（graph-backed 报告端点返回 500），与本轮改动无关——未触碰 `ReportController`/`ReportingService`/`Neo4jGraphDao`。
+
+| 里程碑项 | 状态 | 代码落点 |
+|---|---|---|
+| ValidationGateRunner | ✅ 完成 | `service/ValidationGateRunner.java`：STATIC/MIGRATION 走受控 `ProcessBuilder`（退出码 0 通过、超时 600s、无命令视为跳过通过）；UNIT/API/DB/E2E 复用 `TestExecutionScheduler.submitTestRun`（不另造执行器）；`runGate` 逐条回写 `lg_validation_gate`，`runAll` 任一失败即整体失败 |
+| 测试回写入口统一 | ✅ 完成 | `task/TestExecutionScheduler`：注入 `TestResultUpdateService`，`executeTestRun` 末尾①执行级细粒度回写（`updateConfidenceByTestResults(runId)`，写 verifiedScore 唯一累加字段）②版本级报表刷新（`GraphValidatorService`，已修全量扫描/过度降分）；两者职责明确不再重复计入同一字段 |
+| ChangeTaskService 接门禁 | ✅ 完成 | 注入 `ValidationGateRunner`，新增 `runValidation(taskId, caseIds, workingDir, environment)`：VALIDATING → VALIDATION_PASSED/VALIDATION_FAILED；失败自动建 ReviewRecord 阻断 PR |
+| Controller 门禁执行 | ✅ 完成 | `controller/ChangeTaskController`：拆分 `POST /{id}/register-gates`（登记）与 `POST /{id}/run-validation`（登记可选+执行并驱动状态），新增 `RunValidationRequest` |
+| 单测 | ✅ 完成 | `ValidationGateRunnerTest`（STATIC 退出码通过/失败、无命令跳过、测试门禁提交/跳过、runAll 任一失败）；`ChangeTaskServiceTest` 补 runValidation 通过/失败两条路径 |
+
+本轮偏差说明：
+
+1. **测试类门禁为异步提交、乐观置 PASS**：`submitTestRun` 是 `@Async`，`runTestGate` 记录 `testRun:{runId}` 后当前先返回通过；最终 PASSED/FAILED 由测试结果回调更新的同步等待/轮询策略留待与 `TestResultRepository` 轮询集成时补齐（已在代码注释标注，不静默）。
+2. **`getBaseUrl` 仍为硬编码**：`TestExecutionScheduler.getBaseUrl` 的 dev/test/prod 映射尚未改为从 `DbConnection`/系统配置读取，门禁打真实环境地址前需先补这一步（doc §ValidationGateRunner 与现有测试执行链的衔接 已列为已知项）。
+3. **命令类门禁用 `/bin/sh -c`**：STATIC/MIGRATION 通过 shell 执行传入命令，仅限受信任的 CI 环境；命令来源应由平台侧固定模板而非用户任意输入。
+
+至此，文档 §两套回写服务的确切差异与统一方案 中的**隐患1（全量扫描）、隐患2（过度降分）、双轨字段统一**三项已全部落地；隐患3（`graphPath`/`recentTrace` 空串）待 `TestFailureAnalysisAgent` 与 ImpactSubgraph 摘要对接时填充。
+
+### C.5 PR 编排（可用版，本轮新增）
+
+> 本轮补齐变更闭环的最后一段——受控 PR 草案生成，落实 doc §安全与回滚策略。变更管道相关套件共 **45 测试 PASS**（新增 `PrOrchestratorTest` 6 条）。
+
+| 里程碑项 | 状态 | 代码落点 |
+|---|---|---|
+| PrOrchestrator | ✅ 完成 | `service/PrOrchestrator.java`：`createPrDraft` 落 `lg_pr_task`（prStatus=DRAFT） |
+| 分支保护 | ✅ 完成 | 分支名固定前缀 `legacygraph/{taskType}/{shortId}-{ts}`，只建 feature branch，不触碰 main/master |
+| 门禁前置校验 | ✅ 完成 | `assertGatesPassed`：任务须 VALIDATION_PASSED 且无 FAILED/PENDING 门禁，否则抛 `IllegalStateException` 拒绝建 PR |
+| reviewer 策略 | ✅ 完成 | bugfix 1 人 / upgrade 2 人；补丁触碰迁移脚本或 `.sql`/schema/flyway → 强制 DBA（`touchesSchema`） |
+| 回滚计划 | ✅ 完成 | 始终生成 `revert-branch` 策略 + 回滚标签 + `dbBackupRequired`（schema 变更时 true） |
+| PR 文案 | ✅ 完成 | 复用 `PrDescriptionAgent.generate`，汇总补丁为 diff 摘要输入；Agent 失败不阻断草案（降级） |
+| ChangeTaskService/Controller | ✅ 完成 | `createPr` 驱动 VALIDATION_PASSED → PR_READY；`POST /change-tasks/{id}/create-pr`（门禁未过返回错误消息） |
+| 单测 | ✅ 完成 | `PrOrchestratorTest`（未验证/门禁失败拒绝、bugfix 单审、upgrade 双审+DBA、schema 强制 DBA、Agent 失败降级）；`ChangeTaskServiceTest` 补 createPr |
+
+本轮偏差说明：
+
+1. **只落 PrTask + 生成文案，不推 Git**：真正的 `git push` / GitHub/GitLab API 调用留待接入具体 VCS 适配器，`prStatus` 从 DRAFT 起步、`prUrl` 待推送后回填。这是诚实边界，不伪造远端 PR。
+2. **PR 文案暂未持久化到 PrTask**：`PrDescription`（title/body/commitMessage）当前记入日志与（后续）接口返回；如需持久化可扩展 `PrTask` 字段或复用 proposal。
+3. **schema 判定基于路径启发式**：`touchesSchema` 按补丁文件路径（migration/.sql/schema/flyway）判断，非解析 DDL；足够驱动 reviewer 策略，精确 DDL 分析留待需要时增强。
+
+至此，**变更闭环后端主链路（创建 → 影响子图 → 补丁草案 → 门禁执行 → PR 草案）已全部打通**，状态机 OPEN→…→PR_READY 各段均有代码与单测；真实 Git 推送 / GitHub 或 GitLab PR 创建、运行时冒烟仍待接入外部环境后补齐。
+
+### C.6 下一步（可用版剩余 + 规模版）
+
+- VCS 适配器：`PrOrchestrator` 接入真实 Git 推送 + GitHub/GitLab PR API，把 `prStatus` 从 `DRAFT` 推进到 `CREATED`，并回填 `prUrl`。该项需要远端仓库、令牌、目标平台和分支保护策略配置，当前仍保持“不伪造远端 PR”的草案边界。
+- 运行时端到端验证：起本地 Postgres + Neo4j，对 `V9` 迁移、`/change-tasks/*` 全链路与门禁执行做一次冒烟（当前主要是编译期 + Mock/H2 单测覆盖）。
+- 精确 DDL / schema 影响分析：当前 `touchesSchema` 仍按路径启发式判断，足够驱动 reviewer 策略；如需更精确，应解析迁移脚本或 SQL patch。
+
+### C.7 2026-07-01 复核修复（本轮新增）
+
+本轮按本文档和当前前后端代码重新复核，代码扫描优先使用 CodeGraph MCP；根索引对新增前端文件覆盖不足时，补建 `backend/` 与 `frontend/` 子目录索引继续核对。新增修复如下：
+
+| 偏移/遗漏 | 修复状态 | 代码落点 |
+|---|---|---|
+| `PatchPlanAgent` 已存在但文档仍称 BUGFIX 占位 | ✅ 已校正状态 | `agent/PatchPlanAgent.java`、`ChangeTaskService.generatePatch` 已将 BUGFIX 路由到 `PatchPlanAgent.generate` |
+| 测试类门禁仍“提交即通过” | ✅ 已修复 | `ValidationGateRunner.runTestGate` 轮询 `TestResultRepository.findByExecutionId(runId)`，只有真实结果全部 `PASSED` 才回写门禁 `PASSED`；失败、错误或超时均 `FAILED` |
+| `getBaseUrl` 配置键与 `application.yml` 前缀不一致 | ✅ 已修复 | `TestExecutionScheduler` 改用 `legacy-graph.test.base-url.*`；`application.yml` 补 `legacy-graph.test.base-url.dev/test/prod` |
+| 前端变更任务中心靠 `localStorage` 记任务 ID | ✅ 已修复 | `ChangeTaskService.listTasks`、`ChangeTaskController.GET /change-tasks?projectId=...`、`frontend/src/api/change-task.api.ts`、`ChangeTaskList.vue` 改为真实项目级列表 |
+| 前端默认验证门禁传 `lint/test/review`，后端不识别 | ✅ 已修复 | `ChangeTaskList.vue` 默认传后端支持的 `STATIC`，避免未知门禁导致误失败 |
+| 前端影响子图刷新静默传空目标节点 | ✅ 已修复 | `ChangeTaskList.vue` 刷新前提示输入目标节点 ID，禁止空值 |
+| 新增 `AgentHub.vue` 类型不匹配 | ✅ 已修复 | 图标改为组件对象，`agentApi.run` 入参由 `variables` 改为 `params` |
+
+本轮验证：
+
+- `mvn -Dtest=ValidationGateRunnerTest test` 通过。
+- `mvn -Dtest=ChangeTaskServiceTest test` 通过。
+- `mvn -Dtest=ChangeTaskServiceTest,ValidationGateRunnerTest test` 通过。
+- `mvn -Dtest=PatchPlanAgentTest,PatchPlanValidatorTest,ImpactSubgraphServiceTest,ChangeReportServiceTest,ChangeTaskServiceTest,PrOrchestratorTest,ValidationGateRunnerTest test` 通过。
+- `mvn test-compile` 通过。
+- `npm run type-check` 通过。
+- `npm run build` 通过。

@@ -753,6 +753,65 @@ CREATE TABLE lg_runtime_trace (
     deleted         SMALLINT NOT NULL DEFAULT 0
 );
 
+-- ============================================
+-- ChangeTask 变更闭环（V9 对应，增强版2）
+-- ============================================
+CREATE TABLE lg_change_task (
+    id                  VARCHAR(36) PRIMARY KEY,
+    project_id          VARCHAR(36) NOT NULL,
+    version_id          VARCHAR(36),
+    task_type           VARCHAR(32)  NOT NULL,
+    title               VARCHAR(255) NOT NULL,
+    input_issue         TEXT,
+    impacted_subgraph   TEXT,
+    proposal            TEXT,
+    risk_level          VARCHAR(16),
+    status              VARCHAR(32)  NOT NULL DEFAULT 'OPEN',
+    agent_run_id        VARCHAR(64),
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP,
+    deleted             SMALLINT     NOT NULL DEFAULT 0
+);
+
+CREATE TABLE lg_patch_file (
+    id                  VARCHAR(36) PRIMARY KEY,
+    change_task_id      VARCHAR(36) NOT NULL,
+    file_path           TEXT         NOT NULL,
+    change_type         VARCHAR(32)  NOT NULL,
+    before_sha          VARCHAR(64),
+    after_sha           VARCHAR(64),
+    patch_text          TEXT         NOT NULL,
+    generated_by        VARCHAR(64)  NOT NULL,
+    evidence_ids        TEXT,
+    status              VARCHAR(32)  NOT NULL DEFAULT 'DRAFT',
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted             SMALLINT     NOT NULL DEFAULT 0
+);
+
+CREATE TABLE lg_validation_gate (
+    id                  VARCHAR(36) PRIMARY KEY,
+    change_task_id      VARCHAR(36) NOT NULL,
+    gate_type           VARCHAR(32)  NOT NULL,
+    command             TEXT,
+    result              VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+    report_uri          TEXT,
+    started_at          TIMESTAMP,
+    finished_at         TIMESTAMP,
+    deleted             SMALLINT     NOT NULL DEFAULT 0
+);
+
+CREATE TABLE lg_pr_task (
+    id                  VARCHAR(36) PRIMARY KEY,
+    change_task_id      VARCHAR(36) NOT NULL,
+    branch_name         VARCHAR(255) NOT NULL,
+    pr_url              TEXT,
+    pr_status           VARCHAR(32)  NOT NULL DEFAULT 'NOT_CREATED',
+    reviewer_policy     TEXT,
+    rollback_plan       TEXT,
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted             SMALLINT     NOT NULL DEFAULT 0
+);
+
 -- Disable referential integrity for tests (FK constraints cause issues with
 -- soft-delete + unique constraint combos in H2)
 SET REFERENTIAL_INTEGRITY FALSE;

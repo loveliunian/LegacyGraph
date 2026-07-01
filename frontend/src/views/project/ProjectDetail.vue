@@ -9,6 +9,7 @@
         
         <el-menu
           :default-active="activeMenu"
+          :default-openeds="defaultOpeneds"
           class="sidebar-menu"
           @select="handleMenuSelect"
         >
@@ -17,78 +18,20 @@
             <span>项目概览</span>
           </el-menu-item>
 
-          <el-sub-menu index="sources">
-            <template #title>
-              <el-icon><FolderOpened /></el-icon>
-              <span>资料接入</span>
-            </template>
-            <el-menu-item :index="`/projects/${projectId}/repos`">代码仓库</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/databases`">数据库连接</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/documents`">文档资料</el-menu-item>
-          </el-sub-menu>
-
-          <el-sub-menu index="scan">
-            <template #title>
-              <el-icon><Search /></el-icon>
-              <span>扫描任务</span>
-            </template>
-            <el-menu-item :index="`/projects/${projectId}/scan-versions`">任务列表</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/scan-versions/create`">新建扫描</el-menu-item>
-          </el-sub-menu>
-
-          <el-sub-menu index="graph">
-            <template #title>
-              <el-icon><Connection /></el-icon>
-              <span>图谱中心</span>
-            </template>
-            <el-menu-item :index="`/projects/${projectId}/graph/unified`">统一图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graph/business`">业务图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graph/feature`">功能图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graph/code`">代码图谱</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graph/lineage`">数据血缘</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/graph/runtime`">运行链路</el-menu-item>
-          </el-sub-menu>
-
-          <el-sub-menu index="fact">
-            <template #title>
-              <el-icon><Document /></el-icon>
-              <span>事实与证据</span>
-            </template>
-            <el-menu-item :index="`/projects/${projectId}/facts`">事实列表</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/evidence`">证据检索</el-menu-item>
-          </el-sub-menu>
-
-          <el-sub-menu index="review">
-            <template #title>
-              <el-icon><DocumentChecked /></el-icon>
-              <span>人工审核</span>
-            </template>
-            <el-menu-item :index="`/projects/${projectId}/reviews`">审核队列</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/review-history`">审核历史</el-menu-item>
-          </el-sub-menu>
-
-          <el-sub-menu index="test">
-            <template #title>
-              <el-icon><VideoPlay /></el-icon>
-              <span>测试验证</span>
-            </template>
-            <el-menu-item :index="`/projects/${projectId}/test-cases`">测试用例</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/test-runs`">测试执行</el-menu-item>
-          </el-sub-menu>
-
-          <el-sub-menu index="report">
-            <template #title>
-              <el-icon><Tickets /></el-icon>
-              <span>验证报告</span>
-            </template>
-            <el-menu-item :index="`/projects/${projectId}/validation`">验证报告</el-menu-item>
-            <el-menu-item :index="`/projects/${projectId}/migration/risks`">迁移风险</el-menu-item>
-          </el-sub-menu>
-
-          <el-menu-item :index="`/projects/${projectId}/workbench`">
-            <el-icon><DocumentChecked /></el-icon>
-            <span>证据工作台</span>
+          <el-menu-item :index="`/projects/${projectId}/qa`">
+            <el-icon><ChatDotRound /></el-icon>
+            <span>QA 问答</span>
           </el-menu-item>
+
+          <el-sub-menu v-for="section in menuSections" :key="section.index" :index="section.index">
+            <template #title>
+              <el-icon><component :is="section.icon" /></el-icon>
+              <span>{{ section.label }}</span>
+            </template>
+            <el-menu-item v-for="item in section.items" :key="item.path" :index="item.path">
+              {{ item.label }}
+            </el-menu-item>
+          </el-sub-menu>
         </el-menu>
       </el-aside>
 
@@ -118,17 +61,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, markRaw, onMounted, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   DataBoard,
   FolderOpened,
-  Search,
   Connection,
-  Document,
   DocumentChecked,
   VideoPlay,
-  Tickets
+  Tools,
+  ChatDotRound
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'
@@ -144,7 +86,96 @@ const projectId = computed(() => route.params.projectId as string)
 const currentProject = computed(() => projectStore.currentProject)
 const runningTasksCount = computed(() => taskStore.runningTasks.length)
 
-const activeMenu = computed(() => route.path)
+interface ProjectMenuItem {
+  label: string
+  path: string
+  routeNames?: string[]
+}
+
+interface ProjectMenuSection {
+  index: string
+  label: string
+  icon: Component
+  items: ProjectMenuItem[]
+}
+
+const menuSections = computed<ProjectMenuSection[]>(() => {
+  const basePath = `/projects/${projectId.value}`
+  return [
+    {
+      index: 'ingest',
+      label: '接入与扫描',
+      icon: markRaw(FolderOpened),
+      items: [
+        { label: '代码仓库', path: `${basePath}/repos` },
+        { label: '数据库连接', path: `${basePath}/databases` },
+        { label: '文档资料', path: `${basePath}/documents` },
+        { label: '扫描版本', path: `${basePath}/scan-versions` },
+        { label: '新建扫描', path: `${basePath}/scan-versions/create` }
+      ]
+    },
+    {
+      index: 'graph',
+      label: '图谱与问答',
+      icon: markRaw(Connection),
+      items: [
+        { label: '统一图谱', path: `${basePath}/graph/unified` },
+        { label: '业务图谱', path: `${basePath}/graph/business` },
+        { label: '功能图谱', path: `${basePath}/graph/feature` },
+        { label: '代码图谱', path: `${basePath}/graph/code` },
+        { label: '数据血缘', path: `${basePath}/graph/lineage` },
+        { label: '运行链路', path: `${basePath}/graph/runtime` }
+      ]
+    },
+    {
+      index: 'evidence',
+      label: '证据与审核',
+      icon: markRaw(DocumentChecked),
+      items: [
+        { label: '证据工作台', path: `${basePath}/workbench` },
+        { label: '事实列表', path: `${basePath}/facts` },
+        { label: '证据检索', path: `${basePath}/evidence` },
+        { label: '审核队列', path: `${basePath}/reviews` },
+        { label: '审核历史', path: `${basePath}/review-history` }
+      ]
+    },
+    {
+      index: 'quality',
+      label: '测试与报告',
+      icon: markRaw(VideoPlay),
+      items: [
+        { label: '测试用例', path: `${basePath}/test-cases`, routeNames: ['TestCaseEditorNew', 'TestCaseEditorEdit'] },
+        { label: '测试执行', path: `${basePath}/test-runs`, routeNames: ['TestRunDetail'] },
+        { label: '验证报告', path: `${basePath}/validation` },
+        { label: '迁移风险', path: `${basePath}/migration/risks`, routeNames: ['MigrationRiskDetail'] },
+        { label: '操作日志', path: `${basePath}/audit/logs`, routeNames: ['AuditLogDetail'] }
+      ]
+    },
+    {
+      index: 'automation',
+      label: '智能变更',
+      icon: markRaw(Tools),
+      items: [
+        { label: '变更任务', path: `${basePath}/change-tasks` },
+        { label: 'AI 助手', path: `${basePath}/agents` }
+      ]
+    }
+  ]
+})
+
+const activeMenu = computed(() => {
+  const routeName = route.name as string
+  const matchedItem = menuSections.value
+    .flatMap(section => section.items)
+    .find(item => item.routeNames?.includes(routeName))
+  return matchedItem?.path || route.path
+})
+
+const defaultOpeneds = computed(() =>
+  menuSections.value
+    .filter(section => section.items.some(item => item.path === activeMenu.value))
+    .map(section => section.index)
+)
 
 const getProjectStatusText = (status: string) => dictLabel('project_status', status)
 
@@ -187,6 +218,11 @@ function handleMenuSelect(index: string) {
 
 .sidebar-menu {
   border-right: none;
+}
+
+.sidebar-menu :deep(.el-sub-menu__title),
+.sidebar-menu :deep(.el-menu-item) {
+  font-size: 14px;
 }
 
 .main-container {

@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -149,15 +150,15 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "获取当前用户信息", description = "获取当前登录用户的基本信息，包括角色和权限")
     @Log(value = "获取当前用户信息", type = Log.OperationType.QUERY)
-    public Result<LoginResponse.UserInfo> getCurrentUser(
+    public ResponseEntity<Result<LoginResponse.UserInfo>> getCurrentUser(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         // 从 token 中获取用户信息
         if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return Result.error("用户未登录");
+            return ResponseEntity.status(401).body(Result.error("用户未登录"));
         }
         String token = authorization.substring(7);
         if (!jwtUtil.validateToken(token)) {
-            return Result.error("Token无效或已过期");
+            return ResponseEntity.status(401).body(Result.error("Token无效或已过期"));
         }
 
         String username = jwtUtil.getUsernameFromToken(token);
@@ -166,11 +167,11 @@ public class AuthController {
         );
 
         if (user == null) {
-            return Result.error("用户未登录");
+            return ResponseEntity.status(401).body(Result.error("用户未登录"));
         }
 
         if (!"ACTIVE".equals(user.getStatus())) {
-            return Result.error("用户已被禁用");
+            return ResponseEntity.status(403).body(Result.error("用户已被禁用"));
         }
 
         List<String> roles = user.getRoles() != null
@@ -190,7 +191,7 @@ public class AuthController {
                 permissions
         );
 
-        return Result.success(userInfo);
+        return ResponseEntity.ok(Result.success(userInfo));
     }
 
     /**
@@ -202,9 +203,9 @@ public class AuthController {
     @PostMapping("/refresh")
     @Operation(summary = "刷新访问令牌", description = "使用刷新令牌获取新的访问令牌，延长登录有效期")
     @Log(value = "刷新Token", type = Log.OperationType.OTHER)
-    public Result<LoginResponse> refreshToken(@RequestBody String refreshToken) {
+    public ResponseEntity<Result<LoginResponse>> refreshToken(@RequestBody String refreshToken) {
         if (!jwtUtil.validateToken(refreshToken)) {
-            return Result.error("Token无效或已过期");
+            return ResponseEntity.status(401).body(Result.error("Token无效或已过期"));
         }
 
         String username = jwtUtil.getUsernameFromToken(refreshToken);
@@ -214,11 +215,11 @@ public class AuthController {
         );
 
         if (user == null) {
-            return Result.error("Token无效或已过期");
+            return ResponseEntity.status(401).body(Result.error("Token无效或已过期"));
         }
 
         if (!"ACTIVE".equals(user.getStatus())) {
-            return Result.error("用户已被禁用");
+            return ResponseEntity.status(403).body(Result.error("用户已被禁用"));
         }
 
         String accessToken = jwtUtil.generateToken(user.getId(), user.getUsername());
@@ -248,6 +249,6 @@ public class AuthController {
                 userInfo
         );
 
-        return Result.success(response);
+        return ResponseEntity.ok(Result.success(response));
     }
 }

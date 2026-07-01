@@ -4,7 +4,7 @@
  * 支持自动添加Authorization令牌、请求追踪ID生成、401 token 刷新
  */
 import axios, { AxiosRequestConfig, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { showLoading, hideLoading, forceHideLoading } from '@/utils/loading'
 
@@ -43,18 +43,8 @@ function handleUnauthorized(): void {
   unauthorizedHandling = true
   const userStore = useUserStore()
   userStore.clearAuth()
-  ElMessageBox.confirm(
-    '登录状态已过期，请重新登录',
-    '系统提示',
-    {
-      confirmButtonText: '重新登录',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
-  ).finally(() => {
-    unauthorizedHandling = false
-    window.location.reload()
-  })
+  // token 失效直接跳登录页，不弹框打扰用户
+  window.location.href = '/login'
 }
 
 /**

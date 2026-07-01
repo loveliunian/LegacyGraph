@@ -32,11 +32,14 @@ public class ReportExportService {
 
     private final ObjectMapper objectMapper;
     private final ReportingService reportingService;
+    private final ChangeReportService changeReportService;
 
     public ReportExportService(ObjectMapper objectMapper,
-                               @Lazy ReportingService reportingService) {
+                               @Lazy ReportingService reportingService,
+                               ChangeReportService changeReportService) {
         this.objectMapper = objectMapper;
         this.reportingService = reportingService;
+        this.changeReportService = changeReportService;
     }
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -48,7 +51,9 @@ public class ReportExportService {
         MIGRATION_READINESS("迁移就绪度报告"),
         CONFIDENCE_TREND("置信度趋势报告"),
         TEST_COVERAGE("测试覆盖率报告"),
-        GRAPH_QUALITY("图谱质量报告");
+        GRAPH_QUALITY("图谱质量报告"),
+        FEATURE_SLICE("功能切片说明"),
+        CHANGE_TASK("变更任务说明");
 
         private final String displayName;
 
@@ -91,6 +96,8 @@ public class ReportExportService {
             case CONFIDENCE_TREND -> generateConfidenceTrendMarkdown(projectId, versionId);
             case TEST_COVERAGE -> generateTestCoverageMarkdown(projectId, versionId);
             case GRAPH_QUALITY -> generateGraphQualityMarkdown(projectId, versionId);
+            case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
+                    reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };
         return markdown.getBytes(StandardCharsets.UTF_8);
     }
@@ -104,10 +111,39 @@ public class ReportExportService {
             case CONFIDENCE_TREND -> generateConfidenceTrendMarkdown(projectId, versionId);
             case TEST_COVERAGE -> generateTestCoverageMarkdown(projectId, versionId);
             case GRAPH_QUALITY -> generateGraphQualityMarkdown(projectId, versionId);
+            case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
+                    reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };
 
         String html = convertMarkdownToHtml(markdown, reportType.getDisplayName());
         return convertHtmlToPdf(html);
+    }
+
+    /**
+     * 范围级报告导出（FEATURE_SLICE / CHANGE_TASK）。
+     * <p>
+     * 这两类报告以 sliceId / taskId 为范围，而非 versionId，因此走独立入口。
+     * Markdown 由 {@link ChangeReportService} 装配；PDF 复用现有 flexmark → openhtmltopdf 管线；
+     * Excel 暂不支持（MVP 只做 MD/PDF，见 doc §ReportType 扩展的确切改动点）。
+     * </p>
+     */
+    public byte[] exportScopedReport(String projectId, String scopeId, ReportType reportType, ExportFormat format) {
+        log.info("Exporting scoped report: projectId={}, scopeId={}, reportType={}, format={}",
+                projectId, scopeId, reportType, format);
+
+        String markdown = switch (reportType) {
+            case FEATURE_SLICE -> changeReportService.generateFeatureSliceMarkdown(projectId, scopeId);
+            case CHANGE_TASK -> changeReportService.generateChangeTaskMarkdown(projectId, scopeId);
+            default -> throw new IllegalArgumentException(
+                    reportType + " 不是范围级报告，请使用 exportReport(projectId, versionId, ...)");
+        };
+
+        return switch (format) {
+            case MD -> markdown.getBytes(StandardCharsets.UTF_8);
+            case PDF -> convertHtmlToPdf(convertMarkdownToHtml(markdown, reportType.getDisplayName()));
+            case EXCEL -> throw new IllegalArgumentException(
+                    reportType + " 暂不支持 Excel 导出，请使用 MD 或 PDF");
+        };
     }
 
     /**
@@ -123,6 +159,8 @@ public class ReportExportService {
                 case CONFIDENCE_TREND -> createConfidenceTrendExcel(workbook, projectId, versionId, headerStyle, dataStyle);
                 case TEST_COVERAGE -> createTestCoverageExcel(workbook, projectId, versionId, headerStyle, dataStyle);
                 case GRAPH_QUALITY -> createGraphQualityExcel(workbook, projectId, versionId, headerStyle, dataStyle);
+                case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
+                        reportType + " 暂不支持 Excel 导出，请使用 MD 或 PDF");
             }
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();

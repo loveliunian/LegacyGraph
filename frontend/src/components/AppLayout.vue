@@ -12,20 +12,32 @@
             <span class="logo-text">LegacyGraph</span>
           </router-link>
 
-          <nav class="header-nav">
-            <router-link to="/dashboard" class="nav-link" :class="{ active: $route.path === '/dashboard' }">
-              仪表盘
-            </router-link>
-            <router-link to="/projects" class="nav-link" :class="{ active: $route.path.startsWith('/projects') }">
-              项目管理
-            </router-link>
-          </nav>
+          <el-menu
+            :default-active="activeTopMenu"
+            mode="horizontal"
+            class="header-nav"
+            :ellipsis="false"
+            @select="handleTopMenuSelect"
+          >
+            <template v-for="item in visibleTopMenus" :key="item.index">
+              <el-sub-menu v-if="item.children?.length" :index="item.index">
+                <template #title>
+                  <el-icon><component :is="item.icon" /></el-icon>
+                  <span>{{ item.label }}</span>
+                </template>
+                <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+                  {{ child.label }}
+                </el-menu-item>
+              </el-sub-menu>
+              <el-menu-item v-else :index="item.path">
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span>{{ item.label }}</span>
+              </el-menu-item>
+            </template>
+          </el-menu>
         </div>
 
         <div class="header-right">
-          <!-- LLM 模型切换 -->
-          <ModelSwitcher />
-
           <el-tooltip content="切换主题" placement="bottom">
             <el-button
               :icon="themeIcon"
@@ -72,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, markRaw, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -82,12 +94,13 @@ import {
   Setting,
   SwitchButton,
   Sunny,
-  Moon
+  Moon,
+  DataBoard,
+  FolderOpened
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import LangSwitcher from '@/components/LangSwitcher.vue'
-import ModelSwitcher from '@/components/ModelSwitcher.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -96,8 +109,67 @@ const appStore = useAppStore()
 const userInfo = computed(() => userStore.userInfo)
 const themeIcon = computed(() => appStore.isDark ? Sunny : Moon)
 
+interface TopMenuChild {
+  label: string
+  path: string
+}
+
+interface TopMenuItem {
+  index: string
+  label: string
+  path?: string
+  icon: Component
+  roles?: string[]
+  children?: TopMenuChild[]
+}
+
+const topMenus: TopMenuItem[] = [
+  {
+    index: '/dashboard',
+    label: '工作台',
+    path: '/dashboard',
+    icon: markRaw(DataBoard)
+  },
+  {
+    index: '/projects',
+    label: '项目',
+    path: '/projects',
+    icon: markRaw(FolderOpened)
+  },
+  {
+    index: 'system',
+    label: '系统',
+    icon: markRaw(Setting),
+    roles: ['ADMIN'],
+    children: [
+      { label: '用户管理', path: '/system/users' },
+      { label: '字典管理', path: '/system/dictionaries' },
+      { label: '系统配置', path: '/system/settings' },
+      { label: 'LLM 提供商', path: '/system/llm' },
+      { label: '提示词管理', path: '/system/prompts' }
+    ]
+  }
+]
+
+const visibleTopMenus = computed(() =>
+  topMenus.filter(item => !item.roles || userStore.hasAnyRole(item.roles))
+)
+
+const activeTopMenu = computed(() => {
+  const currentPath = router.currentRoute.value.path
+  if (currentPath.startsWith('/system')) return currentPath
+  if (currentPath.startsWith('/projects')) return '/projects'
+  return '/dashboard'
+})
+
 const toggleTheme = () => {
   appStore.toggleTheme()
+}
+
+const handleTopMenuSelect = (index: string) => {
+  if (index.startsWith('/')) {
+    router.push(index)
+  }
 }
 
 const handleUserCommand = async (command: string) => {
@@ -120,7 +192,7 @@ const handleUserCommand = async (command: string) => {
       router.push('/dashboard')
       break
     case 'settings':
-      router.push('/system/dictionaries')
+      router.push('/system/settings')
       break
   }
 }
@@ -175,28 +247,27 @@ const handleUserCommand = async (command: string) => {
 }
 
 .header-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  --el-menu-bg-color: transparent;
+  --el-menu-hover-bg-color: var(--el-fill-color-light);
+  --el-menu-active-color: var(--el-color-primary);
+  --el-menu-text-color: var(--el-text-color-secondary);
+  --el-menu-hover-text-color: var(--el-text-color-primary);
+  height: var(--lg-header-height);
+  border-bottom: none;
 }
 
-.nav-link {
+.header-nav :deep(.el-menu-item),
+.header-nav :deep(.el-sub-menu__title) {
+  height: var(--lg-header-height);
+  padding: 0 14px;
+  border-bottom: none;
   font-size: 13px;
   font-weight: 500;
-  color: var(--el-text-color-secondary);
-  text-decoration: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  transition: var(--lg-transition);
 }
 
-.nav-link:hover {
-  color: var(--el-text-color-primary);
-  background: var(--el-fill-color-light);
-}
-
-.nav-link.active {
-  color: var(--el-color-primary);
+.header-nav :deep(.el-menu-item.is-active),
+.header-nav :deep(.el-sub-menu.is-active .el-sub-menu__title) {
+  border-bottom: none;
   background: var(--el-color-primary-light-9);
 }
 

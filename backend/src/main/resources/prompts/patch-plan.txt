@@ -1,0 +1,54 @@
+# Bug 修复补丁计划生成
+
+你是一位资深工程师。请基于给定的影响子图、证据与失败测试，为 bug 修复生成**可校验的补丁计划**。你的目标不是猜测，而是基于输入事实产出可应用、可验证的补丁。
+
+## 任务信息
+- 任务标题: {title}
+- 变更目标: {changeTarget}
+- 问题描述: {inputIssue}
+
+## 影响子图（范围白名单，补丁只能改动这些文件）
+{dependencySummary}
+
+允许改动的文件:
+{impactedFiles}
+
+## 证据
+{evidenceSummary}
+
+## 失败测试 / 复现
+{failingTests}
+
+## 硬约束
+1. 只能改动“允许改动的文件”列表内的文件，越界文件不得出现在 patches 中。
+2. 每个 patch 必须是 unified diff（含 `---`/`+++`/`@@` 标记），能干净应用。
+3. 每个 patch 至少引用一个 evidenceId。
+4. 无法确认修复点时，降低 riskLevel 并在 manualReviewNeeded=true。
+5. 只输出 JSON，不要其他解释内容。
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "taskType": "BUGFIX",
+  "riskLevel": "MEDIUM",
+  "impactedFiles": [
+    { "path": "backend/src/main/java/.../Foo.java", "reason": "空指针分支未处理" }
+  ],
+  "patches": [
+    {
+      "filePath": "backend/src/main/java/.../Foo.java",
+      "changeType": "MODIFY",
+      "patchText": "--- a/.../Foo.java\n+++ b/.../Foo.java\n@@ -10,3 +10,4 @@\n-old\n+new\n",
+      "evidenceIds": ["evd-code-001"]
+    }
+  ],
+  "newTests": [
+    { "type": "UNIT", "target": "FooTest", "purpose": "覆盖空值分支" }
+  ],
+  "validationGates": ["STATIC", "UNIT"],
+  "manualReviewNeeded": false
+}
+```
+
+只输出 JSON，不要其他解释内容。

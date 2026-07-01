@@ -92,5 +92,81 @@ export const reportApi = {
     return get<Blob>(`/lg/projects/${projectId}/reports/${reportId}/download?format=${format}`, {
       responseType: 'blob'
     })
+  },
+
+  /**
+   * 获取图谱指标
+   * @param projectId 项目ID
+   */
+  getGraphMetrics: (projectId: string) => {
+    return get(`/lg/projects/${projectId}/reports/graph-metrics`)
+  },
+
+  /**
+   * 获取报告洞察
+   * @param projectId 项目ID
+   */
+  getInsights: (projectId: string) => {
+    return get(`/lg/projects/${projectId}/reports/insights`)
+  },
+
+  /**
+   * 获取支持的导出格式列表
+   */
+  getExportFormats: () => {
+    return get('/reports/formats')
+  },
+
+  /**
+   * 导出迁移就绪度报告
+   * @param projectId 项目ID
+   */
+  exportMigrationReport: (projectId: string) => {
+    return get(`/reports/migration/${projectId}`)
+  },
+
+  /**
+   * 导出置信度报告
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   */
+  exportConfidenceReport: (projectId: string, versionId: string) => {
+    return get(`/reports/confidence/${projectId}/${versionId}`)
+  },
+
+  /**
+   * 导出测试覆盖率报告
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   */
+  exportTestCoverageReport: (projectId: string, versionId: string) => {
+    return get(`/reports/test-coverage/${projectId}/${versionId}`)
+  },
+
+  /**
+   * 导出图谱质量报告
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   */
+  exportGraphQualityReport: (projectId: string, versionId: string) => {
+    return get(`/reports/graph-quality/${projectId}/${versionId}`)
+  },
+
+  /**
+   * 导出功能切片报告
+   * @param projectId 项目ID
+   * @param sliceId 功能切片ID
+   */
+  exportFeatureSliceReport: (projectId: string, sliceId: string) => {
+    return get(`/reports/feature-slice/${projectId}/${sliceId}`)
+  },
+
+  /**
+   * 导出变更任务报告
+   * @param projectId 项目ID
+   * @param taskId 变更任务ID
+   */
+  exportChangeTaskReport: (projectId: string, taskId: string) => {
+    return get(`/reports/change-task/${projectId}/${taskId}`)
   }
 }

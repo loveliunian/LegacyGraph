@@ -83,6 +83,24 @@ public class SysDictService {
     }
 
     /**
+     * 获取所有激活字典的全量映射（缓存：dict-map）
+     * 返回 { dictCode: { value: label } }
+     * 供前端一次加载全量字典内存缓存。
+     */
+    @Cacheable(cacheNames = "dict-map", key = "'all'")
+    public Map<String, Map<String, String>> getAllItemMaps() {
+        List<SysDict> dicts = listAll();
+        Map<String, Map<String, String>> result = new java.util.LinkedHashMap<>();
+        for (SysDict dict : dicts) {
+            List<SysDictItem> items = getItemsByDictId(dict.getId());
+            Map<String, String> map = items.stream()
+                .collect(Collectors.toMap(SysDictItem::getItemValue, SysDictItem::getItemLabel));
+            result.put(dict.getDictCode(), map);
+        }
+        return result;
+    }
+
+    /**
      * 创建字典类型
      */
     public SysDict create(SysDict dict) {

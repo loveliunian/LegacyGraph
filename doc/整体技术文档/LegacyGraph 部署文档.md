@@ -533,14 +533,18 @@ Compose 使用 `${VAR:?message}` 对外部依赖做强校验。补齐 `deploy/.e
 
 ### 9. Neo4j 图为空
 
-先确认 PostgreSQL 有图谱节点和边：
+先确认 Neo4j 中有图谱节点和边：
 
-```sql
-SELECT count(*) FROM lg_graph_node WHERE deleted = 0;
-SELECT count(*) FROM lg_graph_edge WHERE deleted = 0;
+```cypher
+MATCH (n) RETURN count(*) AS node_count;
+MATCH ()-[r]->() RETURN count(*) AS edge_count;
 ```
 
-再检查后端日志中的 Neo4j 写入错误。
+再检查后端日志中的 Neo4j 写入错误。也可在 Neo4j Browser 中按标签查看：
+
+```cypher
+MATCH (n) RETURN labels(n), count(*) ORDER BY count(*) DESC;
+```
 
 ---
 
@@ -572,5 +576,6 @@ mc mirror legacygraph/legacy-graph ./backup/legacy-graph
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 1.2 | 2026-07-01 | 修正图谱存储描述：Neo4j 查询替换 PostgreSQL `lg_graph_node`/`lg_graph_edge` |
 | 1.1 | 2026-06-30 | 按当前 Dockerfile、Compose、Flyway、前端代理和外部依赖部署方式更新 |
 | 1.0 | 2026-06-27 | 初始版本 |

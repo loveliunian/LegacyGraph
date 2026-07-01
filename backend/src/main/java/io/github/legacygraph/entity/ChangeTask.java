@@ -1,0 +1,65 @@
+package io.github.legacygraph.entity;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+/**
+ * 变更任务实体（增强版2：ChangeTask 管道）。
+ * <p>
+ * 承载一次 bugfix/refactor/upgrade 的受控执行：从图谱定位影响子图，
+ * 到生成 PatchPlan、运行验证门禁、生成 PR，全过程状态机化。
+ * </p>
+ * <p>状态流转（见设计文档 §ChangeTask 落地模块）：</p>
+ * <pre>
+ * OPEN → IMPACT_READY → PATCH_DRAFTED → VALIDATING
+ *      → VALIDATION_PASSED / VALIDATION_FAILED
+ *      → REVIEW_PENDING → PR_READY / PR_CREATED
+ *      → MERGED / REJECTED / ROLLED_BACK
+ * </pre>
+ */
+@Data
+@TableName("lg_change_task")
+public class ChangeTask {
+
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
+
+    private String projectId;
+
+    private String versionId;
+
+    /** BUGFIX / REFACTOR / UPGRADE */
+    private String taskType;
+
+    private String title;
+
+    /** 输入问题描述 / issue（JSON） */
+    private String inputIssue;
+
+    /** 影响子图快照（JSON：nodeIds/edgeIds/files） */
+    private String impactedSubgraph;
+
+    /** PatchPlan 草案（JSON） */
+    private String proposal;
+
+    /** LOW / MEDIUM / HIGH */
+    private String riskLevel;
+
+    /** 任务状态机，默认 OPEN */
+    private String status;
+
+    /** 关联的 AgentRun 合约ID，便于回放补丁生成过程 */
+    private String agentRunId;
+
+    private LocalDateTime createdAt;
+
+    private LocalDateTime updatedAt;
+
+    @TableLogic
+    private Integer deleted;
+}

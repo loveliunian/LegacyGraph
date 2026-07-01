@@ -507,9 +507,8 @@ public class SourceController {
             baseDir = System.getProperty("user.home") + "/.legacygraph/repos/" + projectId + "/" + id;
         }
 
-        // 创建扫描版本
+        // 创建扫描版本（版本号由服务端自动生成）
         CreateScanVersionRequest scanReq = new CreateScanVersionRequest();
-        scanReq.setVersionNo("scan-" + System.currentTimeMillis());
         scanReq.setBranchName(repo.getBranchName());
         scanReq.setScanScope(repo.getRepoType());
         var version = scanVersionService.createScanVersion(projectId, scanReq);
@@ -803,11 +802,15 @@ public class SourceController {
         if (dbType == null) {
             dbType = "postgresql";
         }
+        String host = db.getHost() != null ? db.getHost() : "localhost";
+        int port = db.getPort() != null ? db.getPort()
+                : (dbType.equalsIgnoreCase("mysql") || dbType.equalsIgnoreCase("mariadb") ? 3306 : 5432);
+        String dbName = db.getDatabaseName() != null ? db.getDatabaseName() : "";
         return switch (dbType.toLowerCase()) {
             case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s?sslmode=disable",
-                    db.getHost(), db.getPort(), db.getDatabaseName());
-            case "mysql" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true",
-                    db.getHost(), db.getPort(), db.getDatabaseName());
+                    host, port, dbName);
+            case "mysql", "mariadb" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+                    host, port, dbName);
             default -> throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
         };
     }

@@ -91,6 +91,37 @@ public class ReportExportController {
     }
 
     /**
+     * 导出单个功能切片说明书（增强版1）。
+     * sliceId 即 Feature 节点 ID。
+     */
+    @GetMapping("/feature-slice/{projectId}/{sliceId}")
+    public ResponseEntity<byte[]> exportFeatureSliceReport(
+            @PathVariable String projectId,
+            @PathVariable String sliceId,
+            @RequestParam(defaultValue = "MD") String format) {
+
+        ReportExportService.ExportFormat exportFormat = parseFormat(format);
+        byte[] data = reportExportService.exportScopedReport(
+                projectId, sliceId, ReportExportService.ReportType.FEATURE_SLICE, exportFormat);
+        return buildResponse(data, "功能切片说明", exportFormat);
+    }
+
+    /**
+     * 导出单个变更任务说明书（增强版2）。
+     */
+    @GetMapping("/change-task/{projectId}/{taskId}")
+    public ResponseEntity<byte[]> exportChangeTaskReport(
+            @PathVariable String projectId,
+            @PathVariable String taskId,
+            @RequestParam(defaultValue = "MD") String format) {
+
+        ReportExportService.ExportFormat exportFormat = parseFormat(format);
+        byte[] data = reportExportService.exportScopedReport(
+                projectId, taskId, ReportExportService.ReportType.CHANGE_TASK, exportFormat);
+        return buildResponse(data, "变更任务说明", exportFormat);
+    }
+
+    /**
      * 支持的报告格式列表
      */
     @GetMapping("/formats")

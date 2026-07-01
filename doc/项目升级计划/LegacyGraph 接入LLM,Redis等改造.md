@@ -1,4 +1,4 @@
-# LegacyGraph 平台全景设计文档
+# LegacyGraph 接入LLM,Redis等改造
 
 > 本文档由以下七份文档与代码现实深度合并而成，摒弃「本文/本文档/本报告」等指代词，统一按平台视角描述：
 > 1. `LegacyGraph 项目改进总览.md`

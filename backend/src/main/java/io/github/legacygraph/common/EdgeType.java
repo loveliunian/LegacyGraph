@@ -25,7 +25,13 @@ public enum EdgeType {
     ASSERTS("断言"),
     HAS_EVIDENCE("拥有证据"),
     REFERENCES("外键引用"),
-    BELONGS_TO("属于");
+    BELONGS_TO("属于"),
+
+    // ========== 变更闭环关系（增强版2：ChangeTask 管道） ==========
+    AFFECTS("影响"),
+    FIXED_BY("由...修复"),
+    MIGRATES_TO("迁移到"),
+    DEPENDS_ON("依赖于");
 
     private final String description;
 

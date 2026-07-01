@@ -1,87 +1,87 @@
 /**
  * 数据字典工具
  *
- * 从后端加载字典项映射（value → label），提供统一的标签查询函数。
- * 后端数据模型：SysDict（字典类型） → SysDictItem（字典项：itemValue → itemLabel）
- * 后端 API：GET /lg/system/dicts/code/{dictCode}/map → { value: label }
+ * 登录后调用 loadAllDicts() 一次性从后端加载全部字典到内存，
+ * 后续 dictLabel() 同步查询，无需任何网络请求。
+ *
+ * 后端 API：GET /lg/system/dicts/all/maps → { dictCode: { value: label } }
+ * 退出登录时调用 clearDictCache() 清空内存。
  *
  * 使用方式：
- *   import { dictLabel, dictMap, preloadDicts } from '@/utils/dict'
- *   await preloadDicts(['repo_type', 'scan_type', 'scan_status'])
+ *   // 登录后（app/user store 中调用一次）
+ *   await loadAllDicts()
+ *   // 任意页面同步使用
+ *   import { dictLabel } from '@/utils/dict'
  *   const label = dictLabel('repo_type', 'FULLSTACK')  // → '全栈'
  */
 
 import { get } from '@/utils/request'
 
 /** 字典编码 → 值→标签映射 */
-const cache = new Map<string, Record<string, string>>()
+let cache: Record<string, Record<string, string>> = {}
 
-/** 正在加载中的请求 Promise，防止重复请求 */
-const pending = new Map<string, Promise<Record<string, string>>>()
+/** 是否已加载 */
+let loaded = false
+
+/** 正在加载的 Promise (防并发) */
+let loadingPromise: Promise<void> | null = null
 
 /**
- * 加载单个字典的映射表
+ * 从后端一次性加载全量字典到内存
+ * 建议在登录成功后调用，全局只调用一次
  */
-export async function loadDictMap(dictCode: string): Promise<Record<string, string>> {
-  // 命中缓存
-  if (cache.has(dictCode)) {
-    return cache.get(dictCode)!
-  }
+export async function loadAllDicts(): Promise<void> {
+  // 已加载，直接返回
+  if (loaded) return
 
   // 正在加载中，复用同一个 Promise
-  if (pending.has(dictCode)) {
-    return pending.get(dictCode)!
-  }
+  if (loadingPromise) return loadingPromise
 
-  const promise = get<Record<string, string>>(
-    `/lg/system/dicts/code/${encodeURIComponent(dictCode)}/map`
-  )
-    .then((map) => {
-      const data = map || {}
-      cache.set(dictCode, data)
-      return data
+  loadingPromise = get<Record<string, Record<string, string>>>('/lg/system/dicts/all/maps')
+    .then((data) => {
+      cache = data || {}
+      loaded = true
     })
     .catch((err) => {
-      console.warn(`[dict] 加载字典 "${dictCode}" 失败:`, err)
-      const fallback: Record<string, string> = {}
-      cache.set(dictCode, fallback)
-      return fallback
+      console.warn('[dict] 全量字典加载失败:', err)
+      cache = {}
     })
     .finally(() => {
-      pending.delete(dictCode)
+      loadingPromise = null
     })
 
-  pending.set(dictCode, promise)
-  return promise
+  return loadingPromise
 }
 
 /**
- * 预加载多个字典
- */
-export async function preloadDicts(dictCodes: string[]): Promise<void> {
-  await Promise.all(dictCodes.map(loadDictMap))
-}
-
-/**
- * 获取字典映射表（同步，需先 loadDictMap 或 preloadDicts）
- */
-export function dictMap(dictCode: string): Record<string, string> {
-  return cache.get(dictCode) || {}
-}
-
-/**
- * 根据字典值和编码获取标签文本（同步）
+ * 根据字典编码和值获取标签文本（同步，零开销）
  */
 export function dictLabel(dictCode: string, value: string): string {
-  const map = cache.get(dictCode)
-  if (!map) return value || '-'
-  return map[value] || value || '-'
+  if (!value) return '-'
+  const map = cache[dictCode]
+  if (!map) return value
+  return map[value] || value
 }
 
 /**
- * 清空缓存（字典数据更新后调用）
+ * 获取字典映射表（同步）
+ */
+export function dictMap(dictCode: string): Record<string, string> {
+  return cache[dictCode] || {}
+}
+
+/**
+ * 清空内存缓存（退出登录时调用）
  */
 export function clearDictCache(): void {
-  cache.clear()
-  pending.clear()
+  cache = {}
+  loaded = false
+  loadingPromise = null
+}
+
+// 保留旧的按需加载 API 以兼容已有调用（实际已全量加载，直接返回空操作）
+/** @deprecated 请使用 loadAllDicts() 一次性全量加载 */
+export async function preloadDicts(_dictCodes: string[]): Promise<void> {
+  // 全量加载已包含所有字典，此函数保留仅为兼容旧代码
+  // 旧页面 onMounted 仍会调用，这里直接返回不做额外请求
 }

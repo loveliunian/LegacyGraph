@@ -188,7 +188,7 @@ export const sourceApi = {
    * @returns 扫描结果
    */
   scanDbSchema: (projectId: string, id: string) => {
-    return post<{ tableCount: number }>(`/lg/projects/${projectId}/sources/databases/${id}/scan`)
+    return post<{ tableCount: number }>(`/lg/projects/${projectId}/sources/databases/${id}/scan-schema`)
   },
 
   /**

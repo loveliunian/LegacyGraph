@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@/types'
 import { authApi } from '@/api'
+import { loadAllDicts, clearDictCache } from '@/utils/dict'
 
 /**
  * 解析 JWT payload（不校验签名，仅前端用于读取 exp 判断是否过期）。
@@ -57,12 +58,15 @@ export const useUserStore = defineStore('user', () => {
     userInfo.value = null
     permissions.value = []
     roles.value = []
+    clearDictCache()
   }
 
   const login = async (username: string, password: string) => {
     const result = await authApi.login({ username, password })
     setTokens(result.accessToken, result.refreshToken)
     setUserInfo(result.user)
+    // 登录后一次性加载全量字典到内存
+    loadAllDicts()
     return result
   }
 
@@ -80,9 +84,15 @@ export const useUserStore = defineStore('user', () => {
       return userInfo.value
     }
     if (accessToken.value) {
-      const user = await authApi.getCurrentUser()
-      setUserInfo(user)
-      return user
+      try {
+        const user = await authApi.getCurrentUser()
+        setUserInfo(user)
+        return user
+      } catch {
+        // Token 无效或已过期，清除 localStorage 缓存，避免反复拿无效 token 请求后端
+        clearAuth()
+        return null
+      }
     }
     return null
   }

@@ -62,6 +62,7 @@ class ProjectScannerAdapterTest {
                 documentRepository,
                 graphBuilder,
                 frontendGraphBuilder,
+                null,
                 new ObjectMapper(),
                 aiScanOrchestrator,
                 dbSchemaAnalysisAgent,

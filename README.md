@@ -1,6 +1,6 @@
-# LegacyGraph — 遗留系统 AI 知识图谱分析平台
+# LegacyGraph — 系统 AI 知识图谱分析平台
 
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.7-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Vue](https://img.shields.io/badge/Vue-3-blue.svg)](https://v3.vuejs.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -9,13 +9,12 @@
 
 ## 项目简介
 
-**LegacyGraph** 是一个企业级遗留系统分析与知识图谱平台，通过大语言模型（LLM）、图数据库（Neo4j）、向量检索（pgvector）和 Redis 缓存技术，把代码库、数据库、文档、前端页面连接成一张可追溯、可验证、可审核的统一知识网络。
+**LegacyGraph** 是一个企业级系统分析与知识图谱平台，通过大语言模型（LLM）、图数据库（Neo4j）、向量检索（pgvector）和 Redis 缓存技术，把代码库、数据库、文档、前端页面连接成一张可追溯、可验证、可审核的统一知识网络。
 
 核心理念：**静态分析给事实，LLM 做归纳与补全，自动测试负责反证，人工审核兜底**。
 
 ## 应用场景
 
-- 🏢 **遗留系统现代化**：扫描 Java Spring Boot + Vue 老项目，构建三类图谱，辅助迁移决策
 - 👥 **新人快速上手**：自然语言问答「用户注册涉及哪些表？」「修改密码经过哪些模块？」
 - 🔍 **架构审计**：识别代码异味、技术债务、N+1 查询、不合理依赖
 - 📊 **影响分析**：基于图谱依赖链评估变更影响范围
@@ -105,11 +104,11 @@ AI 能力不是孤立的——`ProjectScanner` 扫描完成后由 `AiScanOrchest
 
 | 层 | 选型 |
 |---|---|
-| 后端框架 | Spring Boot 3.5.0 + Java 21 |
+| 后端框架 | Spring Boot 4.0.7 + Java 21 |
 | AI 集成 | Spring AI + LlmGateway（多模型路由） |
 | 关系数据库 | PostgreSQL + jsonb + GIN 索引 |
 | 向量检索 | pgvector（HNSW 索引） |
-| 图数据库 | Neo4j 5.x（向量索引 + 全文组合检索） |
+| 图数据库 | Neo4j 5.x（图谱独占存储，向量索引 + 全文组合检索） |
 | 缓存 | Redis 7.x（Lettuce 客户端） |
 | 对象存储 | MinIO |
 | ORM | MyBatis-Plus 3.5.16 |

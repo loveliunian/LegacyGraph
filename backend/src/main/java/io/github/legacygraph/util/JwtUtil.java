@@ -70,7 +70,7 @@ public class JwtUtil {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (Exception e) {
-            log.warn("解析JWT Token失败: {}", e.getMessage());
+            log.debug("解析JWT Token失败: {}", e.getMessage());
             return null;
         }
     }
@@ -82,6 +82,10 @@ public class JwtUtil {
 
     public Boolean validateToken(String token) {
         try {
+            Claims claims = getClaimsFromToken(token);
+            if (claims == null) {
+                return false;
+            }
             return !isTokenExpired(token);
         } catch (Exception e) {
             log.error("验证JWT Token失败: {}", e.getMessage());

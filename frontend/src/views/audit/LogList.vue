@@ -3,11 +3,17 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>操作日志</span>
-          <el-button type="primary" size="small" @click="handleExport">
-            <el-icon><Download /></el-icon>
-            导出日志
-          </el-button>
+          <span>操作日志 <el-tag v-if="logCount !== null" size="small" type="info" style="margin-left: 8px">共 {{ logCount }} 条</el-tag></span>
+          <div class="header-actions">
+            <el-button type="danger" size="small" plain @click="handleClear">
+              <el-icon><Delete /></el-icon>
+              清空日志
+            </el-button>
+            <el-button type="primary" size="small" @click="handleExport">
+              <el-icon><Download /></el-icon>
+              导出日志
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -188,9 +194,9 @@
 
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { Download, Delete } from '@element-plus/icons-vue'
 import { exportData } from '@/utils/export'
-import { get } from '@/utils/request'
+import { get, del } from '@/utils/request'
 import type { PageResult } from '@/types'
 
 interface AuditLog {
@@ -214,6 +220,7 @@ interface AuditLog {
 const loading = ref(false)
 const detailVisible = ref(false)
 const currentLog = ref<AuditLog | null>(null)
+const logCount = ref<number | null>(null)
 
 const filters = reactive({
   actionType: '',
@@ -339,8 +346,34 @@ async function handleExport() {
   }
 }
 
+async function loadStats() {
+  try {
+    const res = await get<{ count: number }>('/lg/audit/stats/count')
+    logCount.value = res.count ?? null
+  } catch {
+    // 静默失败
+  }
+}
+
+async function handleClear() {
+  try {
+    await ElMessageBox.confirm('确定要清空所有操作日志吗？此操作不可恢复！', '确认清空', {
+      confirmButtonText: '确定清空',
+      cancelButtonText: '取消',
+      type: 'warning' as const
+    })
+    await del('/lg/audit/clear')
+    ElMessage.success('日志已清空')
+    logCount.value = 0
+    await loadData()
+  } catch {
+    // cancelled
+  }
+}
+
 onMounted(() => {
   loadData()
+  loadStats()
 })
 </script>
 

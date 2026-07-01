@@ -52,7 +52,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link size="small" @click="goToDetail(row.id)">查看详情</el-button>
             <el-button
@@ -63,6 +63,15 @@
               @click="rerunFailed(row.id)"
             >
               重跑失败
+            </el-button>
+            <el-button
+              v-if="row.status === 'RUNNING'"
+              link
+              size="small"
+              type="danger"
+              @click="cancelRun(row.id)"
+            >
+              取消
             </el-button>
           </template>
         </el-table-column>
@@ -177,6 +186,18 @@ async function rerunFailed(runId: string) {
   } catch (error) {
     console.error(error)
     ElMessage.error('重跑失败')
+  }
+}
+
+async function cancelRun(runId: string) {
+  const projectId = projectStore.currentProjectId as string
+  try {
+    await testRunApi.cancelRun(projectId, runId)
+    ElMessage.success('测试运行已取消')
+    loadData()
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('取消失败')
   }
 }
 

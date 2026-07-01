@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -70,6 +71,31 @@ class ReviewControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.list").isArray());
+    }
+
+    @Test
+    void testCreateReview_FromDriftQueuePayload() throws Exception {
+        Map<String, Object> request = Map.of(
+                "targetType", "NODE",
+                "targetId", "symbol-1",
+                "targetName", "LegacyService",
+                "graphType", "DRIFT",
+                "confidence", 0.42,
+                "priority", "HIGH",
+                "comment", "标记为需要人工复核"
+        );
+
+        mockMvc.perform(post("/lg/projects/" + projectId + "/reviews")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.projectId").value(projectId))
+                .andExpect(jsonPath("$.data.targetId").value("symbol-1"))
+                .andExpect(jsonPath("$.data.targetName").value("LegacyService"))
+                .andExpect(jsonPath("$.data.graphType").value("DRIFT"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.priority").value("HIGH"));
     }
 
     @Test

@@ -13,7 +13,6 @@ public class CreateScanVersionRequest {
     @NotBlank(message = "项目ID不能为空")
     private String projectId;
 
-    @NotBlank(message = "版本号不能为空")
     @Size(max = 50, message = "版本号长度不能超过50个字符")
     private String versionNo;
 

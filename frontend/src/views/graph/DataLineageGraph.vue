@@ -199,6 +199,8 @@ interface TableColumn {
 interface TableListItem {
   id: string
   name: string
+  /** Neo4j nodeName，用于 Cypher 查询匹配（getTableImpact 的 tableName 参数） */
+  queryKey: string
   type: string
   columnCount: number
   relationCount: number
@@ -297,6 +299,7 @@ async function loadTablesFromBackend() {
       tables.value = tableNodes.map((n: any, idx: number) => ({
         id: n.id || n.key || `table-${idx}`,
         name: n.label || n.key || n.name || `table-${idx}`,
+        queryKey: n.name || n.key || '',      // Neo4j nodeName，用于 getTableImpact API
         type: 'table',
         columnCount: n.columnCount || 0,
         relationCount: n.relationCount || 0,
@@ -322,6 +325,10 @@ async function loadTablesFromBackend() {
  */
 async function loadLineageData(tableName: string) {
   if (!projectId.value || !currentVersion.value) return
+  if (!tableName) {
+    ElMessage.warning('无法加载血缘数据：表名缺失')
+    return
+  }
 
   loading.value = true
   try {
@@ -503,7 +510,7 @@ async function selectTable(id: string) {
 
   const selected = getSelectedTable()
   if (selected) {
-    await loadLineageData(selected.name)
+    await loadLineageData(selected.queryKey || selected.name)
   }
 }
 
@@ -511,7 +518,7 @@ async function refreshGraph() {
   if (selectedTable.value) {
     const selected = getSelectedTable()
     if (selected) {
-      await loadLineageData(selected.name)
+      await loadLineageData(selected.queryKey || selected.name)
     }
   } else {
     await loadTablesFromBackend()

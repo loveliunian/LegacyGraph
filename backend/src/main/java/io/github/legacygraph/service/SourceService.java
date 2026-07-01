@@ -166,14 +166,16 @@ public class SourceService {
     }
 
     private String buildJdbcUrl(DbConnection conn) {
-        String dbType = conn.getDbType() != null ? conn.getDbType().toLowerCase() : "mysql";
-        String host = conn.getHost();
-        int port = conn.getPort() != null ? conn.getPort() : 3306;
+        String dbType = conn.getDbType() != null ? conn.getDbType().toLowerCase() : "postgresql";
+        String host = conn.getHost() != null ? conn.getHost() : "localhost";
+        int port = conn.getPort() != null ? conn.getPort() : ("mysql".equals(dbType) || "mariadb".equals(dbType) ? 3306 : 5432);
         String dbName = conn.getDatabaseName() != null ? conn.getDatabaseName() : "";
         return switch (dbType) {
             case "postgresql" -> "jdbc:postgresql://" + host + ":" + port + "/" + dbName + "?sslmode=disable";
+            case "mysql", "mariadb" -> "jdbc:mysql://" + host + ":" + port + "/" + dbName
+                    + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
             case "oracle" -> "jdbc:oracle:thin:@" + host + ":" + port + ":" + dbName;
-            default -> "jdbc:mysql://" + host + ":" + port + "/" + dbName + "?useSSL=false&serverTimezone=UTC";
+            default -> throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
         };
     }
 

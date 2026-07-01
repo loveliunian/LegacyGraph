@@ -8,6 +8,9 @@ export { systemApi } from './system.api'
 export { reportApi } from './report.api'
 export { vectorApi } from './vector.api'
 export { traceApi } from './trace.api'
+export { agentApi } from './agent.api'
+export { qaApi } from './qa.api'
+export { changeTaskApi } from './change-task.api'
 
 // 保留原有导出向后兼容
 import { get, post, del, put } from '@/utils/request'
@@ -94,6 +97,42 @@ export const scanApi = {
   start: (projectId: string, versionId: string, baseDir?: string) => {
     // F-M3：baseDir 可能含 & / # / 中文等特殊字符，必须 encodeURIComponent，否则破坏 URL
     return post(`/lg/projects/${projectId}/scan-versions/${versionId}/start?baseDir=${encodeURIComponent(baseDir || '')}`)
+  },
+
+  /**
+   * 暂停扫描
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   */
+  pause: (projectId: string, versionId: string) => {
+    return post(`/lg/projects/${projectId}/scan-versions/${versionId}/pause`)
+  },
+
+  /**
+   * 恢复扫描
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   */
+  resume: (projectId: string, versionId: string) => {
+    return post(`/lg/projects/${projectId}/scan-versions/${versionId}/resume`)
+  },
+
+  /**
+   * 取消扫描
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   */
+  cancel: (projectId: string, versionId: string) => {
+    return post(`/lg/projects/${projectId}/scan-versions/${versionId}/cancel`)
+  },
+
+  /**
+   * 删除扫描版本
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   */
+  delete: (projectId: string, versionId: string) => {
+    return del(`/lg/projects/${projectId}/scan-versions/${versionId}`)
   }
 }
 
