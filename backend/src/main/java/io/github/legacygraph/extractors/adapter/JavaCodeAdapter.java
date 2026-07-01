@@ -32,10 +32,11 @@ public class JavaCodeAdapter implements ExtractionAdapter {
 
     private final GraphBuilder graphBuilder;
     private final JavaControllerExtractor controllerExtractor = new JavaControllerExtractor();
-    private final JavaStructureExtractor structureExtractor = new JavaStructureExtractor();
+    private final JavaStructureExtractor structureExtractor;
 
-    public JavaCodeAdapter(GraphBuilder graphBuilder) {
+    public JavaCodeAdapter(GraphBuilder graphBuilder, JavaStructureExtractor structureExtractor) {
         this.graphBuilder = graphBuilder;
+        this.structureExtractor = structureExtractor;
     }
 
     @Override

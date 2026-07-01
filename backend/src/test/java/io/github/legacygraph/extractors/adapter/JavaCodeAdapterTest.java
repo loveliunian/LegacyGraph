@@ -44,7 +44,7 @@ class JavaCodeAdapterTest {
                 """);
         when(graphBuilder.buildJavaStructureGraph(any(), any(), any())).thenReturn(List.of());
 
-        JavaCodeAdapter adapter = new JavaCodeAdapter(graphBuilder);
+        JavaCodeAdapter adapter = new JavaCodeAdapter(graphBuilder, new JavaStructureExtractor());
         ScanContext context = ScanContext.builder()
                 .projectId("project-1")
                 .versionId("v1")

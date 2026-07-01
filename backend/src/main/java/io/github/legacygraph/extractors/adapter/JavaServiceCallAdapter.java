@@ -25,11 +25,13 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
     private final GraphBuilder graphBuilder;
     private final FactPersister factPersister;
     private final ServiceCallExtractor callExtractor = new ServiceCallExtractor();
-    private final JavaStructureExtractor structureExtractor = new JavaStructureExtractor();
+    private final JavaStructureExtractor structureExtractor;
 
-    public JavaServiceCallAdapter(GraphBuilder graphBuilder, FactPersister factPersister) {
+    public JavaServiceCallAdapter(GraphBuilder graphBuilder, FactPersister factPersister,
+                                   JavaStructureExtractor structureExtractor) {
         this.graphBuilder = graphBuilder;
         this.factPersister = factPersister;
+        this.structureExtractor = structureExtractor;
     }
 
     @Override
