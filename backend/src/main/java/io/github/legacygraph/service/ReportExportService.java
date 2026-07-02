@@ -33,13 +33,16 @@ public class ReportExportService {
     private final ObjectMapper objectMapper;
     private final ReportingService reportingService;
     private final ChangeReportService changeReportService;
+    private final ScanResearchReportService scanResearchReportService;
 
     public ReportExportService(ObjectMapper objectMapper,
                                @Lazy ReportingService reportingService,
-                               ChangeReportService changeReportService) {
+                               ChangeReportService changeReportService,
+                               ScanResearchReportService scanResearchReportService) {
         this.objectMapper = objectMapper;
         this.reportingService = reportingService;
         this.changeReportService = changeReportService;
+        this.scanResearchReportService = scanResearchReportService;
     }
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -53,7 +56,10 @@ public class ReportExportService {
         TEST_COVERAGE("测试覆盖率报告"),
         GRAPH_QUALITY("图谱质量报告"),
         FEATURE_SLICE("功能切片说明"),
-        CHANGE_TASK("变更任务说明");
+        CHANGE_TASK("变更任务说明"),
+        SCAN_RESEARCH("资料扫描与图谱构建研究报告"),
+        CODE_UNDERSTANDING("代码理解报告"),
+        GRAPH_BUILD_DETAIL("图谱构建详情报告");
 
         private final String displayName;
 
@@ -96,6 +102,9 @@ public class ReportExportService {
             case CONFIDENCE_TREND -> generateConfidenceTrendMarkdown(projectId, versionId);
             case TEST_COVERAGE -> generateTestCoverageMarkdown(projectId, versionId);
             case GRAPH_QUALITY -> generateGraphQualityMarkdown(projectId, versionId);
+            case SCAN_RESEARCH -> scanResearchReportService.generateMarkdown(projectId, versionId);
+            case CODE_UNDERSTANDING, GRAPH_BUILD_DETAIL -> throw new UnsupportedOperationException(
+                    reportType + " 尚未实现");
             case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
                     reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };
@@ -111,6 +120,9 @@ public class ReportExportService {
             case CONFIDENCE_TREND -> generateConfidenceTrendMarkdown(projectId, versionId);
             case TEST_COVERAGE -> generateTestCoverageMarkdown(projectId, versionId);
             case GRAPH_QUALITY -> generateGraphQualityMarkdown(projectId, versionId);
+            case SCAN_RESEARCH -> scanResearchReportService.generateMarkdown(projectId, versionId);
+            case CODE_UNDERSTANDING, GRAPH_BUILD_DETAIL -> throw new UnsupportedOperationException(
+                    reportType + " 尚未实现");
             case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
                     reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };

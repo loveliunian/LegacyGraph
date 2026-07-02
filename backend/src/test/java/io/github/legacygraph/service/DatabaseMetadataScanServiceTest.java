@@ -1,6 +1,7 @@
 package io.github.legacygraph.service;
 
 import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.extractors.DatabaseConstraintExtractor;
 import io.github.legacygraph.extractors.DatabaseMetadataExtractor.TableMetadata;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,9 @@ class DatabaseMetadataScanServiceTest {
 
     @Mock
     private GraphBuilder graphBuilder;
+
+    @Mock
+    private DatabaseConstraintExtractor databaseConstraintExtractor;
 
     @Mock
     private DataSource mockDataSource;
@@ -148,5 +152,38 @@ class DatabaseMetadataScanServiceTest {
         assertTrue(count >= 0);
         // 空白 schema 应被替换为 "public"
         verify(mockMetaData).getTables(isNull(), eq("public"), eq("%"), any());
+    }
+
+    @Test
+    void testScan_ExtractsConstraintsAndBuildsConstraintGraph() throws Exception {
+        DatabaseConstraintExtractor.ForeignKeyInfo fk = new DatabaseConstraintExtractor.ForeignKeyInfo();
+        fk.setFkName("fk_order_customer");
+        fk.setFkTableName("orders");
+        fk.setFkColumnName("customer_id");
+        fk.setPkTableName("customers");
+        fk.setPkColumnName("id");
+
+        DatabaseConstraintExtractor.IndexInfo idx = new DatabaseConstraintExtractor.IndexInfo();
+        idx.setIndexName("uk_orders_no");
+        idx.setTableName("orders");
+        idx.setColumnName("order_no");
+        idx.setNonUnique(false);
+        idx.setUnique(true);
+
+        when(mockDataSource.getConnection()).thenReturn(mockConnection);
+        when(mockConnection.getMetaData()).thenReturn(mockMetaData);
+        when(mockMetaData.getTables(any(), any(), any(), any())).thenReturn(mockTablesResultSet);
+        when(mockTablesResultSet.next()).thenReturn(false);
+        when(databaseConstraintExtractor.extractForeignKeys(mockDataSource, null, "public"))
+                .thenReturn(List.of(fk));
+        when(databaseConstraintExtractor.extractIndexes(mockDataSource, null, "public"))
+                .thenReturn(List.of(idx));
+
+        int count = databaseMetadataScanService.scan("proj-1", "v1", mockDataSource, "public", "postgresql");
+
+        assertEquals(0, count);
+        verify(databaseConstraintExtractor).extractForeignKeys(mockDataSource, null, "public");
+        verify(databaseConstraintExtractor).extractIndexes(mockDataSource, null, "public");
+        verify(graphBuilder).buildDatabaseConstraintGraph("proj-1", "v1", "public", List.of(fk), List.of(idx));
     }
 }

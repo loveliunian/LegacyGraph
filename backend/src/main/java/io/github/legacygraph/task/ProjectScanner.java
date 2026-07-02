@@ -5,6 +5,10 @@ import io.github.legacygraph.builder.FrontendGraphBuilder;
 import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.DbSchemaAnalysis;
+import io.github.legacygraph.dto.scan.ResolvedDbScope;
+import io.github.legacygraph.dto.scan.ResolvedDocScope;
+import io.github.legacygraph.dto.scan.ResolvedRepoScope;
+import io.github.legacygraph.dto.scan.ResolvedScanPlan;
 import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.DbConnection;
 import io.github.legacygraph.entity.Document;
@@ -71,6 +75,8 @@ public class ProjectScanner {
     private final DbSchemaAnalysisAgent dbSchemaAnalysisAgent;
     private final ExtractionAdapterRegistry extractionAdapterRegistry;
     private final DatabaseMetadataScanService databaseMetadataScanService;
+    private ScanScopeResolver scanScopeResolver;
+    private AssetDiscoveryService assetDiscoveryService;
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -152,6 +158,13 @@ public class ProjectScanner {
         this.databaseMetadataScanService = new DatabaseMetadataScanService(graphBuilder);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setScanPlanningServices(ScanScopeResolver scanScopeResolver,
+                                 AssetDiscoveryService assetDiscoveryService) {
+        this.scanScopeResolver = scanScopeResolver;
+        this.assetDiscoveryService = assetDiscoveryService;
+    }
+
     /**
      * 异步启动完整扫描流程
      */
@@ -185,12 +198,18 @@ public class ProjectScanner {
      */
     private void runScanBody(String projectId, String versionId, String baseDir, ScanVersion version) {
         try {
+            ResolvedScanPlan resolvedPlan = resolveScanPlan(projectId, versionId, version);
             // 解析 scanScope JSON，提取 repoIds/dbIds/docIds/scanTypes 用于过滤扫描范围
             List<String> scopeRepoIds = null;
             List<String> scopeDbIds = null;
             List<String> scopeDocIds = null;
             List<String> scopeScanTypes = null;
-            if (version != null && version.getScanScope() != null && !version.getScanScope().isBlank()) {
+            if (resolvedPlan != null) {
+                scopeRepoIds = repoIdsFromPlan(resolvedPlan);
+                scopeDbIds = dbIdsFromPlan(resolvedPlan);
+                scopeDocIds = docIdsFromPlan(resolvedPlan);
+                scopeScanTypes = scanTypesFromPlan(resolvedPlan);
+            } else if (version != null && version.getScanScope() != null && !version.getScanScope().isBlank()) {
                 try {
                     JsonNode scopeNode = objectMapper.readTree(version.getScanScope());
                     if (scopeNode.has("repoIds") && scopeNode.get("repoIds").isArray()) {
@@ -296,7 +315,7 @@ public class ProjectScanner {
             log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
                     projectId, versionId);
             ScanTask adapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
-            int adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask);
+            int adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan);
             completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
             log.info("Adapter registry scan processed {} assets", adapterCount);
 
@@ -436,6 +455,55 @@ public class ProjectScanner {
                 scanVersionRepository.updateById(version);
             }
         }
+    }
+
+    private ResolvedScanPlan resolveScanPlan(String projectId, String versionId, ScanVersion version) {
+        if (scanScopeResolver == null) {
+            return null;
+        }
+        try {
+            return scanScopeResolver.resolve(projectId, versionId, version != null ? version.getScanScope() : null);
+        } catch (Exception e) {
+            log.debug("Failed to resolve scan plan, fallback to legacy scanScope parsing: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<String> repoIdsFromPlan(ResolvedScanPlan plan) {
+        if (plan.getRepos() == null) {
+            return List.of();
+        }
+        return plan.getRepos().stream()
+                .map(ResolvedRepoScope::getRepoId)
+                .filter(id -> id != null && !id.isBlank())
+                .toList();
+    }
+
+    private List<String> dbIdsFromPlan(ResolvedScanPlan plan) {
+        if (plan.getDatabases() == null) {
+            return List.of();
+        }
+        return plan.getDatabases().stream()
+                .map(ResolvedDbScope::getConnectionId)
+                .filter(id -> id != null && !id.isBlank())
+                .toList();
+    }
+
+    private List<String> docIdsFromPlan(ResolvedScanPlan plan) {
+        if (plan.getDocuments() == null) {
+            return List.of();
+        }
+        return plan.getDocuments().stream()
+                .map(ResolvedDocScope::getDocId)
+                .filter(id -> id != null && !id.isBlank())
+                .toList();
+    }
+
+    private List<String> scanTypesFromPlan(ResolvedScanPlan plan) {
+        if (plan.getScanTypes() == null) {
+            return List.of();
+        }
+        return new ArrayList<>(plan.getScanTypes());
     }
 
     /**
@@ -1036,6 +1104,12 @@ public class ProjectScanner {
 
     private int scanAssetsWithAdapters(String projectId, String versionId,
                                        String baseDir, String backendDir, String frontendDir, ScanTask task) {
+        return scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, task, null);
+    }
+
+    private int scanAssetsWithAdapters(String projectId, String versionId,
+                                       String baseDir, String backendDir, String frontendDir,
+                                       ScanTask task, ResolvedScanPlan resolvedPlan) {
         if (baseDir == null || extractionAdapterRegistry == null) {
             return 0;
         }
@@ -1051,6 +1125,13 @@ public class ProjectScanner {
                 .frontendDir(frontendDir)
                 .config(Map.of())
                 .build();
+
+        if (assetDiscoveryService != null) {
+            ResolvedScanPlan effectivePlan = resolvedPlan != null
+                    ? resolvedPlan
+                    : singleRepoPlan(projectId, versionId, baseDir, backendDir, frontendDir);
+            return scanDiscoveredAssetsWithAdapters(projectId, versionId, context, effectivePlan, task);
+        }
 
         try {
             // 排除巨型目录 + 仅收集有适配器能处理的文件类型
@@ -1128,6 +1209,83 @@ public class ProjectScanner {
             log.warn("Adapter scan failed for {}: {}", baseDir, e.getMessage());
             return 0;
         }
+    }
+
+    private int scanDiscoveredAssetsWithAdapters(String projectId, String versionId,
+                                                 ScanContext context,
+                                                 ResolvedScanPlan plan,
+                                                 ScanTask task) {
+        List<SourceAsset> assets = assetDiscoveryService.discoverAssets(plan);
+        int total = assets.size();
+        if (total == 0) {
+            logTaskProgress(task, 0, 0, "adapter candidate files");
+            assetDiscoveryService.persistSnapshots(projectId, versionId, assets);
+            return 0;
+        }
+
+        logTaskProgress(task, 0, total, "adapter candidate files");
+        int visited = 0;
+        int processed = 0;
+        for (SourceAsset asset : assets) {
+            if (isCancelled(versionId)) {
+                break;
+            }
+            visited++;
+            try {
+                if (plan.isIncremental() && assetDiscoveryService.isIncrementalSkip(asset, projectId, versionId)) {
+                    continue;
+                }
+                var adapter = extractionAdapterRegistry.selectAdapter(context, asset);
+                if (adapter.isEmpty()) {
+                    continue;
+                }
+                ExtractionResult result = adapter.get().extract(context, asset);
+                if (result != null && result.getProcessedAssets() > 0) {
+                    processed += result.getProcessedAssets();
+                } else {
+                    processed++;
+                }
+            } catch (Exception e) {
+                log.warn("Adapter failed for discovered asset {}: {}", asset.getRelativePath(), e.getMessage());
+            } finally {
+                if (visited % PROGRESS_LOG_INTERVAL == 0 || visited == total) {
+                    logTaskProgress(task, visited, total, "adapter candidate files");
+                }
+            }
+        }
+
+        assetDiscoveryService.persistSnapshots(projectId, versionId, assets);
+        Set<String> currentPaths = assets.stream()
+                .map(SourceAsset::getRelativePath)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        var deletions = assetDiscoveryService.detectDeletions(projectId, versionId, currentPaths);
+        if (deletions != null && !deletions.isEmpty()) {
+            log.info("Asset discovery detected {} deleted assets for versionId={}", deletions.size(), versionId);
+        }
+        return processed;
+    }
+
+    private ResolvedScanPlan singleRepoPlan(String projectId, String versionId,
+                                            String baseDir, String backendDir, String frontendDir) {
+        return ResolvedScanPlan.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .repos(List.of(ResolvedRepoScope.builder()
+                        .baseDir(baseDir)
+                        .backendDir(backendDir != null ? backendDir : baseDir)
+                        .frontendDir(frontendDir != null ? frontendDir : baseDir)
+                        .includePatterns(List.of())
+                        .excludePatterns(List.of())
+                        .build()))
+                .databases(List.of())
+                .documents(List.of())
+                .scanTypes(Set.of("CODE_SCAN", "DOC_PARSE"))
+                .maxFiles(Integer.MAX_VALUE)
+                .maxDocs(Integer.MAX_VALUE)
+                .maxDbTables(Integer.MAX_VALUE)
+                .rawScope(Map.of())
+                .build();
     }
 
     private boolean isAdapterCandidate(Path path) {

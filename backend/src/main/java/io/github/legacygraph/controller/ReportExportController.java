@@ -122,6 +122,21 @@ public class ReportExportController {
     }
 
     /**
+     * 导出资料扫描与图谱构建研究报告
+     */
+    @GetMapping("/scan-research/{projectId}/{versionId}")
+    public ResponseEntity<byte[]> exportScanResearchReport(
+            @PathVariable String projectId,
+            @PathVariable String versionId,
+            @RequestParam(defaultValue = "MD") String format) {
+
+        ReportExportService.ExportFormat exportFormat = parseFormat(format);
+        byte[] data = reportExportService.exportReport(
+                projectId, versionId, ReportExportService.ReportType.SCAN_RESEARCH, exportFormat);
+        return buildResponse(data, "资料扫描与图谱构建研究报告", exportFormat);
+    }
+
+    /**
      * 支持的报告格式列表
      */
     @GetMapping("/formats")

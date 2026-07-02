@@ -17,6 +17,8 @@ public enum EdgeType {
     READS("读取"),
     WRITES("写入"),
     HAS_COLUMN("拥有字段"),
+    HAS_INDEX("拥有索引"),
+    UNIQUE_ON("唯一约束字段"),
     JOINS("JOIN"),
     TRIGGERS("触发"),
     CONSUMES("消费"),

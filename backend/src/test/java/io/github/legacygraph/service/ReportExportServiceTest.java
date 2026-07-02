@@ -27,11 +27,14 @@ class ReportExportServiceTest {
     @Mock
     private ChangeReportService changeReportService;
 
+    @Mock
+    private ScanResearchReportService scanResearchReportService;
+
     private ReportExportService reportExportService;
 
     @BeforeEach
     void setUp() {
-        reportExportService = new ReportExportService(objectMapper, reportingService, changeReportService);
+        reportExportService = new ReportExportService(objectMapper, reportingService, changeReportService, scanResearchReportService);
     }
 
     @Test

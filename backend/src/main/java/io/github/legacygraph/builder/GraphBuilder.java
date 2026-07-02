@@ -9,6 +9,7 @@ import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.extractors.DatabaseConstraintExtractor;
 import io.github.legacygraph.extractors.JavaStructureExtractor;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
@@ -341,6 +342,93 @@ public class GraphBuilder {
     }
 
     /**
+     * 构建数据库真实约束图谱：外键、索引和唯一约束。
+     */
+    @Transactional
+    public void buildDatabaseConstraintGraph(String projectId, String versionId, String schema,
+            List<DatabaseConstraintExtractor.ForeignKeyInfo> foreignKeys,
+            List<DatabaseConstraintExtractor.IndexInfo> indexes) {
+        if (foreignKeys != null) {
+            for (DatabaseConstraintExtractor.ForeignKeyInfo fk : foreignKeys) {
+                if (fk.getFkTableName() == null || fk.getPkTableName() == null) {
+                    continue;
+                }
+                String fkTableKey = buildQualifiedTableKey(schema, fk.getFkTableName());
+                String pkTableKey = buildQualifiedTableKey(schema, fk.getPkTableName());
+                GraphNode fkTable = findOrCreateDatabaseTableNode(projectId, versionId, fkTableKey, fk.getFkTableName());
+                GraphNode pkTable = findOrCreateDatabaseTableNode(projectId, versionId, pkTableKey, fk.getPkTableName());
+                String edgeKey = fkTableKey + "->references->" + pkTableKey + "." + nullToEmpty(fk.getFkColumnName());
+                if (fk.getFkName() != null && !fk.getFkName().isBlank()) {
+                    edgeKey = edgeKey + "#" + fk.getFkName();
+                }
+                createEdge(projectId, versionId,
+                        fkTable.getId(), pkTable.getId(),
+                        EdgeType.REFERENCES.name(),
+                        edgeKey,
+                        SourceType.DB_METADATA.name(),
+                        BigDecimal.ONE,
+                        NodeStatus.CONFIRMED);
+            }
+        }
+
+        if (indexes != null) {
+            for (DatabaseConstraintExtractor.IndexInfo idx : indexes) {
+                if (idx.getTableName() == null || idx.getIndexName() == null) {
+                    continue;
+                }
+                String tableKey = buildQualifiedTableKey(schema, idx.getTableName());
+                GraphNode tableNode = findOrCreateDatabaseTableNode(projectId, versionId, tableKey, idx.getTableName());
+                String indexKey = tableKey + "." + idx.getIndexName();
+                GraphNode indexNode = findOrCreateNode(
+                        projectId, versionId,
+                        NodeType.Index.name(),
+                        indexKey,
+                        idx.getIndexName(),
+                        idx.getIndexName(),
+                        idx.isUnique() ? "唯一索引" : "普通索引",
+                        SourceType.DB_METADATA.name(),
+                        null,
+                        null,
+                        null,
+                        BigDecimal.ONE,
+                        NodeStatus.CONFIRMED);
+
+                createEdge(projectId, versionId,
+                        tableNode.getId(), indexNode.getId(),
+                        EdgeType.HAS_INDEX.name(),
+                        tableKey + "->has_index->" + indexKey,
+                        SourceType.DB_METADATA.name(),
+                        BigDecimal.ONE,
+                        NodeStatus.CONFIRMED);
+
+                if (idx.isUnique() && idx.getColumnName() != null && !idx.getColumnName().isBlank()) {
+                    String columnKey = tableKey + "." + idx.getColumnName();
+                    GraphNode columnNode = findOrCreateNode(
+                            projectId, versionId,
+                            NodeType.Column.name(),
+                            columnKey,
+                            idx.getColumnName(),
+                            idx.getColumnName(),
+                            null,
+                            SourceType.DB_METADATA.name(),
+                            null,
+                            null,
+                            null,
+                            BigDecimal.ONE,
+                            NodeStatus.CONFIRMED);
+                    createEdge(projectId, versionId,
+                            indexNode.getId(), columnNode.getId(),
+                            EdgeType.UNIQUE_ON.name(),
+                            indexKey + "->unique_on->" + columnKey,
+                            SourceType.DB_METADATA.name(),
+                            BigDecimal.ONE,
+                            NodeStatus.CONFIRMED);
+                }
+            }
+        }
+    }
+
+    /**
      * 查找或创建节点（委托给 EvidenceGraphWriter）。
      * ⚠️ B-M3：本方法与 FrontendGraphBuilder/BusinessGraphBuilder 中的同名方法均为 thin wrapper，
      * 可进一步收敛为 Builder 直接调用 writer.upsertNode()。
@@ -386,6 +474,34 @@ public class GraphBuilder {
                 BigDecimal.valueOf(0.95),
                 NodeStatus.CONFIRMED
         );
+    }
+
+    private GraphNode findOrCreateDatabaseTableNode(String projectId, String versionId, String tableKey, String tableName) {
+        return findOrCreateNode(
+                projectId, versionId,
+                NodeType.Table.name(),
+                tableKey,
+                tableName,
+                tableName,
+                null,
+                SourceType.DB_METADATA.name(),
+                null,
+                null,
+                null,
+                BigDecimal.ONE,
+                NodeStatus.CONFIRMED
+        );
+    }
+
+    private String buildQualifiedTableKey(String schema, String tableName) {
+        if (schema == null || schema.isBlank()) {
+            return tableName;
+        }
+        return schema + "." + tableName;
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     /**

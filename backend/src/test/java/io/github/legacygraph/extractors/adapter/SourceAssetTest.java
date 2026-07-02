@@ -63,7 +63,8 @@ class SourceAssetTest {
         Path file = tempDir.resolve("test.xml");
         SourceAsset asset = new SourceAsset(
                 file, "mapper/OrderMapper.xml",
-                "xml", "xml", "mybatis", 2048L);
+                "xml", "xml", "mybatis", 2048L,
+                null, null, 0L, null, false);
 
         assertEquals(file, asset.getFile());
         assertEquals("mapper/OrderMapper.xml", asset.getRelativePath());

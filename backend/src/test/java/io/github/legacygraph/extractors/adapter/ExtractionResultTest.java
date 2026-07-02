@@ -58,13 +58,13 @@ class ExtractionResultTest {
      * 测试空 extractedData 时的防御性初始化。
      */
     @Test
-    void builder_withNullExtractedData_initializesEmptyList() {
+    void builder_withoutExtractedData_initializesEmptyList() {
         ExtractionResult result = ExtractionResult.builder()
                 .processedAssets(1)
-                .extractedData(null)
                 .build();
 
         assertNotNull(result.getExtractedData());
+        assertTrue(result.getExtractedData().isEmpty());
     }
 
     /**
@@ -74,7 +74,8 @@ class ExtractionResultTest {
     void allArgsConstructor_createsValidResult() {
         List<Object> data = List.of("item1", "item2");
         ExtractionResult result = new ExtractionResult(
-                2, 4, 3, 1, "done", data);
+                2, 4, 3, 1, "done", data,
+                List.of(), List.of(), null, List.of());
 
         assertEquals(2, result.getProcessedAssets());
         assertEquals(4, result.getNodeCount());

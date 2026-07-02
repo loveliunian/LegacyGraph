@@ -55,5 +55,14 @@ public class GraphEdgeClaim {
     /** 幂等键：同一意图重复提交不产生副作用（可选） */
     private String idempotencyKey;
 
+    /** Dry-run 模式：节点键（未解析为 Neo4j ID 时使用，KnowledgeCompiler） */
+    private String fromNodeKey;
+
+    /** Dry-run 模式：节点键（未解析为 Neo4j ID 时使用，KnowledgeCompiler） */
+    private String toNodeKey;
+
+    /** 关联的 KnowledgeClaim ID（溯源用，KnowledgeCompiler） */
+    private String claimId;
+
 
 }

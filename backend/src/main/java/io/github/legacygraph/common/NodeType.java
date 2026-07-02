@@ -25,6 +25,7 @@ public enum NodeType {
     Mapper("Mapper"),
     SqlStatement("SQL语句"),
     Table("数据库表"),
+    Index("数据库索引"),
     Column("数据库字段"),
     ConfigItem("配置项"),
     ScheduledJob("定时任务"),

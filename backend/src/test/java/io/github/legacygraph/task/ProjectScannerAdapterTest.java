@@ -7,6 +7,7 @@ import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
 import io.github.legacygraph.extractors.adapter.ExtractionResult;
+import io.github.legacygraph.extractors.adapter.SourceAsset;
 import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,7 @@ class ProjectScannerAdapterTest {
     @Mock private DbSchemaAnalysisAgent dbSchemaAnalysisAgent;
     @Mock private ExtractionAdapterRegistry adapterRegistry;
     @Mock private ExtractionAdapter adapter;
+    @Mock private AssetDiscoveryService assetDiscoveryService;
 
     @Test
     void scanAssetsWithAdaptersDelegatesSupportedFilesToRegistry() throws Exception {
@@ -74,6 +76,49 @@ class ProjectScannerAdapterTest {
 
         assertEquals(1, processed);
         verify(adapterRegistry).selectAdapter(any(), any());
+        verify(adapter).extract(any(), any());
+    }
+
+    @Test
+    void scanAssetsWithAdaptersUsesAssetDiscoveryWhenAvailable() throws Exception {
+        Path sourceFile = tempDir.resolve("OrderService.java");
+        Files.writeString(sourceFile, "class OrderService {}");
+        SourceAsset discoveredAsset = SourceAsset.builder()
+                .file(sourceFile)
+                .relativePath("OrderService.java")
+                .fileType("java")
+                .assetKind("CODE")
+                .build();
+        when(assetDiscoveryService.discoverAssets(any())).thenReturn(java.util.List.of(discoveredAsset));
+        when(adapterRegistry.selectAdapter(any(), any())).thenReturn(Optional.of(adapter));
+        when(adapter.extract(any(), any())).thenReturn(ExtractionResult.builder()
+                .processedAssets(1)
+                .summary("ok")
+                .build());
+
+        ProjectScanner scanner = new ProjectScanner(
+                scanVersionRepository,
+                scanTaskRepository,
+                factRepository,
+                dbConnectionRepository,
+                codeRepoRepository,
+                documentRepository,
+                graphBuilder,
+                frontendGraphBuilder,
+                null,
+                new ObjectMapper(),
+                aiScanOrchestrator,
+                dbSchemaAnalysisAgent,
+                adapterRegistry
+        );
+        scanner.setScanPlanningServices(null, assetDiscoveryService);
+
+        int processed = scanner.scanAssetsWithAdapters("project-1", "v1",
+                tempDir.toString(), tempDir.toString(), tempDir.toString());
+
+        assertEquals(1, processed);
+        verify(assetDiscoveryService).discoverAssets(any());
+        verify(assetDiscoveryService).persistSnapshots(any(), any(), any());
         verify(adapter).extract(any(), any());
     }
 }

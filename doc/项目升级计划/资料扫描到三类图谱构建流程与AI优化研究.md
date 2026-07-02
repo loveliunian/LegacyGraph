@@ -939,6 +939,89 @@ legacygraph:
 
 默认先用 `shadow`：直接写图仍生效，Claim 编译只生成对比报告。
 
-## 8. 结语
+## 8. 实现记录（2026-07-02）
+
+按 7.12 分阶段顺序完成首轮实现。后续按代码和 CodeGraph MCP 复核发现，部分能力最初只完成了文件落地，尚未接入主扫描链路；本节已补充本次偏移检查和修复记录。验收时以目标测试实际执行结果为准，不再只用“编译通过”判断完成。
+
+### 8.1 新增文件清单
+
+| 文件 | 所属阶段 | 说明 |
+|---|---|---|
+| `dto/scan/ResolvedScanPlan.java` | 阶段1 | 解析后的扫描计划 DTO |
+| `dto/scan/ResolvedRepoScope.java` | 阶段1 | 仓库扫描范围 DTO |
+| `dto/scan/ResolvedDbScope.java` | 阶段1 | 数据库扫描范围 DTO |
+| `dto/scan/ResolvedDocScope.java` | 阶段1 | 文档扫描范围 DTO |
+| `task/ScanScopeResolver.java` | 阶段1 | 扫描范围解析器 |
+| `entity/SourceAssetSnapshot.java` | 阶段2 | 资产快照实体 |
+| `repository/SourceAssetSnapshotRepository.java` | 阶段2 | 资产快照 Repository |
+| `task/AssetDiscoveryService.java` | 阶段2 | 资产发现服务（增量扫描） |
+| `db/migration/V20__source_asset_snapshot.sql` | 阶段2 | 资产快照表 DDL |
+| `dto/claim/CompileOptions.java` | 阶段4 | 编译选项 DTO |
+| `dto/claim/ClaimCompileIssue.java` | 阶段4 | 编译问题 DTO |
+| `dto/claim/CompiledGraphProjection.java` | 阶段4 | 编译后图谱投影 DTO |
+| `service/KnowledgeCompiler.java` | 阶段4 | Claim 编译器（dry-run） |
+| `entity/GraphWriteIntentEntity.java` | 阶段5 | 写入意图实体 |
+| `repository/GraphWriteIntentRepository.java` | 阶段5 | 写入意图 Repository |
+| `service/GraphWriteIntentService.java` | 阶段5 | 写入意图服务 |
+| `task/GraphWriteIntentWorker.java` | 阶段5 | 写入意图后台执行器 |
+| `db/migration/V21__graph_write_intent_outbox.sql` | 阶段5 | 写入意图 outbox 表 DDL |
+| `extractors/DatabaseConstraintExtractor.java` | 阶段6 | 数据库约束抽取器 |
+| `dto/rag/GraphRagEvidenceCard.java` | 阶段7 | 证据卡片 DTO |
+| `dto/rag/GraphRagExecutionResult.java` | 阶段7 | 执行结果 DTO |
+| `service/GraphRagPlanExecutor.java` | 阶段7 | GraphRAG 计划执行器 |
+| `dto/report/ScanResearchReport.java` | 阶段8 | 扫描研究报告 DTO |
+| `service/ScanResearchReportService.java` | 阶段8 | 扫描研究报告生成服务 |
+
+### 8.2 修改文件清单
+
+| 文件 | 修改内容 |
+|---|---|
+| `extractors/adapter/SourceAsset.java` | 新增 assetKind/contentHash/lastModifiedMs/extractorVersion/deleted 字段 |
+| `extractors/adapter/ExtractionResult.java` | 新增 evidenceRecords/claimDrafts/graphWriteIntent/warnings 字段 |
+| `service/ReportExportService.java` | 新增 SCAN_RESEARCH/CODE_UNDERSTANDING/GRAPH_BUILD_DETAIL 报告类型；注入 ScanResearchReportService |
+| `controller/ReportExportController.java` | 新增 `/reports/scan-research/{projectId}/{versionId}` 端点 |
+| `task/AiScanOrchestrator.java` | 修复 javax.annotation → jakarta.annotation (Spring Boot 4 兼容) |
+
+### 8.3 验收状态
+
+| 阶段 | 状态 | 备注 |
+|---|---|---|
+| 阶段1：扫描计划对象化 | ✅ 已接入 | 4 DTO + ScanScopeResolver；ProjectScanner 优先使用解析后的 ResolvedScanPlan，保留旧 JSON 解析兜底 |
+| 阶段2：资产快照表和 Discovery | ✅ 已接入 | SourceAsset 扩展 + 快照表 + AssetDiscoveryService；Adapter 扫描优先走资产发现和快照增量判定 |
+| 阶段3：Adapter 结果扩展 | ✅ 完成 | ExtractionResult 扩展字段 |
+| 阶段4：Claim 编译 dry-run | ✅ 已修复 | KnowledgeCompiler + 3 DTO；dry-run 现在输出节点 Claim、key-based 边 Claim 和 claimId |
+| 阶段5：GraphWriteIntent outbox | ✅ 已修复 | outbox 表 + Entity + Service + Worker；幂等键改为基于 Claim/Evidence 内容计算，避免同数量不同内容碰撞 |
+| 阶段6：数据库约束增强 | ✅ 已接入 | DatabaseConstraintExtractor (FK + 索引) 已由 DatabaseMetadataScanService 调用，并写入约束图谱 |
+| 阶段7：AI 执行器闭环 | ✅ 已修复 | GraphRagPlanExecutor + 2 DTO；Claim 查询按 subjectKeys 过滤 |
+| 阶段8：报告导出 | ✅ 完成 | ScanResearchReportService + Controller endpoint |
+| 阶段9：双轨切换 | ⏳ 待后续 | 需在对比稳定后逐个 Adapter 从直接写图切到 Claim 编译投影 |
+
+### 8.4 下一步
+
+按照文档 7.12 的阶段9，待各 Adapter 的"直接写图"与"Claim 编译写图"结果对比稳定后，通过 `legacygraph.graph.write-mode` 配置切换到 `claim-compiler` 模式。
+
+### 8.5 偏移复核与修复记录
+
+本次使用 CodeGraph MCP 以调用关系为准复核 7.12 中 1-8 阶段，发现并修复以下偏移：
+
+| 偏移点 | 修复结果 |
+|---|---|
+| `ScanScopeResolver` 已存在但 `ProjectScanner` 仍重复解析 `scanScope` JSON | `ProjectScanner` 新增可选注入并优先解析 `ResolvedScanPlan`，仓库、数据库、文档和 scanTypes 都从统一计划派生，旧解析逻辑保留为兜底 |
+| `AssetDiscoveryService` 已存在但 Adapter 扫描仍直接遍历文件系统 | Adapter 扫描新增基于 `AssetDiscoveryService.discoverAssets` 的主路径，复用 hash、deleted tombstone 和增量跳过判断 |
+| `DatabaseConstraintExtractor` 已存在但数据库扫描未调用 | `DatabaseMetadataScanService` 在表/字段图谱之后抽取 FK、索引、唯一约束，并调用 `GraphBuilder.buildDatabaseConstraintGraph` 写入约束图谱 |
+| 数据库约束图谱缺少索引/唯一约束语义 | 新增 `NodeType.Index`、`EdgeType.HAS_INDEX`、`EdgeType.UNIQUE_ON`，FK 继续使用 `REFERENCES` |
+| `GraphWriteIntentService` 幂等键只看节点/边数量 | 幂等键改为基于排序后的节点 Claim、边 Claim 和 Evidence 内容生成，避免同数量不同内容被误合并 |
+| `GraphRagPlanExecutor` Claim 查询未使用 `subjectKeys` | Claim 查询按请求的 subjectKeys 过滤，避免返回无关 Claim |
+| `KnowledgeCompiler` dry-run 只产出边投影且使用 nodeId 字段承载 key | dry-run 现在同时产出节点 Claim；边 Claim 使用 `fromNodeKey/toNodeKey`，并补充稳定 `claimId` |
+
+本次目标验证已通过：
+
+```bash
+rtk mvn test -Dtest=ProjectScannerAdapterTest,DatabaseMetadataScanServiceTest,GraphWriteIntentServiceTest,GraphRagPlanExecutorTest,KnowledgeCompilerTest
+```
+
+目标用例执行结果为 12 个测试通过。完整 `rtk mvn test` 仍未全绿，当前阻塞在测试上下文初始化阶段：`schema-h2.sql` 创建 `lg_project` 时表已存在，随后触发大量 Spring Boot context-load 失败。该问题与本次补齐的扫描/Claim/GraphRAG 主链路不同，需要单独整理 H2 初始化策略。
+
+## 9. 结语
 
 LegacyGraph 当前已经具备“资料扫描 -> 统一图谱 -> 三类视图 -> AI 编排 -> 缺口发现”的基本闭环。真正的优化方向不是让 AI 替代扫描器，而是让 AI 围绕证据做研究：提出候选、发现缺口、规划补证、解释冲突、生成可验证测试。只要坚持“确定性事实优先、AI 候选待确认、测试/运行时/人工审核回写置信度”，AI 更深介入会显著提升三类图谱的业务可读性和迁移决策价值。

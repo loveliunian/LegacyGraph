@@ -1,230 +1,299 @@
-# codebase-memory-mcp 与 Zread 类工具辅助代码理解和文档生成方案
+# MCP、CLI 与 IDE AI 工具辅助代码理解和文档生成方案
 
 > 研究时间：2026-07-02  
 > 适用范围：LegacyGraph 对代码、文档、数据库资料的理解、图谱增强、问答和报告生成链路  
-> 关联文档：`doc/资料扫描到三类图谱构建流程与AI优化研究.md`
+> 关联文档：`doc/资料扫描到三类图谱构建流程与AI优化研究.md`  
+> 关键修正：Zread 只是“长上下文阅读类 CLI”的一个例子，不应成为方案中心。方案目标是建设可插拔的代码理解工具层，支持 MCP Server、CLI Agent、IDE/本地索引工具、企业级代码搜索和仓库打包工具共同接入。
 
-## 1. 结论
+## 1. 总体结论
 
-可以结合现有 `codebase-memory-mcp` 和 Zread CLI 这类工具，让系统更好地理解代码并输出文档，但它们不应该替代 LegacyGraph 已有的扫描和图谱构建主链路。更合理的定位是：
+LegacyGraph 应把 MCP、Zread 类 CLI、Codex/Claude Code/Aider 类 CLI Agent、Continue/Cursor 类 IDE 索引、Serena/codebase-memory-mcp 类语义代码 MCP、Sourcegraph 类企业代码搜索、Repomix 类仓库打包工具，都视为“外部代码理解工具”。这些工具不替代 LegacyGraph 已有扫描、三类图谱、KnowledgeClaim 和报告生成主链路，而是通过统一适配层提供额外证据、阅读能力和候选摘要。
 
-1. `codebase-memory-mcp` 作为“结构化代码图谱入口”，负责符号发现、调用链、架构社区、影响面、跨文件关系。
-2. Zread 类 CLI 作为“长上下文阅读入口”，负责读取大文件、非索引文件、文档片段、代码上下文摘要和局部深读。
-3. LegacyGraph 自身作为“证据归档和知识生产系统”，继续负责证据入库、KnowledgeClaim 状态管理、Feature Slice 合成、Gap 识别和报告导出。
-4. AI Agent 负责规划、归纳、对齐术语、发现缺口、生成可读文档，但不能直接把推断结果写成已确认事实。
+最终目标不是“绑定某个工具多读一点代码”，而是形成一条可追溯、可降级、可审计的工具编排链路：
 
-最佳效果不是“让 AI 多读一点代码”，而是建立一个可追溯的工具编排流程：
+1. 外部工具负责发现、定位、阅读、追踪、打包和候选总结。
+2. LegacyGraph 负责证据归一化、Claim 状态管理、三类图谱沉淀、Feature Slice 合成、Gap 识别和报告导出。
+3. AI Agent 负责规划阅读顺序、跨术语对齐、摘要组织和风险解释，但不能把无证据推断直接写成已确认事实。
+4. 所有工具都必须经过健康检查、权限策略、预算限制、输出脱敏和证据引用检查。
 
 ```mermaid
 flowchart TD
-    U["用户问题或文档生成请求"] --> O["CodeUnderstandingOrchestrator"]
-    O --> H["ToolHealthService 健康检查"]
-    H -->|可用| M["codebase-memory-mcp 结构化查询"]
-    H -->|可用| Z["Zread 类 CLI 深度阅读"]
-    H -->|降级| F["本地文件与现有图谱降级检索"]
-    M --> E["EvidenceNormalizer 证据归一化"]
-    Z --> E
+    U["用户问题 / 文档生成请求 / 扫描后增强任务"] --> O["CodeUnderstandingOrchestrator"]
+    O --> P["ToolPolicy + ToolRouter<br/>按能力、预算、风险选择工具"]
+    P --> H["ToolHealthService<br/>动态健康检查"]
+    H --> M["MCP Tool Adapters<br/>codebase-memory-mcp / Serena / docs MCP"]
+    H --> C["CLI Tool Adapters<br/>Zread-like / Codex / Claude Code / Aider / Repomix"]
+    H --> I["IDE / Hosted Search Adapters<br/>Continue / Cursor / Sourcegraph / GitHub Search"]
+    H --> F["LocalFallbackAdapter<br/>LegacyGraph 图谱 / 向量 / 文件片段"]
+    M --> E["EvidenceNormalizer"]
+    C --> E
+    I --> E
     F --> E
-    E --> K["KnowledgeClaimService 写入待确认或已确认断言"]
-    E --> R["GraphRAG / FeatureSlice / GapFinder"]
-    R --> D["CodeUnderstandingReportService"]
-    D --> X["ReportExportService 输出 Markdown/PDF"]
+    E --> T["ToolRun / ToolEvidence"]
+    E --> K["KnowledgeClaimService<br/>CONFIRMED / PENDING_CONFIRM / STALE_REFERENCE"]
+    K --> G["GraphRAG / FeatureSlice / GapFinder"]
+    G --> R["CodeUnderstandingReportService"]
+    R --> X["ReportExportService<br/>Markdown / PDF"]
 ```
 
-本次本地检查结论：
+本次复核结论：
 
-- `codebase-memory-mcp` 工具已能被发现，但实际调用 `list_projects` / `search_graph` 返回 `Transport closed`，需要在产品中加入健康检查和降级策略。
-- `zread` / `Zread` 当前不在本机 `PATH` 中，不能假设已安装；应按“可选外部工具”接入，并通过适配器隔离命令、版本和输出格式差异。
-- 当前仓库已有 `QaAgent`、`GraphRagPlannerAgent`、`FeatureSliceSynthesizer`、`KnowledgeClaimService`、`ReportExportService`，足以承接这类工具的结果。
+- `codebase-memory-mcp` 当前能列出并查询 `Users-huymac-LegacyGraph`，索引状态为 `ready`，可作为结构化代码图谱工具的首个适配对象。
+- 本机当前可见 `codex-cli 0.142.5` 和 `Claude Code 2.1.185`，不可见 `zread`、`aider`、`repomix` 命令；因此所有 CLI 工具都必须按可选工具接入。
+- 现有代码里已有 `QaAgent`、`GraphRagPlannerAgent`、`FeatureSliceSynthesizer`、`KnowledgeClaimService`、`ReportExportService`、`SecretScanService` 等承接点，MVP 不需要重建扫描系统。
+- 旧文档中的“codebase-memory-mcp 返回 Transport closed”只能作为历史故障样例，不应写成当前固定状态；产品实现必须每次按项目和工具动态检测。
 
-## 2. 当前系统可复用基础
+## 2. 外部工具生态调研结论
 
-### 2.1 扫描主流程
+### 2.1 工具类型划分
+
+| 类型 | 代表工具 | 强项 | 风险 | LegacyGraph 推荐角色 |
+| --- | --- | --- | --- | --- |
+| 标准化 MCP Server | codebase-memory-mcp、Serena、文档 MCP、数据库 MCP | 通过统一协议暴露 tools/resources/prompts；适合结构化查询和跨工具编排 | MCP Server 能力、授权和安全模型差异大 | 第一优先级工具接入方式 |
+| 语义代码 MCP / LSP 工具 | codebase-memory-mcp、Serena | 符号检索、引用、调用链、影响面、跨文件关系 | 索引过期会导致错误结论 | 确定性代码证据和影响面分析 |
+| CLI Agent | Codex CLI、Claude Code、Aider | 可在本地仓库中执行多步理解、命令、编辑和问答 | 默认能力可能包含写文件或执行命令，必须限制模式 | 只读研究助理，MVP 禁止自动写入 |
+| 长上下文阅读 CLI | Zread-like 工具 | 读取大文件、代码片段、文档片段、生成摘要 | 摘要不是事实，输出格式不稳定 | 深度阅读器和候选摘要生成器 |
+| IDE / 本地索引工具 | Continue、Cursor | 本地开发体验好，具备代码库上下文、规则、检索、MCP 扩展 | 与服务端产品集成难度较高 | 先作为人工工作流参考，后续可接入索引结果 |
+| 企业级代码搜索 | Sourcegraph / Cody | 大规模代码搜索、跨仓库理解、企业权限体系 | 部署和授权成本高 | 大型多仓库场景的可选后端 |
+| 仓库打包工具 | Repomix、gitingest 类工具 | 把仓库转成 AI 友好的单文件或分块输入 | 容易带出敏感文件，输出过大 | 离线上下文包生成，必须走白名单和脱敏 |
+| 本地降级工具 | LegacyGraph 现有图谱、向量库、文件读取 | 稳定、可控、可审计 | 实时调用链和长上下文能力有限 | 永远保底的事实来源 |
+
+### 2.2 对调研资料的落地解读
+
+- MCP 官方协议已经把服务端能力拆成 Tools、Resources、Prompts 等原语；因此 LegacyGraph 不应写死某一个 MCP，而应先建设通用 MCP Client/Adapter，再把 codebase-memory-mcp 作为首个 profile。
+- MCP 安全最佳实践强调用户同意、最小权限、输入校验、访问控制、速率限制、输出净化和审计日志；这与 LegacyGraph 的 Claim 状态和证据归档天然匹配。
+- OpenAI Codex CLI 和 Claude Code 都属于“本地终端 Agent”范式，适合做仓库级问题拆解和局部理解，但因为可能执行命令或编辑文件，产品内接入必须默认只读、强超时、强预算、强审计。
+- Aider 的 repo map 思路说明：让 AI 理解代码库时，先给全局结构和相关符号，再按需加入文件，比盲目塞全仓库更有效。
+- Continue 的代码库文档感知路线说明：把文档、规则、索引和代码上下文持续接入开发问答，比一次性阅读更适合团队知识沉淀。
+- Repomix 这类仓库打包工具说明：把仓库压缩成 AI 友好输入有价值，但在企业系统里必须先做路径白名单、secret scan、大小预算和引用回源。
+- Serena 这类基于语言服务器的 MCP 工具说明：符号级、引用级代码理解可以通过 MCP 提供给 Agent，适合作为 codebase-memory-mcp 之外的第二类语义代码工具。
+
+## 3. 当前系统可复用基础
+
+### 3.1 扫描和图谱主链路
 
 现有扫描主链路已经覆盖代码、文档、数据库：
 
 - `backend/src/main/java/io/github/legacygraph/task/ProjectScanner.java`
   - 负责扫描任务编排。
-  - 通过 `scanAssetsWithAdapters` 调用 Adapter 体系。
-  - 扫描后进入数据库扫描、图谱写入、AI 编排等阶段。
+  - 已有代码、文档、数据库扫描阶段。
 - `backend/src/main/java/io/github/legacygraph/extractors/adapter/ExtractionAdapterRegistry.java`
   - 管理多种资料抽取 Adapter。
-  - 适合继续扩展为“外部理解工具 Adapter”的统一入口。
+  - 可以作为“外部资料抽取”和“内部扫描 Adapter”的参考，但外部 AI 工具建议放入新的 `understanding.tool` 包，避免和确定性扫描 Adapter 混在一起。
 - `backend/src/main/java/io/github/legacygraph/task/AiScanOrchestrator.java`
   - 负责扫描后的 AI 任务串联。
-  - 可以新增“代码理解报告生成”或“外部工具增强 Claim”阶段。
+  - 后续可以增加“扫描后代码理解增强”阶段，但 MVP 不应改变基础扫描成功条件。
 
-这说明 MCP 和 Zread 不需要重建扫描系统，而应作为新的证据源和理解工具接入。
+### 3.2 证据和 Claim 状态
 
-### 2.2 知识断言与证据状态
+`KnowledgeClaimService` 已有清晰边界：
 
-`backend/src/main/java/io/github/legacygraph/service/KnowledgeClaimService.java` 已经明确了证据状态策略：
+- `DOC_AI`、`CODE_AI`、`AI_INFERENCE`、`AI` 默认 `PENDING_CONFIRM`。
+- `CODE`、`DB`、`RUNTIME`、`TEST` 且置信度达到阈值时才可 `CONFIRMED`。
+- 重复 upsert 时合并 evidence，保留更高置信度。
 
-- AI 来源如 `DOC_AI`、`CODE_AI`、`AI_INFERENCE` 默认 `PENDING_CONFIRM`。
-- `CODE`、`DB`、`RUNTIME`、`TEST` 且置信度足够高时，可以进入 `CONFIRMED`。
-- 重复 upsert 时合并 `evidenceIds`，并取更高置信度。
+外部工具结果必须沿用这个边界：
 
-因此外部工具接入后应区分两类结果：
-
-| 外部工具结果 | 建议 sourceType | 建议状态 |
+| 工具结果 | 建议 sourceType | 建议状态 |
 | --- | --- | --- |
-| MCP 基于新鲜索引返回的符号、调用链、文件位置 | `CODE_GRAPH` | 可按确定性证据处理 |
-| Zread 返回的原文片段、文件路径、行号、内容 hash | `CODE` / `DOC` | 可按确定性证据处理 |
-| Zread 或 AI 生成的自然语言摘要 | `TOOL_SUMMARY` / `AI_INFERENCE` | 默认 `PENDING_CONFIRM` |
-| MCP 服务异常、索引过期后的降级结果 | `TOOL_DEGRADED` | 默认 `PENDING_CONFIRM` |
+| 新鲜 MCP 索引返回的符号、文件、调用边 | `CODE_GRAPH` / `CODE` | 可作为高置信证据，但需记录索引时间 |
+| CLI 读取到的原文片段、路径、行号、hash | `CODE` / `DOC` | 可作为确定性证据 |
+| CLI Agent 或 LLM 生成的自然语言摘要 | `TOOL_SUMMARY` / `AI_INFERENCE` | 默认 `PENDING_CONFIRM` |
+| 索引过期、工具降级、输出不含引用 | `STALE_REFERENCE` / `TOOL_DEGRADED` | 默认 `PENDING_CONFIRM` |
+| 外部工具自身判断的“业务规则” | `AI_INFERENCE` | 必须人工复核 |
 
-关键原则：只有“可定位到文件、行号、hash、图谱节点或数据库对象”的结果可以进入高置信度事实；摘要和推断只能作为候选 Claim。
+关键原则：只有能回源到文件、行号、内容 hash、图谱节点、数据库对象或测试结果的结论，才可提升为事实；摘要和推断只能作为候选。
 
-### 2.3 现有问答与报告能力
+### 3.3 问答和报告能力
 
-可直接复用的模块：
+可复用模块：
 
 - `QaAgent`
-  - 现有流程是“文档向量召回 -> 图谱节点相似召回 -> 一跳邻域扩展 -> LLM 生成回答”。
-  - 适合升级为“先 MCP 结构化查询，再向量和本地图谱补充”的多源 RAG。
+  - 已经把图谱节点、图谱边和文档片段同步填充为 `EvidenceItem`。
+  - 可升级为“先结构化工具查询，再本地图谱/向量补充”的多源 RAG。
 - `GraphRagPlannerAgent`
-  - 已经能基于问题和 `KnowledgeClaim` 生成多步 GraphRAG 查询计划。
-  - 适合增加 MCP 查询步骤，如 `search_graph`、`trace_path`、`get_code_snippet`。
+  - 已能基于问题和 Claim 生成多步 GraphRAG 查询计划。
+  - 可扩展为 `ToolQueryPlan`，把 `search_graph`、`trace`、`read`、`pack_context` 等操作纳入计划。
 - `FeatureSliceSynthesizer`
-  - 已经从 `KnowledgeClaim` 和 Neo4j 合成功能切片。
-  - MCP/Zread 产生的证据可以增强入口、实现、数据、规则、验证、缺口。
+  - 已能从 Claim 和 Neo4j 合成功能切片。
+  - 工具证据可补强入口、实现、数据、规则、验证和缺口解释。
 - `ReportExportService`
-  - 已支持 Markdown、PDF、Excel。
-  - 范围级报告已经有 `FEATURE_SLICE` 和 `CHANGE_TASK`。
-  - 可新增 `CODE_UNDERSTANDING` 或通过新的 scoped report 输出模块理解文档。
+  - 已支持范围级 `FEATURE_SLICE` / `CHANGE_TASK` 的 Markdown/PDF 导出。
+  - 可扩展 `ReportType.CODE_UNDERSTANDING`，但复杂 Markdown 装配应放入新的 `CodeUnderstandingReportService`。
+- `SecretScanService`
+  - 已存在 secret 扫描和脱敏能力。
+  - 外部 CLI/MCP 输入输出必须复用它，不另写一套弱化版脱敏。
 
-## 3. 工具定位
+## 4. 目标架构
 
-| 工具 | 强项 | 不适合做的事 | LegacyGraph 中的推荐角色 |
-| --- | --- | --- | --- |
-| `codebase-memory-mcp` | 结构化符号发现、调用链、架构概览、影响面分析、复杂图查询 | 读取未索引文件、解释业务语义、替代证据状态管理 | 代码结构查询器和影响面分析器 |
-| Zread 类 CLI | 长文件阅读、局部上下文压缩、文档和代码混合阅读、非索引内容补足 | 直接写已确认 Claim、绕过安全和脱敏策略、替代 AST 图谱 | 深度阅读器和摘要候选生成器 |
-| LegacyGraph 内部图谱 | 多源证据归档、三类图谱沉淀、Claim 状态、Feature Slice、Gap | 实时索引所有外部工作区、长上下文临时阅读 | 事实库、证据库和报告生产系统 |
-| LLM / Agent | 问题拆解、跨术语对齐、摘要、缺口建议、文档组织 | 作为事实源、跳过引用、覆盖确定性证据 | 研究助理和报告撰写器 |
+### 4.1 设计原则
 
-二者结合的价值在于互补：
+1. 工具可插拔：新增工具只实现 Adapter，不改核心编排逻辑。
+2. 能力驱动路由：按 `SEARCH_SYMBOL`、`TRACE_CALL`、`READ_RESOURCE`、`PACK_CONTEXT` 等能力选择工具，而不是按工具名写死流程。
+3. 只读优先：MVP 所有外部工具只能读，不能自动修改代码、运行破坏性命令或写入仓库。
+4. 证据先行：报告先收集 evidence，再生成章节。没有 evidence 的章节只能写“证据不足”。
+5. 结果可降级：任何外部工具不可用，都不能导致基础报告 500。
+6. 安全可审计：工具调用必须有运行记录、耗时、错误、输出 hash、引用和脱敏状态。
 
-- MCP 解决“代码之间怎么连”的问题。
-- Zread 解决“这段代码和文档到底在说什么”的问题。
-- LegacyGraph 解决“哪些结论可追溯、可复核、可沉淀”的问题。
-
-## 4. 推荐总流程
-
-### 4.1 面向一次代码理解请求
-
-```mermaid
-sequenceDiagram
-    participant User as 用户
-    participant API as UnderstandingController
-    participant Orchestrator as CodeUnderstandingOrchestrator
-    participant MCP as codebase-memory-mcp
-    participant Zread as ZreadCliAdapter
-    participant KG as LegacyGraph 图谱和 Claim
-    participant Report as ReportExportService
-
-    User->>API: 提交问题或文档范围
-    API->>Orchestrator: createUnderstandingTask
-    Orchestrator->>MCP: get_architecture / search_graph / trace_path
-    MCP-->>Orchestrator: 符号、调用链、架构社区
-    Orchestrator->>Zread: read/summarize 指定文件或片段
-    Zread-->>Orchestrator: 原文片段、摘要、引用
-    Orchestrator->>KG: 归一化 Evidence 和 KnowledgeClaimDraft
-    KG-->>Orchestrator: 已确认事实、待确认候选、缺口
-    Orchestrator->>Report: 生成 Markdown/PDF
-    Report-->>User: 返回报告文件
-```
-
-### 4.2 面向扫描后增强
-
-扫描完成后增加一个可选阶段：
-
-1. `ProjectScanner` 完成 Adapter 扫描、数据库扫描、基础图谱写入。
-2. `AiScanOrchestrator` 调用 `CodeUnderstandingOrchestrator`。
-3. Orchestrator 根据扫描结果挑选高价值目标：
-   - 高入度 Controller / Service。
-   - 无业务描述但有复杂调用链的模块。
-   - Feature Slice 缺少实现、数据、规则或测试的节点。
-   - GapFinder 标记的高风险缺口。
-4. 对每个目标先查 MCP，再用 Zread 深读关键文件。
-5. 输出候选 Claim、缺口解释、模块文档草稿。
-6. 进入人工复核或报告导出。
-
-这种模式可以避免每次全仓库盲读，优先处理“图谱已经证明重要但语义不足”的部分。
-
-## 5. 建议新增后端组件
-
-### 5.1 工具适配接口
-
-新增统一接口，避免业务服务直接依赖 MCP 或 CLI 细节：
+### 4.2 核心接口
 
 ```java
 public interface CodeUnderstandingToolAdapter {
     String toolName();
 
-    ToolHealth checkHealth();
+    ToolHealth checkHealth(ToolContext context);
 
-    ToolResult search(ToolQuery query);
+    Set<ToolCapability> capabilities();
 
-    ToolResult trace(ToolTraceRequest request);
-
-    ToolResult read(ToolReadRequest request);
+    ToolResult execute(ToolRequest request);
 }
 ```
 
-建议实现：
+核心枚举：
 
-- `CodebaseMemoryMcpAdapter`
-  - `search` 映射到 `search_graph`。
-  - `trace` 映射到 `trace_path`。
-  - `read` 映射到 `get_code_snippet`。
-  - `architecture` 映射到 `get_architecture`。
-  - 如果返回 `Transport closed`，工具状态设为 `UNAVAILABLE`，并把错误写入工具运行记录。
-- `ZreadCliAdapter`
-  - 用进程调用封装 `zread` / `Zread`。
-  - 支持超时、最大输出字节、工作目录白名单、文件路径校验。
-  - 输出优先要求 JSON；不支持 JSON 时再解析 Markdown。
-  - 当前本机未发现命令，因此默认状态应为 `NOT_INSTALLED`。
-- `LocalFallbackAdapter`
-  - 当 MCP 和 Zread 不可用时，使用现有文件读取、向量召回、Neo4j 查询和 `KnowledgeClaim` 检索。
-  - 保证报告生成能力不被外部工具可用性卡住。
+```java
+public enum ToolCapability {
+    DISCOVER_PROJECT,
+    SEARCH_SYMBOL,
+    TRACE_CALL,
+    READ_RESOURCE,
+    READ_SNIPPET,
+    PACK_CONTEXT,
+    SUMMARIZE,
+    RUN_AGENT_RESEARCH,
+    VALIDATE_EVIDENCE
+}
+```
 
-### 5.2 编排服务
+核心服务：
 
-新增 `CodeUnderstandingOrchestrator`：
+| 服务 | 职责 |
+| --- | --- |
+| `ToolRegistry` | 读取配置、注册 MCP/CLI/Hosted/Local 工具 |
+| `ToolHealthService` | 对每个项目、每个工具做健康检查和索引新鲜度检查 |
+| `ToolPolicyService` | 根据用户请求、项目安全级别、预算和工具状态生成执行策略 |
+| `ToolRouter` | 将计划步骤路由到满足能力的工具 |
+| `ToolRunRecorder` | 记录工具运行、错误、耗时、输出 hash 和审计摘要 |
+| `EvidenceNormalizer` | 把不同工具输出归一化为 `ToolEvidence` 和 `KnowledgeClaimDraft` |
+| `CodeUnderstandingOrchestrator` | 端到端编排问题拆解、工具执行、证据归档和报告生成 |
+| `CodeUnderstandingReportService` | 装配 Markdown 结构，交给 `ReportExportService` 导出 |
 
-职责：
+### 4.3 工具适配分层
 
-1. 接收问题、范围、报告类型、输出格式。
-2. 检查工具状态。
-3. 调用 `GraphRagPlannerAgent` 拆解问题。
-4. 根据计划选择 MCP、Zread 或本地降级工具。
-5. 将结果归一化为 Evidence 和 ClaimDraft。
-6. 调用 `FeatureSliceSynthesizer`、`GapFinderService`、`QaAgent` 形成分析结论。
-7. 交给 `CodeUnderstandingReportService` 生成 Markdown。
+```mermaid
+flowchart LR
+    API["UnderstandingController"] --> O["CodeUnderstandingOrchestrator"]
+    O --> PLAN["ToolQueryPlanner"]
+    PLAN --> ROUTER["ToolRouter"]
+    ROUTER --> MCP["McpToolAdapter"]
+    ROUTER --> CLI["CliToolAdapter"]
+    ROUTER --> HOST["HostedSearchAdapter"]
+    ROUTER --> LOCAL["LocalFallbackAdapter"]
+    MCP --> N["EvidenceNormalizer"]
+    CLI --> N
+    HOST --> N
+    LOCAL --> N
+    N --> RUN["lg_tool_run"]
+    N --> EVD["lg_tool_evidence"]
+    N --> CLAIM["KnowledgeClaimService"]
+    CLAIM --> REPORT["CodeUnderstandingReportService"]
+```
 
-### 5.3 报告服务
+## 5. 工具接入设计
 
-新增 `CodeUnderstandingReportService`，不要把复杂文档生成逻辑塞进 `ReportExportService`：
+### 5.1 MCP 工具适配
 
-- `ReportExportService` 继续作为导出格式入口。
-- `CodeUnderstandingReportService` 负责 Markdown 结构和内容装配。
-- 后续可以把它注册为新的 `ReportType.CODE_UNDERSTANDING`。
+MCP Adapter 不应只服务 codebase-memory-mcp，应支持多个 MCP profile：
 
-推荐报告结构：
+| profile | 典型能力 | 初始优先级 |
+| --- | --- | --- |
+| `codebase-memory-mcp` | `SEARCH_SYMBOL`、`TRACE_CALL`、`READ_SNIPPET`、复杂图查询 | P0 |
+| `serena-mcp` | 语义符号检索、引用、语言服务器级代码理解 | P1 |
+| `docs-mcp` / `context7` 类 | 第三方库文档、内部规范、SDK 文档 | P1 |
+| `database-mcp` | 只读元数据、表结构、约束、SQL 辅助 | P2 |
 
-1. 背景和问题。
-2. 工具运行状态。
-3. 架构视图。
-4. 关键模块和调用链。
-5. 数据访问和外部依赖。
-6. 已确认事实。
-7. AI 推断和待确认候选。
-8. 缺口、风险和验证建议。
-9. 证据索引。
+适配要点：
 
-## 6. 建议数据模型
+- 通过配置声明 MCP Server 名称、命令、endpoint、允许的 tools/resources。
+- 启动时不假设工具可用；按项目调用 `checkHealth`。
+- 对 codebase-memory-mcp，优先使用：
+  - `list_projects` / `index_status`
+  - `search_graph`
+  - `get_code_snippet`
+  - `query_graph`
+- 如果索引时间早于 LegacyGraph 扫描版本，工具状态降级为 `STALE`，相关结论写入 `STALE_REFERENCE`。
+- MCP 输出必须转成统一证据模型，不允许把 MCP 原始 JSON 直接塞进报告正文。
 
-### 6.1 工具运行记录
+### 5.2 CLI 工具适配
+
+CLI Adapter 用同一套进程执行框架支持多种命令：
+
+| 工具 | 接入方式 | MVP 策略 |
+| --- | --- | --- |
+| Zread-like | `zread ...` 或配置化命令模板 | 可选，未安装则跳过 |
+| Codex CLI | `codex ...` | 只读研究模式，不允许自动写文件 |
+| Claude Code | `claude ...` | 只读研究模式，不允许自动写文件 |
+| Aider | `aider --show-repo-map` / 只读问答 | 可选，用 repo map 思路补充上下文 |
+| Repomix | `repomix` 打包白名单路径 | 可选，只允许小范围、脱敏后打包 |
+
+CLI 执行约束：
+
+- `workingDir` 必须落在项目根目录或配置白名单内。
+- 命令模板由服务端配置生成，不能接受用户原始 shell 字符串。
+- 默认禁止写文件、删除文件、网络上传、包安装、git 提交、外部推送。
+- 每次执行必须设置超时、最大 stdout/stderr 字节、最大文件数、最大 token 预算。
+- 输出优先要求 JSON；不支持 JSON 时只把 Markdown 当作 `TOOL_SUMMARY`，并降低置信度。
+- stdout 原文默认不全量入库，只保存 hash、截断摘要、证据片段和引用。
+
+### 5.3 IDE / Hosted Search 适配
+
+Continue、Cursor、Sourcegraph/Cody 这类工具适合分两步接入：
+
+1. 近期：吸收它们的模式，先把“索引 + 规则 + 上下文 + 证据引用”的工作流内化到 LegacyGraph。
+2. 中期：如果团队实际部署了 Sourcegraph 或开放了 IDE 索引 API，再做 `HostedSearchAdapter`。
+
+MVP 不建议依赖 IDE 进程。IDE 更适合辅助开发者本地理解，产品服务端应优先接入可审计的 MCP/CLI/本地图谱。
+
+### 5.4 本地降级适配
+
+`LocalFallbackAdapter` 必须永远可用：
+
+- 从 LegacyGraph Neo4j/Postgres 查 Feature、API、Method、SQL、Table、Rule、Gap。
+- 从向量库查文档片段。
+- 读取受控范围内的文件片段。
+- 调用 `QaAgent` 现有上下文构建能力。
+
+降级顺序：
+
+1. MCP 结构化查询 + CLI 深读。
+2. MCP 结构化查询 + 本地文件片段。
+3. 本地图谱 + CLI 深读。
+4. 本地图谱 + 向量召回。
+5. 仅本地图谱和已有 Claim。
+6. 证据不足，生成缺口报告。
+
+## 6. 数据模型
+
+### 6.1 工具配置和能力
+
+新增 `lg_tool_endpoint`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 工具配置 ID |
+| `project_id` | 项目 ID，可为空表示全局配置 |
+| `tool_name` | `codebase-memory-mcp` / `codex` / `claude-code` / `repomix` |
+| `tool_kind` | `MCP` / `CLI` / `HOSTED_SEARCH` / `LOCAL` |
+| `enabled` | 是否启用 |
+| `command_template` | CLI 命令模板或 MCP 启动命令，敏感字段不入库 |
+| `endpoint_url` | Hosted/MCP endpoint，可为空 |
+| `allowed_capabilities` | JSON 数组 |
+| `workspace_whitelist` | JSON 数组 |
+| `max_seconds` | 默认超时 |
+| `max_output_bytes` | 默认最大输出 |
+| `created_at` / `updated_at` | 审计时间 |
+
+### 6.2 工具运行记录
 
 新增 `lg_tool_run`：
 
@@ -232,20 +301,22 @@ public interface CodeUnderstandingToolAdapter {
 | --- | --- |
 | `id` | 工具运行 ID |
 | `project_id` | 项目 ID |
-| `version_id` | 版本 ID |
-| `tool_name` | `codebase-memory-mcp` / `zread` / `local-fallback` |
-| `tool_version` | 工具版本，无法获取时为空 |
-| `operation` | `search` / `trace` / `read` / `architecture` |
+| `version_id` | 扫描版本 ID，可为空 |
+| `tool_endpoint_id` | 工具配置 ID |
+| `tool_name` | 工具名 |
+| `tool_kind` | 工具类型 |
+| `operation` | `SEARCH_SYMBOL` / `TRACE_CALL` / `READ_RESOURCE` 等 |
 | `query_hash` | 查询参数 hash，避免保存过长 prompt |
-| `status` | `SUCCESS` / `FAILED` / `UNAVAILABLE` / `TIMEOUT` |
-| `exit_code` | CLI 工具退出码 |
+| `status` | `SUCCESS` / `FAILED` / `UNAVAILABLE` / `TIMEOUT` / `DENIED` |
+| `exit_code` | CLI 退出码 |
 | `elapsed_ms` | 耗时 |
+| `index_freshness` | `FRESH` / `STALE` / `UNKNOWN` |
 | `stdout_sha256` | 输出 hash |
-| `stdout_excerpt` | 截断后的安全摘要 |
+| `stdout_excerpt` | 安全截断摘要 |
 | `error_excerpt` | 错误摘要 |
 | `created_at` | 创建时间 |
 
-### 6.2 工具证据记录
+### 6.3 工具证据记录
 
 新增 `lg_tool_evidence`：
 
@@ -253,140 +324,129 @@ public interface CodeUnderstandingToolAdapter {
 | --- | --- |
 | `id` | 证据 ID |
 | `tool_run_id` | 来源工具运行 |
-| `evidence_type` | `SYMBOL` / `CALL_PATH` / `SOURCE_SNIPPET` / `DOC_CHUNK` / `SUMMARY` |
-| `source_path` | 文件路径或文档路径 |
+| `evidence_type` | `SYMBOL` / `CALL_PATH` / `SOURCE_SNIPPET` / `DOC_CHUNK` / `SUMMARY` / `REPO_MAP` |
+| `source_path` | 文件或文档路径 |
 | `symbol_qn` | qualified name |
-| `line_start` / `line_end` | 行号范围 |
+| `line_start` / `line_end` | 行号 |
 | `content_sha256` | 原文 hash |
 | `excerpt` | 安全截断片段 |
 | `graph_node_key` | 可关联的 LegacyGraph 节点 key |
+| `claim_id` | 提升成 Claim 后的关联 ID |
 | `confidence` | 证据置信度 |
 | `privacy_level` | `PUBLIC` / `INTERNAL` / `SENSITIVE` |
 
 原则：
 
-- 不默认保存完整外部工具 stdout。
-- 只保存 hash、摘要和必要引用。
-- 需要全文复核时回源到文件或 Neo4j/Postgres。
+- 不默认保存完整外部 stdout。
+- 保存引用、hash、摘要和必要片段。
+- 需要全文复核时回源到文件、Neo4j/Postgres 或工具运行记录。
 
-## 7. 报告生成算法
+## 7. 代码理解报告生成算法
 
-建议采用“先证据，后文档”的流程：
+推荐采用“计划 -> 证据 -> Claim -> 文档”的流程：
 
-1. 生成报告计划：
-   - 输入问题、范围、报告模板。
-   - `GraphRagPlannerAgent` 生成子问题和查询路径。
-2. 采集结构化证据：
+1. 生成工具计划：
+   - 输入问题、范围、报告模板、工具策略。
+   - `GraphRagPlannerAgent` 生成业务子问题。
+   - `ToolQueryPlanner` 把子问题转成工具能力需求。
+2. 健康检查和路由：
+   - `ToolHealthService` 获取工具状态。
+   - `ToolPolicyService` 过滤不安全、不新鲜、超预算工具。
+   - `ToolRouter` 选择 MCP、CLI、Hosted 或 Local。
+3. 采集结构化证据：
    - MCP 查架构、符号、调用链、影响面。
    - 本地图谱查 Feature、API、Table、BusinessRule、Gap。
-3. 深读关键材料：
-   - Zread 读取大文件、复杂类、文档片段。
-   - 限制读取预算，只读计划命中的文件。
-4. 证据归一化：
-   - 结构化结果进入 `ToolEvidence`。
-   - 可确认结果进入 `KnowledgeClaimService`。
-   - 摘要和推断进入待确认 Claim。
-5. 分章节生成：
-   - 每个章节必须带证据列表。
-   - 章节没有证据时只能写“现有证据不足”，不能猜测。
-6. 自检：
-   - 检查每个关键结论是否有证据 ID。
+4. 深读关键材料：
+   - CLI 深读计划命中的文件、文档、SQL、测试。
+   - 仓库打包工具只允许打包白名单小范围。
+5. 归一化：
+   - 工具原始结果进入 `lg_tool_run`。
+   - 可引用结果进入 `lg_tool_evidence`。
+   - 可确认事实走 `KnowledgeClaimService`。
+   - 摘要和业务推断进入 `PENDING_CONFIRM`。
+6. 分章节生成：
+   - 每个章节必须带证据 ID。
+   - 没有证据的结论只能写“证据不足”。
+7. 自检：
+   - 检查关键结论是否有 evidence。
    - 检查 AI 推断是否单独标注。
-   - 检查工具异常是否在报告中披露。
-7. 导出：
+   - 检查工具异常、降级和索引新鲜度是否披露。
+8. 导出：
    - Markdown 作为主格式。
    - PDF 复用现有 flexmark -> openhtmltopdf 管线。
 
-## 8. AI 更深入介入的效果与边界
+## 8. 安全、权限和边界
 
-### 8.1 效果好的场景
+### 8.1 MCP 安全边界
 
-AI 增强在以下场景会明显有效：
+MCP Server 接入必须遵守以下策略：
 
-- 复杂模块初读：根据 MCP 架构社区和调用链，生成“先看哪些文件”的阅读顺序。
-- 跨术语对齐：把代码里的 Controller/Service/Mapper 与文档里的业务名词对齐。
-- Feature Slice 补全：根据代码路径、页面、SQL、表结构推断功能边界，但输出为待确认候选。
-- 影响面报告：用户提出“改某个接口会影响什么”，MCP 查调用链，AI 组织为可读风险列表。
-- 迁移和重构文档：把代码事实、数据库事实、缺口和验证建议组合成研究报告。
-- 文档质量提升：把零散证据组织成模块说明、数据血缘、接口说明、测试建议。
+- Server 白名单：只允许配置过的 MCP Server。
+- Tool 白名单：只开放 `search`、`trace`、`read`、`query` 等只读工具。
+- Resource 白名单：只允许访问项目根、文档目录、图谱查询结果或受控数据源。
+- 输入校验：路径必须 canonicalize 后确认在白名单内。
+- 输出净化：调用 `SecretScanService` 和 PII masking。
+- 用户同意：高风险工具、跨网络工具、可能读取敏感路径的操作需要显式确认。
+- 审计日志：记录工具、参数 hash、耗时、错误和证据引用。
 
-### 8.2 效果差或风险高的场景
+### 8.2 CLI 安全边界
 
-以下场景不能让 AI 单独决策：
+CLI 工具默认能力更强，因此限制更严格：
 
-- 无证据确认业务规则。
-- 根据变量名猜数据库含义。
-- MCP 索引过期时仍输出确定性调用链。
-- Zread 摘要没有路径、行号或原文 hash。
-- 把 AI 生成的报告反向写成 `CONFIRMED` Claim。
-- 在未脱敏情况下把源码片段交给外部模型或外部 CLI。
+- MVP 中 CLI Adapter 只能跑只读命令。
+- 不接受用户拼接 shell；只能从预定义 command template 生成参数。
+- 禁止 `git commit`、`git push`、`rm`、包安装、数据库写操作、外部上传。
+- 默认禁用网络；确需网络的工具必须标为 `allowExternalNetwork=true` 且在报告中披露。
+- 单次任务必须有文件数、输出字节、耗时、token 预算。
+- 任何 CLI Agent 输出的结论都不能直接 `CONFIRMED`。
 
-### 8.3 推荐证据策略
+### 8.3 证据优先级
 
-保留现有原则：AI 只能辅助，不直接成为事实源。
+当多源证据冲突时，推荐优先级：
 
-| 结论类型 | AI 权限 | 状态 |
-| --- | --- | --- |
-| 文件中明确存在的类、方法、注解、SQL | 可整理 | 可确认 |
-| 调用链、依赖链、影响面 | 可解释 | 依赖 MCP 索引新鲜度 |
-| 业务意图、规则含义 | 可提出候选 | 待确认 |
-| 缺口和风险 | 可生成建议 | 待人工复核 |
-| 文档措辞和章节组织 | 可直接生成 | 不作为事实源 |
+1. 当前源码、测试、数据库结构。
+2. 当前 LegacyGraph 扫描图谱和已确认 Claim。
+3. 新鲜 codebase-memory-mcp / Serena 索引。
+4. CLI 原文片段和 repo map。
+5. 文档片段。
+6. AI 摘要和推断。
 
-## 9. 健康检查和降级设计
+冲突不自动消解，应进入报告“矛盾和待确认”章节。
 
-必须把外部工具不可用作为常态处理。
+## 9. API 设计建议
 
-### 9.1 MCP 健康检查
+### 9.1 查询工具健康状态
 
-检查项：
+```http
+GET /api/projects/{projectId}/understanding/tool-health
+```
 
-- MCP 连接是否可用。
-- 是否能 `list_projects`。
-- 当前 project 是否存在。
-- 索引时间是否晚于最近扫描时间。
-- `search_graph` 是否可返回基本符号。
+返回：
 
-状态：
+```json
+{
+  "projectId": "p1",
+  "tools": [
+    {
+      "toolName": "codebase-memory-mcp",
+      "toolKind": "MCP",
+      "status": "READY",
+      "capabilities": ["SEARCH_SYMBOL", "TRACE_CALL", "READ_SNIPPET"],
+      "indexFreshness": "FRESH",
+      "message": "project index is ready"
+    },
+    {
+      "toolName": "zread",
+      "toolKind": "CLI",
+      "status": "NOT_INSTALLED",
+      "capabilities": [],
+      "message": "command not found"
+    }
+  ]
+}
+```
 
-- `READY`：可参与确定性分析。
-- `STALE`：可参考，但关键结论降级为待确认。
-- `UNAVAILABLE`：不调用，报告中披露。
-- `ERROR`：记录错误摘要，进入 fallback。
-
-### 9.2 Zread 健康检查
-
-检查项：
-
-- `zread` 或配置的命令是否在 `PATH`。
-- 版本是否符合要求。
-- 是否支持 JSON 输出。
-- 是否能在工作目录白名单内读取文件。
-- 最大输出和超时是否生效。
-
-状态：
-
-- `READY`：可用于深读。
-- `NO_JSON_MODE`：可读，但输出解析置信度降低。
-- `NOT_INSTALLED`：跳过。
-- `UNSAFE_CONFIG`：禁止调用。
-
-### 9.3 降级链路
-
-推荐降级顺序：
-
-1. MCP + Zread。
-2. MCP + 本地文件读取。
-3. 本地图谱 + Zread。
-4. 本地图谱 + 向量召回。
-5. 仅本地图谱和已有 Claim。
-6. 证据不足，生成缺口报告。
-
-降级不是失败；报告中明确写出工具状态即可。
-
-## 10. API 设计建议
-
-### 10.1 生成代码理解报告
+### 9.2 生成代码理解报告
 
 ```http
 POST /api/projects/{projectId}/understanding/reports
@@ -398,19 +458,23 @@ Content-Type: application/json
 ```json
 {
   "versionId": "v1",
-  "question": "订单创建功能涉及哪些接口、服务、SQL 和表？",
+  "question": "订单创建功能涉及哪些接口、服务、SQL、表和业务规则？",
   "scope": {
     "paths": ["backend/src/main/java"],
     "symbols": ["OrderController"],
     "featureKeys": ["订单创建"]
   },
-  "reportType": "FEATURE_CODE_UNDERSTANDING",
+  "reportType": "CODE_UNDERSTANDING",
   "format": "MD",
   "toolPolicy": {
-    "preferMcp": true,
-    "preferZread": true,
+    "enabledToolKinds": ["MCP", "CLI", "LOCAL"],
+    "allowedTools": ["codebase-memory-mcp", "codex", "claude-code", "local-fallback"],
+    "executionMode": "READ_ONLY",
+    "allowExternalNetwork": false,
     "allowAiInference": true,
     "maxFilesToRead": 20,
+    "maxToolRuns": 30,
+    "maxSeconds": 180,
     "maxOutputBytes": 200000
   }
 }
@@ -420,248 +484,402 @@ Content-Type: application/json
 
 ```json
 {
-  "taskId": "task-xxx",
+  "taskId": "understanding-task-xxx",
   "status": "RUNNING",
   "toolStatus": {
     "codebaseMemoryMcp": "READY",
-    "zread": "NOT_INSTALLED"
+    "codex": "READY",
+    "claudeCode": "READY",
+    "zread": "NOT_INSTALLED",
+    "localFallback": "READY"
   }
 }
 ```
 
-### 10.2 查询工具健康状态
+### 9.3 查询报告任务
 
 ```http
-GET /api/projects/{projectId}/understanding/tool-health
+GET /api/projects/{projectId}/understanding/reports/{taskId}
 ```
 
 返回：
 
 ```json
 {
-  "codebaseMemoryMcp": {
-    "status": "UNAVAILABLE",
-    "message": "Transport closed"
-  },
-  "zread": {
-    "status": "NOT_INSTALLED",
-    "message": "command not found"
-  },
-  "localFallback": {
-    "status": "READY"
-  }
+  "taskId": "understanding-task-xxx",
+  "status": "SUCCESS",
+  "reportId": "report-xxx",
+  "toolRuns": 12,
+  "evidenceCount": 64,
+  "claimCount": 18,
+  "pendingConfirmCount": 7,
+  "downloadUrl": "/api/reports/report-xxx/download?format=MD"
 }
 ```
 
-## 11. 可产出的文档类型
-
-| 文档类型 | 主要证据 | 适合工具 |
-| --- | --- | --- |
-| 模块理解文档 | 架构社区、包结构、核心类、调用链 | MCP + Zread |
-| 功能切片说明 | Feature、Page、API、Method、SQL、Table、Rule、Test | LegacyGraph + MCP |
-| 变更影响报告 | 调用链、跨服务调用、数据读写、测试覆盖 | MCP + FeatureSlice |
-| API 和数据血缘文档 | Controller、Mapper、SQL、Table、Column | LegacyGraph + Zread |
-| 迁移就绪度补充报告 | 已确认 Claim、待确认 Claim、Gap、风险 | LegacyGraph + AI |
-| 代码问答证据包 | 问题、命中节点、文件片段、推断边界 | QaAgent + MCP |
-
-## 12. 实施路线
-
-### 阶段 0：工具健康检查和降级
-
-目标：不改变现有扫描结果，只增加可观测性。
-
-任务：
-
-1. 新增 `ToolHealthService`。
-2. 检查 MCP 连接、项目索引状态、Zread 命令可用性。
-3. 前端或接口返回工具状态。
-4. 报告中加入“工具运行状态”章节。
-
-验收：
-
-- MCP `Transport closed` 时接口不报 500。
-- Zread 未安装时报告仍可由本地图谱生成。
-- 工具错误可在任务日志和报告中定位。
-
-### 阶段 1：只读工具编排
-
-目标：支持一次性代码理解报告。
-
-任务：
-
-1. 新增 `CodeUnderstandingToolAdapter`。
-2. 实现 `CodebaseMemoryMcpAdapter` 和 `ZreadCliAdapter`。
-3. 新增 `CodeUnderstandingOrchestrator`。
-4. 新增 `CodeUnderstandingReportService`。
-5. Markdown 先落地，PDF 复用现有导出链路。
-
-验收：
-
-- 用户输入一个 Controller、Feature 或自然语言问题，可以生成 Markdown 报告。
-- 报告列出证据路径、符号、调用链和工具状态。
-- 没有证据的结论不会被写成确定语气。
-
-### 阶段 2：接入 KnowledgeClaim 和 Feature Slice
-
-目标：让外部工具结果沉淀到现有知识体系。
-
-任务：
-
-1. 新增 `lg_tool_run` 和 `lg_tool_evidence`。
-2. 工具结果归一化为 `KnowledgeClaimDraft`。
-3. 可确认事实走 `CONFIRMED`，摘要和推断走 `PENDING_CONFIRM`。
-4. `FeatureSliceSynthesizer` 可以消费新增 Claim。
-5. `GapFinderService` 使用工具证据解释缺口。
-
-验收：
-
-- 代码理解报告中的关键证据能回查到 Claim 或 ToolEvidence。
-- Feature Slice 的入口、实现、数据和规则覆盖率提升。
-- AI-only Claim 数量可统计、可复核。
-
-### 阶段 3：扫描后自动增强
-
-目标：扫描完成后自动挑选高价值模块深读，并生成候选文档。
-
-任务：
-
-1. 在 `AiScanOrchestrator` 后置阶段加入增强任务。
-2. 根据复杂度、入度、缺口、业务重要性选择目标。
-3. 限制每次扫描的工具预算。
-4. 生成模块文档草稿和缺口建议。
-5. 引入人工确认入口。
-
-验收：
-
-- 大项目不会因外部工具调用导致扫描时间失控。
-- 自动生成内容有明确状态：草稿、待确认、已确认。
-- 失败任务可重试，不影响基础图谱构建。
-
-## 13. 优化空间
-
-### 13.1 索引新鲜度门禁
-
-MCP 的结构化查询价值很高，但前提是索引新鲜。建议：
-
-- 保存 MCP 索引时间和当前扫描版本时间。
-- 当索引早于代码扫描版本时，所有 MCP 结论降级为 `STALE_REFERENCE`。
-- 报告中显示“索引新鲜度”。
-
-### 13.2 检索预算控制
-
-Zread 类工具容易输出过长内容。建议：
-
-- 每个报告限制最大文件数、最大 token、最大 stdout 字节。
-- 先由 MCP 或本地图谱选文件，再让 Zread 深读。
-- 禁止从根目录盲读。
-
-### 13.3 行号和 hash 引用
-
-高质量文档必须能复核。建议：
-
-- 所有代码片段保留 `source_path`、`line_start`、`line_end`。
-- 保存 `content_sha256`。
-- 文档中的关键结论引用证据 ID。
-
-### 13.4 矛盾检测
-
-当 MCP、Zread、本地图谱、数据库证据冲突时：
-
-- 优先级：当前源码和数据库 > 当前本地图谱 > MCP 新鲜索引 > 文档 > AI 推断。
-- 冲突不自动消解，应进入报告“矛盾和待确认”章节。
-
-### 13.5 安全和脱敏
-
-Zread 类工具如果可能调用外部模型，必须先确认运行模式。建议：
-
-- 默认只允许本地读取模式。
-- 源码、配置、数据库连接信息经过 `SecretScanService` 或同等脱敏策略。
-- 禁止把密钥、连接串、token 原文写入工具运行记录和报告。
-
-## 14. 对现有三类图谱的增益
-
-### 14.1 代码图谱
-
-增益：
-
-- MCP 提供更快的符号定位、调用链和影响面。
-- Zread 补充复杂文件语义摘要。
-- LegacyGraph 将外部结果归档为证据和 Claim。
-
-建议：
-
-- 将 MCP 调用链结果映射为 `CALLS`、`DEPENDS_ON`、`IMPLEMENTS` 等边的候选证据。
-- 只有索引新鲜且可回源到文件时才提高置信度。
-
-### 14.2 功能图谱
-
-增益：
-
-- AI 可以根据代码和文档把 Feature 名称与页面、API、Service、SQL 对齐。
-- Zread 可深读业务文档和大类，辅助补全规则。
-- GapFinder 可更准确地区分“确实缺失”和“已有但未关联”。
-
-建议：
-
-- 新增“功能候选映射报告”。
-- 人工确认后再把 Feature 关系提升为已确认 Claim。
-
-### 14.3 业务图谱
-
-增益：
-
-- Zread 对业务文档、注释、枚举、SQL 条件的语义归纳更有价值。
-- MCP 帮助定位业务规则实际落在哪些方法和调用链。
-- AI 适合提出“规则候选”和“术语候选”。
-
-建议：
-
-- 业务规则默认待确认。
-- 把“规则原文片段”和“代码实现片段”同时作为证据，避免只凭摘要确认。
-
-## 15. 最小可行版本建议
-
-优先做一个低风险 MVP：
-
-1. 不改现有扫描主流程。
-2. 新增工具健康检查。
-3. 新增只读 `CodeUnderstandingReportService`。
-4. 支持输入 `projectId`、`versionId`、问题、路径范围。
-5. 输出 Markdown。
-6. 报告中必须包含：
-   - 工具状态。
-   - 使用的证据列表。
-   - 已确认事实。
-   - AI 推断。
-   - 待确认问题。
-
-MVP 的判断标准不是“AI 写得是否像专家”，而是：
-
-- 报告能否指向具体代码和图谱节点。
-- 结论能否被复核。
-- 工具不可用时是否稳定降级。
-- 输出是否能反哺 Feature Slice、Gap 和后续迁移评估。
-
-## 16. 建议优先级
-
-| 优先级 | 项目 | 原因 |
-| --- | --- | --- |
-| P0 | 工具健康检查和降级 | 当前 MCP 有 `Transport closed`，Zread 未安装，必须先解决可用性边界 |
-| P0 | Markdown 报告生成 | 复用现有导出链路，价值直接可见 |
-| P1 | ToolEvidence 数据模型 | 让外部工具结果可追溯、可审计 |
-| P1 | MCP 查询编排 | 对调用链、影响面、架构理解收益最大 |
-| P1 | Zread 深读适配 | 对大文件、文档、复杂业务规则有增益 |
-| P2 | Claim 自动归档 | 需要严格状态策略，不能过早自动确认 |
-| P2 | 扫描后自动增强 | 价值高，但要先解决成本和失败隔离 |
-
-## 17. 最终建议
-
-建议采用“外部工具辅助理解，LegacyGraph 负责沉淀和复核”的路线：
-
-1. 先把 `codebase-memory-mcp` 和 Zread 类 CLI 封装成可选工具，而不是硬依赖。
-2. 先生成文档，不急于把所有外部工具结果写入核心图谱。
-3. 把工具输出统一归一化为 Evidence，再由 `KnowledgeClaimService` 管理状态。
-4. 把 AI 的价值集中在规划、摘要、缺口发现和文档组织上。
-5. 把事实确认权留给确定性证据和人工复核。
-
-这样做可以显著提升代码理解和文档生成质量，同时不破坏 LegacyGraph 当前最重要的设计原则：图谱中的事实必须可追溯、可复核、可降级。
+## 10. 报告模板
+
+推荐 `CODE_UNDERSTANDING` 报告结构：
+
+1. 任务背景
+   - 用户问题
+   - 分析范围
+   - 工具策略
+2. 工具运行状态
+   - 可用工具
+   - 降级工具
+   - 索引新鲜度
+   - 预算使用
+3. 架构视图
+   - 相关包、模块、入口
+   - 关键依赖
+4. 功能链路
+   - 页面 / API / Controller / Service / Mapper / SQL / Table
+   - 调用链和数据链
+5. 已确认事实
+   - 每条事实必须带 evidence ID
+6. AI 推断和待确认候选
+   - 明确标注 `PENDING_CONFIRM`
+7. 缺口和风险
+   - 证据不足
+   - 冲突证据
+   - 测试缺口
+8. 建议验证动作
+   - 代码检查
+   - SQL/数据库检查
+   - 测试建议
+9. 证据索引
+   - ToolRun
+   - ToolEvidence
+   - Claim
+   - 文件路径和行号
+
+## 11. 可执行实施计划
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `subagent-driven-development` or `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 在 LegacyGraph 中落地一个可插拔、多工具、只读优先、证据可追溯的代码理解和文档生成能力。
+
+**Architecture:** 新增 `understanding` 领域包，先实现工具注册、健康检查、只读编排、证据归一化和 Markdown 报告。外部工具只作为 Adapter 接入，核心事实仍进入 `KnowledgeClaimService` 和现有图谱体系。
+
+**Tech Stack:** Spring Boot、Java、MCP tool client、ProcessBuilder CLI wrapper、Postgres/Flyway、Neo4j、现有 LLM Gateway、现有 ReportExportService。
+
+---
+
+### Task 0：确认基线和冻结范围
+
+**Files:**
+
+- Read: `doc/MCP与Zread类工具辅助代码理解和文档生成方案.md`
+- Read: `backend/src/main/java/io/github/legacygraph/service/KnowledgeClaimService.java`
+- Read: `backend/src/main/java/io/github/legacygraph/agent/QaAgent.java`
+- Read: `backend/src/main/java/io/github/legacygraph/service/ReportExportService.java`
+- Read: `backend/src/main/java/io/github/legacygraph/llm/SecretScanService.java`
+
+- [ ] Step 1：用 codebase-memory-mcp 确认索引状态。
+  - Command: `index_status(project="Users-huymac-LegacyGraph")`
+  - Expected: `status=ready`
+- [ ] Step 2：确认本机可用 CLI。
+  - Command: `command -v codex && codex --version`
+  - Command: `command -v claude && claude --version`
+  - Command: `command -v zread || true`
+  - Expected: 可用工具进入 `READY`，不可用工具进入 `NOT_INSTALLED`
+- [ ] Step 3：确认 MVP 只做只读报告，不接入自动代码修改。
+  - Acceptance: 方案、配置和测试中均出现 `READ_ONLY` 策略。
+- [ ] Step 4：提交前跑基线测试。
+  - Command: `cd backend && mvn test`
+  - Expected: 现有测试通过；如果已有无关失败，记录失败测试名和错误摘要。
+
+### Task 1：新增工具模型和策略对象
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/CodeUnderstandingToolAdapter.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolCapability.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolKind.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolStatus.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolHealth.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolRequest.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolResult.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolPolicy.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/tool/ToolPolicyTest.java`
+
+- [ ] Step 1：写 `ToolPolicyTest`，覆盖默认只读、预算默认值、禁止外部网络。
+- [ ] Step 2：实现枚举和 DTO。
+- [ ] Step 3：实现 `CodeUnderstandingToolAdapter` 接口。
+- [ ] Step 4：运行测试。
+  - Command: `cd backend && mvn -Dtest=ToolPolicyTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 2：实现工具注册和健康检查
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolRegistry.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/ToolHealthService.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/adapter/LocalFallbackAdapter.java`
+- Modify: `backend/src/main/resources/application.yml`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/tool/ToolHealthServiceTest.java`
+
+- [ ] Step 1：配置 `legacygraph.understanding.tools`，包含 `local-fallback`、`codebase-memory-mcp`、`codex`、`claude-code`、`zread` 的 enabled/path/timeout/output limit。
+- [ ] Step 2：`ToolRegistry` 从配置注册工具，不因命令不存在而启动失败。
+- [ ] Step 3：`ToolHealthService` 返回 `READY`、`NOT_INSTALLED`、`UNAVAILABLE`、`STALE`。
+- [ ] Step 4：`LocalFallbackAdapter` 永远返回 `READY`。
+- [ ] Step 5：测试命令不存在、命令存在、禁用工具、本地降级四类场景。
+  - Command: `cd backend && mvn -Dtest=ToolHealthServiceTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 3：实现 MCP Adapter 首版
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/adapter/McpCodeGraphAdapter.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/adapter/McpClientFacade.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/adapter/McpToolResultMapper.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/tool/adapter/McpCodeGraphAdapterTest.java`
+
+- [ ] Step 1：先写单测，用 fake `McpClientFacade` 模拟 `index_status`、`search_graph`、`get_code_snippet` 成功。
+- [ ] Step 2：测试 MCP 连接失败时返回 `UNAVAILABLE`，不抛 500。
+- [ ] Step 3：实现 `McpCodeGraphAdapter` 能力：
+  - `SEARCH_SYMBOL` -> `search_graph`
+  - `READ_SNIPPET` -> `get_code_snippet`
+  - `TRACE_CALL` -> MVP 使用 `query_graph` 查询 `CALLS` / 调用关系；如果当前 MCP profile 暴露专用 trace 工具，再在 profile 配置中映射到该工具
+- [ ] Step 4：实现输出映射，至少保留 `source_path`、`symbol_qn`、`line_start`、`line_end`、`excerpt`。
+- [ ] Step 5：运行测试。
+  - Command: `cd backend && mvn -Dtest=McpCodeGraphAdapterTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 4：实现 CLI Adapter 首版
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/adapter/CliToolAdapter.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/adapter/CliCommandPolicy.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/tool/adapter/CliProcessRunner.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/tool/adapter/CliToolAdapterTest.java`
+
+- [ ] Step 1：测试命令不存在返回 `NOT_INSTALLED`。
+- [ ] Step 2：测试工作目录越界返回 `DENIED`。
+- [ ] Step 3：测试超时返回 `TIMEOUT`。
+- [ ] Step 4：测试 stdout 超限时截断并保留 `stdout_sha256`。
+- [ ] Step 5：实现只读命令模板，不允许用户传原始 shell。
+- [ ] Step 6：首批 profile 支持 `codex`、`claude-code`、`zread-like`、`repomix`，但默认只启用本机存在且配置允许的工具。
+- [ ] Step 7：运行测试。
+  - Command: `cd backend && mvn -Dtest=CliToolAdapterTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 5：新增工具运行和证据表
+
+**Files:**
+
+- Create: `backend/src/main/resources/db/migration/V22__understanding_tool_runs.sql`
+- Create: `backend/src/main/java/io/github/legacygraph/entity/ToolRunEntity.java`
+- Create: `backend/src/main/java/io/github/legacygraph/entity/ToolEvidenceEntity.java`
+- Create: `backend/src/main/java/io/github/legacygraph/repository/ToolRunRepository.java`
+- Create: `backend/src/main/java/io/github/legacygraph/repository/ToolEvidenceRepository.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/ToolRunRecorder.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/ToolRunRecorderTest.java`
+
+- [ ] Step 1：Flyway 建表 `lg_tool_run`、`lg_tool_evidence`，字段按本方案第 6 节落地。
+- [ ] Step 2：Entity 字段和索引与 SQL 对齐。
+- [ ] Step 3：`ToolRunRecorder` 记录运行开始、成功、失败、证据。
+- [ ] Step 4：测试 stdout 不全量保存，只保存 hash 和截断摘要。
+- [ ] Step 5：运行 Repository 和 Recorder 测试。
+  - Command: `cd backend && mvn -Dtest=ToolRunRecorderTest,RepositoryTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 6：实现证据归一化和 Claim 转换
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/EvidenceNormalizer.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/KnowledgeClaimDraftMapper.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/EvidenceNormalizerTest.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/KnowledgeClaimDraftMapperTest.java`
+
+- [ ] Step 1：测试 `SOURCE_SNIPPET` 可映射为 `CODE` Claim，置信度高且有 hash/行号。
+- [ ] Step 2：测试 `SUMMARY` 只能映射为 `AI_INFERENCE`，状态保持 `PENDING_CONFIRM`。
+- [ ] Step 3：测试 `STALE` 工具结果映射为 `STALE_REFERENCE`。
+- [ ] Step 4：测试敏感片段经 `SecretScanService` 脱敏后才写 evidence。
+- [ ] Step 5：运行测试。
+  - Command: `cd backend && mvn -Dtest=EvidenceNormalizerTest,KnowledgeClaimDraftMapperTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 7：实现只读代码理解编排
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/CodeUnderstandingOrchestrator.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/ToolQueryPlanner.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/ToolRouter.java`
+- Create: `backend/src/main/java/io/github/legacygraph/dto/understanding/CodeUnderstandingRequest.java`
+- Create: `backend/src/main/java/io/github/legacygraph/dto/understanding/CodeUnderstandingTaskResult.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/CodeUnderstandingOrchestratorTest.java`
+
+- [ ] Step 1：测试当 MCP 可用时优先走 MCP，再用本地图谱补充。
+- [ ] Step 2：测试 MCP 不可用时自动走 `LocalFallbackAdapter`。
+- [ ] Step 3：测试工具预算达到 `maxToolRuns` 后停止继续调用。
+- [ ] Step 4：测试所有结论都能追溯到 evidence；无 evidence 的结论进入“证据不足”。
+- [ ] Step 5：运行测试。
+  - Command: `cd backend && mvn -Dtest=CodeUnderstandingOrchestratorTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 8：实现 Markdown 报告服务和导出入口
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/CodeUnderstandingReportService.java`
+- Modify: `backend/src/main/java/io/github/legacygraph/service/ReportExportService.java`
+- Modify: `backend/src/main/java/io/github/legacygraph/controller/ReportExportController.java`
+- Modify: `backend/src/main/java/io/github/legacygraph/service/ReportExportService.java` 中的 `ReportType`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/CodeUnderstandingReportServiceTest.java`
+- Test: `backend/src/test/java/io/github/legacygraph/controller/ReportExportControllerTest.java`
+
+- [ ] Step 1：新增 `ReportType.CODE_UNDERSTANDING`。
+- [ ] Step 2：`CodeUnderstandingReportService` 按第 10 节模板生成 Markdown。
+- [ ] Step 3：`ReportExportService` 对 `CODE_UNDERSTANDING` 复用 MD/PDF 导出。
+- [ ] Step 4：Controller 增加下载入口，避免破坏已有报告 API。
+- [ ] Step 5：测试报告包含工具状态、已确认事实、AI 推断、待确认问题、证据索引。
+- [ ] Step 6：运行测试。
+  - Command: `cd backend && mvn -Dtest=CodeUnderstandingReportServiceTest,ReportExportControllerTest,ReportExportServiceTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 9：新增理解任务 API
+
+**Files:**
+
+- Create: `backend/src/main/java/io/github/legacygraph/controller/CodeUnderstandingController.java`
+- Create: `backend/src/main/java/io/github/legacygraph/dto/understanding/ToolHealthResponse.java`
+- Create: `backend/src/main/java/io/github/legacygraph/dto/understanding/CreateUnderstandingReportResponse.java`
+- Test: `backend/src/test/java/io/github/legacygraph/controller/CodeUnderstandingControllerTest.java`
+
+- [ ] Step 1：实现 `GET /api/projects/{projectId}/understanding/tool-health`。
+- [ ] Step 2：实现 `POST /api/projects/{projectId}/understanding/reports`。
+- [ ] Step 3：实现 `GET /api/projects/{projectId}/understanding/reports/{taskId}`。
+- [ ] Step 4：测试工具不可用时 API 仍返回 200 和降级状态。
+- [ ] Step 5：测试非法路径、外部网络、超预算请求返回 400。
+- [ ] Step 6：运行测试。
+  - Command: `cd backend && mvn -Dtest=CodeUnderstandingControllerTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 10：接入 Feature Slice 和 GapFinder
+
+**Files:**
+
+- Modify: `backend/src/main/java/io/github/legacygraph/service/FeatureSliceSynthesizer.java`
+- Modify: `backend/src/main/java/io/github/legacygraph/service/GapFinderService.java`
+- Test: `backend/src/test/java/io/github/legacygraph/service/FeatureSliceSynthesizerTest.java`
+- Test: `backend/src/test/java/io/github/legacygraph/service/GapFinderServiceTest.java`
+
+- [ ] Step 1：让 Feature Slice 能读取 `ToolEvidence` 关联的 Claim。
+- [ ] Step 2：GapFinder 输出中增加“外部工具证据不足 / 索引过期 / 工具不可用”原因。
+- [ ] Step 3：测试工具证据能提高入口、实现、数据、规则章节覆盖率。
+- [ ] Step 4：测试 AI-only Claim 不会被当成已确认规则。
+- [ ] Step 5：运行测试。
+  - Command: `cd backend && mvn -Dtest=FeatureSliceSynthesizerTest,GapFinderServiceTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 11：扫描后自动增强
+
+**Files:**
+
+- Modify: `backend/src/main/java/io/github/legacygraph/task/AiScanOrchestrator.java`
+- Create: `backend/src/main/java/io/github/legacygraph/understanding/ScanUnderstandingEnhancer.java`
+- Test: `backend/src/test/java/io/github/legacygraph/task/AiScanOrchestratorTest.java`
+- Test: `backend/src/test/java/io/github/legacygraph/understanding/ScanUnderstandingEnhancerTest.java`
+
+- [ ] Step 1：新增配置开关 `legacygraph.understanding.scan-enhancement.enabled=false`，默认关闭。
+- [ ] Step 2：按复杂度、入度、缺口数量、业务重要性选择目标，默认每次扫描最多 20 个目标，可通过 `legacygraph.understanding.scan-enhancement.max-targets` 调整。
+- [ ] Step 3：对每个目标调用只读编排，生成候选 Claim 和模块文档草稿。
+- [ ] Step 4：工具失败不影响基础扫描状态。
+- [ ] Step 5：测试开关关闭、开启、工具失败、预算耗尽四类场景。
+- [ ] Step 6：运行测试。
+  - Command: `cd backend && mvn -Dtest=AiScanOrchestratorTest,ScanUnderstandingEnhancerTest test`
+  - Expected: `BUILD SUCCESS`
+
+### Task 12：前端最小入口
+
+**Files:**
+
+- Create: `frontend/src/api/understanding.api.ts`
+- Create: `frontend/src/views/understanding/UnderstandingReportView.vue`
+- Modify: `frontend/src/router/index.ts`
+- Test: 以现有前端测试框架为准；若当前没有前端测试，至少执行类型检查和构建。
+
+- [ ] Step 1：新增工具健康状态 API 封装。
+- [ ] Step 2：新增报告生成表单，字段包含问题、路径、符号、工具策略。
+- [ ] Step 3：新增报告结果页，展示工具状态、降级提示、证据计数、下载按钮。
+- [ ] Step 4：运行前端检查。
+  - Command: `cd frontend && npm run type-check`
+  - Command: `cd frontend && npm run build`
+  - Expected: 两个命令成功；如果项目没有 `type-check`，以 `package.json` 实际脚本为准。
+
+### Task 13：端到端验收
+
+**Files:**
+
+- Create: `backend/src/test/java/io/github/legacygraph/e2e/CodeUnderstandingE2eTest.java`
+- Modify: `doc/MCP与Zread类工具辅助代码理解和文档生成方案.md`，记录验收结果
+
+- [ ] Step 1：准备一个小型 fixture 项目或使用现有测试 fixture。
+- [ ] Step 2：执行工具健康检查。
+- [ ] Step 3：生成一个 `CODE_UNDERSTANDING` Markdown 报告。
+- [ ] Step 4：断言报告包含：
+  - 工具状态
+  - 至少一个文件路径证据
+  - 至少一个图谱节点或调用链证据
+  - AI 推断和待确认分区
+  - 证据索引
+- [ ] Step 5：模拟 MCP 不可用，确认报告降级生成。
+- [ ] Step 6：执行总验证。
+  - Command: `cd backend && mvn test`
+  - Command: `cd frontend && npm run build`
+  - Expected: 后端测试和前端构建通过；任何已有无关失败必须单独列出，不能算作本功能通过。
+
+## 12. 分阶段交付建议
+
+| 阶段 | 目标 | 必须完成 | 不做 |
+| --- | --- | --- | --- |
+| Phase 0 | 方案和基线 | 动态健康检查、工具可选、只读策略 | 不调用外部 Agent 写文件 |
+| Phase 1 | 只读 MVP | ToolRegistry、Health、MCP Adapter、LocalFallback、Markdown 报告 | 不做自动扫描后增强 |
+| Phase 2 | 证据沉淀 | `lg_tool_run`、`lg_tool_evidence`、EvidenceNormalizer、Claim 转换 | 不自动确认业务规则 |
+| Phase 3 | 多工具扩展 | CLI Adapter、Codex/Claude/Zread-like/Repomix profile、预算和安全策略 | 不开放任意 shell |
+| Phase 4 | 图谱增强 | Feature Slice、GapFinder、扫描后自动增强 | 不让增强失败影响基础扫描 |
+| Phase 5 | 评估和运营 | 工具效果评估、成本统计、人工确认入口、团队配置文档 | 不追求一次支持所有工具 |
+
+## 13. 验收标准
+
+MVP 验收必须满足：
+
+1. 工具不可用时不会导致报告生成 500。
+2. 报告能说明使用了哪些工具、哪些工具降级、索引是否新鲜。
+3. 每个关键结论都能回查到 `ToolEvidence`、Claim、图谱节点或文件路径。
+4. AI 摘要和业务推断单独标注为待确认。
+5. CLI 工具默认只读，不能执行任意 shell。
+6. stdout/stderr 不全量入库，敏感内容被脱敏。
+7. Markdown 可以生成，PDF 可复用现有导出链路。
+8. 后端核心测试通过，前端最小入口可构建。
+
+## 14. 参考资料
+
+- [Model Context Protocol - Tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+- [Model Context Protocol - Resources](https://modelcontextprotocol.io/specification/2025-06-18/server/resources)
+- [MCP Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices)
+- [OpenAI Codex CLI](https://github.com/openai/codex)
+- [Claude Code overview](https://docs.anthropic.com/en/docs/claude-code/overview)
+- [Aider repository map](https://aider.chat/docs/repomap.html)
+- [Continue codebase documentation awareness](https://docs.continue.dev/guides/codebase-documentation-awareness)
+- [Repomix](https://github.com/yamadashy/repomix)
+- [Serena MCP](https://github.com/oraios/serena)
+- [Sourcegraph](https://sourcegraph.com/)
+
+## 15. 最终建议
+
+推荐路线是“多工具辅助理解，LegacyGraph 负责沉淀和复核”：
+
+1. 第一阶段只做工具健康检查、MCP 结构化查询、本地降级和 Markdown 报告。
+2. 第二阶段再把 ToolEvidence 和 Claim 持久化，进入 Feature Slice 和 GapFinder。
+3. 第三阶段扩展 Codex/Claude/Zread-like/Repomix 等 CLI profile，但保持只读和强审计。
+4. 第四阶段才做扫描后自动增强和人工确认闭环。
+
+这条路线能把 Zread 类工具的价值纳入体系，同时避免把系统绑死在某个命令、某个 MCP Server 或某个 IDE 上。LegacyGraph 的核心优势仍然是：多源证据可追溯、Claim 状态可复核、三类图谱可沉淀、报告输出可解释。
