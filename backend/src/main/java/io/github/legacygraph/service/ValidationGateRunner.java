@@ -8,7 +8,7 @@ import io.github.legacygraph.task.TestExecutionScheduler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,6 +37,7 @@ public class ValidationGateRunner {
     private final TestResultRepository testResultRepository;
     private final long resultWaitTimeoutMs;
     private final long resultPollIntervalMs;
+    private final TransactionTemplate transactionTemplate;
 
     /** 命令类门禁超时（秒） */
     private static final long COMMAND_TIMEOUT_SEC = 600;
@@ -45,12 +46,14 @@ public class ValidationGateRunner {
                                 TestExecutionScheduler testExecutionScheduler,
                                 TestResultRepository testResultRepository,
                                 @Value("${legacy-graph.test.gate-result-timeout-ms:300000}") long resultWaitTimeoutMs,
-                                @Value("${legacy-graph.test.gate-result-poll-ms:1000}") long resultPollIntervalMs) {
+                                @Value("${legacy-graph.test.gate-result-poll-ms:1000}") long resultPollIntervalMs,
+                                TransactionTemplate transactionTemplate) {
         this.validationGateRepository = validationGateRepository;
         this.testExecutionScheduler = testExecutionScheduler;
         this.testResultRepository = testResultRepository;
         this.resultWaitTimeoutMs = resultWaitTimeoutMs;
         this.resultPollIntervalMs = resultPollIntervalMs;
+        this.transactionTemplate = transactionTemplate;
     }
 
     /**
@@ -63,7 +66,7 @@ public class ValidationGateRunner {
      */
     public ValidationGate runGate(ValidationGate gate, GateContext context) {
         // 短 TX：标记 RUNNING
-        startGate(gate);
+        transactionTemplate.executeWithoutResult(status -> startGate(gate));
 
         // 长 IO：执行门禁（命令执行、测试等待，无 TX）
         boolean passed;
@@ -82,13 +85,13 @@ public class ValidationGateRunner {
         }
 
         // 短 TX：回写结果
-        finishGate(gate, passed);
+        boolean finalPassed = passed;
+        transactionTemplate.executeWithoutResult(status -> finishGate(gate, finalPassed));
         log.info("Gate {} finished: {}", gate.getGateType(), gate.getResult());
         return gate;
     }
 
     /** 短 TX：标记门禁开始执行 */
-    @Transactional
     private void startGate(ValidationGate gate) {
         gate.setStartedAt(LocalDateTime.now());
         gate.setResult("RUNNING");
@@ -96,7 +99,6 @@ public class ValidationGateRunner {
     }
 
     /** 短 TX：回写门禁结果 */
-    @Transactional
     private void finishGate(ValidationGate gate, boolean passed) {
         gate.setResult(passed ? "PASSED" : "FAILED");
         gate.setFinishedAt(LocalDateTime.now());

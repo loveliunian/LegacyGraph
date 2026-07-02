@@ -1,7 +1,9 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 混合 RAG 检索结果项 — 含多维度评分。
@@ -19,6 +21,8 @@ import lombok.Data;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class HybridRagResult {
 
     /** 结果唯一标识 */
@@ -60,28 +64,7 @@ public class HybridRagResult {
     /** 证据来源类型（code/db/runtime/test/doc/ai） */
     private String evidenceSource;
 
-    public HybridRagResult() {}
 
-    public HybridRagResult(String resultId, String resultType, String title,
-                           String content, String sourcePath,
-                           Double sourcePriorityScore, Double vectorScore,
-                           Double graphProximityScore, Double freshnessScore,
-                           Double runtimeVerifiedScore, Double finalScore,
-                           String evidenceSummary, String evidenceSource) {
-        this.resultId = resultId;
-        this.resultType = resultType;
-        this.title = title;
-        this.content = content;
-        this.sourcePath = sourcePath;
-        this.sourcePriorityScore = sourcePriorityScore;
-        this.vectorScore = vectorScore;
-        this.graphProximityScore = graphProximityScore;
-        this.freshnessScore = freshnessScore;
-        this.runtimeVerifiedScore = runtimeVerifiedScore;
-        this.finalScore = finalScore;
-        this.evidenceSummary = evidenceSummary;
-        this.evidenceSource = evidenceSource;
-    }
 
     // ========== 评分权重常量 ==========
 

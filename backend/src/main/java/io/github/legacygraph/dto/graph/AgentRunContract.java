@@ -1,7 +1,9 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +24,8 @@ import java.util.Map;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AgentRunContract {
 
     /** 合约唯一标识 */
@@ -81,34 +85,5 @@ public class AgentRunContract {
     /** 额外元数据 */
     private Map<String, Object> metadata;
 
-    public AgentRunContract() {}
 
-    public AgentRunContract(String contractId, String projectId, String agentType,
-                            String agentName, String inputSchemaVersion,
-                            String outputSchemaVersion, List<String> usedEvidenceIds,
-                            List<String> omittedBecause, boolean needsHumanReview,
-                            String model, Integer promptTokens, Integer completionTokens,
-                            Double costUsd, int retryCount, int selfCorrectionCount,
-                            Double qualityScore, LocalDateTime startedAt,
-                            LocalDateTime finishedAt, Map<String, Object> metadata) {
-        this.contractId = contractId;
-        this.projectId = projectId;
-        this.agentType = agentType;
-        this.agentName = agentName;
-        this.inputSchemaVersion = inputSchemaVersion;
-        this.outputSchemaVersion = outputSchemaVersion;
-        this.usedEvidenceIds = usedEvidenceIds;
-        this.omittedBecause = omittedBecause;
-        this.needsHumanReview = needsHumanReview;
-        this.model = model;
-        this.promptTokens = promptTokens;
-        this.completionTokens = completionTokens;
-        this.costUsd = costUsd;
-        this.retryCount = retryCount;
-        this.selfCorrectionCount = selfCorrectionCount;
-        this.qualityScore = qualityScore;
-        this.startedAt = startedAt;
-        this.finishedAt = finishedAt;
-        this.metadata = metadata;
-    }
 }

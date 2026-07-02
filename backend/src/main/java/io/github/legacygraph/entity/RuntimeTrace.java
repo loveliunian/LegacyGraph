@@ -43,6 +43,5 @@ public class RuntimeTrace {
 
     private LocalDateTime createdAt;
 
-    @TableLogic
     private Integer deleted;
 }

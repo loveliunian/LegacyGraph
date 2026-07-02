@@ -45,7 +45,6 @@ public class TestCase {
 
     private LocalDateTime updatedAt;
 
-    @TableLogic
     private Integer deleted;
 
     @TableField(exist = false)

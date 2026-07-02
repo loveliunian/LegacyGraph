@@ -911,6 +911,16 @@ public class Neo4jGraphDao {
         }
     }
 
+    /** 删除指定项目的全部图谱数据（DETACH DELETE） */
+    public void deleteProjectGraph(String projectId) {
+        try (Session session = neo4jDriver.session()) {
+            session.run(
+                    "MATCH (n) WHERE n.projectId = $projectId DETACH DELETE n",
+                    Map.of("projectId", projectId));
+            log.info("Deleted all Neo4j graph for project: projectId={}", projectId);
+        }
+    }
+
     /** 删除单个节点 */
     public void deleteNode(String projectId, String versionId, String nodeId) {
         try (Session session = neo4jDriver.session()) {

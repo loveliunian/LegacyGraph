@@ -28,6 +28,5 @@ public class TestResult {
     private Long durationMs;
     private LocalDateTime executedAt;
 
-    @TableLogic
     private Integer deleted;
 }

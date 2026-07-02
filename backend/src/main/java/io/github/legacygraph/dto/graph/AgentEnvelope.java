@@ -1,7 +1,9 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +24,8 @@ import java.util.Map;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AgentEnvelope<T> {
 
     /** 项目ID */
@@ -58,6 +62,8 @@ public class AgentEnvelope<T> {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class EvidenceCatalog {
         /** 使用的证据ID列表 */
         private List<String> usedEvidenceIds;
@@ -74,17 +80,6 @@ public class AgentEnvelope<T> {
         /** 额外元数据 */
         private Map<String, Object> metadata;
 
-        public EvidenceCatalog() {}
-
-        public EvidenceCatalog(List<String> usedEvidenceIds, List<String> omittedBecause,
-                               List<String> requiredEvidenceTypes, String summary,
-                               Map<String, Object> metadata) {
-            this.usedEvidenceIds = usedEvidenceIds;
-            this.omittedBecause = omittedBecause;
-            this.requiredEvidenceTypes = requiredEvidenceTypes;
-            this.summary = summary;
-            this.metadata = metadata;
-        }
     }
 
     /**
@@ -133,19 +128,4 @@ public class AgentEnvelope<T> {
         }
     }
 
-    public AgentEnvelope() {}
-
-    public AgentEnvelope(String projectId, String taskId, String schemaVersion, T input,
-                         EvidenceCatalog evidenceCatalog, RequiredEvidencePolicy policy,
-                         String contractId, String agentType, LocalDateTime createdAt) {
-        this.projectId = projectId;
-        this.taskId = taskId;
-        this.schemaVersion = schemaVersion;
-        this.input = input;
-        this.evidenceCatalog = evidenceCatalog;
-        this.policy = policy;
-        this.contractId = contractId;
-        this.agentType = agentType;
-        this.createdAt = createdAt;
-    }
 }

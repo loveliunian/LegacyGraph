@@ -1,7 +1,9 @@
 package io.github.legacygraph.extractors.adapter;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Set;
 
@@ -10,6 +12,8 @@ import java.util.Set;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AdapterCapability {
 
     /** 适配器名称 */
@@ -30,16 +34,5 @@ public class AdapterCapability {
     /** 优先级（数值越小越优先） */
     private int priority;
 
-    public AdapterCapability() {}
 
-    public AdapterCapability(String name, Set<String> languages,
-                             Set<String> frameworks, Set<String> fileTypes,
-                             boolean aiEnhanced, int priority) {
-        this.name = name;
-        this.languages = languages;
-        this.frameworks = frameworks;
-        this.fileTypes = fileTypes;
-        this.aiEnhanced = aiEnhanced;
-        this.priority = priority;
-    }
 }

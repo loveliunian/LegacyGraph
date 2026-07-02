@@ -106,7 +106,7 @@ class AiScanOrchestratorTest {
         AiScanConfig config = new AiScanConfig();
         config.setEnableAi(false);
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         // P1-B：enableAi=false 时创建结构化跳过任务，确保在 scan_task 列表中可见
         verify(scanTaskRepository).insert(any(ScanTask.class));
@@ -118,7 +118,7 @@ class AiScanOrchestratorTest {
 
     @Test
     void testOrchestrate_NullConfig_DoesNothing() {
-        orchestrator.orchestrate("proj-1", "v1", null);
+        orchestrator.orchestrate("proj-1", "v1", null, null);
 
         // null config 同 enableAi=false：创建结构化跳过任务
         verify(scanTaskRepository).insert(any(ScanTask.class));
@@ -137,7 +137,7 @@ class AiScanOrchestratorTest {
         when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         ArgumentCaptor<ScanTask> updateCaptor = ArgumentCaptor.forClass(ScanTask.class);
         verify(scanTaskRepository, atLeastOnce()).updateById(updateCaptor.capture());
@@ -160,7 +160,7 @@ class AiScanOrchestratorTest {
         when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         ArgumentCaptor<ScanTask> updateCaptor = ArgumentCaptor.forClass(ScanTask.class);
         verify(scanTaskRepository, atLeastOnce()).updateById(updateCaptor.capture());
@@ -194,7 +194,7 @@ class AiScanOrchestratorTest {
                         node(NodeType.ApiEndpoint.name(), "api:/b", "高置信B", 0.9)));
         when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         // 创建了 6 个子任务（含 AI_GAP_FINDING），未创建 TEST_GENERATE
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
@@ -248,7 +248,7 @@ class AiScanOrchestratorTest {
         gc.setAssertions(List.of(assertion));
         when(testCaseAgent.generateTestCases(any())).thenReturn(List.of(gc));
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         // 创建了 7 个子任务（含 AI_GAP_FINDING）
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
@@ -313,7 +313,7 @@ class AiScanOrchestratorTest {
         result.setMappings(List.of(mapping));
         when(featureMappingAgent.mapFeatures(any())).thenReturn(result);
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         ArgumentCaptor<GraphEdge> edgeCaptor = ArgumentCaptor.forClass(GraphEdge.class);
         verify(neo4jGraphDao).createEdge(edgeCaptor.capture());
@@ -379,7 +379,7 @@ class AiScanOrchestratorTest {
         when(docUnderstandingAgent.extractBusinessFacts(eq("proj-1"), anyString(), eq(docPath.toString())))
                 .thenReturn(extraction);
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
         verify(factRepository, times(7)).upsert(factCaptor.capture());
@@ -448,7 +448,7 @@ class AiScanOrchestratorTest {
 
         lenient().when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         // 验证：CODE_FEATURE 事实已保存，sourceType=CODE_AI
         ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
@@ -508,7 +508,7 @@ class AiScanOrchestratorTest {
 
         lenient().when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
 
-        orchestrator.orchestrate("proj-1", "v1", config);
+        orchestrator.orchestrate("proj-1", "v1", config, null);
 
         // 验证：AI_FEATURE_CODE_MAPPING 任务已创建（自动路径执行了 mapFeaturesToCode）
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);

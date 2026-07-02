@@ -1,7 +1,9 @@
 package io.github.legacygraph.extractors.adapter;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
@@ -10,6 +12,8 @@ import java.util.Map;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ScanContext {
 
     /** 项目ID */
@@ -29,17 +33,4 @@ public class ScanContext {
 
     /** 额外配置参数 */
     private Map<String, Object> config;
-
-    public ScanContext() {}
-
-    public ScanContext(String projectId, String versionId, String baseDir,
-                       String backendDir, String frontendDir,
-                       Map<String, Object> config) {
-        this.projectId = projectId;
-        this.versionId = versionId;
-        this.baseDir = baseDir;
-        this.backendDir = backendDir;
-        this.frontendDir = frontendDir;
-        this.config = config;
-    }
 }

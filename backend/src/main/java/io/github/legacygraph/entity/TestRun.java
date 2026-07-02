@@ -34,6 +34,5 @@ public class TestRun {
 
     private Integer failedCases;
 
-    @TableLogic
     private Integer deleted;
 }

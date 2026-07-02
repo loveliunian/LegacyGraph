@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 
@@ -36,17 +37,29 @@ class ChangeTaskServiceTest {
     @Mock private io.github.legacygraph.agent.PatchPlanAgent patchPlanAgent;
     @Mock private ValidationGateRunner validationGateRunner;
     @Mock private PrOrchestrator prOrchestrator;
+    @Mock private TransactionTemplate transactionTemplate;
 
     private ChangeTaskService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
+        // Mock TransactionTemplate to directly run the callback (bypass actual TX in unit test)
+        lenient().doAnswer(invocation -> {
+            var consumer = invocation.getArgument(0, java.util.function.Consumer.class);
+            consumer.accept(null);
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
+        lenient().doAnswer(invocation -> {
+            var callback = invocation.getArgument(0, org.springframework.transaction.support.TransactionCallback.class);
+            return callback.doInTransaction(null);
+        }).when(transactionTemplate).execute(any());
+
         service = new ChangeTaskService(changeTaskRepository, patchFileRepository,
                 validationGateRepository, reviewRecordRepository, impactSubgraphService,
                 changeImpactAgent, refactorAgentAdapter, migrationAgentAdapter,
                 patchPlanAgent, new PatchPlanValidator(), validationGateRunner,
-                prOrchestrator, objectMapper);
+                prOrchestrator, objectMapper, transactionTemplate);
     }
 
     @Test

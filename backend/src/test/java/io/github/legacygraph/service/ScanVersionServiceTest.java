@@ -1,11 +1,11 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.github.legacygraph.dto.ScanProgressResponse;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
-import io.github.legacygraph.repository.ScanTaskRepository;
-import io.github.legacygraph.repository.ScanVersionRepository;
+import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,14 +25,28 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ScanVersionServiceTest {
 
-    @Mock
-    private ScanTaskRepository scanTaskRepository;
-
-    @Mock
-    private ScanVersionRepository scanVersionRepository;
-
-    @Mock
-    private CacheService cacheService;
+    @Mock private ScanTaskRepository scanTaskRepository;
+    @Mock private ScanVersionRepository scanVersionRepository;
+    @Mock private CacheService cacheService;
+    @Mock private GraphCacheInvalidator graphCacheInvalidator;
+    @Mock private Neo4jGraphDao neo4jGraphDao;
+    @Mock private GraphNodeRepository graphNodeRepository;
+    @Mock private GraphEdgeRepository graphEdgeRepository;
+    @Mock private FactRepository factRepository;
+    @Mock private EvidenceRepository evidenceRepository;
+    @Mock private NodeEvidenceRepository nodeEvidenceRepository;
+    @Mock private EdgeEvidenceRepository edgeEvidenceRepository;
+    @Mock private DocumentRepository documentRepository;
+    @Mock private DocChunkRepository docChunkRepository;
+    @Mock private TestCaseRepository testCaseRepository;
+    @Mock private TestRunRepository testRunRepository;
+    @Mock private TestResultRepository testResultRepository;
+    @Mock private TestAssertionRepository testAssertionRepository;
+    @Mock private RuntimeTraceRepository runtimeTraceRepository;
+    @Mock private ReviewRecordRepository reviewRecordRepository;
+    @Mock private KnowledgeClaimRepository knowledgeClaimRepository;
+    @Mock private GapTaskRepository gapTaskRepository;
+    @Mock private MigrationRiskRepository migrationRiskRepository;
 
     @InjectMocks
     private ScanVersionService scanVersionService;
@@ -47,13 +61,11 @@ class ScanVersionServiceTest {
         createRequest.setBranchName("main");
         createRequest.setCommitId("abc123");
         createRequest.setScanScope("src/");
-        // 进度缓存默认未命中，回源 DB
         lenient().when(cacheService.get(anyString(), any())).thenReturn(null);
     }
 
     @Test
     void testCreateScanVersion_Success() {
-        // 因为是继承 ServiceImpl，我们这里主要验证业务逻辑
         ScanVersion result = scanVersionService.createScanVersion(testProjectId, createRequest);
 
         assertNotNull(result);
@@ -123,7 +135,7 @@ class ScanVersionServiceTest {
         ScanProgressResponse response = scanVersionService.getScanProgress("version-1");
 
         assertNotNull(response);
-        assertEquals(50, response.getProgress()); // 1 out of 2 completed
+        assertEquals(50, response.getProgress());
         assertEquals(2, response.getTasks().size());
     }
 
@@ -154,7 +166,6 @@ class ScanVersionServiceTest {
     void testUpdateScanStatus_VersionNotFound() {
         when(scanVersionRepository.selectById("version-1")).thenReturn(null);
 
-        // Should not throw, just do nothing
         assertDoesNotThrow(() -> scanVersionService.updateScanStatus("version-1", "RUNNING"));
     }
 

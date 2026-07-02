@@ -1,7 +1,9 @@
 package io.github.legacygraph.extractors.adapter;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.nio.file.Path;
 
@@ -10,6 +12,8 @@ import java.nio.file.Path;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SourceAsset {
 
     /** 文件路径 */
@@ -30,15 +34,5 @@ public class SourceAsset {
     /** 资产大小（字节） */
     private long fileSize;
 
-    public SourceAsset() {}
 
-    public SourceAsset(Path file, String relativePath, String fileType,
-                       String language, String framework, long fileSize) {
-        this.file = file;
-        this.relativePath = relativePath;
-        this.fileType = fileType;
-        this.language = language;
-        this.framework = framework;
-        this.fileSize = fileSize;
-    }
 }

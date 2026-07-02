@@ -1,9 +1,10 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -16,6 +17,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ImpactSubgraph {
 
     /** 变更目标节点ID */
@@ -39,21 +42,5 @@ public class ImpactSubgraph {
     /** 供 LLM 使用的依赖摘要文本 */
     private String dependencySummary;
 
-    public ImpactSubgraph() {
-        this.nodeIds = new ArrayList<>();
-        this.edgeIds = new ArrayList<>();
-        this.impactedFiles = new ArrayList<>();
-    }
 
-    public ImpactSubgraph(String targetNodeId, String targetName, String targetNodeType,
-                          List<String> nodeIds, List<String> edgeIds,
-                          List<String> impactedFiles, String dependencySummary) {
-        this.targetNodeId = targetNodeId;
-        this.targetName = targetName;
-        this.targetNodeType = targetNodeType;
-        this.nodeIds = nodeIds != null ? nodeIds : new ArrayList<>();
-        this.edgeIds = edgeIds != null ? edgeIds : new ArrayList<>();
-        this.impactedFiles = impactedFiles != null ? impactedFiles : new ArrayList<>();
-        this.dependencySummary = dependencySummary;
-    }
 }

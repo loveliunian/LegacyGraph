@@ -1,9 +1,10 @@
 package io.github.legacygraph.dto.rag;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -23,6 +24,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class GraphRagPlan {
 
     /** 原始用户问题 */
@@ -62,26 +65,6 @@ public class GraphRagPlan {
     @Builder.Default
     private boolean needsHumanReview = false;
 
-    public GraphRagPlan() {
-        this.subQuestions = new ArrayList<>();
-        this.claimQueries = new ArrayList<>();
-        this.pathQueries = new ArrayList<>();
-        this.requiredEvidenceTypes = new ArrayList<>();
-    }
-
-    public GraphRagPlan(String question, List<SubQuestion> subQuestions,
-                        List<ClaimQuery> claimQueries, List<PathQuery> pathQueries,
-                        List<String> requiredEvidenceTypes, String reasoning,
-                        boolean needsHumanReview) {
-        this.question = question;
-        this.subQuestions = subQuestions != null ? subQuestions : new ArrayList<>();
-        this.claimQueries = claimQueries != null ? claimQueries : new ArrayList<>();
-        this.pathQueries = pathQueries != null ? pathQueries : new ArrayList<>();
-        this.requiredEvidenceTypes = requiredEvidenceTypes != null ? requiredEvidenceTypes : new ArrayList<>();
-        this.reasoning = reasoning;
-        this.needsHumanReview = needsHumanReview;
-    }
-
     // ==================== 内嵌 DTO ====================
 
     /**
@@ -89,6 +72,8 @@ public class GraphRagPlan {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class SubQuestion {
         /**
          * 目标类型：决定子问题路由到哪种查询执行器。
@@ -112,14 +97,6 @@ public class GraphRagPlan {
         @Builder.Default
         private int dependsOn = -1;
 
-        public SubQuestion() {}
-
-        public SubQuestion(String targetType, String query, String priority, int dependsOn) {
-            this.targetType = targetType;
-            this.query = query;
-            this.priority = priority != null ? priority : "NORMAL";
-            this.dependsOn = dependsOn;
-        }
     }
 
     /**
@@ -127,6 +104,8 @@ public class GraphRagPlan {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ClaimQuery {
         /**
          * 主体类型过滤。
@@ -159,20 +138,6 @@ public class GraphRagPlan {
         /** 查询目的说明 */
         private String purpose;
 
-        public ClaimQuery() {}
-
-        public ClaimQuery(String subjectType, String subjectKey, String predicate,
-                          String objectType, String objectKey, String sourceType,
-                          double minConfidence, String purpose) {
-            this.subjectType = subjectType;
-            this.subjectKey = subjectKey;
-            this.predicate = predicate;
-            this.objectType = objectType;
-            this.objectKey = objectKey;
-            this.sourceType = sourceType;
-            this.minConfidence = minConfidence;
-            this.purpose = purpose;
-        }
     }
 
     /**
@@ -180,6 +145,8 @@ public class GraphRagPlan {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class PathQuery {
         /**
          * 起始节点类型/标签。
@@ -215,18 +182,5 @@ public class GraphRagPlan {
         /** 查询目的说明 */
         private String purpose;
 
-        public PathQuery() {}
-
-        public PathQuery(String startNodeType, String startNodeFilter,
-                         String relationshipPattern, String endNodeType,
-                         String endNodeFilter, String pathDepth, String purpose) {
-            this.startNodeType = startNodeType;
-            this.startNodeFilter = startNodeFilter;
-            this.relationshipPattern = relationshipPattern;
-            this.endNodeType = endNodeType;
-            this.endNodeFilter = endNodeFilter;
-            this.pathDepth = pathDepth != null ? pathDepth : "1..3";
-            this.purpose = purpose;
-        }
     }
 }

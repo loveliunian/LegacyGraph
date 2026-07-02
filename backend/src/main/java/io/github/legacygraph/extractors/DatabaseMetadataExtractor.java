@@ -155,7 +155,7 @@ public class DatabaseMetadataExtractor {
      */
     private String getTableComment(Connection conn, String schema, String tableName) {
         try {
-            String sql = "SELECT obj_description(('\"' || ? || '\"'.'\"' || ? || '\"')::regclass)";
+            String sql = "SELECT obj_description(('\"' || ? || '\".\"' || ? || '\"')::regclass)";
             java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
             stmt.setString(1, schema);
             stmt.setString(2, tableName);

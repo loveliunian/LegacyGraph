@@ -44,6 +44,5 @@ public class GraphNode {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    @TableLogic
     private Integer deleted;
 }

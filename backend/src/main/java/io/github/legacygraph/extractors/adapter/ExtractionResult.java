@@ -1,9 +1,10 @@
 package io.github.legacygraph.extractors.adapter;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -11,6 +12,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ExtractionResult {
 
     /** 处理的资产数 */
@@ -31,18 +34,5 @@ public class ExtractionResult {
     /** 附加数据（供后续步骤使用） */
     private List<Object> extractedData;
 
-    public ExtractionResult() {
-        this.extractedData = new ArrayList<>();
-    }
 
-    public ExtractionResult(int processedAssets, int nodeCount, int edgeCount,
-                            int evidenceCount, String summary,
-                            List<Object> extractedData) {
-        this.processedAssets = processedAssets;
-        this.nodeCount = nodeCount;
-        this.edgeCount = edgeCount;
-        this.evidenceCount = evidenceCount;
-        this.summary = summary;
-        this.extractedData = extractedData != null ? extractedData : new ArrayList<>();
-    }
 }

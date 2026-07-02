@@ -1,9 +1,10 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -16,6 +17,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PatchPlan {
 
     private String taskId;
@@ -40,44 +43,20 @@ public class PatchPlan {
     /** 生成来源 Agent（refactor / migration / repair 等） */
     private String generatedBy;
 
-    public PatchPlan() {
-        this.impactedFiles = new ArrayList<>();
-        this.patches = new ArrayList<>();
-        this.newTests = new ArrayList<>();
-        this.validationGates = new ArrayList<>();
-    }
-
-    public PatchPlan(String taskId, String taskType, String riskLevel,
-                     List<ImpactedFile> impactedFiles, List<Patch> patches,
-                     List<NewTest> newTests, List<String> validationGates,
-                     boolean manualReviewNeeded, String generatedBy) {
-        this.taskId = taskId;
-        this.taskType = taskType;
-        this.riskLevel = riskLevel;
-        this.impactedFiles = impactedFiles != null ? impactedFiles : new ArrayList<>();
-        this.patches = patches != null ? patches : new ArrayList<>();
-        this.newTests = newTests != null ? newTests : new ArrayList<>();
-        this.validationGates = validationGates != null ? validationGates : new ArrayList<>();
-        this.manualReviewNeeded = manualReviewNeeded;
-        this.generatedBy = generatedBy;
-    }
-
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ImpactedFile {
         private String path;
         private String reason;
 
-        public ImpactedFile() {}
-
-        public ImpactedFile(String path, String reason) {
-            this.path = path;
-            this.reason = reason;
-        }
     }
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Patch {
         private String filePath;
         /** CREATE / MODIFY / DELETE */
@@ -85,32 +64,17 @@ public class PatchPlan {
         private String patchText;
         private List<String> evidenceIds;
 
-        public Patch() {
-            this.evidenceIds = new ArrayList<>();
-        }
-
-        public Patch(String filePath, String changeType, String patchText, List<String> evidenceIds) {
-            this.filePath = filePath;
-            this.changeType = changeType;
-            this.patchText = patchText;
-            this.evidenceIds = evidenceIds != null ? evidenceIds : new ArrayList<>();
-        }
     }
 
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class NewTest {
         /** UNIT / API / DB / E2E */
         private String type;
         private String target;
         private String purpose;
 
-        public NewTest() {}
-
-        public NewTest(String type, String target, String purpose) {
-            this.type = type;
-            this.target = target;
-            this.purpose = purpose;
-        }
     }
 }

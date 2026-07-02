@@ -1,21 +1,20 @@
 package io.github.legacygraph.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.CreateProjectRequest;
 import io.github.legacygraph.entity.Project;
 import io.github.legacygraph.exception.BusinessException;
-import io.github.legacygraph.repository.CodeRepoRepository;
-import io.github.legacygraph.repository.ProjectRepository;
+import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import java.util.Collections;
 import java.util.List;
@@ -27,11 +26,41 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ProjectServiceTest {
 
-    @Mock
-    private ProjectRepository projectRepository;
-
-    @Mock
-    private CodeRepoRepository codeRepoRepository;
+    @Mock private ProjectRepository projectRepository;
+    @Mock private CodeRepoRepository codeRepoRepository;
+    @Mock private DbConnectionRepository dbConnectionRepository;
+    @Mock private CacheService cacheService;
+    @Mock private Neo4jGraphDao neo4jGraphDao;
+    @Mock private ScanVersionRepository scanVersionRepository;
+    @Mock private ScanTaskRepository scanTaskRepository;
+    @Mock private GraphNodeRepository graphNodeRepository;
+    @Mock private GraphEdgeRepository graphEdgeRepository;
+    @Mock private FactRepository factRepository;
+    @Mock private EvidenceRepository evidenceRepository;
+    @Mock private NodeEvidenceRepository nodeEvidenceRepository;
+    @Mock private EdgeEvidenceRepository edgeEvidenceRepository;
+    @Mock private DocumentRepository documentRepository;
+    @Mock private DocChunkRepository docChunkRepository;
+    @Mock private TestCaseRepository testCaseRepository;
+    @Mock private TestRunRepository testRunRepository;
+    @Mock private TestResultRepository testResultRepository;
+    @Mock private TestAssertionRepository testAssertionRepository;
+    @Mock private RuntimeTraceRepository runtimeTraceRepository;
+    @Mock private ReviewRecordRepository reviewRecordRepository;
+    @Mock private ReportRepository reportRepository;
+    @Mock private VectorDocumentRepository vectorDocumentRepository;
+    @Mock private PromptRunRepository promptRunRepository;
+    @Mock private DomainOntologyTermRepository domainOntologyTermRepository;
+    @Mock private DomainOntologyRelationRepository domainOntologyRelationRepository;
+    @Mock private KnowledgeClaimRepository knowledgeClaimRepository;
+    @Mock private GapTaskRepository gapTaskRepository;
+    @Mock private MigrationRiskRepository migrationRiskRepository;
+    @Mock private AgentRunRepository agentRunRepository;
+    @Mock private ChangeTaskRepository changeTaskRepository;
+    @Mock private PrTaskRepository prTaskRepository;
+    @Mock private PatchFileRepository patchFileRepository;
+    @Mock private ValidationGateRepository validationGateRepository;
+    @Mock private GraphCacheInvalidator graphCacheInvalidator;
 
     @InjectMocks
     private ProjectService projectService;
@@ -120,12 +149,12 @@ class ProjectServiceTest {
         Project result = projectService.createProject(createRequest);
 
         assertNotNull(result);
-        assertNotNull(result.getId()); // UUID should be generated
+        assertNotNull(result.getId());
         assertEquals("test-project", result.getProjectCode());
         assertEquals("测试项目", result.getProjectName());
         assertEquals("这是一个测试项目", result.getDescription());
         assertEquals("test-user", result.getOwner());
-        assertEquals("LEGACY", result.getProjectType()); // default
+        assertEquals("LEGACY", result.getProjectType());
         assertEquals("INIT", result.getStatus());
         assertNotNull(result.getCreatedAt());
         assertNotNull(result.getUpdatedAt());
@@ -149,6 +178,8 @@ class ProjectServiceTest {
         project.setId("project-1");
 
         when(projectRepository.selectById("project-1")).thenReturn(project);
+        when(scanVersionRepository.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(Collections.emptyList());
         when(projectRepository.deleteById("project-1")).thenReturn(1);
 
         assertDoesNotThrow(() -> projectService.deleteById("project-1"));

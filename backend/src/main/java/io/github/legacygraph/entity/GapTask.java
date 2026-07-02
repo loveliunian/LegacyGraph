@@ -1,7 +1,6 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -73,7 +72,6 @@ public class GapTask {
     /** 优先级评分 0~1 */
     private BigDecimal priorityScore;
 
-    @TableLogic
     private Integer deleted;
 
     private LocalDateTime createdAt;

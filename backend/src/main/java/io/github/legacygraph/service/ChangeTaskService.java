@@ -19,6 +19,7 @@ import io.github.legacygraph.repository.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,6 +56,7 @@ public class ChangeTaskService {
     private final ValidationGateRunner validationGateRunner;
     private final PrOrchestrator prOrchestrator;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     public ChangeTaskService(ChangeTaskRepository changeTaskRepository,
                              PatchFileRepository patchFileRepository,
@@ -68,7 +70,8 @@ public class ChangeTaskService {
                              PatchPlanValidator patchPlanValidator,
                              ValidationGateRunner validationGateRunner,
                              PrOrchestrator prOrchestrator,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             TransactionTemplate transactionTemplate) {
         this.changeTaskRepository = changeTaskRepository;
         this.patchFileRepository = patchFileRepository;
         this.validationGateRepository = validationGateRepository;
@@ -82,6 +85,7 @@ public class ChangeTaskService {
         this.validationGateRunner = validationGateRunner;
         this.prOrchestrator = prOrchestrator;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = transactionTemplate;
     }
 
     /** 创建变更任务（状态 OPEN）—— 短 TX。 */
@@ -149,11 +153,12 @@ public class ChangeTaskService {
         }
 
         // 短 TX 回写状态
-        updateTaskAfterImpact(taskId, subgraph, riskLevel);
+        String finalRiskLevel = riskLevel;
+        transactionTemplate.executeWithoutResult(status ->
+                updateTaskAfterImpact(taskId, subgraph, finalRiskLevel));
         return subgraph;
     }
 
-    @Transactional
     private void updateTaskAfterImpact(String taskId, ImpactSubgraph subgraph, String riskLevel) {
         ChangeTask task = requireTask(taskId);
         task.setImpactedSubgraph(toJson(subgraph));
@@ -200,11 +205,11 @@ public class ChangeTaskService {
         PatchPlanValidator.ValidationResult vr = patchPlanValidator.validate(plan, subgraph);
 
         // 短 TX 持久化 patch files + 状态更新
-        persistPatchResult(taskId, plan, vr, task.getProjectId(), task.getVersionId());
+        transactionTemplate.executeWithoutResult(status ->
+                persistPatchResult(taskId, plan, vr, task.getProjectId(), task.getVersionId()));
         return plan;
     }
 
-    @Transactional
     private void persistPatchResult(String taskId, PatchPlan plan,
                                      PatchPlanValidator.ValidationResult vr,
                                      String projectId, String versionId) {
@@ -291,11 +296,11 @@ public class ChangeTaskService {
         boolean allPassed = validationGateRunner.runAll(taskId, ctx);
 
         // 短 TX 更新任务状态
-        return updateTaskAfterValidation(taskId, task.getProjectId(), task.getVersionId(),
-                task.getTitle(), allPassed);
+        return transactionTemplate.execute(status ->
+                updateTaskAfterValidation(taskId, task.getProjectId(), task.getVersionId(),
+                        task.getTitle(), allPassed));
     }
 
-    @Transactional
     private ChangeTask updateTaskAfterValidation(String taskId, String projectId,
                                                   String versionId, String title,
                                                   boolean allPassed) {

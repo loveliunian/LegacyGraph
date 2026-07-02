@@ -21,6 +21,5 @@ public class EdgeEvidence {
 
     private LocalDateTime createdAt;
 
-    @TableLogic
     private Integer deleted;
 }

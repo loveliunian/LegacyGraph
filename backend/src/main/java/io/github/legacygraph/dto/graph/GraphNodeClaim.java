@@ -1,7 +1,9 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
@@ -17,6 +19,8 @@ import java.math.BigDecimal;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class GraphNodeClaim {
 
     /** 项目ID（必填） */
@@ -64,31 +68,4 @@ public class GraphNodeClaim {
     /** 幂等键：同一意图重复提交不产生副作用（可选） */
     private String idempotencyKey;
 
-    /**
-     * 创建无参构造（Lombok @Builder 需要）。
-     * 同时提供全参构造供 Builder 模式使用。
-     */
-    public GraphNodeClaim() {}
-
-    public GraphNodeClaim(String projectId, String versionId, String nodeType,
-                          String nodeKey, String nodeName, String displayName,
-                          String description, String sourceType, String sourcePath,
-                          Integer startLine, Integer endLine, BigDecimal confidence,
-                          String status, String properties, String idempotencyKey) {
-        this.projectId = projectId;
-        this.versionId = versionId;
-        this.nodeType = nodeType;
-        this.nodeKey = nodeKey;
-        this.nodeName = nodeName;
-        this.displayName = displayName;
-        this.description = description;
-        this.sourceType = sourceType;
-        this.sourcePath = sourcePath;
-        this.startLine = startLine;
-        this.endLine = endLine;
-        this.confidence = confidence;
-        this.status = status;
-        this.properties = properties;
-        this.idempotencyKey = idempotencyKey;
-    }
 }

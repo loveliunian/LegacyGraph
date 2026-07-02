@@ -12,7 +12,7 @@ public interface EvidenceRepository extends LegacyBaseMapper<Evidence> {
      * 按 contentHash 原子 upsert：冲突时忽略（不重复插入）。
      * <p>
      * 依赖 V10 迁移创建的 partial unique index：
-     * <code>CREATE UNIQUE INDEX ON lg_evidence(content_hash) WHERE content_hash IS NOT NULL AND deleted = 0</code>
+     * <code>CREATE UNIQUE INDEX ON lg_evidence(content_hash) WHERE content_hash IS NOT NULL</code>
      * <p>
      * ON CONFLICT WHERE 子句必须包含索引的全部谓词，否则 PostgreSQL 会报：
      * "there is no unique or exclusion constraint matching the ON CONFLICT specification"
@@ -29,12 +29,12 @@ public interface EvidenceRepository extends LegacyBaseMapper<Evidence> {
             + "#{sourceName}, #{startLine}, #{endLine}, #{contentHash}, #{contentExcerpt}, #{summary}, #{content}, "
             + "#{metadata}, #{astPath}, #{sqlHash}, #{chunkId}, #{relatedNodeIds}, #{privacyLevel}, "
             + "#{redactionPolicy}, #{createdAt}) "
-            + "ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL AND deleted = 0 DO NOTHING")
+            + "ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING")
     int insertOrIgnore(Evidence evidence);
 
     /**
      * 按 contentHash 查找已有证据（用于去重冲突时获取已存在的记录 ID）。
      */
-    @Select("SELECT * FROM lg_evidence WHERE content_hash = #{contentHash} AND deleted = 0 LIMIT 1")
+    @Select("SELECT * FROM lg_evidence WHERE content_hash = #{contentHash} LIMIT 1")
     Evidence findByContentHash(String contentHash);
 }

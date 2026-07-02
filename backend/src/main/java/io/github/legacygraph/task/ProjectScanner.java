@@ -382,7 +382,8 @@ public class ProjectScanner {
                 io.github.legacygraph.dto.AiScanConfig aiConfig =
                         io.github.legacygraph.dto.AiScanConfig.fromScanScope(
                                 version != null ? version.getScanScope() : null, objectMapper, aiDefaults);
-                aiScanOrchestrator.orchestrate(projectId, versionId, aiConfig);
+                aiScanOrchestrator.orchestrate(projectId, versionId, aiConfig,
+                        () -> isCancelled(versionId));
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=completed",
                         projectId, versionId);
             } catch (Exception aiEx) {

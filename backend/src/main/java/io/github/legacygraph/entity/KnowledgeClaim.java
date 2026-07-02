@@ -1,7 +1,6 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -87,7 +86,6 @@ public class KnowledgeClaim {
     /** 编译状态：NEW / COMPILED / FAILED / SKIPPED */
     private String compileStatus;
 
-    @TableLogic
     private Integer deleted;
 
     private LocalDateTime createdAt;

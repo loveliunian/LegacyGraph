@@ -26,6 +26,5 @@ public class TestAssertion {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    @TableLogic
     private Integer deleted;
 }

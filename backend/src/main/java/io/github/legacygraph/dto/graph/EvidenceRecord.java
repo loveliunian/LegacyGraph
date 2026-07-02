@@ -1,7 +1,9 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 统一证据记录 — 所有 Extractor/AI Agent 产出的证据都通过此结构流转。
@@ -12,6 +14,8 @@ import lombok.Data;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class EvidenceRecord {
 
     /** 项目ID */
@@ -64,28 +68,4 @@ public class EvidenceRecord {
      */
     private String redactionPolicy;
 
-    public EvidenceRecord() {}
-
-    public EvidenceRecord(String projectId, String versionId,
-                          String evidenceType, String sourcePath, String sourceName,
-                          Integer startLine, Integer endLine, String contentHash,
-                          String summary, String content, String metadata,
-                          String astPath, String sqlHash, String privacyLevel,
-                          String redactionPolicy) {
-        this.projectId = projectId;
-        this.versionId = versionId;
-        this.evidenceType = evidenceType;
-        this.sourcePath = sourcePath;
-        this.sourceName = sourceName;
-        this.startLine = startLine;
-        this.endLine = endLine;
-        this.contentHash = contentHash;
-        this.summary = summary;
-        this.content = content;
-        this.metadata = metadata;
-        this.astPath = astPath;
-        this.sqlHash = sqlHash;
-        this.privacyLevel = privacyLevel;
-        this.redactionPolicy = redactionPolicy;
-    }
 }

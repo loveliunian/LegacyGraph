@@ -18,8 +18,7 @@ public interface GraphEdgeRepository extends LegacyBaseMapper<GraphEdge> {
             "CASE WHEN from_node_id = #{nodeId} THEN to_node_id ELSE from_node_id END " +
             "FROM lg_graph_edge " +
             "WHERE version_id = #{versionId} " +
-            "AND (from_node_id = #{nodeId} OR to_node_id = #{nodeId}) " +
-            "AND deleted = 0")
+            "AND (from_node_id = #{nodeId} OR to_node_id = #{nodeId})")
     List<String> findNeighborNodeIds(@Param("nodeId") String nodeId, @Param("versionId") String versionId);
 
     /**
@@ -27,7 +26,7 @@ public interface GraphEdgeRepository extends LegacyBaseMapper<GraphEdge> {
      */
     @Update("UPDATE lg_graph_edge " +
             "SET from_node_id = #{newNodeId} " +
-            "WHERE from_node_id = #{oldNodeId} AND version_id = #{versionId} AND deleted = 0")
+            "WHERE from_node_id = #{oldNodeId} AND version_id = #{versionId}")
     int updateFromNodeId(@Param("oldNodeId") String oldNodeId,
                          @Param("newNodeId") String newNodeId,
                          @Param("versionId") String versionId);
@@ -37,7 +36,7 @@ public interface GraphEdgeRepository extends LegacyBaseMapper<GraphEdge> {
      */
     @Update("UPDATE lg_graph_edge " +
             "SET to_node_id = #{newNodeId} " +
-            "WHERE to_node_id = #{oldNodeId} AND version_id = #{versionId} AND deleted = 0")
+            "WHERE to_node_id = #{oldNodeId} AND version_id = #{versionId}")
     int updateToNodeId(@Param("oldNodeId") String oldNodeId,
                        @Param("newNodeId") String newNodeId,
                        @Param("versionId") String versionId);

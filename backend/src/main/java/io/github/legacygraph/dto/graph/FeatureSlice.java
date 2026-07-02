@@ -1,11 +1,12 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -31,6 +32,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class FeatureSlice {
 
     /** 切片唯一标识 */
@@ -124,67 +127,6 @@ public class FeatureSlice {
     /** 更新时间 */
     private LocalDateTime updatedAt;
 
-    // ========== 构造函数 ==========
-
-    public FeatureSlice() {
-        this.pageIds = new ArrayList<>();
-        this.apiIds = new ArrayList<>();
-        this.methodIds = new ArrayList<>();
-        this.sqlIds = new ArrayList<>();
-        this.tableIds = new ArrayList<>();
-        this.permissionIds = new ArrayList<>();
-        this.ruleIds = new ArrayList<>();
-        this.testCaseIds = new ArrayList<>();
-        this.evidenceSources = new ArrayList<>();
-        this.entrances = new ArrayList<>();
-        this.implementation = new ArrayList<>();
-        this.data = new ArrayList<>();
-        this.rules = new ArrayList<>();
-        this.verification = new ArrayList<>();
-        this.gaps = new ArrayList<>();
-    }
-
-    public FeatureSlice(String sliceId, String projectId, String versionId,
-                        String name, String featureName, String entryPage,
-                        List<String> pageIds, List<String> apiIds,
-                        List<String> methodIds, List<String> sqlIds,
-                        List<String> tableIds, List<String> permissionIds,
-                        List<String> ruleIds, List<String> testCaseIds,
-                        List<SliceNodeRef> entrances, List<SliceNodeRef> implementation,
-                        List<SliceNodeRef> data, List<SliceNodeRef> rules,
-                        List<SliceNodeRef> verification, List<SliceNodeRef> gaps,
-                        BigDecimal confidence, String status, String riskLevel,
-                        String coverageStatus, List<String> evidenceSources,
-                        LocalDateTime createdAt, LocalDateTime updatedAt) {
-        this.sliceId = sliceId;
-        this.projectId = projectId;
-        this.versionId = versionId;
-        this.name = name;
-        this.featureName = featureName;
-        this.entryPage = entryPage;
-        this.pageIds = pageIds != null ? pageIds : new ArrayList<>();
-        this.apiIds = apiIds != null ? apiIds : new ArrayList<>();
-        this.methodIds = methodIds != null ? methodIds : new ArrayList<>();
-        this.sqlIds = sqlIds != null ? sqlIds : new ArrayList<>();
-        this.tableIds = tableIds != null ? tableIds : new ArrayList<>();
-        this.permissionIds = permissionIds != null ? permissionIds : new ArrayList<>();
-        this.ruleIds = ruleIds != null ? ruleIds : new ArrayList<>();
-        this.testCaseIds = testCaseIds != null ? testCaseIds : new ArrayList<>();
-        this.entrances = entrances != null ? entrances : new ArrayList<>();
-        this.implementation = implementation != null ? implementation : new ArrayList<>();
-        this.data = data != null ? data : new ArrayList<>();
-        this.rules = rules != null ? rules : new ArrayList<>();
-        this.verification = verification != null ? verification : new ArrayList<>();
-        this.gaps = gaps != null ? gaps : new ArrayList<>();
-        this.confidence = confidence;
-        this.status = status;
-        this.riskLevel = riskLevel;
-        this.coverageStatus = coverageStatus;
-        this.evidenceSources = evidenceSources != null ? evidenceSources : new ArrayList<>();
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-    }
-
     // ========== 内部类：切片节点引用 ==========
 
     /**
@@ -195,6 +137,8 @@ public class FeatureSlice {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class SliceNodeRef {
         /** 节点ID */
         private String nodeId;
@@ -220,20 +164,5 @@ public class FeatureSlice {
         /** 来源边类型（该节点是通过什么边连接到 Feature 的） */
         private String edgeType;
 
-        public SliceNodeRef() {
-        }
-
-        public SliceNodeRef(String nodeId, String nodeType, String nodeName,
-                            String displayName, String description, String sourceType,
-                            BigDecimal confidence, String edgeType) {
-            this.nodeId = nodeId;
-            this.nodeType = nodeType;
-            this.nodeName = nodeName;
-            this.displayName = displayName;
-            this.description = description;
-            this.sourceType = sourceType;
-            this.confidence = confidence;
-            this.edgeType = edgeType;
-        }
     }
 }

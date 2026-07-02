@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 /**
  * 扫描后 AI 编排器 — Phase 1。
@@ -120,20 +121,19 @@ public class AiScanOrchestrator {
 
     /**
      * 执行扫描后 AI 编排。未启用 AI 时直接返回。
+     *
+     * @param isCancelled 取消检查函数，每个子阶段前调用；为 null 时不检查
      */
-    public void orchestrate(String projectId, String versionId, AiScanConfig config) {
+    public void orchestrate(String projectId, String versionId, AiScanConfig config,
+                            BooleanSupplier isCancelled) {
         if (config == null || !config.isEnableAi()) {
             log.info("AI orchestration skipped (enableAi=false): versionId={}", versionId);
-            // P1-B：创建结构化跳过任务，确保"未开启 AI"在 scan_task 列表中可见，
-            // 避免"没扫到"与"没开扫"无法区分（呼应"不静默截断"原则）。
             ScanTask skipTask = createTask(projectId, versionId, "AI_ORCHESTRATION", "AI 编排");
             completeTask(skipTask,
                     "⚠ AI 编排已跳过：enableAi=false（未启用 AI 归纳）。"
                     + "业务图谱（业务域/流程/功能/对象/角色）将不会生成。"
                     + "如需生成业务图谱，请在 scanScope 中设置 enableAi=true。",
                     null);
-            // completeTask 会把 ⚠ 摘要标为 WARNING，便于任务列表筛选跳过原因
-            // 即使 AI 未启用，仍执行确定性缺口扫描（不依赖 LLM）
             if (gapFinderService != null) {
                 try {
                     gapFinderService.scanGaps(projectId, versionId);
@@ -148,13 +148,24 @@ public class AiScanOrchestrator {
                 projectId, versionId, config);
 
         runDocExtract(projectId, versionId);
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after doc extract: versionId={}", versionId); return; }
+
         runCodeExtract(projectId, versionId);
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after code extract: versionId={}", versionId); return; }
+
         runFeatureCodeMapping(projectId, versionId);
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature-code mapping: versionId={}", versionId); return; }
+
         runFeatureMapping(projectId, versionId);
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature mapping: versionId={}", versionId); return; }
+
         if (config.isAutoGenerateTestCase()) {
             runTestGenerate(projectId, versionId);
+            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after test generate: versionId={}", versionId); return; }
         }
         runReviewPrepare(projectId, versionId, config.getMinConfidence());
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after review prepare: versionId={}", versionId); return; }
+
         runKnowledgeGapScan(projectId, versionId);
 
         log.info("AI orchestration completed: versionId={}", versionId);

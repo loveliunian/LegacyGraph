@@ -1,7 +1,9 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
@@ -16,6 +18,8 @@ import java.math.BigDecimal;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class GraphEdgeClaim {
 
     /** 项目ID（必填） */
@@ -51,22 +55,5 @@ public class GraphEdgeClaim {
     /** 幂等键：同一意图重复提交不产生副作用（可选） */
     private String idempotencyKey;
 
-    public GraphEdgeClaim() {}
 
-    public GraphEdgeClaim(String projectId, String versionId, String fromNodeId,
-                          String toNodeId, String edgeType, String edgeKey,
-                          String sourceType, BigDecimal confidence, String status,
-                          String properties, String idempotencyKey) {
-        this.projectId = projectId;
-        this.versionId = versionId;
-        this.fromNodeId = fromNodeId;
-        this.toNodeId = toNodeId;
-        this.edgeType = edgeType;
-        this.edgeKey = edgeKey;
-        this.sourceType = sourceType;
-        this.confidence = confidence;
-        this.status = status;
-        this.properties = properties;
-        this.idempotencyKey = idempotencyKey;
-    }
 }

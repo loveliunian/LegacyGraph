@@ -10,6 +10,7 @@ import io.github.legacygraph.llm.SecretScanService;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,8 +22,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class EvidenceGraphWriterTest {
@@ -39,6 +39,19 @@ class EvidenceGraphWriterTest {
     @Mock
     private EdgeEvidenceRepository edgeEvidenceRepository;
 
+    @Mock
+    private PgEvidenceTxExecutor pgEvidenceTxExecutor;
+
+    @BeforeEach
+    void setUp() {
+        // Mock PgEvidenceTxExecutor to directly run the Runnable (bypass @Transactional proxy in unit test)
+        lenient().doAnswer(invocation -> {
+            Runnable task = invocation.getArgument(0);
+            task.run();
+            return null;
+        }).when(pgEvidenceTxExecutor).execute(any(Runnable.class));
+    }
+
     @Test
     void aiNodeWithoutSourcePathStillCreatesEvidenceAndStaysPending() {
         // MERGE 化后 upsertNode 单次 mergeNode 完成去重+创建；此处模拟本次新建（created=true）
@@ -47,7 +60,7 @@ class EvidenceGraphWriterTest {
 
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
                 neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
-                new SecretScanService());
+                new SecretScanService(), pgEvidenceTxExecutor);
 
         GraphNode node = writer.upsertNode(GraphNodeClaim.builder()
                 .projectId("project-1")
@@ -81,7 +94,7 @@ class EvidenceGraphWriterTest {
 
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
                 neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
-                new SecretScanService());
+                new SecretScanService(), pgEvidenceTxExecutor);
 
         writer.attachEvidence("node-1", EvidenceRecord.builder()
                 .evidenceType("doc")

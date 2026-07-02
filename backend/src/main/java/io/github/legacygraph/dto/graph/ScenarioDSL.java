@@ -1,9 +1,10 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -34,6 +35,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ScenarioDSL {
 
     /** 场景唯一标识 */
@@ -98,6 +101,8 @@ public class ScenarioDSL {
      */
     @Data
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Assertion {
         private String type;     // http_status / db / graph / response
         private String field;
@@ -105,49 +110,6 @@ public class ScenarioDSL {
         private String expectedValue;
         private String description;
 
-        public Assertion() {}
-
-        public Assertion(String type, String field, String operator,
-                         String expectedValue, String description) {
-            this.type = type;
-            this.field = field;
-            this.operator = operator;
-            this.expectedValue = expectedValue;
-            this.description = description;
-        }
     }
 
-    public ScenarioDSL() {
-        this.preconditions = new ArrayList<>();
-        this.actions = new ArrayList<>();
-        this.assertions = new ArrayList<>();
-        this.apiIds = new ArrayList<>();
-        this.sqlIds = new ArrayList<>();
-        this.tableIds = new ArrayList<>();
-    }
-
-    public ScenarioDSL(String scenarioId, String sliceId, String name,
-                       String description, String scenarioType, String entryPath,
-                       String httpMethod, String apiPath, String requestBody,
-                       String role, List<String> preconditions,
-                       List<String> actions, List<Assertion> assertions,
-                       List<String> apiIds, List<String> sqlIds,
-                       List<String> tableIds) {
-        this.scenarioId = scenarioId;
-        this.sliceId = sliceId;
-        this.name = name;
-        this.description = description;
-        this.scenarioType = scenarioType;
-        this.entryPath = entryPath;
-        this.httpMethod = httpMethod;
-        this.apiPath = apiPath;
-        this.requestBody = requestBody;
-        this.role = role;
-        this.preconditions = preconditions != null ? preconditions : new ArrayList<>();
-        this.actions = actions != null ? actions : new ArrayList<>();
-        this.assertions = assertions != null ? assertions : new ArrayList<>();
-        this.apiIds = apiIds != null ? apiIds : new ArrayList<>();
-        this.sqlIds = sqlIds != null ? sqlIds : new ArrayList<>();
-        this.tableIds = tableIds != null ? tableIds : new ArrayList<>();
-    }
 }

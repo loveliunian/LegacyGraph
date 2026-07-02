@@ -29,6 +29,5 @@ public class Project {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    @TableLogic
     private Integer deleted;
 }

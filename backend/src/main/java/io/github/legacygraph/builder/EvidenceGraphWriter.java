@@ -53,17 +53,20 @@ public class EvidenceGraphWriter {
     private final NodeEvidenceRepository nodeEvidenceRepository;
     private final EdgeEvidenceRepository edgeEvidenceRepository;
     private final SecretScanService secretScanService;
+    private final PgEvidenceTxExecutor pgEvidenceTxExecutor;
 
     public EvidenceGraphWriter(Neo4jGraphDao neo4jGraphDao,
                                EvidenceRepository evidenceRepository,
                                NodeEvidenceRepository nodeEvidenceRepository,
                                EdgeEvidenceRepository edgeEvidenceRepository,
-                               SecretScanService secretScanService) {
+                               SecretScanService secretScanService,
+                               PgEvidenceTxExecutor pgEvidenceTxExecutor) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.edgeEvidenceRepository = edgeEvidenceRepository;
         this.secretScanService = secretScanService;
+        this.pgEvidenceTxExecutor = pgEvidenceTxExecutor;
     }
 
     // ==================== 节点操作 ====================
@@ -113,8 +116,8 @@ public class EvidenceGraphWriter {
         // 仅新建节点时创建证据（命中已存在节点则跳过，避免重复 evidence）
         if (upsert.created() && (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType()))) {
             try {
-                createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
-                        claim.getStartLine(), claim.getEndLine());
+                pgEvidenceTxExecutor.execute(() -> createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
+                        claim.getStartLine(), claim.getEndLine()));
             } catch (Exception pgEx) {
                 // 跨存储补偿：Neo4j 已写入但 PG 证据写入失败 → 标记节点 INCOMPLETE
                 log.error("PG evidence write failed for Neo4j node {} (idempotencyKey={}): {} — marking INCOMPLETE",
@@ -172,7 +175,7 @@ public class EvidenceGraphWriter {
         // 仅新建边时继承源节点证据（命中已存在边则跳过，避免重复继承）
         if (upsert.created()) {
             try {
-                inheritEvidenceForEdge(merged, claim.getFromNodeId());
+                pgEvidenceTxExecutor.execute(() -> inheritEvidenceForEdge(merged, claim.getFromNodeId()));
             } catch (Exception pgEx) {
                 // 跨存储补偿：Neo4j 已写入但 PG 证据继承失败 → 标记边 INCOMPLETE
                 log.error("PG evidence inherit failed for Neo4j edge {} (idempotencyKey={}): {} — marking INCOMPLETE",
@@ -479,21 +482,24 @@ public class EvidenceGraphWriter {
             for (EvidenceRecord er : intent.getEvidenceRecords()) {
                 try {
                     // evidence records 通常随已有节点/边关联；此处作为独立证据落库
-                    Evidence ev = new Evidence();
-                    ev.setId(UUID.randomUUID().toString());
-                    ev.setProjectId(intent.getProjectId());
-                    ev.setVersionId(intent.getVersionId());
-                    ev.setEvidenceType(er.getEvidenceType());
-                    ev.setSourcePath(er.getSourcePath());
-                    ev.setSourceName(er.getSourceName());
-                    ev.setContentHash(er.getContentHash());
-                    ev.setSummary(er.getSummary());
-                    ev.setContent(er.getContent());
-                    ev.setMetadata(er.getMetadata());
-                    applyPrivacy(ev, er);
-                    ev.setCreatedAt(LocalDateTime.now());
-                    int rows = evidenceRepository.insertOrIgnore(ev);
-                    if (rows > 0) evidenceCount++;
+                    // 使用独立事务，避免被外层 aborted 事务影响
+                    pgEvidenceTxExecutor.execute(() -> {
+                        Evidence ev = new Evidence();
+                        ev.setId(UUID.randomUUID().toString());
+                        ev.setProjectId(intent.getProjectId());
+                        ev.setVersionId(intent.getVersionId());
+                        ev.setEvidenceType(er.getEvidenceType());
+                        ev.setSourcePath(er.getSourcePath());
+                        ev.setSourceName(er.getSourceName());
+                        ev.setContentHash(er.getContentHash());
+                        ev.setSummary(er.getSummary());
+                        ev.setContent(er.getContent());
+                        ev.setMetadata(er.getMetadata());
+                        applyPrivacy(ev, er);
+                        ev.setCreatedAt(LocalDateTime.now());
+                        evidenceRepository.insertOrIgnore(ev);
+                    });
+                    evidenceCount++;
                 } catch (Exception e) {
                     log.error("writeIntent: evidence record failed (idempotencyKey={}): {}",
                             intent.getIdempotencyKey(), e.getMessage());

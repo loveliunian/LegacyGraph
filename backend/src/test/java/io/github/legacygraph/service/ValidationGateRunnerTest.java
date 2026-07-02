@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 
@@ -23,12 +24,25 @@ class ValidationGateRunnerTest {
     @Mock private ValidationGateRepository validationGateRepository;
     @Mock private TestExecutionScheduler testExecutionScheduler;
     @Mock private TestResultRepository testResultRepository;
+    @Mock private TransactionTemplate transactionTemplate;
 
     private ValidationGateRunner runner;
 
     @BeforeEach
     void setUp() {
-        runner = new ValidationGateRunner(validationGateRepository, testExecutionScheduler, testResultRepository, 50, 1);
+        // Mock TransactionTemplate to directly run the callback
+        lenient().doAnswer(invocation -> {
+            var consumer = invocation.getArgument(0, java.util.function.Consumer.class);
+            consumer.accept(null);
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
+        lenient().doAnswer(invocation -> {
+            var callback = invocation.getArgument(0, org.springframework.transaction.support.TransactionCallback.class);
+            return callback.doInTransaction(null);
+        }).when(transactionTemplate).execute(any());
+
+        runner = new ValidationGateRunner(validationGateRepository, testExecutionScheduler,
+                testResultRepository, 50, 1, transactionTemplate);
     }
 
     private ValidationGate gate(String type, String command) {

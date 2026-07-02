@@ -1,7 +1,9 @@
 package io.github.legacygraph.dto.graph;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -14,6 +16,8 @@ import java.time.LocalDateTime;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class RuntimeEvidenceRecord {
 
     /** Trace ID */
@@ -61,28 +65,5 @@ public class RuntimeEvidenceRecord {
     /** 观测时间 */
     private LocalDateTime observedAt;
 
-    public RuntimeEvidenceRecord() {}
 
-    public RuntimeEvidenceRecord(String traceId, String scenarioId, String spanKind,
-                                  String operationName, String httpMethod, String path,
-                                  String sqlHash, Integer httpStatus, Long durationMs,
-                                  Long p95DurationMs, Integer errorCount, boolean aligned,
-                                  String matchedNodeId, String matchedEdgeId,
-                                  LocalDateTime observedAt) {
-        this.traceId = traceId;
-        this.scenarioId = scenarioId;
-        this.spanKind = spanKind;
-        this.operationName = operationName;
-        this.httpMethod = httpMethod;
-        this.path = path;
-        this.sqlHash = sqlHash;
-        this.httpStatus = httpStatus;
-        this.durationMs = durationMs;
-        this.p95DurationMs = p95DurationMs;
-        this.errorCount = errorCount;
-        this.aligned = aligned;
-        this.matchedNodeId = matchedNodeId;
-        this.matchedEdgeId = matchedEdgeId;
-        this.observedAt = observedAt;
-    }
 }

@@ -21,6 +21,5 @@ public class NodeEvidence {
 
     private LocalDateTime createdAt;
 
-    @TableLogic
     private Integer deleted;
 }

@@ -28,6 +28,5 @@ public class DocChunk {
 
     private LocalDateTime createdAt;
 
-    @TableLogic
     private Integer deleted;
 }
