@@ -8,7 +8,7 @@
       </el-button>
     </div>
 
-    <el-table :data="versionList" v-loading="loading" border stripe>
+    <el-table :data="versionList" v-loading="loading && !hasLoadedOnce" border stripe>
       <!-- 版本号 + 版本名称合并为一列 -->
       <el-table-column label="版本信息" min-width="200">
         <template #default="{ row }">
@@ -171,7 +171,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Loading } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { t } from '@/locales'
-import { get, del, post } from '@/utils/request'
+import { scanApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
@@ -179,6 +179,7 @@ const router = useRouter()
 const projectId = route.params.projectId as string
 
 const loading = ref(false)
+const hasLoadedOnce = ref(false)
 const versionList = ref<any[]>([])
 const pageNum = ref(1)
 const pageSize = ref(10)
@@ -187,7 +188,7 @@ const detailDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
-const POLL_INTERVAL = 3000
+const POLL_INTERVAL = 100000
 
 const hasRunningTasks = computed(() =>
   versionList.value.some(v => v.status === 'RUNNING')
@@ -277,7 +278,7 @@ const stopScan = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await post(`/lg/projects/${projectId}/scan-versions/${row.id}/cancel`)
+    await scanApi.cancel(projectId, row.id)
     ElMessage.success('扫描已停止')
     await loadVersionList()
   } catch {
@@ -292,7 +293,7 @@ const pauseScan = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await post(`/lg/projects/${projectId}/scan-versions/${row.id}/pause`)
+    await scanApi.pause(projectId, row.id)
     ElMessage.success('扫描已暂停')
     await loadVersionList()
   } catch {
@@ -307,7 +308,7 @@ const resumeScan = async (row: any) => {
       cancelButtonText: '取消',
       type: 'info'
     })
-    await post(`/lg/projects/${projectId}/scan-versions/${row.id}/resume`)
+    await scanApi.resume(projectId, row.id)
     ElMessage.success('扫描已恢复')
     await loadVersionList()
   } catch {
@@ -322,7 +323,7 @@ const deleteVersion = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await del(`/lg/projects/${projectId}/scan-versions/${row.id}`)
+    await scanApi.delete(projectId, row.id)
     ElMessage.success('版本已删除')
     await loadVersionList()
   } catch {
@@ -335,17 +336,17 @@ const goToGraph = (version: any) => {
   router.push(`/projects/${projectId}/graph/unified?versionId=${version.id}`)
 }
 
-const loadVersionList = async (page?: number) => {
+const loadVersionList = async (page?: number, silent = false) => {
   if (page) pageNum.value = page
-  loading.value = true
+  if (!silent) loading.value = true
   try {
-    const res = await get(`/lg/projects/${projectId}/scan-versions`, {
+    const res = await scanApi.list(projectId, {
       pageNum: pageNum.value,
       pageSize: pageSize.value
     })
     const list = res.list || []
     total.value = res.total || 0
-    versionList.value = list.map((v: any) => ({
+    const mapped = list.map((v: any) => ({
       id: v.id,
       versionNumber: v.versionNumber || v.versionNo || '-',
       versionName: v.versionName || v.versionNo || '未知版本',
@@ -362,11 +363,31 @@ const loadVersionList = async (page?: number) => {
       createdAt: v.createdAt,
       createdBy: v.createdBy || '-'
     }))
+    if (silent && versionList.value.length > 0) {
+      // 轮询刷新：仅原地更新几个核心展示字段，避免整表重渲染 + 遮罩
+      const map = new Map<any, any>(mapped.map((m: any) => [m.id, m]))
+      versionList.value.forEach((row: any) => {
+        const next: any = map.get(row.id)
+        if (!next) return
+        row.status = next.status
+        row.progress = next.progress
+        row.stage = next.stage
+        row.taskCount = next.taskCount
+        row.completedTaskCount = next.completedTaskCount
+        row.nodeCount = next.nodeCount
+        row.edgeCount = next.edgeCount
+        row.factCount = next.factCount
+        row.duration = next.duration
+      })
+    } else {
+      versionList.value = mapped
+    }
+    hasLoadedOnce.value = true
     managePolling()
   } catch (err) {
     console.error('获取扫描版本列表失败:', err)
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -377,7 +398,7 @@ const handlePageChange = (page: number) => {
 const startPolling = () => {
   if (pollTimer) return
   pollTimer = setInterval(() => {
-    loadVersionList()
+    loadVersionList(undefined, true)
   }, POLL_INTERVAL)
 }
 

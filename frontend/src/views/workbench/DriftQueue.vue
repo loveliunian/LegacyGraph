@@ -51,13 +51,11 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
 
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { graphApi } from '@/api'
-import { post } from '@/utils/request'
+import { graphApi } from '@/api'  // Phase 3-2: 逐步迁移到此 API module
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const props = defineProps<{ projectId: string; versionId: string }>()
@@ -101,7 +99,7 @@ async function loadDrift() {
 
 async function createReview(row: any) {
   try {
-    await post(`/lg/projects/${props.projectId}/reviews`, {
+    await graphApi.createReview(props.projectId, {
       targetType: row.targetType || 'NODE',
       targetId: row.elementId || row.id,
       targetName: row.elementName,

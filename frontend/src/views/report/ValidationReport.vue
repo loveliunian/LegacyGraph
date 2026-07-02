@@ -237,13 +237,14 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+// F-H1: get(...insights) → reportApi.getInsights（需 extra config _showLoading）
+// ✅ 已迁移：scan-versions → graphApi, overview → projectApi, insights → reportApi
 
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Connection, Link, CircleCheck, Warning, Opportunity, Star } from '@element-plus/icons-vue'
-import { get } from '@/utils/request'
+import { graphApi, projectApi, reportApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
@@ -288,11 +289,7 @@ const exportReport = () => {
 const loadAiInsights = async () => {
   if (!projectId || !selectedVersion.value) return
   try {
-    const insight: any = await get(
-      `/lg/projects/${projectId}/reports/insights`,
-      { versionId: selectedVersion.value },
-      { _showLoading: false }
-    )
+    const insight: any = await reportApi.getInsights(projectId, selectedVersion.value, { _showLoading: false })
     aiInsightSummary.value = insight?.summary || ''
     aiActions.value = Array.isArray(insight?.actions) ? insight.actions : []
   } catch (err) {
@@ -306,8 +303,8 @@ onMounted(async () => {
   if (!projectId) return
   try {
     const [versionsRes, overviewRes] = await Promise.all([
-      get(`/lg/projects/${projectId}/scan-versions`).catch(() => null),
-      get(`/lg/projects/${projectId}/overview`).catch(() => null)
+      graphApi.getScanVersions(projectId).catch(() => null),
+      projectApi.overview(projectId).catch(() => null)
     ])
     // 加载版本列表
     versions.value = (Array.isArray(versionsRes) ? versionsRes : versionsRes?.list || [])

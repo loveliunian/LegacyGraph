@@ -13,8 +13,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class TestResultUpdateServiceTest {
 
     @Mock
@@ -37,6 +41,68 @@ class TestResultUpdateServiceTest {
     private TestFailureAnalysisAgent testFailureAnalysisAgent;
 
     private TestResultUpdateService testResultUpdateService;
+
+    @Test
+    void testUpdateConfidenceByTestResults_usesBatchSelect() {
+        testResultUpdateService = new TestResultUpdateService(
+                neo4jGraphDao, testResultRepository,
+                testCaseRepository, reviewRecordRepository, testFailureAnalysisAgent);
+
+        TestResult r1 = new TestResult();
+        r1.setId("r-1"); r1.setTestCaseId("case-1"); r1.setResultStatus("PASSED");
+        TestResult r2 = new TestResult();
+        r2.setId("r-2"); r2.setTestCaseId("case-2"); r2.setResultStatus("FAILED");
+        r2.setErrorMessage("boom");
+        when(testResultRepository.findByExecutionId("exec-1")).thenReturn(List.of(r1, r2));
+
+        TestCase tc1 = new TestCase();
+        tc1.setId("case-1"); tc1.setProjectId("p1"); tc1.setTargetNodeId("node-1");
+        TestCase tc2 = new TestCase();
+        tc2.setId("case-2"); tc2.setProjectId("p1"); tc2.setTargetNodeId("node-2");
+        when(testCaseRepository.selectBatchIds(anyList())).thenReturn(List.of(tc1, tc2));
+
+        // PASSED → onTestPass 也需要 findNodeById(node-1)
+        // FAILED → onTestFail 需要 findNodeById(node-2)
+        GraphNode node1 = new GraphNode();
+        node1.setId("node-1"); node1.setProjectId("p1");
+        node1.setNodeType("ApiEndpoint"); node1.setConfidence(BigDecimal.valueOf(0.8));
+        GraphNode node2 = new GraphNode();
+        node2.setId("node-2"); node2.setProjectId("p1");
+        node2.setNodeType("Service"); node2.setConfidence(BigDecimal.valueOf(0.5));
+        when(neo4jGraphDao.findNodeById("node-1")).thenReturn(Optional.of(node1));
+        when(neo4jGraphDao.findNodeById("node-2")).thenReturn(Optional.of(node2));
+
+        // PASSED: queryEdges for the passed node
+        when(neo4jGraphDao.queryEdges(any(), any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        // Mock AI agent for failed test
+        TestFailureAnalysis analysis = new TestFailureAnalysis();
+        analysis.setSummary("分析结果");
+        analysis.setTroubleshootingSteps(List.of());
+        when(testFailureAnalysisAgent.analyze(any())).thenReturn(analysis);
+
+        testResultUpdateService.updateConfidenceByTestResults("exec-1");
+
+        // 应使用批量查询而非逐条 getById
+        verify(testCaseRepository).selectBatchIds(anyList());
+        verify(testCaseRepository, never()).getById(anyString());
+    }
+
+    @Test
+    void testUpdateConfidenceByTestResults_emptyResults() {
+        testResultUpdateService = new TestResultUpdateService(
+                neo4jGraphDao, testResultRepository,
+                testCaseRepository, reviewRecordRepository, testFailureAnalysisAgent);
+
+        when(testResultRepository.findByExecutionId("exec-1")).thenReturn(Collections.emptyList());
+
+        testResultUpdateService.updateConfidenceByTestResults("exec-1");
+
+        // 空结果：不应调用任何 TestCase 查询
+        verify(testCaseRepository, never()).selectBatchIds(anyList());
+        verify(testCaseRepository, never()).getById(anyString());
+    }
 
     @Test
     void testConstruction() {

@@ -214,12 +214,12 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+// F-H1: get(...sources/...) → sourceApi 方法
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { get, post } from '@/utils/request'
+import { scanApi, sourceApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
@@ -336,7 +336,7 @@ const nextStep = () => {
 const startScan = async () => {
   submitting.value = true
   try {
-    const res = await post(`/lg/projects/${projectId}/scan-versions`, {
+    const res: any = await scanApi.create(projectId, {
       versionNo: scanForm.taskName.replace(/[\s-]/g, '_'),
       branchName: 'main',
       // 将 AI 开关随 scanScope 传递给后端扫描后编排器
@@ -351,7 +351,7 @@ const startScan = async () => {
       })
     })
     const versionId = typeof res === 'string' ? res : res.id || res
-    await post(`/lg/projects/${projectId}/scan-versions/${versionId}/start`)
+    await scanApi.start(projectId, versionId)
     ElMessage.success('扫描任务已创建并启动')
     router.push(`/projects/${projectId}/scan-versions`)
   } catch (error) {
@@ -370,9 +370,9 @@ onMounted(async () => {
 
   try {
     const [reposRes, dbsRes, docsRes] = await Promise.all([
-      get(`/lg/projects/${projectId}/sources/repos`, { pageNum: 1, pageSize: 100 }),
-      get(`/lg/projects/${projectId}/sources/databases`, { pageNum: 1, pageSize: 100 }),
-      get(`/lg/projects/${projectId}/sources/documents`, { pageNum: 1, pageSize: 100 })
+      sourceApi.listCodeRepo(projectId, { pageNum: 1, pageSize: 100 }),
+      sourceApi.listDbConnections(projectId, { pageNum: 1, pageSize: 100 }),
+      sourceApi.listDocuments(projectId, { pageNum: 1, pageSize: 100 })
     ])
     repoList.value = (reposRes.list || reposRes || []).map((r: any) => ({
       id: r.id,

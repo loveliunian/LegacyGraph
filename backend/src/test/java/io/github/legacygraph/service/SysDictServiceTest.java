@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -322,5 +323,33 @@ class SysDictServiceTest {
 
         assertTrue(result);
         verify(sysDictItemRepository).deleteById("item-1");
+    }
+
+    @Test
+    void testGetAllItemMaps_usesBatchQuery() {
+        // 准备两个字典
+        SysDict dict1 = new SysDict();
+        dict1.setId("dict-1"); dict1.setDictCode("status");
+        SysDict dict2 = new SysDict();
+        dict2.setId("dict-2"); dict2.setDictCode("type");
+        when(sysDictRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(dict1, dict2));
+
+        // 准备字典项：一次 batch in 查询拉回全部
+        SysDictItem item1 = new SysDictItem();
+        item1.setDictId("dict-1"); item1.setItemValue("ACTIVE"); item1.setItemLabel("激活");
+        item1.setStatus("ACTIVE"); item1.setSortOrder(1);
+        SysDictItem item2 = new SysDictItem();
+        item2.setDictId("dict-2"); item2.setItemValue("API"); item2.setItemLabel("接口");
+        item2.setStatus("ACTIVE"); item2.setSortOrder(1);
+
+        when(sysDictItemRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(item1, item2));
+
+        Map<String, Map<String, String>> result = sysDictService.getAllItemMaps();
+
+        assertEquals(2, result.size());
+        assertEquals("激活", result.get("status").get("ACTIVE"));
+        assertEquals("接口", result.get("type").get("API"));
+        // 验证只调用了一次（批量查询），而非逐条调 getItemsByDictId
+        verify(sysDictItemRepository, times(1)).selectList(any(LambdaQueryWrapper.class));
     }
 }

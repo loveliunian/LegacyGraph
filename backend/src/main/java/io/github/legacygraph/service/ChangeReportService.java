@@ -292,21 +292,38 @@ public class ChangeReportService {
     /** 拉取一组节点的证据，按 evidenceType 分组为可读条目。 */
     private Map<String, List<String>> collectEvidence(List<String> nodeIds) {
         Map<String, List<String>> byType = new LinkedHashMap<>();
-        Set<String> seenEvidenceIds = new HashSet<>();
-        for (String nodeId : nodeIds.stream().distinct().toList()) {
-            List<NodeEvidence> links = nodeEvidenceRepository.lambdaQuery()
-                    .eq(NodeEvidence::getNodeId, nodeId).list();
-            for (NodeEvidence link : links) {
-                if (link.getEvidenceId() == null || !seenEvidenceIds.add(link.getEvidenceId())) continue;
-                Evidence ev = evidenceRepository.selectById(link.getEvidenceId());
-                if (ev == null) continue;
-                String type = ev.getEvidenceType() != null ? ev.getEvidenceType() : "unknown";
-                String locator = ev.getSourcePath() != null ? ev.getSourcePath() : nullToDash(ev.getSourceName());
-                if (ev.getStartLine() != null) {
-                    locator += ":" + ev.getStartLine() + (ev.getEndLine() != null ? "-" + ev.getEndLine() : "");
-                }
-                byType.computeIfAbsent(type, k -> new ArrayList<>()).add(locator);
+        List<String> distinctNodeIds = nodeIds.stream().distinct().toList();
+        if (distinctNodeIds.isEmpty()) return byType;
+
+        // 批量加载 NodeEvidence：一次 SQL 替代逐条 nodeId 查询
+        List<NodeEvidence> allLinks = nodeEvidenceRepository.lambdaQuery()
+                .in(NodeEvidence::getNodeId, distinctNodeIds)
+                .list();
+
+        // 收集去重的 evidenceId，批量加载 Evidence
+        Set<String> evidenceIds = new HashSet<>();
+        for (NodeEvidence link : allLinks) {
+            if (link.getEvidenceId() != null) {
+                evidenceIds.add(link.getEvidenceId());
             }
+        }
+        Map<String, Evidence> evidenceMap = new HashMap<>();
+        if (!evidenceIds.isEmpty()) {
+            List<Evidence> evList = evidenceRepository.selectBatchIds(evidenceIds);
+            for (Evidence ev : evList) {
+                evidenceMap.put(ev.getId(), ev);
+            }
+        }
+
+        for (NodeEvidence link : allLinks) {
+            Evidence ev = evidenceMap.get(link.getEvidenceId());
+            if (ev == null) continue;
+            String type = ev.getEvidenceType() != null ? ev.getEvidenceType() : "unknown";
+            String locator = ev.getSourcePath() != null ? ev.getSourcePath() : nullToDash(ev.getSourceName());
+            if (ev.getStartLine() != null) {
+                locator += ":" + ev.getStartLine() + (ev.getEndLine() != null ? "-" + ev.getEndLine() : "");
+            }
+            byType.computeIfAbsent(type, k -> new ArrayList<>()).add(locator);
         }
         return byType;
     }
@@ -317,15 +334,28 @@ public class ChangeReportService {
             sb.append("_暂无关联测试_\n\n");
             return;
         }
+        // 批量加载 TestCase
+        Map<String, TestCase> tcMap = new HashMap<>();
+        List<TestCase> tcs = testCaseRepository.selectBatchIds(ids);
+        for (TestCase tc : tcs) {
+            tcMap.put(tc.getId(), tc);
+        }
+        // 批量加载每个 TestCase 的最新一次 TestResult：一次 SQL，内存分组取最新
+        Map<String, TestResult> latestResultMap = new HashMap<>();
+        if (!ids.isEmpty()) {
+            List<TestResult> allResults = testResultRepository.lambdaQuery()
+                    .in(TestResult::getTestCaseId, ids)
+                    .orderByDesc(TestResult::getExecutedAt)
+                    .list();
+            for (TestResult tr : allResults) {
+                latestResultMap.putIfAbsent(tr.getTestCaseId(), tr);
+            }
+        }
         sb.append("| 用例 | 类型 | 最近结果 |\n|------|------|------|\n");
         for (String caseId : ids) {
-            TestCase tc = testCaseRepository.selectById(caseId);
+            TestCase tc = tcMap.get(caseId);
             if (tc == null) continue;
-            TestResult latest = testResultRepository.lambdaQuery()
-                    .eq(TestResult::getTestCaseId, caseId)
-                    .orderByDesc(TestResult::getExecutedAt)
-                    .last("LIMIT 1")
-                    .one();
+            TestResult latest = latestResultMap.get(caseId);
             sb.append(String.format("| %s | %s | %s |\n",
                     nullToDash(tc.getCaseName()), nullToDash(tc.getCaseType()),
                     latest != null ? nullToDash(latest.getResultStatus()) : "未执行"));

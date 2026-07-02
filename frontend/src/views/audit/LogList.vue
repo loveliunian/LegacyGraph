@@ -190,13 +190,12 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
 
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Delete } from '@element-plus/icons-vue'
 import { exportData } from '@/utils/export'
-import { get, del } from '@/utils/request'
+import { auditApi } from '@/api'
 import type { PageResult } from '@/types'
 
 interface AuditLog {
@@ -288,7 +287,7 @@ async function loadData() {
       params.endTime = filters.dateRange[1].toISOString()
     }
 
-    const res = await get<PageResult<AuditLog>>('/lg/audit/list', params)
+    const res = await auditApi.list(params) as PageResult<AuditLog>
     tableData.value = res.list
     pagination.total = res.total
   } catch (e) {
@@ -348,7 +347,7 @@ async function handleExport() {
 
 async function loadStats() {
   try {
-    const res = await get<{ count: number }>('/lg/audit/stats/count')
+    const res = await auditApi.statsCount() as { count: number }
     logCount.value = res.count ?? null
   } catch {
     // 静默失败
@@ -362,7 +361,7 @@ async function handleClear() {
       cancelButtonText: '取消',
       type: 'warning' as const
     })
-    await del('/lg/audit/clear')
+    await auditApi.clear()
     ElMessage.success('日志已清空')
     logCount.value = 0
     await loadData()

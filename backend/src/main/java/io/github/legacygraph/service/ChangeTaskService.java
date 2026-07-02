@@ -7,6 +7,7 @@ import io.github.legacygraph.agent.ChangeImpactAgent;
 import io.github.legacygraph.agent.adapter.MigrationAgentAdapter;
 import io.github.legacygraph.agent.adapter.RefactorAgentAdapter;
 import io.github.legacygraph.dto.ChangeImpactAnalysis;
+import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.graph.PatchPlan;
 import io.github.legacygraph.entity.ChangeTask;
@@ -31,6 +32,11 @@ import java.util.UUID;
  *       → VALIDATION_PASSED/VALIDATION_FAILED → REVIEW_PENDING
  *       → PR_READY/PR_CREATED → MERGED/REJECTED/ROLLED_BACK
  * </p>
+ *
+ * <h3>Phase 0-2 长事务拆分</h3>
+ * <p>仅短 TX 方法（createTask/registerGates）保留 @Transactional；
+ *   涉及 LLM/Agent 调用、门禁执行、测试等待的 refreshImpact/generatePatch/runValidation
+ *   不再在 @Transactional 内执行长 IO，改为：读→长IO→短 TX 写。</p>
  */
 @Slf4j
 @Service
@@ -78,7 +84,7 @@ public class ChangeTaskService {
         this.objectMapper = objectMapper;
     }
 
-    /** 创建变更任务（状态 OPEN）。 */
+    /** 创建变更任务（状态 OPEN）—— 短 TX。 */
     @Transactional
     public ChangeTask createTask(String projectId, String versionId, String taskType,
                                  String title, String inputIssue) {
@@ -112,42 +118,65 @@ public class ChangeTaskService {
     /**
      * 基于图谱刷新影响子图（OPEN → IMPACT_READY）。
      * targetNodeId 为变更目标节点。
+     * <p>Phase 0-2：移除 @Transactional，LLM 调用不再持有数据库连接。</p>
      */
-    @Transactional
     public ImpactSubgraph refreshImpact(String taskId, String targetNodeId) {
         ChangeTask task = requireTask(taskId);
         ImpactSubgraph subgraph = impactSubgraphService.extractByNode(
                 task.getProjectId(), task.getVersionId(), targetNodeId);
 
-        // 调用 ChangeImpactAgent 做语义级影响分析，dependencies 由子图摘要自动填充
+        // Phase 3-1: AgentEnvelope 合约调用（含证据目录）
+        String riskLevel = null;
         try {
-            ChangeImpactAnalysis analysis = changeImpactAgent.analyze(
-                    task.getProjectId(), subgraph.getTargetName(),
-                    task.getTitle(), subgraph.getDependencySummary());
+            ChangeImpactAgent.ChangeImpactInput input = ChangeImpactAgent.ChangeImpactInput.builder()
+                    .changeTarget(subgraph.getTargetName())
+                    .changeDescription(task.getTitle())
+                    .dependencies(subgraph.getDependencySummary())
+                    .build();
+            AgentEnvelope<ChangeImpactAgent.ChangeImpactInput> env =
+                    AgentEnvelope.<ChangeImpactAgent.ChangeImpactInput>builder()
+                    .projectId(task.getProjectId())
+                    .taskId(taskId)
+                    .agentType("ChangeImpact")
+                    .input(input)
+                    .build();
+            ChangeImpactAnalysis analysis = changeImpactAgent.analyze(env);
             if (analysis != null && analysis.getSeverity() != null) {
-                task.setRiskLevel(normalizeRisk(analysis.getSeverity()));
+                riskLevel = normalizeRisk(analysis.getSeverity());
             }
         } catch (Exception e) {
             log.warn("ChangeImpactAgent analyze failed for task {}: {}", taskId, e.getMessage());
         }
 
+        // 短 TX 回写状态
+        updateTaskAfterImpact(taskId, subgraph, riskLevel);
+        return subgraph;
+    }
+
+    @Transactional
+    private void updateTaskAfterImpact(String taskId, ImpactSubgraph subgraph, String riskLevel) {
+        ChangeTask task = requireTask(taskId);
         task.setImpactedSubgraph(toJson(subgraph));
+        if (riskLevel != null) {
+            task.setRiskLevel(riskLevel);
+        }
         task.setStatus("IMPACT_READY");
         task.setUpdatedAt(LocalDateTime.now());
         changeTaskRepository.updateById(task);
-        return subgraph;
     }
 
     /**
      * 生成补丁草案（IMPACT_READY → PATCH_DRAFTED，越界/缺证据 → REVIEW_PENDING）。
      * 复用 Refactor/Migration Adapter；补丁落库前过 PatchPlanValidator 三类校验。
+     * <p>Phase 0-2：移除 @Transactional，Agent 调用不再持有数据库连接。</p>
      */
-    @Transactional
     public PatchPlan generatePatch(String taskId, PatchGenRequest req) {
         ChangeTask task = requireTask(taskId);
         ImpactSubgraph subgraph = fromJson(task.getImpactedSubgraph(), ImpactSubgraph.class);
 
         List<String> evidenceIds = req.getEvidenceIds() != null ? req.getEvidenceIds() : List.of();
+
+        // Agent 调用（长 IO，无 TX）
         PatchPlan plan;
         switch (task.getTaskType()) {
             case "REFACTOR" -> plan = refactorAgentAdapter.toPatchPlan(
@@ -167,8 +196,19 @@ public class ChangeTaskService {
             throw new IllegalStateException("补丁生成失败：Agent 返回空计划");
         }
 
-        // 三类校验：范围/格式/证据
+        // 三类校验：范围/格式/证据（无 TX）
         PatchPlanValidator.ValidationResult vr = patchPlanValidator.validate(plan, subgraph);
+
+        // 短 TX 持久化 patch files + 状态更新
+        persistPatchResult(taskId, plan, vr, task.getProjectId(), task.getVersionId());
+        return plan;
+    }
+
+    @Transactional
+    private void persistPatchResult(String taskId, PatchPlan plan,
+                                     PatchPlanValidator.ValidationResult vr,
+                                     String projectId, String versionId) {
+        ChangeTask task = requireTask(taskId);
 
         String patchStatus = vr.isNeedsReview() ? "REVIEW_PENDING" : "DRAFT";
         for (PatchPlan.Patch p : plan.getPatches()) {
@@ -195,11 +235,10 @@ public class ChangeTaskService {
         }
         task.setUpdatedAt(LocalDateTime.now());
         changeTaskRepository.updateById(task);
-        return plan;
     }
 
     /**
-     * 登记验证门禁（PATCH_DRAFTED → VALIDATING）。
+     * 登记验证门禁（PATCH_DRAFTED → VALIDATING）—— 短 TX。
      * 门禁执行体（复用 TestExecutionScheduler）留待 ValidationGateRunner；此处先落记录。
      */
     @Transactional
@@ -230,13 +269,13 @@ public class ChangeTaskService {
      * 通过 {@link ValidationGateRunner} 逐条执行门禁：STATIC/MIGRATION 走命令，
      * UNIT/API/DB/E2E 复用 TestExecutionScheduler。任一失败 → VALIDATION_FAILED 并建 ReviewRecord。
      * </p>
+     * <p>Phase 0-2：移除 @Transactional，门禁执行（含命令执行、测试等待）不再持有数据库连接。</p>
      *
      * @param taskId  任务ID
      * @param caseIds 测试类门禁要跑的用例ID（可空；空则测试门禁视为跳过通过）
      * @param workingDir 命令类门禁工作目录（可空）
      * @param environment 测试环境（dev/test/prod，可空默认 test）
      */
-    @Transactional
     public ChangeTask runValidation(String taskId, List<String> caseIds,
                                     String workingDir, String environment) {
         ChangeTask task = requireTask(taskId);
@@ -248,8 +287,19 @@ public class ChangeTaskService {
                 .caseIds(caseIds)
                 .build();
 
+        // 门禁执行（长 IO：命令执行、测试等待，无 TX）
         boolean allPassed = validationGateRunner.runAll(taskId, ctx);
 
+        // 短 TX 更新任务状态
+        return updateTaskAfterValidation(taskId, task.getProjectId(), task.getVersionId(),
+                task.getTitle(), allPassed);
+    }
+
+    @Transactional
+    private ChangeTask updateTaskAfterValidation(String taskId, String projectId,
+                                                  String versionId, String title,
+                                                  boolean allPassed) {
+        ChangeTask task = requireTask(taskId);
         task.setStatus(allPassed ? "VALIDATION_PASSED" : "VALIDATION_FAILED");
         task.setUpdatedAt(LocalDateTime.now());
         changeTaskRepository.updateById(task);
@@ -257,11 +307,11 @@ public class ChangeTaskService {
         if (!allPassed) {
             ReviewRecord review = new ReviewRecord();
             review.setId(UUID.randomUUID().toString());
-            review.setProjectId(task.getProjectId());
-            review.setVersionId(task.getVersionId());
+            review.setProjectId(projectId);
+            review.setVersionId(versionId);
             review.setTargetType("ChangeTask");
             review.setTargetId(task.getId());
-            review.setTargetName(task.getTitle());
+            review.setTargetName(title);
             review.setGraphType("change");
             review.setPriority("high");
             review.setStatus("PENDING");

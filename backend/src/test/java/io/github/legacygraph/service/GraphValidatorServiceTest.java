@@ -15,7 +15,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,6 +35,8 @@ class GraphValidatorServiceTest {
     private TestResultRepository testResultRepository;
     @Mock
     private GraphCacheInvalidator graphCacheInvalidator;
+    @Mock
+    private io.github.legacygraph.repository.ScanVersionRepository scanVersionRepository;
 
     private GraphValidatorService graphValidatorService;
 
@@ -41,10 +45,12 @@ class GraphValidatorServiceTest {
     private TestCase testCase;
     private GraphEdge testEdge;
     private GraphNode testNode;
+    private io.github.legacygraph.entity.ScanVersion scanVersion;
 
     @BeforeEach
     void setUp() {
-        graphValidatorService = new GraphValidatorService(neo4jGraphDao, testCaseRepository, testResultRepository, graphCacheInvalidator);
+        graphValidatorService = new GraphValidatorService(neo4jGraphDao, testCaseRepository,
+                testResultRepository, graphCacheInvalidator, scanVersionRepository);
 
         passedResult = new TestResult();
         passedResult.setVersionId("version-1");
@@ -75,6 +81,10 @@ class GraphValidatorServiceTest {
         testNode.setNodeType("ApiEndpoint");
         testNode.setStatus("PENDING");
         testNode.setConfidence(new BigDecimal("0.8000"));
+
+        scanVersion = new io.github.legacygraph.entity.ScanVersion();
+        scanVersion.setId("version-1");
+        scanVersion.setProjectId("p1");
     }
 
     @SuppressWarnings("unchecked")
@@ -217,8 +227,15 @@ class GraphValidatorServiceTest {
 
     @Test
     void testGetValidationReport_EmptyVersion() {
-        when(neo4jGraphDao.countNodes(any(), eq("version-1"), any())).thenReturn(0L);
-        when(neo4jGraphDao.countEdges(any(), eq("version-1"), any())).thenReturn(0L);
+        when(scanVersionRepository.selectById("version-1")).thenReturn(scanVersion);
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalNodes", 0L);
+        stats.put("confirmedNodes", 0L);
+        stats.put("pendingNodes", 0L);
+        stats.put("totalEdges", 0L);
+        stats.put("confirmedEdges", 0L);
+        stats.put("pendingEdges", 0L);
+        when(neo4jGraphDao.versionGraphStats("p1", "version-1")).thenReturn(stats);
         when(testResultRepository.lambdaQuery()).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
         when(testResultRepository.lambdaQuery().eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
         when(testResultRepository.lambdaQuery().eq(any(), any()).eq(any(), any())).thenReturn(mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
@@ -239,16 +256,20 @@ class GraphValidatorServiceTest {
         assertEquals(0, report.getPassedTests());
         assertEquals(0, report.getFailedTests());
         assertEquals(BigDecimal.ZERO, report.getOverallConfidence());
+        verify(neo4jGraphDao, never()).countNodes(any(), any(), any()); // 不应再调用 countNodes
     }
 
     @Test
     void testGetValidationReport_WithData() {
-        when(neo4jGraphDao.countNodes(isNull(), eq("version-1"), isNull())).thenReturn(10L);
-        when(neo4jGraphDao.countNodes(isNull(), eq("version-1"), eq("CONFIRMED"))).thenReturn(5L);
-        when(neo4jGraphDao.countNodes(isNull(), eq("version-1"), eq("PENDING_CONFIRM"))).thenReturn(3L);
-        when(neo4jGraphDao.countEdges(isNull(), eq("version-1"), isNull())).thenReturn(20L);
-        when(neo4jGraphDao.countEdges(isNull(), eq("version-1"), eq("CONFIRMED"))).thenReturn(10L);
-        when(neo4jGraphDao.countEdges(isNull(), eq("version-1"), eq("PENDING_CONFIRM"))).thenReturn(5L);
+        when(scanVersionRepository.selectById("version-1")).thenReturn(scanVersion);
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalNodes", 10L);
+        stats.put("confirmedNodes", 5L);
+        stats.put("pendingNodes", 3L);
+        stats.put("totalEdges", 20L);
+        stats.put("confirmedEdges", 10L);
+        stats.put("pendingEdges", 5L);
+        when(neo4jGraphDao.versionGraphStats("p1", "version-1")).thenReturn(stats);
         when(neo4jGraphDao.queryNodes(isNull(), eq("version-1"), isNull(), isNull(), isNull(), isNull(), anyInt()))
                 .thenReturn(List.of(testNode));
 

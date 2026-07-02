@@ -106,15 +106,14 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+// ✅ F-H1: get(...logs) → scanApi.getLogs
 
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { get, post } from '@/utils/request'
-import { graphApi } from '@/api'
+import { scanApi, graphApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
@@ -164,7 +163,7 @@ const viewLogs = async (row: any) => {
   logDialogVisible.value = true
   logs.value = []
   try {
-    const logData = await get(`/lg/projects/${projectId}/scan-versions/${row.versionId}/logs`)
+    const logData = await scanApi.getLogs(projectId, row.versionId)
     if (Array.isArray(logData)) {
       logs.value = logData
     }
@@ -180,7 +179,7 @@ const stopTask = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await post(`/lg/projects/${projectId}/scan-versions/${row.versionId}/cancel`)
+    await scanApi.cancel(projectId, row.versionId)
     row.status = 'CANCELED'
     ElMessage.success('任务已停止')
   } catch {
@@ -195,7 +194,7 @@ const retryTask = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await post(`/lg/projects/${projectId}/scan-versions/${row.versionId}/resume`)
+    await scanApi.resume(projectId, row.versionId)
     row.status = 'PENDING'
     row.progress = 0
     ElMessage.success('任务已重新提交')

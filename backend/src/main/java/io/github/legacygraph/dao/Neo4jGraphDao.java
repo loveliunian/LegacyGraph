@@ -113,6 +113,26 @@ public class Neo4jGraphDao {
         }
     }
 
+    /**
+     * 设置 Neo4j 节点的单个属性（用于补偿标记如 writeStatus=INCOMPLETE）。
+     */
+    public void setNodeProperty(String nodeId, String property, Object value) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher = "MATCH (n {id: $id}) SET n." + property + " = $value";
+            session.run(cypher, Map.of("id", nodeId, "value", value));
+        }
+    }
+
+    /**
+     * 设置 Neo4j 关系的单个属性（用于补偿标记）。
+     */
+    public void setEdgeProperty(String edgeId, String property, Object value) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher = "MATCH ()-[r {id: $id}]->() SET r." + property + " = $value";
+            session.run(cypher, Map.of("id", edgeId, "value", value));
+        }
+    }
+
     /** mergeNode 的返回结果：节点 + 是否本次新建 */
     public record NodeUpsert(GraphNode node, boolean created) {}
 

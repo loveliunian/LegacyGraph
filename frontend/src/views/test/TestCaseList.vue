@@ -155,16 +155,15 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+// ✅ F-H1: post(...test-cases/.../run) → testApi.run
 
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { get, post } from '@/utils/request'
-import { useProjectStore } from '@/stores/project'
 import { testApi } from '@/api'
+import { useProjectStore } from '@/stores/project'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
@@ -202,7 +201,7 @@ async function loadData() {
   if (!projectId) return
   loading.value = true
   try {
-    const res = await get(`/lg/projects/${projectId}/test-cases`, {
+    const res = await testApi.list(projectId!, {
       pageNum: pagination.value.page,
       pageSize: pagination.value.pageSize
     })
@@ -247,7 +246,7 @@ const runCase = async (row: any) => {
   try {
     ElMessage.info(`正在运行用例: ${row.caseName || row.caseCode}`)
     // 调用后端单用例执行接口
-    await post(`/lg/projects/${projectId}/test-cases/${row.id}/run`, null, { params: { env: 'test' } })
+    await testApi.run(projectId!, row.id, 'test')
     ElMessage.success('测试用例已提交执行')
     loadData()
   } catch (error) {

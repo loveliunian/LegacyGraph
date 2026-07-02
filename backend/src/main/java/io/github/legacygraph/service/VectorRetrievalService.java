@@ -9,9 +9,7 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * 向量检索服务 - 使用 Spring AI + pgvector 实现语义相似度搜索
@@ -146,13 +144,25 @@ public class VectorRetrievalService {
                 projectId, versionId, queryEmbedding, 20, null
             );
 
-            // 从匹配的文档中提取关联的节点
+            // 从匹配的文档中提取关联的节点：收集所有 sourceUri，批量查询 Neo4j
+            List<String> nodeIds = similarDocs.stream()
+                    .map(VectorDocument::getSourceUri)
+                    .filter(uri -> uri != null && !uri.isBlank())
+                    .distinct()
+                    .toList();
+            Map<String, GraphNode> nodeMap = new HashMap<>();
+            if (!nodeIds.isEmpty()) {
+                List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(nodeIds);
+                for (GraphNode n : nodes) {
+                    nodeMap.put(n.getId(), n);
+                }
+            }
             List<GraphNode> result = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
             for (VectorDocument doc : similarDocs) {
                 if (doc.getSourceUri() != null) {
-                    // sourceUri 格式可能是节点ID或文件路径
-                    GraphNode node = neo4jGraphDao.findNodeById(doc.getSourceUri()).orElse(null);
-                    if (node != null && !result.contains(node)) {
+                    GraphNode node = nodeMap.get(doc.getSourceUri());
+                    if (node != null && seen.add(node.getId())) {
                         result.add(node);
                     }
                 }

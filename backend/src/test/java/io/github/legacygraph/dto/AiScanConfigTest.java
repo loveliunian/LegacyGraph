@@ -45,4 +45,26 @@ class AiScanConfigTest {
         assertFalse(config.isEnableAi());
         assertEquals(0.6, config.getMinConfidence());
     }
+
+    @Test
+    void testParse_UsesBackendDefaults_WhenScanScopeAbsent() {
+        AiScanConfig defaults = new AiScanConfig();
+        defaults.setEnableAi(true);
+        defaults.setMinConfidence(0.8);
+
+        // scanScope 为空 → 采用后端配置默认值
+        AiScanConfig fromNull = AiScanConfig.fromScanScope(null, objectMapper, defaults);
+        assertTrue(fromNull.isEnableAi());
+        assertEquals(0.8, fromNull.getMinConfidence());
+    }
+
+    @Test
+    void testParse_ScanScopeOverridesBackendDefaults() {
+        AiScanConfig defaults = new AiScanConfig();
+        defaults.setEnableAi(true);
+
+        // scanScope 显式关闭 → 覆盖后端默认的开启
+        AiScanConfig config = AiScanConfig.fromScanScope("{\"enableAi\":false}", objectMapper, defaults);
+        assertFalse(config.isEnableAi());
+    }
 }

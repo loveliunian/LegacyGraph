@@ -2,13 +2,16 @@ package io.github.legacygraph.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.agent.CodeFactAgent;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.agent.FeatureMappingAgent;
 import io.github.legacygraph.agent.TestCaseAgent;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dto.AiScanConfig;
+import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.entity.Document;
 import io.github.legacygraph.entity.Fact;
@@ -29,9 +32,15 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -61,6 +70,7 @@ public class AiScanOrchestrator {
     private final DocUnderstandingAgent docUnderstandingAgent;
     private final FeatureMappingAgent featureMappingAgent;
     private final TestCaseAgent testCaseAgent;
+    private final CodeFactAgent codeFactAgent;
     private final BusinessGraphBuilder businessGraphBuilder;
     private final ObjectMapper objectMapper;
 
@@ -68,6 +78,10 @@ public class AiScanOrchestrator {
     private static final int MAX_TEST_GEN_NODES = 20;
     /** 审核准备节点上限 */
     private static final int MAX_REVIEW_NODES = 50;
+    /** 代码事实抽取的类节点上限，避免 LLM 调用过多 */
+    private static final int MAX_CODE_EXTRACT_NODES = 30;
+    /** 单个代码文件读取上限（字符），配合 truncate 控制 prompt 体积 */
+    private static final int CODE_CONTENT_LIMIT = 8000;
 
     public AiScanOrchestrator(ScanTaskRepository scanTaskRepository,
                               DocumentRepository documentRepository,
@@ -78,6 +92,7 @@ public class AiScanOrchestrator {
                               DocUnderstandingAgent docUnderstandingAgent,
                               FeatureMappingAgent featureMappingAgent,
                               TestCaseAgent testCaseAgent,
+                              CodeFactAgent codeFactAgent,
                               BusinessGraphBuilder businessGraphBuilder,
                               ObjectMapper objectMapper) {
         this.scanTaskRepository = scanTaskRepository;
@@ -89,6 +104,7 @@ public class AiScanOrchestrator {
         this.docUnderstandingAgent = docUnderstandingAgent;
         this.featureMappingAgent = featureMappingAgent;
         this.testCaseAgent = testCaseAgent;
+        this.codeFactAgent = codeFactAgent;
         this.businessGraphBuilder = businessGraphBuilder;
         this.objectMapper = objectMapper;
     }
@@ -99,12 +115,23 @@ public class AiScanOrchestrator {
     public void orchestrate(String projectId, String versionId, AiScanConfig config) {
         if (config == null || !config.isEnableAi()) {
             log.info("AI orchestration skipped (enableAi=false): versionId={}", versionId);
+            // P1-B：创建结构化跳过任务，确保"未开启 AI"在 scan_task 列表中可见，
+            // 避免"没扫到"与"没开扫"无法区分（呼应"不静默截断"原则）。
+            ScanTask skipTask = createTask(projectId, versionId, "AI_ORCHESTRATION", "AI 编排");
+            completeTask(skipTask,
+                    "⚠ AI 编排已跳过：enableAi=false（未启用 AI 归纳）。"
+                    + "业务图谱（业务域/流程/功能/对象/角色）将不会生成。"
+                    + "如需生成业务图谱，请在 scanScope 中设置 enableAi=true。",
+                    null);
+            // completeTask 会把 ⚠ 摘要标为 WARNING，便于任务列表筛选跳过原因
             return;
         }
         log.info("Starting AI orchestration: projectId={}, versionId={}, config={}",
                 projectId, versionId, config);
 
         runDocExtract(projectId, versionId);
+        runCodeExtract(projectId, versionId);
+        runFeatureCodeMapping(projectId, versionId);
         runFeatureMapping(projectId, versionId);
         if (config.isAutoGenerateTestCase()) {
             runTestGenerate(projectId, versionId);
@@ -140,9 +167,166 @@ public class AiScanOrchestrator {
                     log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
                 }
             }
-            completeTask(task, "AI 抽取业务事实 " + factCount + " 条，扫描文档 " + docs.size() + " 个", null);
+            completeTask(task, buildDocExtractSummary(factCount, docs.size()), null);
         } catch (Exception e) {
             log.error("AI_DOC_EXTRACT failed: versionId={}", versionId, e);
+            completeTask(task, null, e.getMessage());
+        }
+    }
+
+    /**
+     * P1-B：区分"没扫到"与"没开扫"。文档数或事实数为 0 时给出显式提示，
+     * 便于在扫描任务列表中定位业务图谱为空的原因（呼应"不静默截断"原则）。
+     */
+    private String buildDocExtractSummary(int factCount, int docCount) {
+        if (docCount == 0) {
+            return "⚠ 未发现任何文档 —— 业务事实 0 条。请确认 scanScope 含 DOC_PARSE 且项目已配置产品/需求文档";
+        }
+        if (factCount == 0) {
+            return "⚠ 扫描文档 " + docCount + " 个，但未抽取到业务事实 —— 可能文档无业务语义或 LLM 未返回内容";
+        }
+        return "AI 抽取业务事实 " + factCount + " 条，扫描文档 " + docCount + " 个";
+    }
+
+    // ==================== AI_CODE_EXTRACT ====================
+
+    /**
+     * P0-A：从代码抽取业务事实，让"无文档"项目也能产出业务/功能节点。
+     *
+     * <p>复用 {@link CodeFactAgent} 对 Service/Controller 类源码做 LLM 语义理解，
+     * 抽取结果桥接为 {@link DocUnderstandingAgent.BusinessFactExtraction}（填充 features），
+     * 复用 {@link BusinessGraphBuilder#buildBusinessGraph} 落图，避免重复的落库映射代码。</p>
+     */
+    private void runCodeExtract(String projectId, String versionId) {
+        ScanTask task = createTask(projectId, versionId, "AI_CODE_EXTRACT", "代码业务事实抽取");
+        try {
+            // 取 Service/Controller 类节点作为业务语义最集中的抽取对象
+            List<GraphNode> codeNodes = new ArrayList<>();
+            codeNodes.addAll(neo4jGraphDao.queryNodes(projectId, versionId,
+                    NodeType.Service.name(), null, null, null, MAX_CODE_EXTRACT_NODES));
+            codeNodes.addAll(neo4jGraphDao.queryNodes(projectId, versionId,
+                    NodeType.Controller.name(), null, null, null, MAX_CODE_EXTRACT_NODES));
+
+            if (codeNodes.isEmpty()) {
+                completeTask(task, "⚠ 无 Service/Controller 类节点，跳过代码事实抽取", null);
+                return;
+            }
+
+            int factCount = 0;
+            int processed = 0;
+            Set<String> visitedPaths = new HashSet<>();
+            for (GraphNode node : codeNodes) {
+                if (processed >= MAX_CODE_EXTRACT_NODES) {
+                    break;
+                }
+                String content = readCodeContent(node, visitedPaths);
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                processed++;
+                try {
+                    FactExtractionResult result = codeFactAgent.extractFacts(
+                            projectId, truncate(content, CODE_CONTENT_LIMIT), node.getSourcePath());
+                    factCount += persistAndBuildCodeFacts(projectId, versionId, node, result);
+                } catch (Exception e) {
+                    log.warn("Code fact extract failed for node {}: {}", node.getNodeKey(), e.getMessage());
+                }
+            }
+            String summary = factCount > 0
+                    ? "AI 从代码抽取业务事实 " + factCount + " 条，分析类节点 " + processed + " 个"
+                    : "⚠ 分析类节点 " + processed + " 个，未抽取到业务事实";
+            completeTask(task, summary, null);
+        } catch (Exception e) {
+            log.error("AI_CODE_EXTRACT failed: versionId={}", versionId, e);
+            completeTask(task, null, e.getMessage());
+        }
+    }
+
+    /**
+     * 将代码事实抽取结果落 Fact 表，并桥接为业务图谱功能节点。
+     */
+    private int persistAndBuildCodeFacts(String projectId, String versionId, GraphNode node,
+                                         FactExtractionResult result) {
+        if (result == null || result.getItems() == null || result.getItems().isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        DocUnderstandingAgent.BusinessFactExtraction bridge =
+                new DocUnderstandingAgent.BusinessFactExtraction();
+        for (FactExtractionResult.FactItem item : result.getItems()) {
+            if (item == null || item.getName() == null || item.getName().isBlank()) {
+                continue;
+            }
+            double confidence = item.getConfidence() != null
+                    ? item.getConfidence().doubleValue() : 0.6;
+            String key = item.getKey() != null && !item.getKey().isBlank()
+                    ? item.getKey() : "code-feature:" + item.getName();
+            if (saveAiFact(projectId, versionId, "CODE_FEATURE", key, item.getName(),
+                    node.getSourcePath(), item, confidence, SourceType.CODE_AI.name())) {
+                count++;
+            }
+            bridge.getFeatures().add(item.getName());
+        }
+        // 复用 P0-B 的功能清单落图路径
+        if (!bridge.getFeatures().isEmpty() && businessGraphBuilder != null) {
+            try {
+                businessGraphBuilder.buildBusinessGraph(projectId, versionId, bridge,
+                        node.getSourcePath(), SourceType.CODE_AI.name());
+            } catch (Exception e) {
+                log.warn("Business graph build from code facts failed for node {}: {}",
+                        node.getNodeKey(), e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 读取代码节点对应的源文件内容。按 sourcePath 去重，避免同文件多节点重复抽取。
+     */
+    private String readCodeContent(GraphNode node, Set<String> visitedPaths) {
+        String path = node.getSourcePath();
+        if (path == null || path.isBlank() || !visitedPaths.add(path)) {
+            return null;
+        }
+        try {
+            Path filePath = Path.of(path);
+            if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
+                return null;
+            }
+            return Files.readString(filePath, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.debug("Failed to read code content {}: {}", path, e.getMessage());
+            return null;
+        }
+    }
+
+    // ==================== AI_FEATURE_CODE_MAPPING ====================
+
+    /**
+     * P1-C：将文档/代码抽取的 Feature 节点按名称相似度映射到已有的 Page/API 实现，
+     * 建立 EXPOSED_BY / IMPLEMENTED_BY 边，避免 Feature 成为孤立节点。
+     *
+     * <p>此前仅手动接口 {@code FactController.extractDocFacts} 会调用 mapFeaturesToCode，
+     * 自动扫描路径遗漏该步骤，导致自动抽出的 Feature 与代码断连。此处对齐两条路径。</p>
+     */
+    private void runFeatureCodeMapping(String projectId, String versionId) {
+        ScanTask task = createTask(projectId, versionId, "AI_FEATURE_CODE_MAPPING", "功能到代码实现映射");
+        try {
+            int featureMappings = businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
+            // P2：业务对象 ↔ 数据库表对齐，连通业务层与技术层
+            int objectMappings = businessGraphBuilder.mapBusinessObjectsToTables(projectId, versionId);
+            int totalMappings = featureMappings + objectMappings;
+            if (totalMappings == 0) {
+                completeTask(task,
+                        "⚠ 未建立 Feature/业务对象技术映射 —— 可能无 Feature/Page/API，"
+                        + "或无 BusinessObject/技术实体候选",
+                        null);
+            } else {
+                completeTask(task, "已建立 Feature→Page/API 映射 " + featureMappings
+                        + " 条，业务对象技术映射 " + objectMappings + " 条", null);
+            }
+        } catch (Exception e) {
+            log.error("AI_FEATURE_CODE_MAPPING failed: versionId={}", versionId, e);
             completeTask(task, null, e.getMessage());
         }
     }
@@ -157,7 +341,7 @@ public class AiScanOrchestrator {
             for (DocUnderstandingAgent.BusinessDomain domain : extraction.getBusinessDomains()) {
                 String key = "domain:" + nonBlank(domain.getName(), domain.getDescription());
                 if (saveAiFact(projectId, versionId, "BUSINESS_DOMAIN", key, domain.getName(),
-                        doc.getFilePath(), domain, domain.getConfidence())) {
+                        doc.getFilePath(), domain, domain.getConfidence(), SourceType.DOC_AI.name())) {
                     count++;
                 }
             }
@@ -168,7 +352,7 @@ public class AiScanOrchestrator {
                         : "process:" + process.getName();
                 double confidence = process.getConfidence();
                 if (saveAiFact(projectId, versionId, "BUSINESS_PROCESS", key, process.getName(),
-                        doc.getFilePath(), process, confidence)) {
+                        doc.getFilePath(), process, confidence, SourceType.DOC_AI.name())) {
                     count++;
                 }
             }
@@ -176,7 +360,7 @@ public class AiScanOrchestrator {
         if (extraction.getBusinessObjects() != null) {
             for (DocUnderstandingAgent.BusinessObject obj : extraction.getBusinessObjects()) {
                 if (saveAiFact(projectId, versionId, "BUSINESS_OBJECT", "object:" + obj.getName(),
-                        obj.getName(), doc.getFilePath(), obj, obj.getConfidence())) {
+                        obj.getName(), doc.getFilePath(), obj, obj.getConfidence(), SourceType.DOC_AI.name())) {
                     count++;
                 }
             }
@@ -185,7 +369,7 @@ public class AiScanOrchestrator {
             for (DocUnderstandingAgent.BusinessRule rule : extraction.getBusinessRules()) {
                 String key = "rule:" + nonBlank(rule.getName(), rule.getExpression());
                 if (saveAiFact(projectId, versionId, "BUSINESS_RULE", key, rule.getName(),
-                        doc.getFilePath(), rule, rule.getConfidence())) {
+                        doc.getFilePath(), rule, rule.getConfidence(), SourceType.DOC_AI.name())) {
                     count++;
                 }
             }
@@ -196,7 +380,7 @@ public class AiScanOrchestrator {
                     continue;
                 }
                 if (saveAiFact(projectId, versionId, "BUSINESS_ROLE", "role:" + role,
-                        role, doc.getFilePath(), role, 0.7)) {
+                        role, doc.getFilePath(), role, 0.7, SourceType.DOC_AI.name())) {
                     count++;
                 }
             }
@@ -211,7 +395,7 @@ public class AiScanOrchestrator {
                         + nonBlank(transition.getFromStatus(), "?") + " -> "
                         + nonBlank(transition.getToStatus(), "?");
                 if (saveAiFact(projectId, versionId, "STATUS_TRANSITION", key, name,
-                        doc.getFilePath(), transition, transition.getConfidence())) {
+                        doc.getFilePath(), transition, transition.getConfidence(), SourceType.DOC_AI.name())) {
                     count++;
                 }
             }
@@ -222,7 +406,7 @@ public class AiScanOrchestrator {
                     continue;
                 }
                 if (saveAiFact(projectId, versionId, "FEATURE", "feature:" + feature,
-                        feature, doc.getFilePath(), feature, 0.7)) {
+                        feature, doc.getFilePath(), feature, 0.7, SourceType.DOC_AI.name())) {
                     count++;
                 }
             }
@@ -247,6 +431,9 @@ public class AiScanOrchestrator {
     private void runFeatureMapping(String projectId, String versionId) {
         ScanTask task = createTask(projectId, versionId, "AI_FEATURE_MAPPING", "功能映射对齐");
         try {
+            // 收集已有 Feature 节点作为映射锚点，避免 LLM 凭空生成映射
+            List<GraphNode> features = neo4jGraphDao.queryNodes(projectId, versionId,
+                    NodeType.Feature.name(), null, null, null, 100);
             // 收集前端页面节点与后端 API 节点作为映射输入
             List<GraphNode> pages = neo4jGraphDao.queryNodes(projectId, versionId,
                     NodeType.Page.name(), null, null, null, 50);
@@ -264,7 +451,8 @@ public class AiScanOrchestrator {
             request.setApiDefinitions(summarizeNodes(apis));
             request.setControllerCode("");
             request.setPermissionInfo("");
-            request.setProductDoc("");
+            // 将已有 Feature 节点作为产品文档上下文传入，让 LLM 以 Feature 为锚点做映射
+            request.setProductDoc(features.isEmpty() ? "" : "已有功能点:\n" + summarizeNodes(features));
 
             FeatureMappingAgent.MappingResult result = featureMappingAgent.mapFeatures(request);
             int mappingCount = result != null && result.getMappings() != null
@@ -527,7 +715,8 @@ public class AiScanOrchestrator {
     // ==================== 工具方法 ====================
 
     private boolean saveAiFact(String projectId, String versionId, String factType, String factKey,
-                               String factName, String sourcePath, Object data, double confidence) {
+                               String factName, String sourcePath, Object data, double confidence,
+                               String sourceType) {
         try {
             Fact fact = new Fact();
             fact.setId(UUID.randomUUID().toString());
@@ -536,7 +725,7 @@ public class AiScanOrchestrator {
             fact.setFactType(factType);
             fact.setFactKey(factKey);
             fact.setFactName(factName);
-            fact.setSourceType("DOC_AI");
+            fact.setSourceType(sourceType != null ? sourceType : SourceType.DOC_AI.name());
             fact.setSourcePath(sourcePath);
             fact.setNormalizedData(objectMapper.writeValueAsString(data));
             fact.setConfidence(confidence);
@@ -625,7 +814,15 @@ public class AiScanOrchestrator {
             task.setOutputSummary("\"" + (summary != null ? summary.replace("\"", "\\\"") : "") + "\"");
         }
         task.setErrorMessage(error);
-        task.setTaskStatus(error == null ? "SUCCESS" : "FAILED");
+        if (error != null) {
+            task.setTaskStatus("FAILED");
+        } else if (summary != null && summary.startsWith("⚠")) {
+            // P1-B：空结果/跳过等非错误但有告警的情况，标记为 WARNING
+            // 与 SUCCESS 区分，便于在扫描任务列表中快速定位"业务图谱为空"的原因
+            task.setTaskStatus("WARNING");
+        } else {
+            task.setTaskStatus("SUCCESS");
+        }
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);

@@ -1,6 +1,7 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -52,6 +53,10 @@ public class ChangeTask {
 
     /** 任务状态机，默认 OPEN */
     private String status;
+
+    /** 乐观锁版本号（Phase 0-2），每次状态迁移 +1。对应 lg_change_task.version。 */
+    @com.baomidou.mybatisplus.annotation.Version
+    private Integer version;
 
     /** 关联的 AgentRun 合约ID，便于回放补丁生成过程 */
     private String agentRunId;

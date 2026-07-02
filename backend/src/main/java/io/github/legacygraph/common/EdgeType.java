@@ -26,6 +26,7 @@ public enum EdgeType {
     HAS_EVIDENCE("拥有证据"),
     REFERENCES("外键引用"),
     BELONGS_TO("属于"),
+    MAPS_TO("对应"),
 
     // ========== 变更闭环关系（增强版2：ChangeTask 管道） ==========
     AFFECTS("影响"),

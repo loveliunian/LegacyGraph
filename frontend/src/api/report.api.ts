@@ -106,8 +106,9 @@ export const reportApi = {
    * 获取报告洞察
    * @param projectId 项目ID
    */
-  getInsights: (projectId: string) => {
-    return get(`/lg/projects/${projectId}/reports/insights`)
+  getInsights: (projectId: string, versionId?: string, config?: Record<string, any>) => {
+    const url = `/lg/projects/${projectId}/reports/insights` + (versionId ? `?versionId=${versionId}` : '')
+    return get(url, config)
   },
 
   /**

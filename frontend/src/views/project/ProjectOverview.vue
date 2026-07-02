@@ -232,7 +232,7 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
+// F-H1: get(...overview) → projectApi
 
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'

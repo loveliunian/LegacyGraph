@@ -17,7 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -228,8 +230,21 @@ public class TestResultUpdateService {
         List<TestResult> allResults = testResultRepository.findByExecutionId(executionId);
         log.info("Updating confidence for {} test results in execution {}", allResults.size(), executionId);
 
+        // 批量加载 TestCase，避免 N+1
+        Map<String, TestCase> tcMap = new HashMap<>();
+        if (!allResults.isEmpty()) {
+            List<String> tcIds = allResults.stream()
+                    .map(TestResult::getTestCaseId)
+                    .distinct()
+                    .toList();
+            List<TestCase> tcs = testCaseRepository.selectBatchIds(tcIds);
+            for (TestCase tc : tcs) {
+                tcMap.put(tc.getId(), tc);
+            }
+        }
+
         for (TestResult result : allResults) {
-            TestCase testCase = testCaseRepository.getById(result.getTestCaseId());
+            TestCase testCase = tcMap.get(result.getTestCaseId());
             if (testCase == null) {
                 continue;
             }

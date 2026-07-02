@@ -98,14 +98,13 @@
 </template>
 
 <script setup lang="ts">
-// TODO F-H1: 将直接 request 调用迁移到 api/ 模块
 
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 import { ArrowLeft, Download } from '@element-plus/icons-vue'
 import CodePreview from '@/components/code/CodePreview.vue'
-import { get } from '@/utils/request'
+import { auditApi } from '@/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -154,7 +153,7 @@ function exportLog() {
 onMounted(async () => {
   const logId = route.params.id
   try {
-    const data = await get(`/lg/audit/${logId}`)
+    const data: any = await auditApi.getDetail(logId as string)
     logDetail.value = data
   } catch (err) {
     console.error('获取日志详情失败:', err)

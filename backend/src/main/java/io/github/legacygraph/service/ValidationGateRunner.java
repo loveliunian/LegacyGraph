@@ -22,6 +22,11 @@ import java.util.concurrent.TimeUnit;
  * STATIC/MIGRATION 门禁通过受控 {@link ProcessBuilder} 执行命令。
  * </p>
  * <p>门禁结果落 {@code lg_validation_gate}，逐条 PASSED/FAILED。</p>
+ *
+ * <h3>Phase 0-2 长事务拆分</h3>
+ * <p>runGate/runAll 不再标注 @Transactional：命令执行（ProcessBuilder.waitFor）和
+ * 测试等待（Thread.sleep 轮询）均不持有数据库连接。
+ * 短 TX 的 startGate/finishGate 单独标注。</p>
  */
 @Slf4j
 @Service
@@ -50,17 +55,17 @@ public class ValidationGateRunner {
 
     /**
      * 执行单个门禁并回写结果。
+     * <p>Phase 0-2：拆为 startGate（短 TX）→ execute（无 TX）→ finishGate（短 TX）。</p>
      *
      * @param gate     待执行门禁（已落库，含 gateType/command）
      * @param context  执行上下文（projectId/versionId/caseIds/workingDir）
      * @return 更新后的门禁（result=PASSED/FAILED）
      */
-    @Transactional
     public ValidationGate runGate(ValidationGate gate, GateContext context) {
-        gate.setStartedAt(LocalDateTime.now());
-        gate.setResult("RUNNING");
-        validationGateRepository.updateById(gate);
+        // 短 TX：标记 RUNNING
+        startGate(gate);
 
+        // 长 IO：执行门禁（命令执行、测试等待，无 TX）
         boolean passed;
         try {
             passed = switch (gate.getGateType()) {
@@ -76,18 +81,33 @@ public class ValidationGateRunner {
             passed = false;
         }
 
+        // 短 TX：回写结果
+        finishGate(gate, passed);
+        log.info("Gate {} finished: {}", gate.getGateType(), gate.getResult());
+        return gate;
+    }
+
+    /** 短 TX：标记门禁开始执行 */
+    @Transactional
+    private void startGate(ValidationGate gate) {
+        gate.setStartedAt(LocalDateTime.now());
+        gate.setResult("RUNNING");
+        validationGateRepository.updateById(gate);
+    }
+
+    /** 短 TX：回写门禁结果 */
+    @Transactional
+    private void finishGate(ValidationGate gate, boolean passed) {
         gate.setResult(passed ? "PASSED" : "FAILED");
         gate.setFinishedAt(LocalDateTime.now());
         validationGateRepository.updateById(gate);
-        log.info("Gate {} finished: {}", gate.getGateType(), gate.getResult());
-        return gate;
     }
 
     /**
      * 批量执行一个任务的所有门禁，返回是否全部通过。
      * 任一门禁失败即整体失败（调用方据此把 ChangeTask 置 VALIDATION_FAILED）。
+     * <p>Phase 0-2：移除 @Transactional，内部逐条 runGate 已自行管理短 TX。</p>
      */
-    @Transactional
     public boolean runAll(String changeTaskId, GateContext context) {
         List<ValidationGate> gates = validationGateRepository.lambdaQuery()
                 .eq(ValidationGate::getChangeTaskId, changeTaskId)
@@ -151,6 +171,9 @@ public class ValidationGateRunner {
         return waitForTestResults(gate, runId, context.getCaseIds().size());
     }
 
+    /**
+     * 轮询等待测试结果（无事务：Thread.sleep 不持有 DB 连接）。
+     */
     private boolean waitForTestResults(ValidationGate gate, String runId, int expectedCount) {
         long deadline = System.currentTimeMillis() + Math.max(1, resultWaitTimeoutMs);
         long pollMs = Math.max(1, resultPollIntervalMs);

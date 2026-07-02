@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -90,9 +91,23 @@ public class SysDictService {
     @Cacheable(cacheNames = "dict-map", key = "'all'")
     public Map<String, Map<String, String>> getAllItemMaps() {
         List<SysDict> dicts = listAll();
+        if (dicts.isEmpty()) return new java.util.LinkedHashMap<>();
+
+        // 收集所有字典ID，批量加载字典项，避免 N+1
+        List<String> dictIds = dicts.stream().map(SysDict::getId).toList();
+        LambdaQueryWrapper<SysDictItem> itemWrapper = new LambdaQueryWrapper<>();
+        itemWrapper.in(SysDictItem::getDictId, dictIds)
+                .eq(SysDictItem::getStatus, "ACTIVE")
+                .orderByAsc(SysDictItem::getSortOrder);
+        List<SysDictItem> allItems = sysDictItemRepository.selectList(itemWrapper);
+
+        // 按 dictId 分组
+        Map<String, List<SysDictItem>> itemsByDictId = allItems.stream()
+                .collect(Collectors.groupingBy(SysDictItem::getDictId));
+
         Map<String, Map<String, String>> result = new java.util.LinkedHashMap<>();
         for (SysDict dict : dicts) {
-            List<SysDictItem> items = getItemsByDictId(dict.getId());
+            List<SysDictItem> items = itemsByDictId.getOrDefault(dict.getId(), Collections.emptyList());
             Map<String, String> map = items.stream()
                 .collect(Collectors.toMap(SysDictItem::getItemValue, SysDictItem::getItemLabel));
             result.put(dict.getDictCode(), map);

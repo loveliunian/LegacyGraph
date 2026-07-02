@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.agent.FeatureMappingAgent;
 import io.github.legacygraph.agent.TestCaseAgent;
+import io.github.legacygraph.agent.CodeFactAgent;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.AiScanConfig;
+import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
@@ -54,6 +56,7 @@ class AiScanOrchestratorTest {
     @Mock private DocUnderstandingAgent docUnderstandingAgent;
     @Mock private FeatureMappingAgent featureMappingAgent;
     @Mock private TestCaseAgent testCaseAgent;
+    @Mock private CodeFactAgent codeFactAgent;
     @Mock private BusinessGraphBuilder businessGraphBuilder;
 
     private AiScanOrchestrator orchestrator;
@@ -65,7 +68,7 @@ class AiScanOrchestratorTest {
     void setUp() {
         orchestrator = new AiScanOrchestrator(scanTaskRepository, documentRepository, factRepository,
                 reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
-                featureMappingAgent, testCaseAgent, businessGraphBuilder, new ObjectMapper());
+                featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper());
     }
 
     private GraphNode node(String type, String key, String name, double conf) {
@@ -85,7 +88,9 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config);
 
-        verifyNoInteractions(scanTaskRepository);
+        // P1-B：enableAi=false 时创建结构化跳过任务，确保在 scan_task 列表中可见
+        verify(scanTaskRepository).insert(any(ScanTask.class));
+        verify(scanTaskRepository).updateById(any(ScanTask.class));
         verifyNoInteractions(documentRepository);
         verifyNoInteractions(neo4jGraphDao);
     }
@@ -93,7 +98,56 @@ class AiScanOrchestratorTest {
     @Test
     void testOrchestrate_NullConfig_DoesNothing() {
         orchestrator.orchestrate("proj-1", "v1", null);
-        verifyNoInteractions(scanTaskRepository);
+
+        // null config 同 enableAi=false：创建结构化跳过任务
+        verify(scanTaskRepository).insert(any(ScanTask.class));
+        verify(scanTaskRepository).updateById(any(ScanTask.class));
+    }
+
+    @Test
+    void testCodeExtract_NoServiceOrController_MarksWarning() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+        config.setAutoGenerateTestCase(false);
+        config.setMinConfidence(0.6);
+
+        when(documentRepository.selectList(any())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        orchestrator.orchestrate("proj-1", "v1", config);
+
+        ArgumentCaptor<ScanTask> updateCaptor = ArgumentCaptor.forClass(ScanTask.class);
+        verify(scanTaskRepository, atLeastOnce()).updateById(updateCaptor.capture());
+        ScanTask codeExtractTask = updateCaptor.getAllValues().stream()
+                .filter(t -> "AI_CODE_EXTRACT".equals(t.getTaskType()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", codeExtractTask.getTaskStatus());
+        assertTrue(codeExtractTask.getOutputSummary().contains("无 Service/Controller"));
+    }
+
+    @Test
+    void testFeatureCodeMapping_NoEdges_MarksWarning() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+        config.setAutoGenerateTestCase(false);
+        config.setMinConfidence(0.6);
+
+        when(documentRepository.selectList(any())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        orchestrator.orchestrate("proj-1", "v1", config);
+
+        ArgumentCaptor<ScanTask> updateCaptor = ArgumentCaptor.forClass(ScanTask.class);
+        verify(scanTaskRepository, atLeastOnce()).updateById(updateCaptor.capture());
+        ScanTask mappingTask = updateCaptor.getAllValues().stream()
+                .filter(t -> "AI_FEATURE_CODE_MAPPING".equals(t.getTaskType()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", mappingTask.getTaskStatus());
+        assertTrue(mappingTask.getOutputSummary().contains("未建立 Feature/业务对象技术映射"));
     }
 
     @Test
@@ -105,6 +159,8 @@ class AiScanOrchestratorTest {
 
         // 无文档
         when(documentRepository.selectList(any())).thenReturn(List.of());
+        lenient().when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
         // 无页面/接口节点（feature mapping 跳过），低置信节点用于审核
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
@@ -118,11 +174,13 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config);
 
-        // 创建了 3 个子任务（DOC_EXTRACT, FEATURE_MAPPING, REVIEW_PREPARE），未创建 TEST_GENERATE
+        // 创建了 5 个子任务（DOC_EXTRACT, CODE_EXTRACT, FEATURE_CODE_MAPPING, FEATURE_MAPPING, REVIEW_PREPARE），未创建 TEST_GENERATE
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(3)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(5)).insert(taskCaptor.capture());
         List<String> types = taskCaptor.getAllValues().stream().map(ScanTask::getTaskType).toList();
         assertTrue(types.contains("AI_DOC_EXTRACT"));
+        assertTrue(types.contains("AI_CODE_EXTRACT"));
+        assertTrue(types.contains("AI_FEATURE_CODE_MAPPING"));
         assertTrue(types.contains("AI_FEATURE_MAPPING"));
         assertTrue(types.contains("AI_REVIEW_PREPARE"));
         assertFalse(types.contains("AI_TEST_GENERATE"));
@@ -141,6 +199,8 @@ class AiScanOrchestratorTest {
         config.setMinConfidence(0.5);
 
         when(documentRepository.selectList(any())).thenReturn(List.of());
+        lenient().when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
         // API 节点用于 feature mapping 与 test gen
@@ -167,9 +227,9 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config);
 
-        // 创建了 4 个子任务
+        // 创建了 6 个子任务（DOC_EXTRACT, CODE_EXTRACT, FEATURE_CODE_MAPPING, FEATURE_MAPPING, TEST_GENERATE, REVIEW_PREPARE）
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(4)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(6)).insert(taskCaptor.capture());
         assertTrue(taskCaptor.getAllValues().stream()
                 .anyMatch(t -> "AI_TEST_GENERATE".equals(t.getTaskType())));
 
@@ -203,7 +263,21 @@ class AiScanOrchestratorTest {
                 .thenReturn(java.util.Optional.of(api));
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), isNull(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
-        when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
+        // 新增步骤：runCodeExtract 查询 Service/Controller（返回空，跳过代码抽取）
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Service.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Controller.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        // 新增步骤：runFeatureCodeMapping 查询 Feature/Table/Service/Mapper（返回空，跳过）
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.BusinessObject.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Table.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Mapper.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        lenient().when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
 
         FeatureMappingAgent.Mapping mapping = new FeatureMappingAgent.Mapping();
         mapping.setPageKey("page:/order");
@@ -290,5 +364,127 @@ class AiScanOrchestratorTest {
         assertTrue(factTypes.contains("STATUS_TRANSITION"));
         assertTrue(factTypes.contains("FEATURE"));
         verify(businessGraphBuilder).buildBusinessGraph(eq("proj-1"), eq("v1"), eq(extraction), anyString());
+    }
+
+    /**
+     * 5.2-4：代码侧端到端——存在 Service/Controller 图节点 + 可读源码 + CodeFactAgent 返回 FactItem 时，
+     * 应保存 CODE_FEATURE 事实（sourceType=CODE_AI）并创建 Feature 图节点。
+     */
+    @Test
+    void testCodeExtract_SavesCodeFactWithCodeAiSourceType() throws Exception {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+        config.setMinConfidence(0.6);
+
+        // 创建临时 Java 源文件
+        Path codePath = tempDir.resolve("OrderService.java");
+        Files.writeString(codePath, "public class OrderService { public void createOrder() {} }");
+
+        GraphNode serviceNode = new GraphNode();
+        serviceNode.setId("svc-1");
+        serviceNode.setNodeType(NodeType.Service.name());
+        serviceNode.setNodeKey("service:OrderService");
+        serviceNode.setNodeName("OrderService");
+        serviceNode.setSourcePath(codePath.toString());
+
+        // 无文档
+        when(documentRepository.selectList(any())).thenReturn(List.of());
+        // Service 节点存在
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Service.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of(serviceNode));
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Controller.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        // page/api 查询 + feature 查询 + review 查询均返回空
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), isNull(),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+
+        // CodeFactAgent 返回事实
+        FactExtractionResult codeResult = new FactExtractionResult();
+        FactExtractionResult.FactItem item = new FactExtractionResult.FactItem();
+        item.setKey("code-feature:创建订单");
+        item.setName("创建订单");
+        item.setConfidence(BigDecimal.valueOf(0.8));
+        codeResult.setItems(List.of(item));
+        when(codeFactAgent.extractFacts(eq("proj-1"), anyString(), eq(codePath.toString())))
+                .thenReturn(codeResult);
+
+        lenient().when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
+
+        orchestrator.orchestrate("proj-1", "v1", config);
+
+        // 验证：CODE_FEATURE 事实已保存，sourceType=CODE_AI
+        ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
+        verify(factRepository, atLeastOnce()).upsert(factCaptor.capture());
+        List<Fact> codeFacts = factCaptor.getAllValues().stream()
+                .filter(f -> "CODE_FEATURE".equals(f.getFactType()))
+                .toList();
+        assertFalse(codeFacts.isEmpty(), "Should persist at least one CODE_FEATURE fact");
+        // 关键断言：来源类型为 CODE_AI，不是 DOC_AI
+        assertTrue(codeFacts.stream().allMatch(f -> "CODE_AI".equals(f.getSourceType())),
+                "Code-extracted facts should have sourceType=CODE_AI, got: "
+                        + codeFacts.stream().map(Fact::getSourceType).toList());
+
+        // 验证：businessGraphBuilder 被调用（创建 Feature 图节点）
+        verify(businessGraphBuilder, atLeastOnce()).buildBusinessGraph(
+                eq("proj-1"), eq("v1"), any(), eq(codePath.toString()), eq("CODE_AI"));
+    }
+
+    /**
+     * 5.2-5：自动路径 Feature 对齐——自动编排产生的 Feature 应触发 Feature→Page/API 映射，
+     * 而不是只依赖手动 extractDocFacts()。
+     */
+    @Test
+    void testAutoOrchestration_MapsFeaturesToCode() throws Exception {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+        config.setMinConfidence(0.6);
+
+        // 无文档
+        when(documentRepository.selectList(any())).thenReturn(List.of());
+        // 无 Service/Controller
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Service.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Controller.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        // Feature 节点存在（模拟之前抽取的）
+        GraphNode featureNode = node(NodeType.Feature.name(), "feature:订单管理", "订单管理", 0.8);
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of(featureNode));
+        // Page 节点存在
+        GraphNode pageNode = node(NodeType.Page.name(), "page:/order", "订单页", 0.9);
+        pageNode.setDisplayName("订单管理页面");
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of(pageNode));
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), isNull(),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+
+        // mock mapFeaturesToCode 的Table/Service/Mapper 查询（lenient：无 BusinessObject 时提前返回）
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Table.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.BusinessObject.name()),
+                any(), any(), any(), anyInt())).thenReturn(List.of());
+
+        lenient().when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
+
+        orchestrator.orchestrate("proj-1", "v1", config);
+
+        // 验证：AI_FEATURE_CODE_MAPPING 任务已创建（自动路径执行了 mapFeaturesToCode）
+        ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
+        verify(scanTaskRepository, atLeastOnce()).insert(taskCaptor.capture());
+        List<String> taskTypes = taskCaptor.getAllValues().stream()
+                .map(ScanTask::getTaskType).toList();
+        assertTrue(taskTypes.contains("AI_FEATURE_CODE_MAPPING"),
+                "Auto orchestration should include AI_FEATURE_CODE_MAPPING task, got: " + taskTypes);
+        // AI_FEATURE_MAPPING 也应在编排中（以 Feature 为锚点）
+        assertTrue(taskTypes.contains("AI_FEATURE_MAPPING"),
+                "Auto orchestration should include AI_FEATURE_MAPPING task");
     }
 }

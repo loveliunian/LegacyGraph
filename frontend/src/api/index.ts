@@ -11,6 +11,7 @@ export { traceApi } from './trace.api'
 export { agentApi } from './agent.api'
 export { qaApi } from './qa.api'
 export { changeTaskApi } from './change-task.api'
+export { auditApi } from './audit.api'
 
 // 保留原有导出向后兼容
 import { get, post, del, put } from '@/utils/request'
@@ -73,8 +74,18 @@ export const scanApi = {
    * @param data 创建扫描版本数据
    * @returns 创建结果
    */
-  create: (projectId: string, data: { versionNo: string, branchName?: string }) => {
+  create: (projectId: string, data: Record<string, any>) => {
     return post(`/lg/projects/${projectId}/scan-versions`, data)
+  },
+
+  /**
+   * 查询扫描版本列表
+   * @param projectId 项目ID
+   * @param params 分页参数
+   * @returns 扫描版本分页列表
+   */
+  list: (projectId: string, params: { pageNum: number; pageSize: number }) => {
+    return get(`/lg/projects/${projectId}/scan-versions`, { params })
   },
 
   /**
@@ -133,7 +144,12 @@ export const scanApi = {
    */
   delete: (projectId: string, versionId: string) => {
     return del(`/lg/projects/${projectId}/scan-versions/${versionId}`)
-  }
+  },
+
+  /** 获取扫描日志 */
+  getLogs: (projectId: string, versionId: string) => {
+    return get(`/lg/projects/${projectId}/scan-versions/${versionId}/logs`)
+  },
 }
 
 /**
@@ -266,6 +282,11 @@ export const graphApi = {
   /** 获取项目扫描版本列表 */
   getScanVersions: (projectId: string) => {
     return get(`/lg/projects/${projectId}/scan-versions`)
+  },
+
+  /** 创建审核任务 */
+  createReview: (projectId: string, data: Record<string, any>) => {
+    return post(`/lg/projects/${projectId}/reviews`, data)
   },
 }
 
@@ -429,7 +450,12 @@ export const testApi = {
    */
   startRun: (projectId: string, data: { versionId: string, caseIds: string[], environment: string }) => {
     return post(`/lg/projects/${projectId}/test-runs/start`, data)
-  }
+  },
+
+  /** 运行单个测试用例 */
+  run: (projectId: string, caseId: string, env: string = 'test') => {
+    return post(`/lg/projects/${projectId}/test-cases/${caseId}/run`, null, { params: { env } })
+  },
 }
 
 /**

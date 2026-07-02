@@ -1,5 +1,6 @@
 package io.github.legacygraph.agent;
 
+import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.graph.PatchPlan;
 import io.github.legacygraph.llm.LlmGateway;
@@ -13,12 +14,7 @@ import java.util.Map;
 
 /**
  * PatchPlanAgent - BUGFIX 补丁计划生成（可用版）。
- * <p>
- * 见 doc §现有 Agent 到 PatchPlan 的差距：Refactor/Migration 已由 Adapter 覆盖，
- * BUGFIX 需要一个以 {@link ImpactSubgraph} + Evidence + 失败测试为输入、
- * 直接输出 {@link PatchPlan} JSON 契约的生成器。
- * </p>
- * <p>输出仍须经 {@code PatchPlanValidator} 三类校验后才落盘。</p>
+ * <p>Phase 3-1: 新增 {@link #generate(AgentEnvelope)} 重载，支持证据合约调用。</p>
  */
 @Slf4j
 @Service
@@ -28,15 +24,30 @@ public class PatchPlanAgent {
     private final LlmGateway llmGateway;
 
     /**
-     * 生成 BUGFIX 补丁计划。
-     *
-     * @param projectId     项目ID
-     * @param taskId        变更任务ID
-     * @param title         任务标题
-     * @param inputIssue    问题描述
-     * @param subgraph      影响子图（提供范围白名单与依赖摘要）
-     * @param evidenceSummary 证据摘要文本
-     * @param failingTests  失败测试 / 复现摘要
+     * 生成 BUGFIX 补丁计划（AgentEnvelope 合约版本 — Phase 3-1）。
+     * <p>调用前需通过 RequiredEvidencePolicy 校验证据完整性。</p>
+     */
+    public PatchPlan generate(AgentEnvelope<PatchPlanInput> envelope) {
+        PatchPlanInput input = envelope.getInput();
+        if (input == null) {
+            log.warn("PatchPlanAgent: empty input in envelope {}", envelope.getContractId());
+            return null;
+        }
+        Map<String, String> variables = buildVariables(input);
+        PatchPlan plan = llmGateway.callWithTemplate(
+                envelope.getProjectId(), "patch-plan", variables, PatchPlan.class);
+        if (plan != null) {
+            plan.setTaskId(input.taskId);
+            plan.setTaskType("BUGFIX");
+            plan.setGeneratedBy("PatchPlanAgent");
+        }
+        log.info("PatchPlanAgent (envelope) generated plan for task {}: patches={}",
+                input.taskId, plan != null && plan.getPatches() != null ? plan.getPatches().size() : 0);
+        return plan;
+    }
+
+    /**
+     * 生成 BUGFIX 补丁计划（兼容旧 API — 四参默认合约）。
      */
     public PatchPlan generate(String projectId, String taskId, String title,
                               String inputIssue, ImpactSubgraph subgraph,
@@ -59,6 +70,32 @@ public class PatchPlanAgent {
         log.info("PatchPlanAgent generated plan for task {}: patches={}", taskId,
                 plan != null && plan.getPatches() != null ? plan.getPatches().size() : 0);
         return plan;
+    }
+
+    private Map<String, String> buildVariables(PatchPlanInput input) {
+        Map<String, String> vars = new HashMap<>();
+        vars.put("title", nz(input.title));
+        vars.put("changeTarget", nz(input.changeTarget));
+        vars.put("inputIssue", nz(input.inputIssue));
+        vars.put("dependencySummary", nz(input.dependencySummary));
+        vars.put("impactedFiles", joinFiles(input.impactedFiles));
+        vars.put("evidenceSummary", nz(input.evidenceSummary));
+        vars.put("failingTests", nz(input.failingTests));
+        return vars;
+    }
+
+    /** PatchPlan 输入 DTO */
+    @lombok.Data
+    @lombok.Builder
+    public static class PatchPlanInput {
+        private String taskId;
+        private String title;
+        private String changeTarget;
+        private String inputIssue;
+        private String dependencySummary;
+        private List<String> impactedFiles;
+        private String evidenceSummary;
+        private String failingTests;
     }
 
     private String joinFiles(List<String> files) {

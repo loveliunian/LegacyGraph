@@ -1,6 +1,8 @@
 package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.builder.FeatureSliceBuilder;
+import io.github.legacygraph.builder.ScenarioDSLBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.*;
 import io.github.legacygraph.test.ApiTestExecutor;
@@ -32,6 +34,10 @@ class TestCaseServiceTest {
     private E2eTestExecutor e2eTestExecutor;
     @Mock
     private TestResultUpdateService testResultUpdateService;
+    @Mock
+    private FeatureSliceBuilder featureSliceBuilder;
+    @Mock
+    private ScenarioDSLBuilder scenarioDSLBuilder;
 
     private TestCaseService testCaseService;
 
@@ -39,7 +45,8 @@ class TestCaseServiceTest {
     void testConstruction() {
         testCaseService = new TestCaseService(neo4jGraphDao, testCaseRepository,
                 testResultRepository, objectMapper, apiTestExecutor,
-                dbAssertionExecutor, e2eTestExecutor, testResultUpdateService);
+                dbAssertionExecutor, e2eTestExecutor, testResultUpdateService,
+                featureSliceBuilder, scenarioDSLBuilder);
         assertNotNull(testCaseService);
     }
 }

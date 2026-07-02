@@ -84,6 +84,14 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator;
 
+    /** 扫描后 AI 编排默认开关（legacy-graph.ai.*），scanScope 未显式指定时生效 */
+    @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.enable-default:true}")
+    private boolean aiEnableDefault;
+    @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.auto-generate-test-case-default:false}")
+    private boolean aiAutoGenerateTestCaseDefault;
+    @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.min-confidence-default:0.6}")
+    private double aiMinConfidenceDefault;
+
     /** 取消注册表：Controller 写入 signal，runScanBody 检查点读取。ConcurrentHashMap 保证多线程安全 */
     private final ConcurrentHashMap<String, Boolean> cancelledVersions = new ConcurrentHashMap<>();
 
@@ -284,7 +292,7 @@ public class ProjectScanner {
                         projectId, versionId);
             }
 
-            // 0d. Adapter Registry 试运行：按资产选择 Adapter 做补充抽取，未匹配资产保留旧扫描链路兜底
+            // 0d. Adapter Registry 扫描：按资产选择 Adapter 做抽取
             if (isCancelled(versionId)) return;
             log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
                     projectId, versionId);
@@ -293,12 +301,19 @@ public class ProjectScanner {
             completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
             log.info("Adapter registry scan processed {} assets", adapterCount);
 
+            // Phase 1-2: Adapter 已覆盖时跳过旧硬编码扫描（避免双轨重复扫描）
+            boolean skipLegacyScans = adapterCount > 0;
+            if (skipLegacyScans) {
+                log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=skipped (adapters covered {} assets)",
+                        projectId, versionId, adapterCount);
+            }
+
             // === 1. 代码扫描阶段：Java / Service / MyBatis / 前端 ===
             // 仅在未指定 scanTypes 或包含 CODE_SCAN 时执行
             if (isCancelled(versionId)) return;
             boolean shouldScanCode = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("CODE_SCAN");
-            if (shouldScanCode) {
+            if (shouldScanCode && !skipLegacyScans) {
             log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=starting code scan phase",
                     projectId, versionId);
 
@@ -388,14 +403,18 @@ public class ProjectScanner {
             ScanTask buildTask = createTask(projectId, versionId, "GRAPH_BUILD", "图谱构建");
             completeTask(buildTask, "Graph built in Neo4j", null);
 
-            // 6. 扫描后 AI 编排（按 scanScope 中的 enableAi/autoGenerateTestCase/minConfidence 开关执行）
+            // 6. 扫描后 AI 编排（开关默认取后端配置 legacy-graph.ai.*，scanScope 可覆盖）
             if (isCancelled(versionId)) return;
             try {
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=starting",
                         projectId, versionId);
+                io.github.legacygraph.dto.AiScanConfig aiDefaults = new io.github.legacygraph.dto.AiScanConfig();
+                aiDefaults.setEnableAi(aiEnableDefault);
+                aiDefaults.setAutoGenerateTestCase(aiAutoGenerateTestCaseDefault);
+                aiDefaults.setMinConfidence(aiMinConfidenceDefault);
                 io.github.legacygraph.dto.AiScanConfig aiConfig =
                         io.github.legacygraph.dto.AiScanConfig.fromScanScope(
-                                version != null ? version.getScanScope() : null, objectMapper);
+                                version != null ? version.getScanScope() : null, objectMapper, aiDefaults);
                 aiScanOrchestrator.orchestrate(projectId, versionId, aiConfig);
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=completed",
                         projectId, versionId);
@@ -410,6 +429,8 @@ public class ProjectScanner {
                     version.setScanStatus("SUCCESS");
                 }
                 version.setFinishedAt(LocalDateTime.now());
+                // 回写节点/边/事实/子任务统计快照，供列表接口零 IO 读取
+                applyStatsSnapshot(version, projectId, versionId);
                 scanVersionRepository.updateById(version);
             }
 
@@ -430,8 +451,71 @@ public class ProjectScanner {
                 version.setScanStatus("FAILED");
                 version.setErrorMessage(e.getMessage());
                 version.setFinishedAt(LocalDateTime.now());
+                // 失败时也回写快照（可能是部分数据），避免列表接口继续实时查 Neo4j
+                applyStatsSnapshot(version, projectId, versionId);
                 scanVersionRepository.updateById(version);
             }
+        }
+    }
+
+    /**
+     * 汇总本次扫描的节点/边/事实/子任务统计，写入 ScanVersion 冗余字段。
+     * 每处失败均单独 try/catch：任何统计失败都不能影响主扫描落 SUCCESS/FAILED 状态。
+     * 仅在扫描终态调用（成功/失败），列表接口对 RUNNING 状态版本仍走批量聚合兜底。
+     */
+    private void applyStatsSnapshot(ScanVersion version, String projectId, String versionId) {
+        try {
+            long nodeCount = 0L;
+            try {
+                nodeCount = neo4jGraphDao.countNodes(projectId, versionId, null);
+            } catch (Exception ex) {
+                log.warn("Snapshot: countNodes failed versionId={}: {}", versionId, ex.getMessage());
+            }
+            long edgeCount = 0L;
+            try {
+                edgeCount = neo4jGraphDao.countEdges(projectId, versionId, null);
+            } catch (Exception ex) {
+                log.warn("Snapshot: countEdges failed versionId={}: {}", versionId, ex.getMessage());
+            }
+            long factCount = 0L;
+            try {
+                factCount = factRepository.lambdaQuery()
+                        .eq(Fact::getVersionId, versionId)
+                        .count();
+            } catch (Exception ex) {
+                log.warn("Snapshot: countFacts failed versionId={}: {}", versionId, ex.getMessage());
+            }
+
+            int taskTotal = 0, taskSuccess = 0, taskFailed = 0;
+            String stage = "-";
+            try {
+                List<ScanTask> tasks = scanTaskRepository.lambdaQuery()
+                        .eq(ScanTask::getVersionId, versionId)
+                        .list();
+                taskTotal = tasks.size();
+                for (ScanTask t : tasks) {
+                    if ("SUCCESS".equals(t.getTaskStatus())) taskSuccess++;
+                    else if ("FAILED".equals(t.getTaskStatus())) taskFailed++;
+                }
+                stage = tasks.stream()
+                        .filter(t -> !"SUCCESS".equals(t.getTaskStatus()))
+                        .findFirst()
+                        .map(ScanTask::getTaskType)
+                        .orElse(taskTotal > 0 ? "COMPLETED" : "-");
+            } catch (Exception ex) {
+                log.warn("Snapshot: countTasks failed versionId={}: {}", versionId, ex.getMessage());
+            }
+
+            version.setNodeCount(nodeCount);
+            version.setEdgeCount(edgeCount);
+            version.setFactCount(factCount);
+            version.setTaskTotal(taskTotal);
+            version.setTaskSuccess(taskSuccess);
+            version.setTaskFailed(taskFailed);
+            version.setCurrentStage(stage);
+            version.setStatsUpdatedAt(LocalDateTime.now());
+        } catch (Exception e) {
+            log.warn("applyStatsSnapshot unexpected failure versionId={}: {}", versionId, e.getMessage());
         }
     }
 
@@ -1121,6 +1205,11 @@ public class ProjectScanner {
         return null;
     }
 
+    /**
+     * @deprecated 由 Adapter 扫描链路替代（Phase 1-2）。
+     * 保留作为兜底，未来版本将删除。新抽取能力请通过 {@link ExtractionAdapter} 添加。
+     */
+    @Deprecated
     private int scanJavaControllers(String projectId, String versionId, String baseDir, ScanTask task) {
         if (baseDir == null) return 0;
         JavaControllerExtractor extractor = new JavaControllerExtractor();
@@ -1181,6 +1270,10 @@ public class ProjectScanner {
         return 0;
     }
 
+    /**
+     * @deprecated 由 {@link io.github.legacygraph.extractors.adapter.MyBatisXmlAdapter} 替代（Phase 1-2）。
+     */
+    @Deprecated
     private int scanMyBatisXml(String projectId, String versionId, String baseDir, ScanTask task) {
         if (baseDir == null) return 0;
         MyBatisXmlExtractor extractor = new MyBatisXmlExtractor();
@@ -1250,6 +1343,10 @@ public class ProjectScanner {
         }
     }
 
+    /**
+     * @deprecated 由 {@link io.github.legacygraph.extractors.adapter.VueFrontendAdapter} 替代（Phase 1-2）。
+     */
+    @Deprecated
     private int scanFrontendFiles(String projectId, String versionId, String baseDir, ScanTask task) {
         if (baseDir == null) return 0;
         VueRouteExtractor vueExtractor = new VueRouteExtractor();
@@ -1327,6 +1424,10 @@ public class ProjectScanner {
         return fileName.endsWith("Controller.java") || fileName.contains("Controller");
     }
 
+    /**
+     * @deprecated 由 {@link io.github.legacygraph.extractors.adapter.JavaServiceCallAdapter} 替代（Phase 1-2）。
+     */
+    @Deprecated
     private int scanServiceCalls(String projectId, String versionId, String baseDir, ScanTask task) {
         if (baseDir == null) return 0;
         ServiceCallExtractor extractor = new ServiceCallExtractor();

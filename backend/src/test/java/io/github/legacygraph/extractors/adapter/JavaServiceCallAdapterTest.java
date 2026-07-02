@@ -29,6 +29,8 @@ class JavaServiceCallAdapterTest {
     private GraphBuilder graphBuilder;
     @Mock
     private FactPersister factPersister;
+    @Mock
+    private JavaStructureExtractor structureExtractor;
 
     @Test
     void extractBuildsJavaStructureEvenWhenClassHasNoServiceCalls() throws Exception {
@@ -42,8 +44,14 @@ class JavaServiceCallAdapterTest {
                 }
                 """);
         when(graphBuilder.buildJavaStructureGraph(any(), any(), any())).thenReturn(List.of());
+        JavaStructureExtractor.JavaClassInfo classInfo = new JavaStructureExtractor.JavaClassInfo();
+        classInfo.setQualifiedName("com.demo.OrderService");
+        classInfo.setClassName("OrderService");
+        classInfo.setPackageName("com.demo");
+        classInfo.setMethods(List.of());
+        when(structureExtractor.extractFromFile(any())).thenReturn(List.of(classInfo));
 
-        JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister);
+        JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor);
         ScanContext context = ScanContext.builder()
                 .projectId("project-1")
                 .versionId("v1")

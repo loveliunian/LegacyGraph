@@ -3,8 +3,10 @@ package io.github.legacygraph.service;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
+import io.github.legacygraph.repository.ScanVersionRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -27,15 +30,18 @@ public class GraphValidatorService {
     private final TestCaseRepository testCaseRepository;
     private final TestResultRepository testResultRepository;
     private final GraphCacheInvalidator graphCacheInvalidator;
+    private final ScanVersionRepository scanVersionRepository;
 
     public GraphValidatorService(Neo4jGraphDao neo4jGraphDao,
                                TestCaseRepository testCaseRepository,
                                TestResultRepository testResultRepository,
-                               GraphCacheInvalidator graphCacheInvalidator) {
+                               GraphCacheInvalidator graphCacheInvalidator,
+                               ScanVersionRepository scanVersionRepository) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
         this.graphCacheInvalidator = graphCacheInvalidator;
+        this.scanVersionRepository = scanVersionRepository;
     }
 
     /**
@@ -214,12 +220,18 @@ public class GraphValidatorService {
 
     @org.springframework.cache.annotation.Cacheable(cacheNames = "validation-report", key = "#versionId")
     public ValidationReport getValidationReport(String versionId) {
-        long totalNodes = neo4jGraphDao.countNodes(null, versionId, null);
-        long confirmedNodes = neo4jGraphDao.countNodes(null, versionId, "CONFIRMED");
-        long pendingNodes = neo4jGraphDao.countNodes(null, versionId, "PENDING_CONFIRM");
-        long totalEdges = neo4jGraphDao.countEdges(null, versionId, null);
-        long confirmedEdges = neo4jGraphDao.countEdges(null, versionId, "CONFIRMED");
-        long pendingEdges = neo4jGraphDao.countEdges(null, versionId, "PENDING_CONFIRM");
+        // 获取 projectId（用于 Neo4j 查询过滤）
+        ScanVersion sv = scanVersionRepository.selectById(versionId);
+        String projectId = sv != null ? sv.getProjectId() : null;
+
+        // 一次 Cypher 拿到 nodes/edges 全部按状态汇总，替代原来的 6 次 count*
+        Map<String, Object> stats = neo4jGraphDao.versionGraphStats(projectId, versionId);
+        long totalNodes = toLong(stats.get("totalNodes"));
+        long confirmedNodes = toLong(stats.get("confirmedNodes"));
+        long pendingNodes = toLong(stats.get("pendingNodes"));
+        long totalEdges = toLong(stats.get("totalEdges"));
+        long confirmedEdges = toLong(stats.get("confirmedEdges"));
+        long pendingEdges = toLong(stats.get("pendingEdges"));
 
         long passedTests = testResultRepository.lambdaQuery()
                 .eq(TestResult::getVersionId, versionId)
@@ -240,6 +252,11 @@ public class GraphValidatorService {
         report.setFailedTests(failedTests);
         report.setOverallConfidence(calculateOverallConfidence(versionId));
         return report;
+    }
+
+    private static long toLong(Object val) {
+        if (val instanceof Number n) return n.longValue();
+        return 0L;
     }
 
     private BigDecimal calculateOverallConfidence(String versionId) {

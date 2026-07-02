@@ -2,9 +2,13 @@ package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.builder.FeatureSliceBuilder;
+import io.github.legacygraph.builder.ScenarioDSLBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.GenerateTestCasesRequest;
 import io.github.legacygraph.dto.StartTestRunRequest;
+import io.github.legacygraph.dto.graph.FeatureSlice;
+import io.github.legacygraph.dto.graph.ScenarioDSL;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
@@ -43,6 +47,8 @@ public class TestCaseService {
     private final DbAssertionExecutor dbAssertionExecutor;
     private final E2eTestExecutor e2eTestExecutor;
     private final TestResultUpdateService testResultUpdateService;
+    private final FeatureSliceBuilder featureSliceBuilder;
+    private final ScenarioDSLBuilder scenarioDSLBuilder;
 
     private final ExecutorService testExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -53,7 +59,9 @@ public class TestCaseService {
                           ApiTestExecutor apiTestExecutor,
                           DbAssertionExecutor dbAssertionExecutor,
                           E2eTestExecutor e2eTestExecutor,
-                          TestResultUpdateService testResultUpdateService) {
+                          TestResultUpdateService testResultUpdateService,
+                          FeatureSliceBuilder featureSliceBuilder,
+                          ScenarioDSLBuilder scenarioDSLBuilder) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
@@ -62,11 +70,103 @@ public class TestCaseService {
         this.dbAssertionExecutor = dbAssertionExecutor;
         this.e2eTestExecutor = e2eTestExecutor;
         this.testResultUpdateService = testResultUpdateService;
+        this.featureSliceBuilder = featureSliceBuilder;
+        this.scenarioDSLBuilder = scenarioDSLBuilder;
     }
 
+    // ==================== Phase 2.2: Feature Slice → Test Case 贯通 ====================
+
     /**
-     * 生成测试用例
+     * 从 Feature Slice 生成测试用例（Phase 2.2）。
+     * <p>使用 ScenarioDSLBuilder 从 Slice 构建场景 DSL，
+     * 再映射为 TestCase 并持久化。替代逐节点生成模式。</p>
+     *
+     * @param sliceId Feature Slice ID
+     * @return 生成的测试用例数量
      */
+    @Transactional
+    public int generateTestCasesFromSlice(String projectId, String sliceId) {
+        FeatureSlice slice = featureSliceBuilder.buildSliceById(projectId, sliceId);
+        if (slice == null || slice.getSliceId() == null) {
+            log.warn("TestCaseService: slice not found: projectId={}, sliceId={}", projectId, sliceId);
+            return 0;
+        }
+
+        List<ScenarioDSL> scenarios = scenarioDSLBuilder.buildFromSlice(slice);
+        if (scenarios.isEmpty()) {
+            log.info("TestCaseService: no scenarios generated from slice {}", sliceId);
+            return 0;
+        }
+
+        int count = 0;
+        for (ScenarioDSL dsl : scenarios) {
+            TestCase tc = scenarioToTestCase(slice.getProjectId(), slice.getVersionId(), dsl, slice);
+            if (tc != null) {
+                testCaseRepository.insert(tc);
+                count++;
+            }
+        }
+
+        // 回写 slice：关联 testCaseIds
+        if (slice.getTestCaseIds() == null) slice.setTestCaseIds(new ArrayList<>());
+        slice.getTestCaseIds().add(sliceId);
+        log.info("TestCaseService: generated {} test cases from slice {} (scenarioCount={})",
+                count, sliceId, scenarios.size());
+        return count;
+    }
+
+    private TestCase scenarioToTestCase(String projectId, String versionId,
+                                         ScenarioDSL dsl, FeatureSlice slice) {
+        TestCase tc = new TestCase();
+        tc.setId(UUID.randomUUID().toString());
+        tc.setProjectId(projectId);
+        tc.setVersionId(versionId);
+        tc.setCaseCode("SLICE_" + Math.abs(dsl.getScenarioId().hashCode()));
+        tc.setCaseName(dsl.getName() != null ? dsl.getName() : "Slice-" + dsl.getScenarioId());
+        tc.setCaseType(dsl.getScenarioType() != null ? dsl.getScenarioType() : "API");
+        tc.setPriority("P2");
+        tc.setGeneratedBy("SLICE_DSL");
+        tc.setConfidence(slice.getConfidence() != null ? slice.getConfidence() : BigDecimal.valueOf(0.7));
+        tc.setStatus("GENERATED");
+        tc.setCreatedAt(LocalDateTime.now());
+        tc.setUpdatedAt(LocalDateTime.now());
+
+        // DSL 的 assertions 序列化为 expectedResult
+        try {
+            Map<String, Object> expected = new HashMap<>();
+            List<Map<String, String>> assertionList = new ArrayList<>();
+            for (ScenarioDSL.Assertion a : dsl.getAssertions()) {
+                Map<String, String> am = new HashMap<>();
+                am.put("type", a.getType());
+                am.put("field", a.getField());
+                am.put("operator", a.getOperator());
+                am.put("expected", a.getExpectedValue());
+                assertionList.add(am);
+            }
+            expected.put("assertions", assertionList);
+            expected.put("scenarioType", dsl.getScenarioType());
+            expected.put("sliceId", slice.getSliceId());
+            tc.setExpectedResult(objectMapper.writeValueAsString(expected));
+        } catch (JsonProcessingException e) {
+            log.warn("TestCaseService: failed to serialize assertions: {}", e.getMessage());
+        }
+
+        // actions 序列化为 steps
+        try {
+            tc.setSteps(objectMapper.writeValueAsString(dsl.getActions()));
+        } catch (JsonProcessingException e) {
+            log.warn("TestCaseService: failed to serialize steps: {}", e.getMessage());
+        }
+
+        // preconditions
+        try {
+            tc.setPreconditions(objectMapper.writeValueAsString(dsl.getPreconditions()));
+        } catch (JsonProcessingException e) {
+            log.warn("TestCaseService: failed to serialize preconditions: {}", e.getMessage());
+        }
+
+        return tc;
+    }
     @Transactional
     public String generateTestCases(String projectId, GenerateTestCasesRequest request) {
         String executionId = UUID.randomUUID().toString();
@@ -348,8 +448,17 @@ public class TestCaseService {
 
         List<CompletableFuture<TestResult>> futures = new ArrayList<>();
 
+        // 批量加载 TestCase，避免 N+1
+        Map<String, TestCase> tcMap = new HashMap<>();
+        if (!caseIds.isEmpty()) {
+            List<TestCase> tcs = testCaseRepository.selectBatchIds(caseIds);
+            for (TestCase tc : tcs) {
+                tcMap.put(tc.getId(), tc);
+            }
+        }
+
         for (String caseId : caseIds) {
-            TestCase testCase = testCaseRepository.getById(caseId);
+            TestCase testCase = tcMap.get(caseId);
             if (testCase == null) continue;
 
             TestResult result = new TestResult();

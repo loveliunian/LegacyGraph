@@ -289,10 +289,23 @@ public class ReportingService {
                 .eq(TestResult::getVersionId, versionId)
                 .eq(TestResult::getResultStatus, "PASSED")
                 .list();
-        for (TestResult result : testResults) {
-            TestCase testCase = testCaseRepository.selectById(result.getTestCaseId());
-            if (testCase != null && testCase.getTargetNodeId() != null) {
-                coveredNodeIds.add(testCase.getTargetNodeId());
+
+        // 批量加载 TestCase，避免 N+1
+        if (!testResults.isEmpty()) {
+            List<String> testCaseIds = testResults.stream()
+                    .map(TestResult::getTestCaseId)
+                    .distinct()
+                    .toList();
+            List<TestCase> testCases = testCaseRepository.selectBatchIds(testCaseIds);
+            Map<String, TestCase> testCaseMap = new HashMap<>();
+            for (TestCase tc : testCases) {
+                testCaseMap.put(tc.getId(), tc);
+            }
+            for (TestResult result : testResults) {
+                TestCase testCase = testCaseMap.get(result.getTestCaseId());
+                if (testCase != null && testCase.getTargetNodeId() != null) {
+                    coveredNodeIds.add(testCase.getTargetNodeId());
+                }
             }
         }
 
@@ -542,11 +555,25 @@ public class ReportingService {
         trQuery.eq(TestResult::getProjectId, projectId)
                 .eq(TestResult::getVersionId, versionId)
                 .eq(TestResult::getResultStatus, "PASSED");
+        List<TestResult> testResults = testResultRepository.selectList(trQuery);
         Set<String> coveredNodeIds = new HashSet<>();
-        for (TestResult result : testResultRepository.selectList(trQuery)) {
-            TestCase testCase = testCaseRepository.selectById(result.getTestCaseId());
-            if (testCase != null && testCase.getTargetNodeId() != null) {
-                coveredNodeIds.add(testCase.getTargetNodeId());
+        if (!testResults.isEmpty()) {
+            List<String> testCaseIds = testResults.stream()
+                    .map(TestResult::getTestCaseId)
+                    .distinct()
+                    .toList();
+            List<TestCase> testCases = testCaseRepository.selectBatchIds(testCaseIds);
+            Map<String, String> targetNodeMap = new HashMap<>();
+            for (TestCase tc : testCases) {
+                if (tc.getTargetNodeId() != null) {
+                    targetNodeMap.put(tc.getId(), tc.getTargetNodeId());
+                }
+            }
+            for (TestResult result : testResults) {
+                String targetNodeId = targetNodeMap.get(result.getTestCaseId());
+                if (targetNodeId != null) {
+                    coveredNodeIds.add(targetNodeId);
+                }
             }
         }
         return coveredNodeIds;

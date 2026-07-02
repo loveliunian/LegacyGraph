@@ -48,12 +48,15 @@ public class GraphEdgeClaim {
     /** 额外属性（JSON 字符串） */
     private String properties;
 
+    /** 幂等键：同一意图重复提交不产生副作用（可选） */
+    private String idempotencyKey;
+
     public GraphEdgeClaim() {}
 
     public GraphEdgeClaim(String projectId, String versionId, String fromNodeId,
                           String toNodeId, String edgeType, String edgeKey,
                           String sourceType, BigDecimal confidence, String status,
-                          String properties) {
+                          String properties, String idempotencyKey) {
         this.projectId = projectId;
         this.versionId = versionId;
         this.fromNodeId = fromNodeId;
@@ -64,5 +67,6 @@ public class GraphEdgeClaim {
         this.confidence = confidence;
         this.status = status;
         this.properties = properties;
+        this.idempotencyKey = idempotencyKey;
     }
 }

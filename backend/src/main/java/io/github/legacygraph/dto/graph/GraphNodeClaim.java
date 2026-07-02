@@ -61,6 +61,9 @@ public class GraphNodeClaim {
     /** 额外属性（JSON 字符串） */
     private String properties;
 
+    /** 幂等键：同一意图重复提交不产生副作用（可选） */
+    private String idempotencyKey;
+
     /**
      * 创建无参构造（Lombok @Builder 需要）。
      * 同时提供全参构造供 Builder 模式使用。
@@ -71,7 +74,7 @@ public class GraphNodeClaim {
                           String nodeKey, String nodeName, String displayName,
                           String description, String sourceType, String sourcePath,
                           Integer startLine, Integer endLine, BigDecimal confidence,
-                          String status, String properties) {
+                          String status, String properties, String idempotencyKey) {
         this.projectId = projectId;
         this.versionId = versionId;
         this.nodeType = nodeType;
@@ -86,5 +89,6 @@ public class GraphNodeClaim {
         this.confidence = confidence;
         this.status = status;
         this.properties = properties;
+        this.idempotencyKey = idempotencyKey;
     }
 }

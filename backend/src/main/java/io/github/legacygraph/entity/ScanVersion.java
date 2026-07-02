@@ -29,6 +29,23 @@ public class ScanVersion {
     private LocalDateTime finishedAt;
     private String errorMessage;
 
+    /** 节点数快照（终态回写，见 V13 迁移） */
+    private Long nodeCount;
+    /** 边数快照 */
+    private Long edgeCount;
+    /** 事实数快照 */
+    private Long factCount;
+    /** 子任务总数快照 */
+    private Integer taskTotal;
+    /** 成功子任务数快照 */
+    private Integer taskSuccess;
+    /** 失败子任务数快照 */
+    private Integer taskFailed;
+    /** 最后阶段快照（COMPLETED 或首个非 SUCCESS 子任务 taskType） */
+    private String currentStage;
+    /** 统计快照回写时间 */
+    private LocalDateTime statsUpdatedAt;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

@@ -141,8 +141,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { changeTaskApi } from '@/api'
-import { get } from '@/utils/request'
+import { changeTaskApi, graphApi } from '@/api'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -209,7 +208,7 @@ async function loadList() {
 
 async function loadVersions() {
   try {
-    const res = await get(`/lg/projects/${projectId}/scan-versions`)
+    const res: any = await graphApi.getScanVersions(projectId)
     versions.value = (res as any)?.list || []
   } catch {
     // 静默

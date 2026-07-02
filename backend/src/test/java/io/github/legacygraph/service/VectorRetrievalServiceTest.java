@@ -99,7 +99,7 @@ class VectorRetrievalServiceTest {
     }
 
     @Test
-    void testFindSimilarNodes_FoundResults() {
+    void testFindSimilarNodes_UsesBatchQuery() {
         String searchText = "订单";
         float[] embedding = {0.5f, 0.6f};
         when(embeddingModel.embed(searchText)).thenReturn(embedding);
@@ -113,7 +113,8 @@ class VectorRetrievalServiceTest {
         GraphNode node = new GraphNode();
         node.setId("node-1");
         node.setNodeName("订单节点");
-        when(neo4jGraphDao.findNodeById("node-1")).thenReturn(Optional.of(node));
+        // 批量查询替代逐条 findNodeById
+        when(neo4jGraphDao.findNodesByIds(List.of("node-1"))).thenReturn(List.of(node));
 
         List<GraphNode> results = vectorRetrievalService.findSimilarNodes(
                 "p1", "v1", searchText, 0.7);
@@ -121,6 +122,8 @@ class VectorRetrievalServiceTest {
         assertNotNull(results);
         assertEquals(1, results.size());
         assertEquals("订单节点", results.get(0).getNodeName());
+        verify(neo4jGraphDao).findNodesByIds(anyList());
+        verify(neo4jGraphDao, never()).findNodeById(anyString());
     }
 
     @Test

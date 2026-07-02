@@ -4,6 +4,7 @@ import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.graph.EvidenceRecord;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
+import io.github.legacygraph.dto.graph.GraphWriteIntent;
 import io.github.legacygraph.dto.graph.PrivacyLevel;
 import io.github.legacygraph.entity.*;
 import io.github.legacygraph.llm.SecretScanService;
@@ -76,6 +77,8 @@ public class EvidenceGraphWriter {
      *   <li>不存在则创建新节点，并根据 sourceType 决定状态：
      *     AI_INFERENCE / DOC_AI → PENDING_CONFIRM，其他 → CONFIRMED</li>
      *   <li>创建节点成功后，自动创建证据并建立关联</li>
+     *   <li>证据写入失败时（PostgreSQL 不可用），标记 Neo4j 节点 writeStatus=INCOMPLETE，
+     *     进入复核队列（见 GraphWriteReconciler）</li>
      * </ul>
      *
      * @param claim 节点声明
@@ -109,8 +112,15 @@ public class EvidenceGraphWriter {
 
         // 仅新建节点时创建证据（命中已存在节点则跳过，避免重复 evidence）
         if (upsert.created() && (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType()))) {
-            createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
-                    claim.getStartLine(), claim.getEndLine());
+            try {
+                createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
+                        claim.getStartLine(), claim.getEndLine());
+            } catch (Exception pgEx) {
+                // 跨存储补偿：Neo4j 已写入但 PG 证据写入失败 → 标记节点 INCOMPLETE
+                log.error("PG evidence write failed for Neo4j node {} (idempotencyKey={}): {} — marking INCOMPLETE",
+                        merged.getId(), claim.getIdempotencyKey(), pgEx.getMessage());
+                markNodeIncomplete(merged.getId(), pgEx.getMessage());
+            }
         }
 
         return merged;
@@ -126,6 +136,8 @@ public class EvidenceGraphWriter {
      *   <li>先按 (projectId, versionId, fromNodeId, toNodeId, edgeType, edgeKey) 去重</li>
      *   <li>AI 来源的边默认 PENDING_CONFIRM</li>
      *   <li>创建成功后自动继承源节点的证据</li>
+     *   <li>证据继承失败时（PostgreSQL 不可用），标记 Neo4j 边 writeStatus=INCOMPLETE，
+     *     进入复核队列</li>
      * </ul>
      *
      * @param claim 边声明
@@ -159,7 +171,14 @@ public class EvidenceGraphWriter {
 
         // 仅新建边时继承源节点证据（命中已存在边则跳过，避免重复继承）
         if (upsert.created()) {
-            inheritEvidenceForEdge(merged, claim.getFromNodeId());
+            try {
+                inheritEvidenceForEdge(merged, claim.getFromNodeId());
+            } catch (Exception pgEx) {
+                // 跨存储补偿：Neo4j 已写入但 PG 证据继承失败 → 标记边 INCOMPLETE
+                log.error("PG evidence inherit failed for Neo4j edge {} (idempotencyKey={}): {} — marking INCOMPLETE",
+                        merged.getId(), claim.getIdempotencyKey(), pgEx.getMessage());
+                markEdgeIncomplete(merged.getId(), pgEx.getMessage());
+            }
         }
 
         return merged;
@@ -424,6 +443,92 @@ public class EvidenceGraphWriter {
     }
 
     // ==================== 证据角色枚举 ====================
+
+    /**
+     * 写入意图（outbox 模式入口）：批量处理 node/edge claims + evidence records。
+     * <p>每条 claim 独立 upsert，失败不中断其他 claim 处理。</p>
+     *
+     * @param intent 写入意图，包含幂等键、claims 和 evidence records
+     * @return 写入结果摘要
+     */
+    public GraphWriteResult writeIntent(GraphWriteIntent intent) {
+        int nodeCount = 0, edgeCount = 0, evidenceCount = 0;
+        if (intent.getNodeClaims() != null) {
+            for (GraphNodeClaim nc : intent.getNodeClaims()) {
+                try {
+                    upsertNode(nc);
+                    nodeCount++;
+                } catch (Exception e) {
+                    log.error("writeIntent: node claim failed (idempotencyKey={}, nodeKey={}): {}",
+                            intent.getIdempotencyKey(), nc.getNodeKey(), e.getMessage());
+                }
+            }
+        }
+        if (intent.getEdgeClaims() != null) {
+            for (GraphEdgeClaim ec : intent.getEdgeClaims()) {
+                try {
+                    upsertEdge(ec);
+                    edgeCount++;
+                } catch (Exception e) {
+                    log.error("writeIntent: edge claim failed (idempotencyKey={}, edgeKey={}): {}",
+                            intent.getIdempotencyKey(), ec.getEdgeKey(), e.getMessage());
+                }
+            }
+        }
+        if (intent.getEvidenceRecords() != null) {
+            for (EvidenceRecord er : intent.getEvidenceRecords()) {
+                try {
+                    // evidence records 通常随已有节点/边关联；此处作为独立证据落库
+                    Evidence ev = new Evidence();
+                    ev.setId(UUID.randomUUID().toString());
+                    ev.setProjectId(intent.getProjectId());
+                    ev.setVersionId(intent.getVersionId());
+                    ev.setEvidenceType(er.getEvidenceType());
+                    ev.setSourcePath(er.getSourcePath());
+                    ev.setSourceName(er.getSourceName());
+                    ev.setContentHash(er.getContentHash());
+                    ev.setSummary(er.getSummary());
+                    ev.setContent(er.getContent());
+                    ev.setMetadata(er.getMetadata());
+                    applyPrivacy(ev, er);
+                    ev.setCreatedAt(LocalDateTime.now());
+                    int rows = evidenceRepository.insertOrIgnore(ev);
+                    if (rows > 0) evidenceCount++;
+                } catch (Exception e) {
+                    log.error("writeIntent: evidence record failed (idempotencyKey={}): {}",
+                            intent.getIdempotencyKey(), e.getMessage());
+                }
+            }
+        }
+        log.info("writeIntent processed (idempotencyKey={}): {} nodes, {} edges, {} evidence",
+                intent.getIdempotencyKey(), nodeCount, edgeCount, evidenceCount);
+        return new GraphWriteResult(nodeCount, edgeCount, evidenceCount);
+    }
+
+    /** 标记 Neo4j 节点为 INCOMPLETE（PG 证据写入失败补偿） */
+    private void markNodeIncomplete(String nodeId, String error) {
+        try {
+            neo4jGraphDao.setNodeProperty(nodeId, "writeStatus", "INCOMPLETE");
+            neo4jGraphDao.setNodeProperty(nodeId, "writeError", error != null
+                    ? (error.length() > 500 ? error.substring(0, 500) : error) : "unknown");
+        } catch (Exception neoEx) {
+            log.error("Failed to mark Neo4j node {} as INCOMPLETE: {}", nodeId, neoEx.getMessage());
+        }
+    }
+
+    /** 标记 Neo4j 边为 INCOMPLETE（PG 证据写入失败补偿） */
+    private void markEdgeIncomplete(String edgeId, String error) {
+        try {
+            neo4jGraphDao.setEdgeProperty(edgeId, "writeStatus", "INCOMPLETE");
+            neo4jGraphDao.setEdgeProperty(edgeId, "writeError", error != null
+                    ? (error.length() > 500 ? error.substring(0, 500) : error) : "unknown");
+        } catch (Exception neoEx) {
+            log.error("Failed to mark Neo4j edge {} as INCOMPLETE: {}", edgeId, neoEx.getMessage());
+        }
+    }
+
+    /** 写入结果摘要 */
+    public record GraphWriteResult(int nodeCount, int edgeCount, int evidenceCount) {}
 
     /**
      * 基于位置签名生成 SHA-256 哈希，用于节点指针型证据的去重。

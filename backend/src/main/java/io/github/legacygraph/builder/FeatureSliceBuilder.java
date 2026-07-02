@@ -38,6 +38,14 @@ public class FeatureSliceBuilder {
     }
 
     /**
+     * 从图谱中为指定功能构建完整切片（别名，语义更清晰）。
+     * <p>等价于 {@link #buildSlice(String, String, String)}。</p>
+     */
+    public FeatureSlice buildSliceByFeatureName(String projectId, String versionId, String featureName) {
+        return buildSlice(projectId, versionId, featureName);
+    }
+
+    /**
      * 从图谱中为指定功能构建完整切片。
      *
      * @param projectId   项目ID

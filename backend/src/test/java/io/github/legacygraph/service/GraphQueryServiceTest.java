@@ -1,218 +1,125 @@
 package io.github.legacygraph.service;
 
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.entity.Fact;
-import io.github.legacygraph.entity.GraphEdge;
-import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.entity.ScanTask;
+import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.Session;
-import org.neo4j.driver.Result;
-import org.neo4j.driver.Record;
-import org.neo4j.driver.types.Path;
-import org.neo4j.driver.types.Node;
-import org.neo4j.driver.types.Relationship;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * GraphQueryService 测试（Phase 2.6 更新：Driver 已移除，全部委托读模型）。
+ */
 @ExtendWith(MockitoExtension.class)
 class GraphQueryServiceTest {
 
-    @Mock
-    private Neo4jGraphDao neo4jGraphDao;
-
-    @Mock
-    private ScanVersionRepository scanVersionRepository;
-
-    @Mock
-    private ScanTaskRepository scanTaskRepository;
-
-    @Mock
-    private FactRepository factRepository;
-
-    @Mock
-    private Driver neo4jDriver;
-
-    @Mock
-    private Session session;
-
-    @Mock
-    private Result result;
-
-    @Mock
-    private Record record;
-
-    @Mock
-    private Path path;
-
-    @Mock
-    private Node node1;
-
-    @Mock
-    private Node node2;
-
-    @Mock
-    private Relationship relationship;
-
-    @Mock
-    private CacheService cacheService;
+    @Mock private Neo4jGraphDao neo4jGraphDao;
+    @Mock private ScanVersionRepository scanVersionRepository;
+    @Mock private ScanTaskRepository scanTaskRepository;
+    @Mock private FactRepository factRepository;
+    @Mock private CacheService cacheService;
+    @Mock private GraphPathReadModel pathReadModel;
+    @Mock private GraphProjectionReadModel projectionReadModel;
 
     private GraphQueryService graphQueryService;
 
     @BeforeEach
     void setUp() {
-        graphQueryService = new GraphQueryService(
-                neo4jGraphDao,
-                scanVersionRepository,
-                scanTaskRepository,
-                factRepository,
-                neo4jDriver,
-                cacheService
-        );
-        // 缓存默认未命中：getOrLoad 直接执行 loader（回源），便于测试原始查询逻辑
+        graphQueryService = new GraphQueryService(neo4jGraphDao, scanVersionRepository,
+                scanTaskRepository, factRepository, cacheService,
+                pathReadModel, projectionReadModel);
         lenient().when(cacheService.getOrLoad(anyString(), any(), any(), any()))
                 .thenAnswer(inv -> ((java.util.function.Supplier<?>) inv.getArgument(3)).get());
     }
 
+    @Test void testConstruction() { assertNotNull(graphQueryService); }
+
     @Test
-    void testGetApiCallChain_EmptyResult() {
-        when(neo4jDriver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
-        when(result.hasNext()).thenReturn(false);
-
-        List<Map<String, Object>> resultList = graphQueryService.getApiCallChain("p1", "v1", "POST /api/test");
-
-        assertNotNull(resultList);
-        assertTrue(resultList.isEmpty());
-        verify(session, times(1)).run(anyString(), anyMap());
-        verify(session, times(1)).close();
+    void testGetApiCallChain_DelegatesToReadModel() {
+        var chain = new GraphPathReadModel.PathChain(); chain.nodes = List.of();
+        when(pathReadModel.getApiCallChain(anyString(), anyString(), anyString())).thenReturn(chain);
+        List<Map<String, Object>> result = graphQueryService.getApiCallChain("p1", "v1", "GET /api/test");
+        assertNotNull(result);
+        verify(pathReadModel).getApiCallChain("p1", "v1", "GET /api/test");
     }
 
     @Test
-    void testGetApiCallChain_WithResults() {
-        when(neo4jDriver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
-        when(result.hasNext()).thenReturn(true, false);
-        when(result.next()).thenReturn(record);
-        when(record.get("p")).thenReturn(mock(org.neo4j.driver.Value.class));
-        when(record.get("p").asPath()).thenReturn(path);
-        
-        List<Node> nodes = Arrays.asList(node1, node2);
-        when(path.nodes()).thenReturn(nodes);
-        when(node1.id()).thenReturn(1L);
-        when(node1.labels()).thenReturn(Collections.singletonList("ApiEndpoint"));
-        when(node1.asMap()).thenReturn(Map.of("nodeKey", "POST /api/test", "displayName", "测试接口"));
-        when(node2.id()).thenReturn(2L);
-        when(node2.labels()).thenReturn(Collections.singletonList("Service"));
-        when(node2.asMap()).thenReturn(Map.of("nodeKey", "TestService", "displayName", "测试服务"));
-
-        List<Map<String, Object>> resultList = graphQueryService.getApiCallChain("p1", "v1", "POST /api/test");
-
-        assertNotNull(resultList);
-        assertFalse(resultList.isEmpty());
-        verify(session, times(1)).run(anyString(), anyMap());
+    void testGetTableImpact_DelegatesToReadModel() {
+        var chain = new GraphPathReadModel.PathChain(); chain.nodes = List.of();
+        when(pathReadModel.getTableImpact(anyString(), anyString(), anyString())).thenReturn(chain);
+        List<Map<String, Object>> result = graphQueryService.getTableImpact("p1", "v1", "orders");
+        assertNotNull(result);
+        verify(pathReadModel).getTableImpact("p1", "v1", "orders");
     }
 
     @Test
-    void testGetTableImpact_EmptyResult() {
-        when(neo4jDriver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
-        when(result.hasNext()).thenReturn(false);
-
-        List<Map<String, Object>> resultList = graphQueryService.getTableImpact("p1", "v1", "t_user");
-
-        assertNotNull(resultList);
-        assertTrue(resultList.isEmpty());
+    void testGetFeatureView_DelegatesToReadModel() {
+        var view = new GraphProjectionReadModel.ProjectionView();
+        when(projectionReadModel.getFeatureView(anyString(), anyString(), anyString())).thenReturn(view);
+        Map<String, Object> result = graphQueryService.getFeatureView("p1", "v1", "order");
+        assertNotNull(result);
+        verify(projectionReadModel).getFeatureView("p1", "v1", "order");
     }
 
     @Test
-    void testGetTableImpact_WithResults() {
-        when(neo4jDriver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
-        when(result.hasNext()).thenReturn(true, false);
-        when(result.next()).thenReturn(record);
-        when(record.get("p")).thenReturn(mock(org.neo4j.driver.Value.class));
-        when(record.get("p").asPath()).thenReturn(path);
-
-        when(path.nodes()).thenReturn(Arrays.asList(node1, node2));
-        when(node1.elementId()).thenReturn("node-1");
-        when(node1.labels()).thenReturn(Collections.singletonList("ApiEndpoint"));
-        when(node1.asMap()).thenReturn(Map.of("nodeKey", "POST /api/test", "displayName", "测试接口"));
-        when(node2.elementId()).thenReturn("node-2");
-        when(node2.labels()).thenReturn(Collections.singletonList("Table"));
-        when(node2.asMap()).thenReturn(Map.of("nodeName", "t_user", "displayName", "用户表"));
-
-        when(path.relationships()).thenReturn(Collections.singletonList(relationship));
-        when(relationship.elementId()).thenReturn("rel-1");
-        when(relationship.type()).thenReturn("WRITES");
-        when(relationship.startNodeElementId()).thenReturn("node-1");
-        when(relationship.endNodeElementId()).thenReturn("node-2");
-        when(relationship.asMap()).thenReturn(Map.of("confidence", 0.9));
-
-        List<Map<String, Object>> resultList = graphQueryService.getTableImpact("p1", "v1", "t_user");
-
-        assertNotNull(resultList);
-        assertEquals(1, resultList.size());
-        assertEquals(2, ((List<?>) resultList.get(0).get("nodes")).size());
-        assertEquals(1, ((List<?>) resultList.get(0).get("edges")).size());
+    void testGetBusinessView_DelegatesToReadModel() {
+        var view = new GraphProjectionReadModel.ProjectionView();
+        when(projectionReadModel.getBusinessView(anyString(), anyString(), anyString())).thenReturn(view);
+        Map<String, Object> result = graphQueryService.getBusinessView("p1", "v1", "sales");
+        assertNotNull(result);
+        verify(projectionReadModel).getBusinessView("p1", "v1", "sales");
     }
 
     @Test
-    void testGetFeatureView_EmptyResult() {
-        when(neo4jDriver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
-        when(result.hasNext()).thenReturn(false);
+    void testGetScanVersions_usesSnapshotForTerminalStatus() {
+        // 终态版本有 stats_updated_at → 应直接读快照字段，不查 Neo4j/ScanTask/Fact
+        ScanVersion v = new ScanVersion();
+        v.setId("v-1");
+        v.setProjectId("p1");
+        v.setVersionNo("1.0");
+        v.setScanStatus("SUCCESS");
+        v.setStatsUpdatedAt(LocalDateTime.now());
+        v.setTaskTotal(5); v.setTaskSuccess(5); v.setTaskFailed(0);
+        v.setCurrentStage("COMPLETED");
+        v.setNodeCount(100L); v.setEdgeCount(200L); v.setFactCount(50L);
+        v.setCreatedAt(LocalDateTime.now());
+        v.setStartedAt(LocalDateTime.now());
+        v.setFinishedAt(LocalDateTime.now());
 
-        Map<String, Object> resultMap = graphQueryService.getFeatureView("p1", "v1", "user");
+        Page<ScanVersion> p = new Page<>(1, 10);
+        p.setRecords(List.of(v));
+        p.setTotal(1);
 
-        assertNotNull(resultMap);
-        assertEquals("user", resultMap.get("module"));
-        assertEquals("v1", resultMap.get("versionId"));
-        assertEquals("p1", resultMap.get("projectId"));
-        assertEquals(0, ((List<?>) resultMap.get("nodes")).size());
-        assertEquals(0, ((List<?>) resultMap.get("edges")).size());
-    }
+        // scanVersionRepository.lambdaQuery() 返回的链式调用
+        var chainMock = mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class, RETURNS_DEEP_STUBS);
+        lenient().when(scanVersionRepository.lambdaQuery()).thenReturn(chainMock);
+        lenient().when(chainMock.eq(any(), any())).thenReturn(chainMock);
+        lenient().when(chainMock.orderByDesc(any(com.baomidou.mybatisplus.core.toolkit.support.SFunction.class))).thenReturn(chainMock);
+        lenient().when(chainMock.page(any(Page.class))).thenReturn(p);
 
-    @Test
-    void testGetFeatureView_WithResults() {
-        when(neo4jDriver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
-        when(result.hasNext()).thenReturn(true, false);
-        when(result.next()).thenReturn(record);
-        when(record.get("p")).thenReturn(mock(org.neo4j.driver.Value.class));
-        when(record.get("p").asPath()).thenReturn(path);
-        
-        List<Node> nodes = Collections.singletonList(node1);
-        when(path.nodes()).thenReturn(nodes);
-        when(node1.elementId()).thenReturn("node-1");
-        when(node1.labels()).thenReturn(Collections.singletonList("Feature"));
-        when(node1.asMap()).thenReturn(Map.of("nodeKey", "feature-1", "displayName", "用户功能"));
-        
-        List<Relationship> relationships = Collections.singletonList(relationship);
-        when(path.relationships()).thenReturn(relationships);
-        when(relationship.elementId()).thenReturn("rel-1");
-        when(relationship.type()).thenReturn("CALLS");
-        when(relationship.startNodeElementId()).thenReturn("node-1");
-        when(relationship.endNodeElementId()).thenReturn("node-2");
-        when(relationship.asMap()).thenReturn(Map.of("confidence", 0.9));
+        var result = graphQueryService.getScanVersions("p1", 1, 10);
 
-        Map<String, Object> resultMap = graphQueryService.getFeatureView("p1", "v1", "user");
-
-        assertNotNull(resultMap);
-        assertEquals(1, ((List<?>) resultMap.get("nodes")).size());
-        assertEquals(1, ((List<?>) resultMap.get("edges")).size());
+        assertEquals(1, result.getTotal());
+        Map<String, Object> item = result.getList().get(0);
+        assertEquals("v-1", item.get("id"));
+        assertEquals(100L, item.get("nodeCount"));
+        assertEquals(200L, item.get("edgeCount"));
+        assertEquals(50L, item.get("factCount"));
+        assertEquals(5, item.get("taskCount"));
+        // 终态版本不应触发实时聚合查询
+        verify(scanTaskRepository, never()).lambdaQuery();
     }
 }
