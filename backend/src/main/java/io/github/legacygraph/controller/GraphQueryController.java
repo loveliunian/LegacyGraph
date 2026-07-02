@@ -11,6 +11,8 @@ import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.service.GraphMergeService;
 import io.github.legacygraph.service.GraphQueryService;
+import io.github.legacygraph.service.GapFinderService;
+import io.github.legacygraph.service.KnowledgeClaimService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -42,6 +44,8 @@ public class GraphQueryController {
     private final GraphMergeService graphMergeService;
     private final Neo4jGraphDao neo4jGraphDao;
     private final FeatureSliceBuilder featureSliceBuilder;
+    private final KnowledgeClaimService knowledgeClaimService;
+    private final GapFinderService gapFinderService;
 
     /**
      * 构造函数注入
@@ -52,11 +56,15 @@ public class GraphQueryController {
     public GraphQueryController(GraphQueryService graphQueryService,
                                 GraphMergeService graphMergeService,
                                 Neo4jGraphDao neo4jGraphDao,
-                                FeatureSliceBuilder featureSliceBuilder) {
+                                FeatureSliceBuilder featureSliceBuilder,
+                                KnowledgeClaimService knowledgeClaimService,
+                                GapFinderService gapFinderService) {
         this.graphQueryService = graphQueryService;
         this.graphMergeService = graphMergeService;
         this.neo4jGraphDao = neo4jGraphDao;
         this.featureSliceBuilder = featureSliceBuilder;
+        this.knowledgeClaimService = knowledgeClaimService;
+        this.gapFinderService = gapFinderService;
     }
 
     /**
@@ -256,6 +264,7 @@ public class GraphQueryController {
                 ? neo4jGraphDao.versionGraphStats(projectId, versionId)
                 : neo4jGraphDao.graphStats(projectId));
         ensureQualityDefaults(stats);
+        appendClaimGapStats(stats, projectId, versionId);
         return Result.success(stats);
     }
 
@@ -302,4 +311,38 @@ public class GraphQueryController {
         stats.putIfAbsent("noEvidenceEdges", 0L);
         stats.putIfAbsent("aiOnlyEdges", 0L);
         stats.putIfAbsent("runtimeOnlyEdges", 0L);
-    }}
+        stats.putIfAbsent("claimCount", 0L);
+        stats.putIfAbsent("confirmedClaimCount", 0L);
+        stats.putIfAbsent("pendingClaimCount", 0L);
+        stats.putIfAbsent("conflictedClaimCount", 0L);
+        stats.putIfAbsent("aiOnlyClaimCount", 0L);
+        stats.putIfAbsent("gapCount", 0L);
+        stats.putIfAbsent("openGapCount", 0L);
+        stats.putIfAbsent("highSeverityGapCount", 0L);
+        stats.putIfAbsent("gapCountByType", Collections.emptyMap());
+    }
+
+    private void appendClaimGapStats(Map<String, Object> stats, String projectId, String versionId) {
+        if (versionId == null || versionId.isBlank()
+                || knowledgeClaimService == null || gapFinderService == null) {
+            return;
+        }
+        try {
+            Map<String, Long> claimStatusCounts = knowledgeClaimService.countClaimsByStatus(projectId, versionId);
+            stats.put("claimCount", claimStatusCounts.values().stream().mapToLong(Long::longValue).sum());
+            stats.put("confirmedClaimCount", claimStatusCounts.getOrDefault("CONFIRMED", 0L));
+            stats.put("pendingClaimCount", claimStatusCounts.getOrDefault("PENDING_CONFIRM", 0L));
+            stats.put("conflictedClaimCount", claimStatusCounts.getOrDefault("CONFLICTED", 0L));
+            stats.put("aiOnlyClaimCount", knowledgeClaimService.countAiOnlyClaims(projectId, versionId));
+
+            Map<String, Long> gapStatusCounts = gapFinderService.countGapsByStatus(projectId, versionId);
+            stats.put("gapCount", gapStatusCounts.values().stream().mapToLong(Long::longValue).sum());
+            stats.put("openGapCount", gapStatusCounts.getOrDefault("OPEN", 0L)
+                    + gapStatusCounts.getOrDefault("REOPENED", 0L));
+            stats.put("highSeverityGapCount", gapFinderService.countHighSeverityGaps(projectId, versionId));
+            stats.put("gapCountByType", gapFinderService.countGapsByType(projectId, versionId));
+        } catch (Exception e) {
+            stats.putIfAbsent("claimGapMetricsError", e.getMessage());
+        }
+    }
+}

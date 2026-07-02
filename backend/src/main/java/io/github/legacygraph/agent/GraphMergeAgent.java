@@ -43,7 +43,7 @@ public class GraphMergeAgent {
         variables.put("structScore", String.valueOf(input.structScore));
         variables.put("neighborScore", String.valueOf(input.neighborScore));
         variables.put("evidenceScore", String.valueOf(input.evidenceScore));
-        return llmGateway.callWithTemplate(env.getProjectId(), "graph-merge-decision",
+        return llmGateway.callWithEnvelope(env, "graph-merge-decision",
                 variables, GraphMergeDecision.class);
     }
 

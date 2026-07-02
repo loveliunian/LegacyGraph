@@ -35,6 +35,17 @@ public class GraphQualityReport {
     // 质量评级 A/B/C/D
     private String qualityRating;
 
+    // Claim/Gap 指标（Phase M1-M3）
+    private long claimCount;
+    private long confirmedClaimCount;
+    private long pendingClaimCount;
+    private long conflictedClaimCount;
+    private long aiOnlyClaimCount;
+    private long gapCount;
+    private long openGapCount;
+    private long highSeverityGapCount;
+    private java.util.Map<String, Long> gapCountByType;
+
     @Data
     public static class ConfidenceBin {
         private BigDecimal lowerBound;

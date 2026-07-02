@@ -100,6 +100,10 @@ class ProjectScannerProgressLoggingTest {
         assertThat(messages)
                 .anyMatch(message -> message.contains("Scan task started") && message.contains("DB_DISCOVERY"));
         assertThat(messages)
-                .anyMatch(message -> message.contains("Scan still running") && message.contains("BACKEND_SCAN"));
+                .anyMatch(message -> message.contains("Scan task started") && message.contains("ADAPTER_SCAN"));
+        assertThat(messages)
+                .anyMatch(message -> message.contains("Scan still running")
+                        && message.contains("CODE_SCAN")
+                        && message.contains("Adapter Registry"));
     }
 }

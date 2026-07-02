@@ -11,10 +11,14 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -115,69 +119,102 @@ class LayeredArchitectureTest {
     /**
      * task 包不得直接依赖具体 Extractor（如 JavaControllerExtractor 等），
      * 只依赖 extractors.adapter 包。确保扫描编排通过 Adapter seam 而非硬编码抽取器。
-     *
-     * <p>注：当前 ProjectScanner 仍直接使用具体 Extractor（Phase 1-2 to-do），
-     * 此规则记录违规数但不阻断构建。</p>
      */
     @Test
     void taskPackageShouldNotDependOnConcreteExtractors() {
-        ArchRule rule = classes()
+        ArchRule rule = noClasses()
                 .that().resideInAPackage("..task..")
-                .should().onlyDependOnClassesThat()
-                .resideOutsideOfPackage("..extractors..")
-                .orShould().resideInAnyPackage("..extractors.adapter..");
-        try {
-            rule.check(classes);
-        } catch (AssertionError e) {
-            System.err.println("[ARCH-ADVISORY] task → concrete Extractors violations (Phase 1-2 to-do): "
-                    + e.getMessage().lines().filter(l -> l.contains("depend")).count() + " class(es)");
-        }
+                .should().dependOnClassesThat(new DescribedPredicate<>("concrete extractor outside adapter") {
+                    @Override
+                    public boolean test(JavaClass input) {
+                        return input.getPackageName().contains(".extractors")
+                                && !input.getPackageName().contains(".extractors.adapter");
+                    }
+                });
+        rule.check(classes);
     }
 
     /**
      * service 包不得直接持有 org.neo4j.driver.Driver。
      * 图谱查询应统一走 Neo4jGraphDao 或 Read Model，不直接拼 Cypher。
-     *
-     * <p>注：当前 GraphQueryService 等仍直接注入 Driver（Phase 2.6 to-do），
-     * 此规则记录违规数但不阻断构建，迁移完成后移除 try-catch 恢复严格检查。</p>
      */
     @Test
     void servicePackageShouldNotDependOnNeo4jDriver() {
-        ArchRule rule = classes()
+        ArchRule rule = noClasses()
                 .that().resideInAPackage("..service..")
-                .should().onlyAccessClassesThat()
-                .areNotAssignableTo(org.neo4j.driver.Driver.class);
-        try {
-            rule.check(classes);
-        } catch (AssertionError e) {
-            // Phase 2.6 migration in progress — log violation count, don't block CI
-            System.err.println("[ARCH-ADVISORY] service → Driver violations (Phase 2.6 to-do): " 
-                    + e.getMessage().lines().filter(l -> l.contains("Method")).count() + " method(s)");
-        }
+                .should().dependOnClassesThat().areAssignableTo(org.neo4j.driver.Driver.class);
+        rule.check(classes);
     }
 
     /**
-     * agent 包的高风险 Agent 不允许调用四参 callWithTemplate。
-     * 必须通过 AgentRunContract + 证据策略调用。
-     *
-     * <p>注：当前高风险 Agent 仍在使用四参版本。
-     * 此规则记录违规数但不阻断构建（Phase 3 to-do）。</p>
+     * Agent 只产出结构化结果，不直接写 Repository；持久化统一下沉到 Service 层。
      */
     @Test
-    void highRiskAgentsShouldNotCallFourParamCallWithTemplate() {
-        // 检查 agent 包对 LlmGateway 的直接依赖
-        ArchRule rule = classes()
+    void agentsShouldNotDependOnRepositories() {
+        ArchRule rule = noClasses()
                 .that().resideInAPackage("..agent..")
-                .and().areNotAssignableTo(io.github.legacygraph.agent.adapter.RefactorAgentAdapter.class)
-                .and().areNotAssignableTo(io.github.legacygraph.agent.adapter.MigrationAgentAdapter.class)
-                .should().onlyDependOnClassesThat()
-                .areNotAssignableTo(LlmGateway.class);
-        try {
-            rule.check(classes);
-        } catch (AssertionError e) {
-            System.err.println("[ARCH-ADVISORY] agent → LlmGateway violations (Phase 3 to-do): "
-                    + e.getMessage().lines().filter(l -> l.contains("depend")).count() + " class(es)");
+                .should().dependOnClassesThat().resideInAPackage("..repository..");
+        rule.check(classes);
+    }
+
+    /**
+     * 高风险 Agent 的 AgentEnvelope 入口不允许退回默认四参 callWithTemplate。
+     * 兼容旧 API 可以保留四参调用，但 Envelope 入口必须通过 LlmGateway.callWithEnvelope。
+     */
+    @Test
+    void highRiskAgentEnvelopeEntriesShouldUseEvidenceGateway() throws Exception {
+        String sources = readAgentSources(
+                "PatchPlanAgent.java",
+                "ChangeImpactAgent.java",
+                "FeatureMappingAgent.java",
+                "GraphMergeAgent.java",
+                "TestFailureAnalysisAgent.java",
+                "GapFinderAgent.java");
+
+        assertFalse(sources.contains("callWithTemplate(envelope.getProjectId()"),
+                "AgentEnvelope entry must call callWithEnvelope, not default callWithTemplate");
+        assertFalse(sources.contains("callWithTemplate(env.getProjectId()"),
+                "AgentEnvelope entry must call callWithEnvelope, not default callWithTemplate");
+        assertFalse(sources.contains("return mapFeatures(env.getInput())"),
+                "FeatureMappingAgent envelope entry must not delegate to legacy default-contract API");
+        assertFalse(sources.contains("return analyze(env.getInput())"),
+                "TestFailureAnalysisAgent envelope entry must not delegate to legacy default-contract API");
+    }
+
+    /**
+     * GapFinderAgent 必须使用 AgentEnvelope + callWithEnvelope（Phase M1-M4 架构门禁）。
+     */
+    @Test
+    void gapFinderAgentMustUseAgentEnvelope() throws Exception {
+        Path agentFile = Path.of("src/main/java/io/github/legacygraph/agent/GapFinderAgent.java");
+        if (!Files.exists(agentFile)) {
+            agentFile = Path.of("backend/src/main/java/io/github/legacygraph/agent/GapFinderAgent.java");
         }
+        if (!Files.exists(agentFile)) {
+            return; // skip if file not found
+        }
+        String source = Files.readString(agentFile);
+        assertTrue(source.contains("callWithEnvelope"),
+                "GapFinderAgent must use callWithEnvelope for LLM calls");
+        assertTrue(source.contains("AgentEnvelope"),
+                "GapFinderAgent must reference AgentEnvelope");
+        assertFalse(source.contains("callWithTemplate(projectId"),
+                "GapFinderAgent must not use default callWithTemplate bypassing envelope");
+    }
+
+    private static String readAgentSources(String... fileNames) throws Exception {
+        Path agentDir = Path.of("src/main/java/io/github/legacygraph/agent");
+        if (!Files.exists(agentDir)) {
+            agentDir = Path.of("backend/src/main/java/io/github/legacygraph/agent");
+        }
+        StringBuilder source = new StringBuilder();
+        try (Stream<Path> paths = Files.list(agentDir)) {
+            Set<String> targets = Set.of(fileNames);
+            for (Path path : paths.filter(p -> targets.contains(p.getFileName().toString())).toList()) {
+                source.append(Files.readString(path)).append('\n');
+            }
+        }
+        return source.toString();
     }
 
     private static DescribedPredicate<JavaClass> controllerOutsideBaseline(Set<String> baselineControllerNames) {

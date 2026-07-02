@@ -1,10 +1,14 @@
 package io.github.legacygraph.builder;
 
-import io.github.legacygraph.dao.Neo4jGraphDao;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.legacygraph.entity.EdgeEvidence;
+import io.github.legacygraph.entity.NodeEvidence;
+import io.github.legacygraph.repository.EdgeEvidenceRepository;
+import io.github.legacygraph.repository.NodeEvidenceRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.neo4j.driver.Driver;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
-import org.neo4j.driver.Driver;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -16,7 +20,8 @@ import java.util.Map;
  * <p>
  * 当 EvidenceGraphWriter 在 Neo4j 写入成功但 PG 证据写入失败时，
  * 会将受影响的节点/边标记为 writeStatus=INCOMPLETE。
- * 本对账器扫描这些标记并尝试自动修复（重新关联证据）。
+ * 本对账器扫描这些标记；只有 PostgreSQL 证据关联已补齐时才清除标记，
+ * 否则继续保留在复核队列中。
  * </p>
  *
  * <h3>检测维度</h3>
@@ -31,9 +36,15 @@ import java.util.Map;
 public class GraphWriteReconciler {
 
     private final Driver neo4jDriver;
+    private final NodeEvidenceRepository nodeEvidenceRepository;
+    private final EdgeEvidenceRepository edgeEvidenceRepository;
 
-    public GraphWriteReconciler(Driver neo4jDriver) {
+    public GraphWriteReconciler(Driver neo4jDriver,
+                                NodeEvidenceRepository nodeEvidenceRepository,
+                                EdgeEvidenceRepository edgeEvidenceRepository) {
         this.neo4jDriver = neo4jDriver;
+        this.nodeEvidenceRepository = nodeEvidenceRepository;
+        this.edgeEvidenceRepository = edgeEvidenceRepository;
     }
 
     /**
@@ -50,25 +61,47 @@ public class GraphWriteReconciler {
                 incompleteNodes.size(), incompleteEdges.size(), projectId);
 
         int autoFixed = 0;
-        // 自动修复尝试：清除已经过期的 INCOMPLETE 标记（超过 24h 的视为永久丢失）
+        // 自动修复尝试：仅当 PG 证据关联已经补齐时清除 INCOMPLETE 标记。
         for (IncompleteNode n : incompleteNodes) {
             try {
-                clearIncompleteMark(n.nodeId(), "node");
-                autoFixed++;
+                if (hasNodeEvidence(n.nodeId())) {
+                    clearIncompleteMark(n.nodeId(), "node");
+                    autoFixed++;
+                } else {
+                    log.warn("GraphWriteReconciler: node {} still has no PG evidence, keeping INCOMPLETE",
+                            n.nodeId());
+                }
             } catch (Exception e) {
                 log.warn("Failed to clear INCOMPLETE mark on node {}: {}", n.nodeId(), e.getMessage());
             }
         }
         for (IncompleteEdge e : incompleteEdges) {
             try {
-                clearIncompleteMark(e.edgeId(), "edge");
-                autoFixed++;
+                if (hasEdgeEvidence(e.edgeId())) {
+                    clearIncompleteMark(e.edgeId(), "edge");
+                    autoFixed++;
+                } else {
+                    log.warn("GraphWriteReconciler: edge {} still has no PG evidence, keeping INCOMPLETE",
+                            e.edgeId());
+                }
             } catch (Exception ex) {
                 log.warn("Failed to clear INCOMPLETE mark on edge {}: {}", e.edgeId(), ex.getMessage());
             }
         }
 
         return new ReconciliationResult(incompleteNodes, incompleteEdges, autoFixed);
+    }
+
+    private boolean hasNodeEvidence(String nodeId) {
+        Long count = nodeEvidenceRepository.selectCount(new LambdaQueryWrapper<NodeEvidence>()
+                .eq(NodeEvidence::getNodeId, nodeId));
+        return count != null && count > 0;
+    }
+
+    private boolean hasEdgeEvidence(String edgeId) {
+        Long count = edgeEvidenceRepository.selectCount(new LambdaQueryWrapper<EdgeEvidence>()
+                .eq(EdgeEvidence::getEdgeId, edgeId));
+        return count != null && count > 0;
     }
 
     /** 查找 writeStatus=INCOMPLETE 的节点 */

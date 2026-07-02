@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * LLM 提供商管理服务
@@ -33,6 +35,38 @@ public class LlmProviderService {
     /** B-S4：LLM 调用超时（秒），激活 application.yml 中 legacy-graph.ai.llm-timeout 配置 */
     @Value("${legacy-graph.ai.llm-timeout:120}")
     private long llmTimeoutSeconds;
+
+    /** 匹配 ${VAR} 或 ${VAR:default} 占位符 */
+    private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{([^}:]+)(?::([^}]*))?}");
+
+    /**
+     * 解析字符串中的环境变量占位符 ${VAR} 或 ${VAR:default}。
+     * 例如 {@code resolveEnvVars("${OPENAI_API_KEY}")} → 返回 OPENAI_API_KEY 环境变量的值。
+     * 未匹配到环境变量时使用 default 值（如有），否则抛出 IllegalStateException。
+     */
+    public static String resolveEnvPlaceholders(String value) {
+        if (value == null || value.isBlank()) return value;
+        Matcher m = ENV_PLACEHOLDER.matcher(value);
+        if (!m.find()) return value; // 无占位符，直接返回
+        m.reset();
+        StringBuilder sb = new StringBuilder();
+        while (m.find()) {
+            String varName = m.group(1);
+            String defaultValue = m.group(2);
+            String resolved = System.getenv(varName);
+            if (resolved == null || resolved.isBlank()) {
+                if (defaultValue != null) {
+                    resolved = defaultValue;
+                } else {
+                    throw new IllegalStateException(
+                            "环境变量 " + varName + " 未设置。请在启动前 export " + varName + "=your-key");
+                }
+            }
+            m.appendReplacement(sb, Matcher.quoteReplacement(resolved));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
 
     /**
      * 获取所有提供商
@@ -138,6 +172,8 @@ public class LlmProviderService {
             config = Map.of();
         }
         String apiKey = (String) config.getOrDefault("api_key", "");
+        // 解析环境变量占位符 ${VAR} 或 ${VAR:default}
+        apiKey = resolveEnvPlaceholders(apiKey);
         // 防御：OpenAI Java Client 4.x 不接受空字符串作为 apiKey，给出明确错误
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException(

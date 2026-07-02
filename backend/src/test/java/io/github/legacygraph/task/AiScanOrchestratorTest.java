@@ -12,6 +12,7 @@ import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
+import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
@@ -23,6 +24,8 @@ import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ReviewRecordRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
+import io.github.legacygraph.service.GapFinderService;
+import io.github.legacygraph.service.KnowledgeClaimService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -58,6 +61,8 @@ class AiScanOrchestratorTest {
     @Mock private TestCaseAgent testCaseAgent;
     @Mock private CodeFactAgent codeFactAgent;
     @Mock private BusinessGraphBuilder businessGraphBuilder;
+    @Mock private KnowledgeClaimService knowledgeClaimService;
+    @Mock private GapFinderService gapFinderService;
 
     private AiScanOrchestrator orchestrator;
 
@@ -68,7 +73,22 @@ class AiScanOrchestratorTest {
     void setUp() {
         orchestrator = new AiScanOrchestrator(scanTaskRepository, documentRepository, factRepository,
                 reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
-                featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper());
+                featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper(),
+                knowledgeClaimService, gapFinderService);
+        lenient().when(gapFinderService.scanGaps(anyString(), anyString()))
+                .thenReturn(GapFinderService.GapScanResult.builder()
+                        .created(0)
+                        .reopened(0)
+                        .unchanged(0)
+                        .byType(Map.of())
+                        .build());
+        lenient().when(knowledgeClaimService.upsertDrafts(anyList())).thenReturn(List.of());
+        lenient().when(docUnderstandingAgent.toClaimDrafts(anyString(), anyString(), any(), anyString()))
+                .thenCallRealMethod();
+        lenient().when(codeFactAgent.toClaimDrafts(anyString(), anyString(), any(), anyString()))
+                .thenCallRealMethod();
+        lenient().when(featureMappingAgent.toClaimDrafts(anyString(), anyString(), any()))
+                .thenCallRealMethod();
     }
 
     private GraphNode node(String type, String key, String name, double conf) {
@@ -91,6 +111,7 @@ class AiScanOrchestratorTest {
         // P1-B：enableAi=false 时创建结构化跳过任务，确保在 scan_task 列表中可见
         verify(scanTaskRepository).insert(any(ScanTask.class));
         verify(scanTaskRepository).updateById(any(ScanTask.class));
+        verify(gapFinderService).scanGaps("proj-1", "v1");
         verifyNoInteractions(documentRepository);
         verifyNoInteractions(neo4jGraphDao);
     }
@@ -102,6 +123,7 @@ class AiScanOrchestratorTest {
         // null config 同 enableAi=false：创建结构化跳过任务
         verify(scanTaskRepository).insert(any(ScanTask.class));
         verify(scanTaskRepository).updateById(any(ScanTask.class));
+        verify(gapFinderService).scanGaps("proj-1", "v1");
     }
 
     @Test
@@ -174,15 +196,16 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config);
 
-        // 创建了 5 个子任务（DOC_EXTRACT, CODE_EXTRACT, FEATURE_CODE_MAPPING, FEATURE_MAPPING, REVIEW_PREPARE），未创建 TEST_GENERATE
+        // 创建了 6 个子任务（含 AI_GAP_FINDING），未创建 TEST_GENERATE
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(5)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(6)).insert(taskCaptor.capture());
         List<String> types = taskCaptor.getAllValues().stream().map(ScanTask::getTaskType).toList();
         assertTrue(types.contains("AI_DOC_EXTRACT"));
         assertTrue(types.contains("AI_CODE_EXTRACT"));
         assertTrue(types.contains("AI_FEATURE_CODE_MAPPING"));
         assertTrue(types.contains("AI_FEATURE_MAPPING"));
         assertTrue(types.contains("AI_REVIEW_PREPARE"));
+        assertTrue(types.contains("AI_GAP_FINDING"));
         assertFalse(types.contains("AI_TEST_GENERATE"));
 
         // 仅低置信节点(0.3<0.6)生成审核记录，高置信(0.9)跳过
@@ -227,11 +250,13 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config);
 
-        // 创建了 6 个子任务（DOC_EXTRACT, CODE_EXTRACT, FEATURE_CODE_MAPPING, FEATURE_MAPPING, TEST_GENERATE, REVIEW_PREPARE）
+        // 创建了 7 个子任务（含 AI_GAP_FINDING）
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(6)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(7)).insert(taskCaptor.capture());
         assertTrue(taskCaptor.getAllValues().stream()
                 .anyMatch(t -> "AI_TEST_GENERATE".equals(t.getTaskType())));
+        assertTrue(taskCaptor.getAllValues().stream()
+                .anyMatch(t -> "AI_GAP_FINDING".equals(t.getTaskType())));
 
         // 生成的测试用例被持久化
         verify(testCaseAgent, atLeastOnce()).generateTestCases(any());
@@ -302,6 +327,9 @@ class AiScanOrchestratorTest {
         ArgumentCaptor<ReviewRecord> reviewCaptor = ArgumentCaptor.forClass(ReviewRecord.class);
         verify(reviewRecordRepository).insert(reviewCaptor.capture());
         assertTrue(reviewCaptor.getValue().getComment().contains("订单提交"));
+        verify(knowledgeClaimService, atLeastOnce()).upsertDrafts(argThat(drafts ->
+                containsDraft(drafts, "Feature", "feature:订单提交", "EXPOSED_BY", "Page", "page:/order")
+                        && containsDraft(drafts, "Feature", "feature:订单提交", "IMPLEMENTS", "ApiEndpoint", "api:/order")));
     }
 
     @Test
@@ -364,6 +392,10 @@ class AiScanOrchestratorTest {
         assertTrue(factTypes.contains("STATUS_TRANSITION"));
         assertTrue(factTypes.contains("FEATURE"));
         verify(businessGraphBuilder).buildBusinessGraph(eq("proj-1"), eq("v1"), eq(extraction), anyString());
+        verify(knowledgeClaimService, atLeastOnce()).upsertDrafts(argThat(drafts ->
+                containsDraft(drafts, "Feature", "feature:提交订单", "DESCRIBED_BY", "Evidence", docPath.toString())
+                        && containsDraft(drafts, "BusinessObject", "object:订单", "MENTIONED_IN", "Evidence", docPath.toString())
+                        && containsDraft(drafts, "BusinessRule", "rule:库存校验", "MENTIONED_IN", "Evidence", docPath.toString())));
     }
 
     /**
@@ -433,6 +465,8 @@ class AiScanOrchestratorTest {
         // 验证：businessGraphBuilder 被调用（创建 Feature 图节点）
         verify(businessGraphBuilder, atLeastOnce()).buildBusinessGraph(
                 eq("proj-1"), eq("v1"), any(), eq(codePath.toString()), eq("CODE_AI"));
+        verify(knowledgeClaimService, atLeastOnce()).upsertDrafts(argThat(drafts ->
+                containsDraft(drafts, "Feature", "feature:创建订单", "IMPLEMENTS", "SourceFile", codePath.toString())));
     }
 
     /**
@@ -486,5 +520,15 @@ class AiScanOrchestratorTest {
         // AI_FEATURE_MAPPING 也应在编排中（以 Feature 为锚点）
         assertTrue(taskTypes.contains("AI_FEATURE_MAPPING"),
                 "Auto orchestration should include AI_FEATURE_MAPPING task");
+    }
+
+    private boolean containsDraft(List<KnowledgeClaimDraft> drafts, String subjectType, String subjectKey,
+                                  String predicate, String objectType, String objectKey) {
+        return drafts != null && drafts.stream().anyMatch(d ->
+                subjectType.equals(d.getSubjectType())
+                        && subjectKey.equals(d.getSubjectKey())
+                        && predicate.equals(d.getPredicate())
+                        && objectType.equals(d.getObjectType())
+                        && objectKey.equals(d.getObjectKey()));
     }
 }

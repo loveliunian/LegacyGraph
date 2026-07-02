@@ -10,6 +10,7 @@ import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.http.okhttp.SpringAiOpenAiHttpClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.retry.backoff.FixedBackOffPolicy;
@@ -45,6 +46,7 @@ public class LlmConfig {
     @Bean
     @Primary
     @Profile("!test")
+    @DependsOn("flyway")
     public EmbeddingModel embeddingModel(LlmProviderService llmProviderService) {
         LlmProvider provider = llmProviderService.getByCode("openai-embedding");
         if (provider == null) {
@@ -55,6 +57,8 @@ public class LlmConfig {
         Map<String, Object> config = provider.getApiConfig();
         if (config == null) config = Map.of();
         String apiKey = (String) config.getOrDefault("api_key", "");
+        // 解析环境变量占位符 ${VAR} 或 ${VAR:default}
+        apiKey = io.github.legacygraph.service.LlmProviderService.resolveEnvPlaceholders(apiKey);
         if (apiKey.isBlank()) {
             throw new IllegalStateException("openai-embedding 的 api_key 为空");
         }

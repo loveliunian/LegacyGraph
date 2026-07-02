@@ -10,11 +10,12 @@ import java.util.List;
  * 图谱写入意图（Outbox 模式）。
  * <p>
  * 调用方通过此 DTO 声明"需要写入图谱"，包含节点/边 claims、证据、幂等键。
- * 由 {@code GraphWriteExecutor} 负责幂等写入 Neo4j + PostgreSQL，
- * 失败时标记 INCOMPLETE 进入复核队列。
+ * 当前由 {@code EvidenceGraphWriter#writeIntent} 批量处理，写入失败时由
+ * {@code GraphWriteReconciler} 复核 INCOMPLETE 标记。
  * </p>
  *
- * @see io.github.legacygraph.builder.GraphWriteExecutor
+ * @see io.github.legacygraph.builder.EvidenceGraphWriter#writeIntent(GraphWriteIntent)
+ * @see io.github.legacygraph.builder.GraphWriteReconciler
  */
 @Data
 @Builder

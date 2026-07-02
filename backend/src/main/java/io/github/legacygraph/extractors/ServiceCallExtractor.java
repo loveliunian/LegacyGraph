@@ -44,15 +44,35 @@ public class ServiceCallExtractor {
     public List<CallRelation> extractFromFile(File file) throws IOException {
         List<CallRelation> relations = new ArrayList<>();
         String content = Files.readString(file.toPath());
-        ParseResult<CompilationUnit> result = javaParser.parse(content);
+        ParseResult<CompilationUnit> result;
+        try {
+            result = javaParser.parse(content);
+        } catch (RuntimeException e) {
+            // JavaParser 词法分析器偶发内部崩溃（如 IndexOutOfBounds），重试一次
+            log.warn("JavaParser crashed on first parse attempt (will retry): {} — {}", file.getAbsolutePath(), e.getMessage());
+            content = Files.readString(file.toPath());
+            try {
+                result = javaParser.parse(content);
+            } catch (RuntimeException e2) {
+                log.warn("Failed to parse Java file for service call (JavaParser crash after retry): {}", file.getAbsolutePath());
+                log.warn("Parse error: {}", e2.getMessage());
+                return relations;
+            }
+        }
         if (!result.isSuccessful() || result.getResult().isEmpty()) {
             // 偶发 I/O 竞争导致读入不完整 → 重试一次
             content = Files.readString(file.toPath());
-            result = javaParser.parse(content);
+            try {
+                result = javaParser.parse(content);
+            } catch (RuntimeException e) {
+                log.warn("Failed to parse Java file for service call (JavaParser crash on retry): {}", file.getAbsolutePath());
+                log.warn("Parse error: {}", e.getMessage());
+                return relations;
+            }
         }
         if (!result.isSuccessful() || result.getResult().isEmpty()) {
             log.warn("Failed to parse Java file for service call (after retry): {}", file.getAbsolutePath());
-            log.warn("Parse problems: {}", result.getProblems());
+            logParseProblems(result);
             return relations;
         }
 
@@ -148,6 +168,22 @@ public class ServiceCallExtractor {
             }
         }
         return varToType;
+    }
+
+    /**
+     * 安全输出解析问题概要。使用 getMessage() 仅输出一行描述，
+     * 避免 getVerboseMessage() 输出超长源码上下文或 toString() 打印 stack trace。
+     */
+    private static void logParseProblems(ParseResult<?> result) {
+        var problems = result.getProblems();
+        if (problems == null || problems.isEmpty()) return;
+        for (int i = 0; i < problems.size(); i++) {
+            try {
+                log.warn("Parse problem [{}]: {}", i, problems.get(i).getMessage());
+            } catch (Exception ex) {
+                log.warn("Parse problem [{}]: <FAILED getMessage(): {}>", i, ex.getMessage());
+            }
+        }
     }
 
     /**

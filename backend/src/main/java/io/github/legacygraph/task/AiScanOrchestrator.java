@@ -13,6 +13,7 @@ import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
+import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.entity.Document;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
@@ -21,16 +22,17 @@ import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.extractors.DocumentExtractor;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ReviewRecordRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
+import io.github.legacygraph.service.DocumentContentService;
+import io.github.legacygraph.service.GapFinderService;
+import io.github.legacygraph.service.KnowledgeClaimService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -73,6 +75,9 @@ public class AiScanOrchestrator {
     private final CodeFactAgent codeFactAgent;
     private final BusinessGraphBuilder businessGraphBuilder;
     private final ObjectMapper objectMapper;
+    private final DocumentContentService documentContentService = new DocumentContentService();
+    private final KnowledgeClaimService knowledgeClaimService;
+    private final GapFinderService gapFinderService;
 
     /** 测试生成的高价值节点上限，避免编排耗时过长 */
     private static final int MAX_TEST_GEN_NODES = 20;
@@ -94,7 +99,9 @@ public class AiScanOrchestrator {
                               TestCaseAgent testCaseAgent,
                               CodeFactAgent codeFactAgent,
                               BusinessGraphBuilder businessGraphBuilder,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              KnowledgeClaimService knowledgeClaimService,
+                              GapFinderService gapFinderService) {
         this.scanTaskRepository = scanTaskRepository;
         this.documentRepository = documentRepository;
         this.factRepository = factRepository;
@@ -107,6 +114,8 @@ public class AiScanOrchestrator {
         this.codeFactAgent = codeFactAgent;
         this.businessGraphBuilder = businessGraphBuilder;
         this.objectMapper = objectMapper;
+        this.knowledgeClaimService = knowledgeClaimService;
+        this.gapFinderService = gapFinderService;
     }
 
     /**
@@ -124,6 +133,15 @@ public class AiScanOrchestrator {
                     + "如需生成业务图谱，请在 scanScope 中设置 enableAi=true。",
                     null);
             // completeTask 会把 ⚠ 摘要标为 WARNING，便于任务列表筛选跳过原因
+            // 即使 AI 未启用，仍执行确定性缺口扫描（不依赖 LLM）
+            if (gapFinderService != null) {
+                try {
+                    gapFinderService.scanGaps(projectId, versionId);
+                } catch (Exception gapEx) {
+                    log.warn("Knowledge gap scan failed (non-blocking): versionId={}, err={}",
+                            versionId, gapEx.getMessage());
+                }
+            }
             return;
         }
         log.info("Starting AI orchestration: projectId={}, versionId={}, config={}",
@@ -137,6 +155,7 @@ public class AiScanOrchestrator {
             runTestGenerate(projectId, versionId);
         }
         runReviewPrepare(projectId, versionId, config.getMinConfidence());
+        runKnowledgeGapScan(projectId, versionId);
 
         log.info("AI orchestration completed: versionId={}", versionId);
     }
@@ -151,9 +170,8 @@ public class AiScanOrchestrator {
                             .eq(Document::getProjectId, projectId)
                             .eq(Document::getVersionId, versionId));
             int factCount = 0;
-            DocumentExtractor extractor = new DocumentExtractor();
             for (Document doc : docs) {
-                String content = readDocContent(doc, extractor);
+                String content = readDocContent(doc);
                 if (content == null || content.isBlank()) {
                     continue;
                 }
@@ -163,6 +181,8 @@ public class AiScanOrchestrator {
                                     truncate(content, 8000), doc.getFilePath());
                     factCount += persistBusinessFacts(projectId, versionId, doc, extraction);
                     buildBusinessGraph(projectId, versionId, doc, extraction);
+                    upsertClaimDrafts(projectId, versionId,
+                            docUnderstandingAgent.toClaimDrafts(projectId, versionId, extraction, doc.getFilePath()));
                 } catch (Exception e) {
                     log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
                 }
@@ -277,6 +297,8 @@ public class AiScanOrchestrator {
                         node.getNodeKey(), e.getMessage());
             }
         }
+        upsertClaimDrafts(projectId, versionId,
+                codeFactAgent.toClaimDrafts(projectId, versionId, result, node.getSourcePath()));
         return count;
     }
 
@@ -475,20 +497,23 @@ public class AiScanOrchestrator {
             if (mapping == null) {
                 continue;
             }
-            String targetId = mappingTargetId(mapping);
             try {
                 GraphEdge edge = createPendingFeatureEdge(projectId, versionId, mapping);
                 if (edge != null) {
-                    targetId = edge.getId();
                     persisted++;
+                    if (createMappingReviewRecord(projectId, versionId, mapping, edge.getId())) {
+                        persisted++;
+                    }
+                } else {
+                    log.debug("Skipping review record: no edge created for mapping pageKey={} apiKey={}",
+                            mapping.getPageKey(), mapping.getApiKey());
                 }
             } catch (Exception e) {
-                log.warn("Failed to persist AI feature mapping edge {}: {}", targetId, e.getMessage());
-            }
-            if (createMappingReviewRecord(projectId, versionId, mapping, targetId)) {
-                persisted++;
+                log.warn("Failed to persist AI feature mapping edge: {}", e.getMessage());
             }
         }
+        upsertClaimDrafts(projectId, versionId,
+                featureMappingAgent.toClaimDrafts(projectId, versionId, result));
         return persisted;
     }
 
@@ -742,16 +767,16 @@ public class AiScanOrchestrator {
         }
     }
 
-    private String readDocContent(Document doc, DocumentExtractor extractor) {
+    private String readDocContent(Document doc) {
         if (doc.getFilePath() == null || doc.getFilePath().isBlank()) {
             return null;
         }
         try {
-            File file = new File(doc.getFilePath());
-            if (!file.exists()) {
+            Path filePath = Path.of(doc.getFilePath());
+            if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
                 return null;
             }
-            return extractor.extractText(file);
+            return documentContentService.readText(doc.getFilePath());
         } catch (Exception e) {
             log.debug("Failed to read doc content {}: {}", doc.getFilePath(), e.getMessage());
             return null;
@@ -826,5 +851,40 @@ public class AiScanOrchestrator {
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);
+    }
+
+    // ==================== Knowledge Claim 桥接 ====================
+
+    private void upsertClaimDrafts(String projectId, String versionId,
+                                   List<KnowledgeClaimDraft> drafts) {
+        if (knowledgeClaimService == null || drafts == null || drafts.isEmpty()) {
+            return;
+        }
+        try {
+            knowledgeClaimService.upsertDrafts(drafts);
+        } catch (Exception e) {
+            log.warn("Knowledge claim upsert failed: projectId={}, versionId={}, err={}",
+                    projectId, versionId, e.getMessage());
+        }
+    }
+
+    /**
+     * 扫描结束后执行知识缺口发现（确定性 + LLM 增强）。
+     */
+    private void runKnowledgeGapScan(String projectId, String versionId) {
+        if (gapFinderService == null) {
+            log.debug("GapFinderService not available, skipping gap scan: versionId={}", versionId);
+            return;
+        }
+        ScanTask task = createTask(projectId, versionId, "AI_GAP_FINDING", "知识缺口扫描");
+        try {
+            GapFinderService.GapScanResult result = gapFinderService.scanGaps(projectId, versionId);
+            completeTask(task, "生成知识缺口 " + result.getCreated()
+                    + " 条，重新打开 " + result.getReopened()
+                    + " 条，保持 " + result.getUnchanged() + " 条", null);
+        } catch (Exception e) {
+            log.error("AI_GAP_FINDING failed: versionId={}", versionId, e);
+            completeTask(task, null, e.getMessage());
+        }
     }
 }

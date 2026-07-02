@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.ReportInsightAgent;
 import io.github.legacygraph.dto.ReportInsight;
+import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
 import io.github.legacygraph.entity.GraphEdge;
@@ -60,6 +61,12 @@ class ReportingServiceTest {
     @Mock
     private ReportInsightAgent reportInsightAgent;
 
+    @Mock
+    private KnowledgeClaimService knowledgeClaimService;
+
+    @Mock
+    private GapFinderService gapFinderService;
+
     private ReportingService reportingService;
 
     private List<GraphNode> mockNodes;
@@ -76,7 +83,9 @@ class ReportingServiceTest {
                 minioClient,
                 objectMapper,
                 reportExportService,
-                reportInsightAgent
+                reportInsightAgent,
+                knowledgeClaimService,
+                gapFinderService
         );
 
         GraphNode node1 = new GraphNode();
@@ -244,6 +253,40 @@ class ReportingServiceTest {
         assertEquals(0, report.getTotalNodes());
         assertEquals(0, report.getCoverageRatio().compareTo(BigDecimal.ZERO));
         assertEquals(0, report.getTestPassRatio().compareTo(BigDecimal.ZERO));
+    }
+
+    @Test
+    void testGenerateGraphQualityReport_IncludesClaimAndGapMetrics() {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalNodes", 3L);
+        stats.put("totalEdges", 2L);
+        stats.put("avgConfidence", 0.7);
+        when(neo4jGraphDao.versionGraphStats("project-1", "v1")).thenReturn(stats);
+        when(neo4jGraphDao.averageNodeDegree("project-1", "v1")).thenReturn(1.5);
+        when(neo4jGraphDao.confidenceDistribution("project-1", "v1")).thenReturn(Collections.emptyList());
+        when(neo4jGraphDao.queryLowConfidenceNodes(eq("project-1"), eq("v1"), eq(0.3), anyInt()))
+                .thenReturn(Collections.emptyList());
+        when(neo4jGraphDao.queryDisconnectedNodes(eq("project-1"), eq("v1"), anyInt()))
+                .thenReturn(Collections.emptyList());
+        when(knowledgeClaimService.countClaimsByStatus("project-1", "v1"))
+                .thenReturn(Map.of("CONFIRMED", 2L, "PENDING_CONFIRM", 3L));
+        when(knowledgeClaimService.countAiOnlyClaims("project-1", "v1")).thenReturn(4L);
+        when(gapFinderService.countGapsByStatus("project-1", "v1"))
+                .thenReturn(Map.of("OPEN", 1L, "REOPENED", 1L));
+        when(gapFinderService.countHighSeverityGaps("project-1", "v1")).thenReturn(1L);
+        when(gapFinderService.countGapsByType("project-1", "v1"))
+                .thenReturn(Map.of("doc_only_feature", 2L));
+
+        GraphQualityReport report = reportingService.generateGraphQualityReport("project-1", "v1");
+
+        assertEquals(5L, report.getClaimCount());
+        assertEquals(2L, report.getConfirmedClaimCount());
+        assertEquals(3L, report.getPendingClaimCount());
+        assertEquals(4L, report.getAiOnlyClaimCount());
+        assertEquals(2L, report.getGapCount());
+        assertEquals(2L, report.getOpenGapCount());
+        assertEquals(1L, report.getHighSeverityGapCount());
+        assertEquals(Map.of("doc_only_feature", 2L), report.getGapCountByType());
     }
 
     @Test

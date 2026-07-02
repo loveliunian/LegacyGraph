@@ -1,7 +1,9 @@
 package io.github.legacygraph.agent;
 
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
+import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.PatchPlan;
+import io.github.legacygraph.llm.LlmCallException;
 import io.github.legacygraph.llm.LlmGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,5 +65,70 @@ class PatchPlanAgentTest {
         when(llmGateway.callWithTemplate(any(), any(), anyMap(), eq(PatchPlan.class))).thenReturn(null);
         PatchPlan result = agent.generate("p1", "chg-1", "t", "i", null, null, null);
         assertNull(result);
+    }
+
+    @Test
+    void generateEnvelope_usesEvidenceContractGateway() {
+        PatchPlan raw = PatchPlan.builder().riskLevel("LOW").build();
+        when(llmGateway.callWithEnvelope(any(), eq("patch-plan"), anyMap(), eq(PatchPlan.class)))
+                .thenReturn(raw);
+
+        AgentEnvelope<PatchPlanAgent.PatchPlanInput> envelope = AgentEnvelope.<PatchPlanAgent.PatchPlanInput>builder()
+                .projectId("p1")
+                .taskId("chg-1")
+                .agentType("PatchPlanAgent")
+                .contractId("contract-1")
+                .input(PatchPlanAgent.PatchPlanInput.builder()
+                        .taskId("chg-1")
+                        .title("修复X")
+                        .changeTarget("TicketService")
+                        .inputIssue("空指针")
+                        .dependencySummary("dep summary")
+                        .impactedFiles(List.of("src/A.java"))
+                        .evidenceSummary("evd summary")
+                        .failingTests("TicketServiceTest.fail")
+                        .build())
+                .evidenceCatalog(AgentEnvelope.EvidenceCatalog.builder()
+                        .usedEvidenceIds(List.of("ev-1"))
+                        .requiredEvidenceTypes(List.of("TEST_RESULT"))
+                        .summary("evd summary")
+                        .build())
+                .policy(AgentEnvelope.RequiredEvidencePolicy.strict())
+                .build();
+
+        PatchPlan result = agent.generate(envelope);
+
+        assertEquals("chg-1", result.getTaskId());
+        assertEquals("BUGFIX", result.getTaskType());
+        assertEquals("PatchPlanAgent", result.getGeneratedBy());
+        verify(llmGateway).callWithEnvelope(eq(envelope), eq("patch-plan"), anyMap(), eq(PatchPlan.class));
+        verify(llmGateway, never()).callWithTemplate(any(), any(), anyMap(), eq(PatchPlan.class));
+    }
+
+    @Test
+    void generateEnvelope_strictMissingEvidenceReturnsManualReviewPlan() {
+        when(llmGateway.callWithEnvelope(any(), eq("patch-plan"), anyMap(), eq(PatchPlan.class)))
+                .thenThrow(new LlmCallException("Required evidence missing", null, true, null));
+
+        AgentEnvelope<PatchPlanAgent.PatchPlanInput> envelope = AgentEnvelope.<PatchPlanAgent.PatchPlanInput>builder()
+                .projectId("p1")
+                .taskId("chg-1")
+                .input(PatchPlanAgent.PatchPlanInput.builder()
+                        .taskId("chg-1")
+                        .title("修复X")
+                        .build())
+                .evidenceCatalog(AgentEnvelope.EvidenceCatalog.builder()
+                        .requiredEvidenceTypes(List.of("TEST_RESULT"))
+                        .build())
+                .policy(AgentEnvelope.RequiredEvidencePolicy.strict())
+                .build();
+
+        PatchPlan result = agent.generate(envelope);
+
+        assertNotNull(result);
+        assertTrue(result.isManualReviewNeeded());
+        assertEquals("chg-1", result.getTaskId());
+        assertEquals("BUGFIX", result.getTaskType());
+        assertEquals("PatchPlanAgent", result.getGeneratedBy());
     }
 }

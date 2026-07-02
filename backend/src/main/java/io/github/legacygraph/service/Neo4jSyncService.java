@@ -1,16 +1,11 @@
 package io.github.legacygraph.service;
 
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import lombok.extern.slf4j.Slf4j;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.Session;
-import org.neo4j.driver.Transaction;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Neo4j 同步服务（已废弃：图谱数据直接写入 Neo4j，不再需要从 PG 同步）
@@ -21,21 +16,15 @@ import java.util.Map;
 public class Neo4jSyncService {
 
     private final Neo4jGraphDao neo4jGraphDao;
-    private final Driver neo4jDriver;
 
-    public Neo4jSyncService(Neo4jGraphDao neo4jGraphDao, Driver neo4jDriver) {
+    public Neo4jSyncService(Neo4jGraphDao neo4jGraphDao) {
         this.neo4jGraphDao = neo4jGraphDao;
-        this.neo4jDriver = neo4jDriver;
     }
 
     /** @deprecated 图谱数据已直写 Neo4j，此方法仅做版本清理 */
     @Deprecated
     public void syncGraph(String projectId, String versionId) {
         log.info("Clearing Neo4j graph before rescan: projectId={}, versionId={}", projectId, versionId);
-        neo4jGraphDao.deleteGraph(projectId, versionId);
-    }
-
-    private void deleteExistingGraph(Session session, String projectId, String versionId) {
         neo4jGraphDao.deleteGraph(projectId, versionId);
     }
 

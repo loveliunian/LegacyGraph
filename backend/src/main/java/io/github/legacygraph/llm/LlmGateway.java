@@ -1,6 +1,7 @@
 package io.github.legacygraph.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.AgentRunContract;
 import io.github.legacygraph.entity.AgentRun;
 import io.github.legacygraph.entity.LlmProvider;
@@ -21,6 +22,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -92,6 +95,21 @@ public class LlmGateway {
                 .outputSchemaVersion("1.0")
                 .build();
         return callWithTemplate(projectId, templateName, variables, responseType, contract);
+    }
+
+    /**
+     * 通过 AgentEnvelope 调用 LLM。
+     * <p>Envelope 是高风险 Agent 的证据约束 Interface：网关在渲染 prompt、查询 provider、
+     * 写 PromptRun/AgentRun 之前先校验 RequiredEvidencePolicy，缺必填证据时直接进入人工复核路径。</p>
+     */
+    public <T> T callWithEnvelope(AgentEnvelope<?> envelope, String templateName,
+                                  Map<String, String> variables, Class<T> responseType) {
+        if (envelope == null) {
+            throw new IllegalArgumentException("AgentEnvelope must not be null");
+        }
+        validateEvidencePolicy(envelope);
+        AgentRunContract contract = toContract(envelope, templateName);
+        return callWithTemplate(envelope.getProjectId(), templateName, variables, responseType, contract);
     }
 
     /**
@@ -256,6 +274,70 @@ public class LlmGateway {
         }
     }
 
+    private AgentRunContract toContract(AgentEnvelope<?> envelope, String templateName) {
+        AgentEnvelope.EvidenceCatalog catalog = envelope.getEvidenceCatalog();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (catalog != null && catalog.getMetadata() != null) {
+            metadata.putAll(catalog.getMetadata());
+        }
+        if (catalog != null && catalog.getRequiredEvidenceTypes() != null) {
+            metadata.put("requiredEvidenceTypes", catalog.getRequiredEvidenceTypes());
+        }
+        AgentEnvelope.RequiredEvidencePolicy policy = envelope.getPolicy();
+        if (policy != null) {
+            metadata.put("evidencePolicyMode", policy.getMode());
+            metadata.put("failOnMissingEvidence", policy.isFailOnMissing());
+            metadata.put("allowAiInference", policy.isAllowAiInference());
+        }
+        if (envelope.getTaskId() != null) {
+            metadata.put("taskId", envelope.getTaskId());
+        }
+
+        return AgentRunContract.builder()
+                .contractId(envelope.getContractId())
+                .projectId(envelope.getProjectId())
+                .agentType(hasText(envelope.getAgentType()) ? envelope.getAgentType() : templateName)
+                .agentName(hasText(envelope.getAgentType()) ? envelope.getAgentType() : templateName)
+                .inputSchemaVersion(hasText(envelope.getSchemaVersion()) ? envelope.getSchemaVersion() : "1.0")
+                .outputSchemaVersion("1.0")
+                .usedEvidenceIds(catalog != null ? catalog.getUsedEvidenceIds() : null)
+                .omittedBecause(catalog != null ? catalog.getOmittedBecause() : null)
+                .metadata(metadata.isEmpty() ? null : metadata)
+                .build();
+    }
+
+    private void validateEvidencePolicy(AgentEnvelope<?> envelope) {
+        AgentEnvelope.RequiredEvidencePolicy policy = envelope.getPolicy();
+        if (policy == null) {
+            return;
+        }
+        boolean requiresEvidence = policy.isFailOnMissing()
+                || "REQUIRE".equalsIgnoreCase(policy.getMode());
+        if (!requiresEvidence) {
+            return;
+        }
+
+        AgentEnvelope.EvidenceCatalog catalog = envelope.getEvidenceCatalog();
+        List<String> usedEvidenceIds = catalog != null ? catalog.getUsedEvidenceIds() : null;
+        boolean hasEvidenceIds = usedEvidenceIds != null
+                && usedEvidenceIds.stream().anyMatch(this::hasText);
+        if (hasEvidenceIds) {
+            return;
+        }
+
+        List<String> requiredTypes = catalog != null ? catalog.getRequiredEvidenceTypes() : null;
+        String required = requiredTypes == null || requiredTypes.isEmpty()
+                ? "evidence"
+                : String.join(",", requiredTypes);
+        throw new LlmCallException(
+                "Required evidence missing for " + required + " (agent="
+                        + (hasText(envelope.getAgentType()) ? envelope.getAgentType() : "unknown")
+                        + ", taskId=" + envelope.getTaskId() + ")",
+                null,
+                true,
+                null);
+    }
+
     /**
      * doc 4.4：对发往外部模型的 prompt 做 PII + 密钥脱敏，返回安全内容。
      */
@@ -281,6 +363,10 @@ public class LlmGateway {
     private String truncate(String s, int max) {
         if (s == null) return "";
         return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**

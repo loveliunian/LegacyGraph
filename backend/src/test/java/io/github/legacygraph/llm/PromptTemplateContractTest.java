@@ -179,6 +179,15 @@ class PromptTemplateContractTest {
     }
 
     @Test
+    void gapFinder_variablesCoveredByAgent() {
+        Set<String> agentVars = Set.of("gapTask", "claims", "evidence");
+        Set<String> templateVars = placeholdersOf("gap-finder");
+        assertTrue(agentVars.containsAll(templateVars),
+                "gap-finder 含 Agent 未提供的变量: " + diff(templateVars, agentVars));
+        assertFullyRendered("gap-finder", mapOfKeys(agentVars));
+    }
+
+    @Test
     void refactorSuggestion_variablesCoveredByAgent() {
         Set<String> agentVars = Set.of("target", "smellType", "code");
         Set<String> templateVars = placeholdersOf("refactor-suggestion");

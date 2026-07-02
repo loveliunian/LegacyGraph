@@ -18,7 +18,7 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="扫描类型" width="160">
+      <el-table-column label="扫描类型" width="130">
         <template #default="{ row }">
           <div class="scan-types">
             <el-tag
@@ -32,11 +32,10 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" width="80" align="center">
         <template #default="{ row }">
-          <el-tag size="small" :type="getStatusType(row.status)">
-            {{ getStatusText(row.status) }}
-          </el-tag>
+          <span class="status-dot" :class="'status-' + row.status?.toLowerCase()" />
+          <span class="status-text">{{ getStatusText(row.status) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="进度" width="170">
@@ -53,32 +52,29 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="当前阶段" width="120">
+      <el-table-column label="当前阶段" width="110">
         <template #default="{ row }">
-          <span v-if="row.stage && row.stage !== '-'" class="stage-text">
-            <el-icon class="is-loading" v-if="row.status === 'RUNNING'"><Loading /></el-icon>
-            <el-tag size="small" :type="getStageTagType(row.stage)">{{ getStageText(row.stage) }}</el-tag>
-          </span>
+          <div class="stage-cell" v-if="row.stage && row.stage !== '-'">
+            <span class="stage-indicator" :class="{ 'is-active': row.status === 'RUNNING' }" />
+            <span class="stage-label">{{ getStageText(row.stage) }}</span>
+          </div>
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="图谱统计" width="200">
+      <el-table-column label="图谱统计" width="110">
         <template #default="{ row }">
-          <div class="graph-stats">
-            <span class="stat-item" v-if="row.nodeCount">
-              <span class="stat-val">{{ row.nodeCount }}</span>
-              <span class="stat-lbl">节点</span>
+          <div class="graph-stats" v-if="row.nodeCount || row.edgeCount || row.factCount">
+            <span class="stat-line" v-if="row.nodeCount">
+              <em class="stat-num">{{ row.nodeCount }}</em> 节点
             </span>
-            <span class="stat-item" v-if="row.edgeCount">
-              <span class="stat-val">{{ row.edgeCount }}</span>
-              <span class="stat-lbl">关系</span>
+            <span class="stat-line" v-if="row.edgeCount">
+              <em class="stat-num">{{ row.edgeCount }}</em> 关系
             </span>
-            <span class="stat-item" v-if="row.factCount">
-              <span class="stat-val">{{ row.factCount }}</span>
-              <span class="stat-lbl">事实</span>
+            <span class="stat-line" v-if="row.factCount">
+              <em class="stat-num">{{ row.factCount }}</em> 事实
             </span>
-            <span v-if="!row.nodeCount && !row.edgeCount && !row.factCount" class="text-gray">-</span>
           </div>
+          <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
       <el-table-column label="耗时" width="90" align="center">
@@ -93,14 +89,16 @@
           <span v-else class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
-          <el-button type="primary" link size="small" @click="compareWithPrevious(row)">对比</el-button>
-          <el-button v-if="row.status === 'RUNNING'" type="warning" link size="small" @click="pauseScan(row)">暂停</el-button>
-          <el-button v-if="row.status === 'PAUSED'" type="success" link size="small" @click="resumeScan(row)">恢复</el-button>
-          <el-button v-if="row.status === 'RUNNING'" type="danger" link size="small" @click="stopScan(row)">停止</el-button>
-          <el-button type="danger" link size="small" @click="deleteVersion(row)">删除</el-button>
+          <div class="action-buttons">
+            <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
+            <el-button type="primary" link size="small" @click="compareWithPrevious(row)">对比</el-button>
+            <el-button v-if="row.status === 'RUNNING'" type="warning" link size="small" @click="pauseScan(row)">暂停</el-button>
+            <el-button v-if="row.status === 'PAUSED'" type="success" link size="small" @click="resumeScan(row)">恢复</el-button>
+            <el-button v-if="row.status === 'RUNNING'" type="danger" link size="small" @click="stopScan(row)">停止</el-button>
+            <el-button type="danger" link size="small" @click="deleteVersion(row)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -168,7 +166,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Loading } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { t } from '@/locales'
 import { scanApi } from '@/api'
@@ -497,35 +495,105 @@ onUnmounted(() => {
   text-align: right;
 }
 
+/* 状态指示 */
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  background-color: #909399;
+}
+
+.status-dot.status-running,
+.status-dot.status-processing {
+  background-color: #409eff;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-dot.status-success,
+.status-dot.status-completed {
+  background-color: #67c23a;
+}
+
+.status-dot.status-failed {
+  background-color: #f56c6c;
+}
+
+.status-dot.status-paused {
+  background-color: #e6a23c;
+}
+
+.status-dot.status-created,
+.status-dot.status-pending {
+  background-color: #909399;
+}
+
+.status-dot.status-cancelled {
+  background-color: #c0c4cc;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.status-text {
+  font-size: 12px;
+  color: #303133;
+  vertical-align: middle;
+}
+
 /* 当前阶段 */
-.stage-text {
+.stage-cell {
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
-/* 图谱统计：内联紧凑排列 */
+.stage-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #409eff;
+  flex-shrink: 0;
+}
+
+.stage-indicator.is-active {
+  background-color: #67c23a;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.stage-label {
+  font-size: 12px;
+  color: #303133;
+  line-height: 1.4;
+}
+
+/* 图谱统计：纵向紧凑排列 */
 .graph-stats {
   display: flex;
-  gap: 12px;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
 }
 
-.stat-item {
-  display: flex;
-  align-items: baseline;
-  gap: 3px;
+.stat-line {
+  font-size: 12px;
+  color: #606266;
+  white-space: nowrap;
 }
 
-.stat-val {
+.stat-num {
+  font-style: normal;
   font-weight: 600;
-  font-size: 14px;
   color: #303133;
-}
-
-.stat-lbl {
-  font-size: 11px;
-  color: #909399;
+  min-width: 24px;
+  display: inline-block;
+  text-align: right;
+  margin-right: 2px;
 }
 
 .duration-text {
@@ -538,6 +606,23 @@ onUnmounted(() => {
   font-size: 12px;
   color: #606266;
   white-space: nowrap;
+}
+
+/* 操作列按钮组：紧凑排列，不换行 */
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+}
+
+.action-buttons .el-button + .el-button {
+  margin-left: 0;
+}
+
+.action-buttons .el-button--small.is-link {
+  padding: 0 2px;
+  height: auto;
 }
 
 .pagination-wrapper {

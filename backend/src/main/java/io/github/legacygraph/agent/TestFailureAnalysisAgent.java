@@ -29,10 +29,22 @@ public class TestFailureAnalysisAgent {
 
     /** Phase 3-1: AgentEnvelope 合约入口 */
     public TestFailureAnalysis analyzeFromEnvelope(AgentEnvelope<FailureContext> env) {
-        return analyze(env.getInput());
+        FailureContext ctx = env.getInput();
+        if (ctx == null) {
+            return null;
+        }
+        Map<String, String> variables = buildVariables(ctx);
+        return llmGateway.callWithEnvelope(env, "test-failure-analysis",
+                variables, TestFailureAnalysis.class);
     }
 
     public TestFailureAnalysis analyze(FailureContext ctx) {
+        Map<String, String> variables = buildVariables(ctx);
+        return llmGateway.callWithTemplate(ctx.getProjectId(), "test-failure-analysis",
+                variables, TestFailureAnalysis.class);
+    }
+
+    private Map<String, String> buildVariables(FailureContext ctx) {
         Map<String, String> variables = new HashMap<>();
         variables.put("caseName", nz(ctx.getCaseName()));
         variables.put("targetNode", nz(ctx.getTargetNode()));
@@ -41,8 +53,7 @@ public class TestFailureAnalysisAgent {
         variables.put("errorMessage", nz(ctx.getErrorMessage()));
         variables.put("graphPath", nz(ctx.getGraphPath()));
         variables.put("recentTrace", nz(ctx.getRecentTrace()));
-        return llmGateway.callWithTemplate(ctx.getProjectId(), "test-failure-analysis",
-                variables, TestFailureAnalysis.class);
+        return variables;
     }
 
     private String nz(String s) { return s != null ? s : ""; }

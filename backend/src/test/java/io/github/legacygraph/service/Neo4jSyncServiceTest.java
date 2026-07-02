@@ -7,9 +7,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.Session;
-import org.neo4j.driver.Transaction;
 
 import java.math.BigDecimal;
 import java.util.Collections;
@@ -25,19 +22,13 @@ class Neo4jSyncServiceTest {
     @Mock
     private Neo4jGraphDao neo4jGraphDao;
 
-    @Mock
-    private Driver neo4jDriver;
-
-    @Mock
-    private Session session;
-
     private Neo4jSyncService neo4jSyncService;
 
     private GraphNode testNode;
 
     @BeforeEach
     void setUp() {
-        neo4jSyncService = new Neo4jSyncService(neo4jGraphDao, neo4jDriver);
+        neo4jSyncService = new Neo4jSyncService(neo4jGraphDao);
 
         testNode = new GraphNode();
         testNode.setId("node-1");
@@ -101,7 +92,7 @@ class Neo4jSyncServiceTest {
 
     @Test
     void testConstructor_InjectionCorrect() {
-        Neo4jSyncService service = new Neo4jSyncService(neo4jGraphDao, neo4jDriver);
+        Neo4jSyncService service = new Neo4jSyncService(neo4jGraphDao);
         assertNotNull(service);
     }
 }

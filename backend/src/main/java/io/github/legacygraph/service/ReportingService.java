@@ -8,6 +8,8 @@ import io.github.legacygraph.dto.report.GraphMetricsReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
+import io.github.legacygraph.service.GapFinderService;
+import io.github.legacygraph.service.KnowledgeClaimService;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.Report;
 import io.github.legacygraph.entity.TestCase;
@@ -54,6 +56,8 @@ public class ReportingService {
     private final ObjectMapper objectMapper;
     private final ReportExportService reportExportService;
     private final ReportInsightAgent reportInsightAgent;
+    private final KnowledgeClaimService knowledgeClaimService;
+    private final GapFinderService gapFinderService;
 
     // B-M7：原为 "legacygraph-reports"，与 application.yml 的 minio.bucket-name 不一致，统一为 legacy-graph
     private final String bucketName = "legacy-graph";
@@ -65,7 +69,9 @@ public class ReportingService {
                            MinioClient minioClient,
                            ObjectMapper objectMapper,
                            ReportExportService reportExportService,
-                           ReportInsightAgent reportInsightAgent) {
+                           ReportInsightAgent reportInsightAgent,
+                           KnowledgeClaimService knowledgeClaimService,
+                           GapFinderService gapFinderService) {
         this.reportRepository = reportRepository;
         this.neo4jGraphDao = neo4jGraphDao;
         this.testResultRepository = testResultRepository;
@@ -75,6 +81,8 @@ public class ReportingService {
         this.objectMapper = objectMapper;
         this.reportExportService = reportExportService;
         this.reportInsightAgent = reportInsightAgent;
+        this.knowledgeClaimService = knowledgeClaimService;
+        this.gapFinderService = gapFinderService;
     }
 
     /**
@@ -427,6 +435,26 @@ public class ReportingService {
             report.setQualityRating("C");
         } else {
             report.setQualityRating("D");
+        }
+
+        // Claim/Gap 指标（Phase M1-M3）
+        try {
+            Map<String, Long> claimStatusCounts = knowledgeClaimService.countClaimsByStatus(projectId, versionId);
+            report.setClaimCount(claimStatusCounts.values().stream().mapToLong(Long::longValue).sum());
+            report.setConfirmedClaimCount(claimStatusCounts.getOrDefault("CONFIRMED", 0L));
+            report.setPendingClaimCount(claimStatusCounts.getOrDefault("PENDING_CONFIRM", 0L));
+            report.setConflictedClaimCount(claimStatusCounts.getOrDefault("CONFLICTED", 0L));
+            report.setAiOnlyClaimCount(knowledgeClaimService.countAiOnlyClaims(projectId, versionId));
+
+            Map<String, Long> gapStatusCounts = gapFinderService.countGapsByStatus(projectId, versionId);
+            report.setGapCount(gapStatusCounts.values().stream().mapToLong(Long::longValue).sum());
+            report.setOpenGapCount(gapStatusCounts.getOrDefault("OPEN", 0L)
+                    + gapStatusCounts.getOrDefault("REOPENED", 0L));
+            report.setHighSeverityGapCount(gapFinderService.countHighSeverityGaps(projectId, versionId));
+            report.setGapCountByType(gapFinderService.countGapsByType(projectId, versionId));
+        } catch (Exception e) {
+            log.warn("Failed to load Claim/Gap metrics for quality report: projectId={}, versionId={}, err={}",
+                    projectId, versionId, e.getMessage());
         }
 
         saveReport(projectId, "GRAPH_QUALITY", "图谱质量报告");

@@ -35,7 +35,7 @@ public class ChangeImpactAgent {
         variables.put("changeDescription", input.changeDescription != null ? input.changeDescription : "");
         variables.put("dependencies", input.dependencies != null ? input.dependencies : "");
 
-        return llmGateway.callWithTemplate(envelope.getProjectId(), "change-impact",
+        return llmGateway.callWithEnvelope(envelope, "change-impact",
                 variables, ChangeImpactAnalysis.class);
     }
 

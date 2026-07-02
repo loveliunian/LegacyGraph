@@ -11,27 +11,18 @@ import io.github.legacygraph.entity.Document;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
-import io.github.legacygraph.extractors.DatabaseMetadataExtractor;
-import io.github.legacygraph.extractors.FrontendApiExtractor;
-import io.github.legacygraph.extractors.JavaControllerExtractor;
-import io.github.legacygraph.extractors.MyBatisXmlExtractor;
-import io.github.legacygraph.extractors.ServiceCallExtractor;
-import io.github.legacygraph.extractors.SqlTableExtractor;
-import io.github.legacygraph.extractors.VueRouteExtractor;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
 import io.github.legacygraph.extractors.adapter.ExtractionResult;
 import io.github.legacygraph.extractors.adapter.ScanContext;
 import io.github.legacygraph.extractors.adapter.SourceAsset;
-import io.github.legacygraph.model.ApiFact;
-import io.github.legacygraph.model.FrontendPageFact;
-import io.github.legacygraph.model.MapperSqlFact;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
+import io.github.legacygraph.service.DatabaseMetadataScanService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -79,6 +70,7 @@ public class ProjectScanner {
     private final AiScanOrchestrator aiScanOrchestrator;
     private final DbSchemaAnalysisAgent dbSchemaAnalysisAgent;
     private final ExtractionAdapterRegistry extractionAdapterRegistry;
+    private final DatabaseMetadataScanService databaseMetadataScanService;
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -157,6 +149,7 @@ public class ProjectScanner {
         this.aiScanOrchestrator = aiScanOrchestrator;
         this.dbSchemaAnalysisAgent = dbSchemaAnalysisAgent;
         this.extractionAdapterRegistry = extractionAdapterRegistry;
+        this.databaseMetadataScanService = new DatabaseMetadataScanService(graphBuilder);
     }
 
     /**
@@ -301,45 +294,19 @@ public class ProjectScanner {
             completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
             log.info("Adapter registry scan processed {} assets", adapterCount);
 
-            // Phase 1-2: Adapter 已覆盖时跳过旧硬编码扫描（避免双轨重复扫描）
-            boolean skipLegacyScans = adapterCount > 0;
-            if (skipLegacyScans) {
-                log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=skipped (adapters covered {} assets)",
-                        projectId, versionId, adapterCount);
-            }
-
             // === 1. 代码扫描阶段：Java / Service / MyBatis / 前端 ===
-            // 仅在未指定 scanTypes 或包含 CODE_SCAN 时执行
+            // Phase 1-2: 结构化代码抽取统一由 Adapter Registry 承接，不再回退到旧硬编码 Extractor 链。
             if (isCancelled(versionId)) return;
             boolean shouldScanCode = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("CODE_SCAN");
-            if (shouldScanCode && !skipLegacyScans) {
-            log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=starting code scan phase",
-                    projectId, versionId);
-
-            // 1. 扫描Java文件获取Controller接口
-            ScanTask javaTask = createTask(projectId, versionId, "BACKEND_SCAN", "Java代码扫描");
-            int apiCount = scanJavaControllers(projectId, versionId, backendDir, javaTask);
-            completeTask(javaTask, "Scanned " + apiCount + " APIs", null);
-            log.info("Completed Java controller scan, found {} APIs", apiCount);
-
-            // 1.5 扫描Service调用关系
-            ScanTask serviceCallTask = createTask(projectId, versionId, "SERVICE_CALL_SCAN", "Service调用关系扫描");
-            int callCount = scanServiceCalls(projectId, versionId, backendDir, serviceCallTask);
-            completeTask(serviceCallTask, "Scanned " + callCount + " service call relations", null);
-            log.info("Completed service call scan, found {} call relations", callCount);
-
-            // 2. 扫描MyBatis XML文件
-            ScanTask mapperTask = createTask(projectId, versionId, "MAPPER_SCAN", "MyBatis XML扫描");
-            int mapperCount = scanMyBatisXml(projectId, versionId, backendDir, mapperTask);
-            completeTask(mapperTask, "Scanned " + mapperCount + " mappers", null);
-            log.info("Completed MyBatis XML scan, found {} mappers", mapperCount);
-
-            // 3. 扫描前端文件 (Vue路由和API调用)
-            ScanTask frontendTask = createTask(projectId, versionId, "FRONTEND_SCAN", "前端文件扫描");
-            int frontendCount = scanFrontendFiles(projectId, versionId, frontendDir, frontendTask);
-            completeTask(frontendTask, "Scanned " + frontendCount + " frontend pages/APIs", null);
-            log.info("Completed frontend file scan, found {} pages/APIs", frontendCount);
+            if (shouldScanCode) {
+                if (adapterCount > 0) {
+                    log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=completed by Adapter Registry ({} assets)",
+                            projectId, versionId, adapterCount);
+                } else {
+                    log.warn("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=no supported source assets found by Adapter Registry",
+                            projectId, versionId);
+                }
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=skipped (CODE_SCAN not in scanTypes)",
                         projectId, versionId);
@@ -369,7 +336,7 @@ public class ProjectScanner {
                 for (DbConnection conn : dbConnections) {
                     try {
                         DataSource dataSource = createDataSource(conn);
-                        totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn.getSchemaName());
+                        totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn.getSchemaName(), conn.getDbType());
                     } catch (Exception e) {
                         log.warn("Failed to scan database connection {}: {}", conn.getId(), e.getMessage());
                     } finally {
@@ -687,10 +654,10 @@ public class ProjectScanner {
                     Map<String, Object> dsMap = (Map<String, Object>) ds;
                     // 标准 spring.datasource.{url,username,password,driver-class-name}
                     if (dsMap.get("url") instanceof String url) extractUrlAndParse(result, url);
-                    if (dsMap.get("username") instanceof String u) result.put("username", u);
-                    if (dsMap.get("password") instanceof String p) result.put("password", p);
-                    if (dsMap.get("driver-class-name") instanceof String d) result.put("dbType", driverToDbType(d));
-                    if (dsMap.get("driverClassName") instanceof String dc) result.put("dbType", driverToDbType(dc));
+                    if (dsMap.get("username") instanceof String u) result.put("username", resolvePlaceholder(u));
+                    if (dsMap.get("password") instanceof String p) result.put("password", resolvePlaceholder(p));
+                    if (dsMap.get("driver-class-name") instanceof String d) result.putIfAbsent("dbType", driverToDbType(resolvePlaceholder(d)));
+                    if (dsMap.get("driverClassName") instanceof String dc) result.putIfAbsent("dbType", driverToDbType(resolvePlaceholder(dc)));
 
                     // Druid 嵌套: spring.datasource.druid.master.{url,username,password}
                     Object druid = dsMap.get("druid");
@@ -704,7 +671,7 @@ public class ProjectScanner {
                             if (masterMap.get("url") instanceof String mu) extractUrlAndParse(result, mu);
                             if (masterMap.get("username") instanceof String mu) result.putIfAbsent("username", mu);
                             if (masterMap.get("password") instanceof String mp) result.putIfAbsent("password", mp);
-                            if (masterMap.get("driver-class-name") instanceof String md) result.putIfAbsent("dbType", driverToDbType(md));
+                            if (masterMap.get("driver-class-name") instanceof String md) result.putIfAbsent("dbType", driverToDbType(resolvePlaceholder(md)));
                         }
                     }
 
@@ -740,11 +707,11 @@ public class ProjectScanner {
                 result.put("url", resolved);
                 parseJdbcUrl(resolved, result);
             } else if (line.startsWith("spring.datasource.username")) {
-                result.put("username", extractPropertyValue(line));
+                result.put("username", resolvePlaceholder(extractPropertyValue(line)));
             } else if (line.startsWith("spring.datasource.password")) {
-                result.put("password", extractPropertyValue(line));
+                result.put("password", resolvePlaceholder(extractPropertyValue(line)));
             } else if (line.startsWith("spring.datasource.driver-class-name")) {
-                result.put("dbType", driverToDbType(extractPropertyValue(line)));
+                result.putIfAbsent("dbType", driverToDbType(resolvePlaceholder(extractPropertyValue(line))));
             }
         }
     }
@@ -1014,6 +981,11 @@ public class ProjectScanner {
         dataSource.setUsername(conn.getUsername());
         dataSource.setPassword(conn.getPassword() != null ? conn.getPassword() : "");
         dataSource.setDriverClassName(getDriverClassName(conn.getDbType()));
+        // 设置连接超时属性，避免卡死
+        Properties props = new Properties();
+        props.setProperty("connectTimeout", "10");
+        props.setProperty("socketTimeout", "30");
+        dataSource.setConnectionProperties(props);
         return dataSource;
     }
 
@@ -1037,7 +1009,7 @@ public class ProjectScanner {
         if (dbType == null) return "org.postgresql.Driver";
         return switch (dbType.toLowerCase()) {
             case "postgresql" -> "org.postgresql.Driver";
-            case "mysql" -> "com.mysql.cj.jdbc.Driver";
+            case "mysql", "mariadb" -> "com.mysql.cj.jdbc.Driver";
             default -> "org.postgresql.Driver";
         };
     }
@@ -1205,303 +1177,8 @@ public class ProjectScanner {
         return null;
     }
 
-    /**
-     * @deprecated 由 Adapter 扫描链路替代（Phase 1-2）。
-     * 保留作为兜底，未来版本将删除。新抽取能力请通过 {@link ExtractionAdapter} 添加。
-     */
-    @Deprecated
-    private int scanJavaControllers(String projectId, String versionId, String baseDir, ScanTask task) {
-        if (baseDir == null) return 0;
-        JavaControllerExtractor extractor = new JavaControllerExtractor();
-        try {
-            List<Path> javaFiles = Files.walk(Paths.get(baseDir))
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> isControllerFile(p))
-                    .collect(Collectors.toList());
-
-            int total = javaFiles.size();
-            if (total == 0) { logTaskProgress(task, 0, 0, "Java controller files"); return 0; }
-            logTaskProgress(task, 0, total, "Java controller files");
-
-            var visited = new java.util.concurrent.atomic.AtomicInteger(0);
-            var count = new java.util.concurrent.atomic.AtomicInteger(0);
-            var failed = new java.util.concurrent.atomic.AtomicInteger(0);
-            java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-            try {
-                List<java.util.concurrent.Callable<Void>> tasks = javaFiles.stream()
-                        .<java.util.concurrent.Callable<Void>>map(file -> () -> {
-                            if (isCancelled(versionId)) return null;
-                            try {
-                                List<ApiFact> apis = extractor.extractFromFile(file);
-                                if (!apis.isEmpty()) {
-                                    for (ApiFact api : apis) {
-                                        saveFact(projectId, versionId, "CODE_AST", "API", api.getFullPath(), api.getMethodName(),
-                                                file.toString(), api.getStartLine(), api.getEndLine(),
-                                                api, BigDecimal.ONE, "EXTRACTED");
-                                    }
-                                    graphBuilder.buildApiNodes(projectId, versionId, apis, file.toString());
-                                    count.addAndGet(apis.size());
-                                }
-                            } catch (IOException e) {
-                                log.warn("Failed to parse Java file: {}", file, e);
-                                failed.incrementAndGet();
-                            } catch (RuntimeException e) {
-                                log.warn("Unexpected error parsing Java file: {} — {}", file, e.getMessage());
-                                failed.incrementAndGet();
-                            } finally {
-                                int v = visited.incrementAndGet();
-                                if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
-                                    logTaskProgress(task, v, total, "Java controller files");
-                                }
-                            }
-                            return null;
-                        }).toList();
-                executor.invokeAll(tasks);
-            } finally {
-                executor.shutdown();
-            }
-            log.info("Java controller scan finished: {} APIs from {} files ({} failed parse)",
-                    count.get(), total, failed.get());
-            return count.get();
-        } catch (IOException | InterruptedException e) {
-            log.error("Failed to walk directory for Java scan", e);
-        }
-        return 0;
-    }
-
-    /**
-     * @deprecated 由 {@link io.github.legacygraph.extractors.adapter.MyBatisXmlAdapter} 替代（Phase 1-2）。
-     */
-    @Deprecated
-    private int scanMyBatisXml(String projectId, String versionId, String baseDir, ScanTask task) {
-        if (baseDir == null) return 0;
-        MyBatisXmlExtractor extractor = new MyBatisXmlExtractor();
-        try {
-            List<Path> xmlFiles = Files.walk(Paths.get(baseDir))
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".xml"))
-                    .filter(p -> isMyBatisMapperFile(p))
-                    .collect(Collectors.toList());
-
-            int total = xmlFiles.size();
-            if (total == 0) { logTaskProgress(task, 0, 0, "MyBatis XML files"); return 0; }
-            logTaskProgress(task, 0, total, "MyBatis XML files");
-
-            var visited = new java.util.concurrent.atomic.AtomicInteger(0);
-            var count = new java.util.concurrent.atomic.AtomicInteger(0);
-            java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-            try {
-                List<java.util.concurrent.Callable<Void>> tasks = xmlFiles.stream()
-                        .<java.util.concurrent.Callable<Void>>map(xmlPath -> () -> {
-                            if (isCancelled(versionId)) return null;
-                            try {
-                                File xmlFile = xmlPath.toFile();
-                                MapperSqlFact mapperFact = extractor.extractFromFile(xmlFile);
-                                if (mapperFact.getNamespace() != null) {
-                                    saveFact(projectId, versionId, "MAPPER_XML", "MAPPER", mapperFact.getNamespace(),
-                                            mapperFact.getNamespace(), xmlFile.getAbsolutePath(),
-                                            null, null, mapperFact, BigDecimal.ONE, "EXTRACTED");
-                                    graphBuilder.buildMapperSqlGraph(projectId, versionId, mapperFact);
-                                    count.incrementAndGet();
-                                }
-                            } catch (Exception e) {
-                                log.warn("Failed to parse MyBatis XML: {}", xmlPath, e);
-                            } finally {
-                                int v = visited.incrementAndGet();
-                                if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
-                                    logTaskProgress(task, v, total, "MyBatis XML files");
-                                }
-                            }
-                            return null;
-                        }).toList();
-                executor.invokeAll(tasks);
-            } finally {
-                executor.shutdown();
-            }
-            return count.get();
-        } catch (Exception e) {
-            log.error("Failed to scan MyBatis XML files", e);
-        }
-        return 0;
-    }
-
-    public int scanDatabaseMetadata(String projectId, String versionId, DataSource dataSource, String schema) {
-        // PostgreSQL 默认 schema 为 public
-        String effectiveSchema = (schema != null && !schema.isBlank()) ? schema : "public";
-        log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=extracting schema {} (raw: {})", 
-                projectId, versionId, effectiveSchema, schema);
-        DatabaseMetadataExtractor extractor = new DatabaseMetadataExtractor();
-        try {
-            var tables = extractor.extractFromSchema(dataSource, effectiveSchema);
-            graphBuilder.buildDatabaseGraph(projectId, versionId, tables);
-            log.info("Extracted {} tables from database schema {}", tables.size(), effectiveSchema);
-            return tables.size();
-        } catch (Exception e) {
-            log.error("Failed to extract database metadata for schema {}", effectiveSchema, e);
-            return 0;
-        }
-    }
-
-    /**
-     * @deprecated 由 {@link io.github.legacygraph.extractors.adapter.VueFrontendAdapter} 替代（Phase 1-2）。
-     */
-    @Deprecated
-    private int scanFrontendFiles(String projectId, String versionId, String baseDir, ScanTask task) {
-        if (baseDir == null) return 0;
-        VueRouteExtractor vueExtractor = new VueRouteExtractor();
-        FrontendApiExtractor apiExtractor = new FrontendApiExtractor();
-        try {
-            List<Path> vueFiles = Files.walk(Paths.get(baseDir))
-                    .filter(Files::isRegularFile)
-                    .filter(p -> isVueFile(p))
-                    .collect(Collectors.toList());
-
-            int total = vueFiles.size();
-            if (total == 0) { logTaskProgress(task, 0, 0, "frontend files"); return 0; }
-            logTaskProgress(task, 0, total, "frontend files");
-
-            var visited = new java.util.concurrent.atomic.AtomicInteger(0);
-            var count = new java.util.concurrent.atomic.AtomicInteger(0);
-            var failed = new java.util.concurrent.atomic.AtomicInteger(0);
-            java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-            try {
-                List<java.util.concurrent.Callable<Void>> tasks = vueFiles.stream()
-                        .<java.util.concurrent.Callable<Void>>map(vueFile -> () -> {
-                            if (isCancelled(versionId)) return null;
-                            try {
-                                List<FrontendPageFact> pages = vueExtractor.extractFromFile(vueFile);
-                                if (!pages.isEmpty()) {
-                                    for (FrontendPageFact page : pages) {
-                                        saveFact(projectId, versionId, "FRONTEND_AST", "FRONTEND_PAGE", page.getRoutePath(),
-                                                page.getPageName(), vueFile.toString(), page.getStartLine(), page.getEndLine(),
-                                                page, BigDecimal.ONE, "EXTRACTED");
-                                        count.incrementAndGet();
-                                    }
-                                    frontendGraphBuilder.buildFrontendGraph(projectId, versionId, pages, vueFile.toString());
-                                }
-                                List<FrontendPageFact.FrontendApiCall> apiCalls = apiExtractor.extractFromFile(vueFile);
-                                if (!apiCalls.isEmpty()) {
-                                    for (FrontendPageFact.FrontendApiCall api : apiCalls) {
-                                        saveFact(projectId, versionId, "FRONTEND_AST", "FRONTEND_API", api.getUrl(),
-                                                api.getMethod() + " " + api.getUrl(), vueFile.toString(),
-                                                api.getLineNumber(), api.getLineNumber(), api, BigDecimal.ONE, "EXTRACTED");
-                                        count.incrementAndGet();
-                                    }
-                                    frontendGraphBuilder.buildFrontendApiGraph(projectId, versionId, apiCalls);
-                                }
-                            } catch (IOException e) {
-                                log.warn("Failed to parse Vue file: {}", vueFile, e);
-                                failed.incrementAndGet();
-                            } catch (RuntimeException e) {
-                                log.warn("Unexpected error parsing Vue file: {} — {}", vueFile, e.getMessage());
-                                failed.incrementAndGet();
-                            } finally {
-                                int v = visited.incrementAndGet();
-                                if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
-                                    logTaskProgress(task, v, total, "frontend files");
-                                }
-                            }
-                            return null;
-                        }).toList();
-                executor.invokeAll(tasks);
-            } finally {
-                executor.shutdown();
-            }
-            log.info("Frontend scan finished: {} items from {} files ({} failed parse)",
-                    count.get(), total, failed.get());
-            return count.get();
-        } catch (IOException | InterruptedException e) {
-            log.error("Failed to walk directory for frontend scan", e);
-        }
-        return 0;
-    }
-
-    // ==================== 文件判断 ====================
-
-    private boolean isControllerFile(Path path) {
-        String fileName = path.getFileName().toString();
-        return fileName.endsWith("Controller.java") || fileName.contains("Controller");
-    }
-
-    /**
-     * @deprecated 由 {@link io.github.legacygraph.extractors.adapter.JavaServiceCallAdapter} 替代（Phase 1-2）。
-     */
-    @Deprecated
-    private int scanServiceCalls(String projectId, String versionId, String baseDir, ScanTask task) {
-        if (baseDir == null) return 0;
-        ServiceCallExtractor extractor = new ServiceCallExtractor();
-        try {
-            // 扫描所有 Java 文件，由提取器基于 AST 实际内容判定调用关系，不依赖文件命名
-            // 仅排除 Controller 文件 — 它们由 scanJavaControllers 处理
-            List<Path> javaFiles = Files.walk(Paths.get(baseDir))
-                    .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> !isControllerFile(p))
-                    .collect(Collectors.toList());
-
-            int total = javaFiles.size();
-            if (total == 0) { logTaskProgress(task, 0, 0, "Java files (non-controller)"); return 0; }
-            logTaskProgress(task, 0, total, "Java files (non-controller)");
-
-            var visited = new java.util.concurrent.atomic.AtomicInteger(0);
-            var count = new java.util.concurrent.atomic.AtomicInteger(0);
-            var failed = new java.util.concurrent.atomic.AtomicInteger(0);
-            java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-            try {
-                List<java.util.concurrent.Callable<Void>> tasks = javaFiles.stream()
-                        .<java.util.concurrent.Callable<Void>>map(javaFile -> () -> {
-                            if (isCancelled(versionId)) return null;
-                            try {
-                                List<ServiceCallExtractor.CallRelation> calls = extractor.extractFromFile(javaFile.toFile());
-                                if (!calls.isEmpty()) {
-                                    for (ServiceCallExtractor.CallRelation call : calls) {
-                                        saveFact(projectId, versionId, "CODE_AST", "SERVICE_CALL", call.getCallerClass() + "." + call.getCallerMethod(),
-                                                call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod(),
-                                                javaFile.toString(), call.getLineNumber(), call.getLineNumber(),
-                                                call, BigDecimal.ONE, "EXTRACTED");
-                                    }
-                                    graphBuilder.buildServiceCallGraph(projectId, versionId, calls);
-                                    count.addAndGet(calls.size());
-                                }
-                            } catch (IOException e) {
-                                log.warn("Failed to parse Java file for service call: {}", javaFile, e);
-                                failed.incrementAndGet();
-                            } catch (RuntimeException e) {
-                                log.warn("Unexpected error parsing Java file for service call: {} — {}", javaFile, e.getMessage());
-                                failed.incrementAndGet();
-                            } finally {
-                                int v = visited.incrementAndGet();
-                                if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
-                                    logTaskProgress(task, v, total, "Java files (non-controller)");
-                                }
-                            }
-                            return null;
-                        }).toList();
-                executor.invokeAll(tasks);
-            } finally {
-                executor.shutdown();
-            }
-            log.info("Service call scan finished: {} calls from {} files ({} failed parse)",
-                    count.get(), total, failed.get());
-            return count.get();
-        } catch (IOException | InterruptedException e) {
-            log.error("Failed to walk directory for service call scan", e);
-        }
-        return 0;
-    }
-
-    private boolean isMyBatisMapperFile(Path path) {
-        String fileName = path.getFileName().toString();
-        return fileName.endsWith("Mapper.xml") ||
-               fileName.contains("Mapper") && fileName.endsWith(".xml") ||
-               fileName.contains("mapper") && fileName.endsWith(".xml");
-    }
-
-    private boolean isVueFile(Path path) {
-        String fileName = path.getFileName().toString();
-        return fileName.endsWith(".vue") || fileName.endsWith(".jsx") || fileName.endsWith(".tsx")
-                || fileName.endsWith(".ts") || fileName.endsWith(".js");
+    public int scanDatabaseMetadata(String projectId, String versionId, DataSource dataSource, String schema, String dbType) {
+        return databaseMetadataScanService.scan(projectId, versionId, dataSource, schema, dbType);
     }
 
     // ==================== 工具方法 ====================

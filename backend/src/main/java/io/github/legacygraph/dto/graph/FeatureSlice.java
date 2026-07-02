@@ -25,6 +25,9 @@ import java.util.List;
  * </pre>
  *
  * <p>FeatureSlice 不是新建第三套图，而是总图上的投影视图。</p>
+ *
+ * <p>增强版（M5）：支持多入口动态切片，
+ * 入口类型包括 Page/ApiEndpoint/ScheduledJob/MessageConsumer/BatchTask/ExternalCallback。</p>
  */
 @Data
 @Builder
@@ -48,7 +51,7 @@ public class FeatureSlice {
     /** 入口：页面路径 */
     private String entryPage;
 
-    // ========== 关键路径节点 ==========
+    // ========== 关键路径节点（传统固定层级，保留向后兼容） ==========
 
     /** 路径上的页面节点ID列表 */
     private List<String> pageIds;
@@ -73,6 +76,30 @@ public class FeatureSlice {
 
     /** 关联的测试场景ID列表 */
     private List<String> testCaseIds;
+
+    // ========== M5 动态多入口切片字段 ==========
+
+    /**
+     * 入口节点列表。
+     * 支持多种入口类型：Page（页面）、ApiEndpoint（API接口）、ScheduledJob（定时任务）、
+     * MessageConsumer（消息消费者）、BatchTask（批处理任务）、ExternalCallback（外部回调）。
+     */
+    private List<SliceNodeRef> entrances;
+
+    /** 实现节点列表：Controller/Service/Method/Mapper 等 */
+    private List<SliceNodeRef> implementation;
+
+    /** 数据节点列表：SqlStatement/Table/Column 等 */
+    private List<SliceNodeRef> data;
+
+    /** 规则节点列表：BusinessRule/Permission 等 */
+    private List<SliceNodeRef> rules;
+
+    /** 验证节点列表：TestCase/Assertion 等 */
+    private List<SliceNodeRef> verification;
+
+    /** 缺口节点列表：缺失的入口/实现/数据/规则/验证 */
+    private List<SliceNodeRef> gaps;
 
     // ========== 状态信息 ==========
 
@@ -109,6 +136,12 @@ public class FeatureSlice {
         this.ruleIds = new ArrayList<>();
         this.testCaseIds = new ArrayList<>();
         this.evidenceSources = new ArrayList<>();
+        this.entrances = new ArrayList<>();
+        this.implementation = new ArrayList<>();
+        this.data = new ArrayList<>();
+        this.rules = new ArrayList<>();
+        this.verification = new ArrayList<>();
+        this.gaps = new ArrayList<>();
     }
 
     public FeatureSlice(String sliceId, String projectId, String versionId,
@@ -117,6 +150,9 @@ public class FeatureSlice {
                         List<String> methodIds, List<String> sqlIds,
                         List<String> tableIds, List<String> permissionIds,
                         List<String> ruleIds, List<String> testCaseIds,
+                        List<SliceNodeRef> entrances, List<SliceNodeRef> implementation,
+                        List<SliceNodeRef> data, List<SliceNodeRef> rules,
+                        List<SliceNodeRef> verification, List<SliceNodeRef> gaps,
                         BigDecimal confidence, String status, String riskLevel,
                         String coverageStatus, List<String> evidenceSources,
                         LocalDateTime createdAt, LocalDateTime updatedAt) {
@@ -134,6 +170,12 @@ public class FeatureSlice {
         this.permissionIds = permissionIds != null ? permissionIds : new ArrayList<>();
         this.ruleIds = ruleIds != null ? ruleIds : new ArrayList<>();
         this.testCaseIds = testCaseIds != null ? testCaseIds : new ArrayList<>();
+        this.entrances = entrances != null ? entrances : new ArrayList<>();
+        this.implementation = implementation != null ? implementation : new ArrayList<>();
+        this.data = data != null ? data : new ArrayList<>();
+        this.rules = rules != null ? rules : new ArrayList<>();
+        this.verification = verification != null ? verification : new ArrayList<>();
+        this.gaps = gaps != null ? gaps : new ArrayList<>();
         this.confidence = confidence;
         this.status = status;
         this.riskLevel = riskLevel;
@@ -141,5 +183,57 @@ public class FeatureSlice {
         this.evidenceSources = evidenceSources != null ? evidenceSources : new ArrayList<>();
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+    }
+
+    // ========== 内部类：切片节点引用 ==========
+
+    /**
+     * 切片节点引用 — 轻量级节点描述符，用于 FeatureSlice 的各个分组列表。
+     * <p>
+     * 包含节点基本信息，避免每次引用都需要查询完整 GraphNode。
+     * </p>
+     */
+    @Data
+    @Builder
+    public static class SliceNodeRef {
+        /** 节点ID */
+        private String nodeId;
+
+        /** 节点类型（NodeType 名称） */
+        private String nodeType;
+
+        /** 节点名称 */
+        private String nodeName;
+
+        /** 显示名称 */
+        private String displayName;
+
+        /** 描述 */
+        private String description;
+
+        /** 来源类型 */
+        private String sourceType;
+
+        /** 置信度 */
+        private BigDecimal confidence;
+
+        /** 来源边类型（该节点是通过什么边连接到 Feature 的） */
+        private String edgeType;
+
+        public SliceNodeRef() {
+        }
+
+        public SliceNodeRef(String nodeId, String nodeType, String nodeName,
+                            String displayName, String description, String sourceType,
+                            BigDecimal confidence, String edgeType) {
+            this.nodeId = nodeId;
+            this.nodeType = nodeType;
+            this.nodeName = nodeName;
+            this.displayName = displayName;
+            this.description = description;
+            this.sourceType = sourceType;
+            this.confidence = confidence;
+            this.edgeType = edgeType;
+        }
     }
 }

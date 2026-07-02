@@ -2,6 +2,7 @@ package io.github.legacygraph;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.GraphMergeDecision;
+import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.entity.PromptRun;
 import io.github.legacygraph.llm.LlmCallException;
 import io.github.legacygraph.llm.LlmGateway;
@@ -20,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.retry.support.RetryTemplate;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -122,5 +124,27 @@ class LlmGatewayTest {
         assertEquals(GraphMergeDecision.Decision.REVIEW, result.getDecision());
         verifyNoInteractions(llmProviderService);
         verifyNoInteractions(promptRunRepository);
+    }
+
+    @Test
+    void callWithEnvelope_strictPolicyMissingEvidenceRejectsBeforeProviderLookup() {
+        AgentEnvelope<Object> envelope = AgentEnvelope.builder()
+                .projectId("proj-1")
+                .taskId("task-1")
+                .agentType("PatchPlanAgent")
+                .evidenceCatalog(AgentEnvelope.EvidenceCatalog.builder()
+                        .requiredEvidenceTypes(List.of("TEST_RESULT"))
+                        .build())
+                .policy(AgentEnvelope.RequiredEvidencePolicy.strict())
+                .build();
+
+        LlmCallException ex = assertThrows(LlmCallException.class,
+                () -> llmGateway.callWithEnvelope(envelope, "patch-plan", Map.of(), GraphMergeDecision.class));
+
+        assertTrue(ex.isNeedsReview());
+        assertTrue(ex.getMessage().contains("Required evidence missing"));
+        verifyNoInteractions(llmProviderService);
+        verifyNoInteractions(promptRunRepository);
+        verifyNoInteractions(agentRunRepository);
     }
 }

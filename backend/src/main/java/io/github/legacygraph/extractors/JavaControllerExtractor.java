@@ -15,6 +15,7 @@ import io.github.legacygraph.model.ApiFact;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,14 +43,34 @@ public class JavaControllerExtractor {
     public List<ApiFact> extractFromFile(Path javaFile) throws IOException {
         List<ApiFact> result = new ArrayList<>();
 
-        ParseResult<CompilationUnit> resultCU = javaParser.parse(javaFile);
+        // 先读入内存再解析，避免 I/O 竞争读到半截文件
+        ParseResult<CompilationUnit> resultCU;
+        try {
+            resultCU = javaParser.parse(Files.readString(javaFile));
+        } catch (RuntimeException e) {
+            // JavaParser 词法分析器偶发内部崩溃（如 IndexOutOfBounds），重试一次
+            log.warn("JavaParser crashed on first parse attempt (will retry): {} — {}", javaFile, e.getMessage());
+            try {
+                resultCU = javaParser.parse(Files.readString(javaFile));
+            } catch (RuntimeException e2) {
+                log.warn("Failed to parse Java file (JavaParser crash after retry): {}", javaFile);
+                log.warn("Parse error: {}", e2.getMessage());
+                return result;
+            }
+        }
         if (!resultCU.isSuccessful() || resultCU.getResult().isEmpty()) {
-            // 偶发 I/O 竞争导致读入不完整 → 重试一次
-            resultCU = javaParser.parse(javaFile);
+            // 偶发 I/O 竞争导致读入不完整 → 重读源文件并重试一次
+            try {
+                resultCU = javaParser.parse(Files.readString(javaFile));
+            } catch (RuntimeException e) {
+                log.warn("Failed to parse Java file (JavaParser crash on retry): {}", javaFile);
+                log.warn("Parse error: {}", e.getMessage());
+                return result;
+            }
         }
         if (!resultCU.isSuccessful() || resultCU.getResult().isEmpty()) {
             log.warn("Failed to parse Java file (after retry): {}", javaFile);
-            log.warn("Parse problems: {}", resultCU.getProblems());
+            logParseProblems(resultCU);
             return result;
         }
 
@@ -309,6 +330,22 @@ public class JavaControllerExtractor {
             }
         }
         return null;
+    }
+
+    /**
+     * 安全输出解析问题概要。使用 getMessage() 仅输出一行描述，
+     * 避免 getVerboseMessage() 输出超长源码上下文或 toString() 打印 stack trace。
+     */
+    static void logParseProblems(ParseResult<?> result) {
+        var problems = result.getProblems();
+        if (problems == null || problems.isEmpty()) return;
+        for (int i = 0; i < problems.size(); i++) {
+            try {
+                log.warn("Parse problem [{}]: {}", i, problems.get(i).getMessage());
+            } catch (Exception ex) {
+                log.warn("Parse problem [{}]: <FAILED getMessage(): {}>", i, ex.getMessage());
+            }
+        }
     }
 
     /**

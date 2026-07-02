@@ -69,6 +69,29 @@ public class PromptTemplateLoader {
 
         String merged = sb.toString().trim();
 
+        // P1: 若 task_prompt 中不含变量占位符（如 {docContent}），自动附加变量数据段。
+        // 否则 replaceVariables 扫描不到占位符，LLM 收不到实际数据，无法产出结论。
+        boolean hasPlaceholders = false;
+        if (variables != null && !variables.isEmpty()) {
+            for (String varName : variables.keySet()) {
+                if (merged.contains("{" + varName + "}")) {
+                    hasPlaceholders = true;
+                    break;
+                }
+            }
+        }
+        if (!hasPlaceholders && variables != null && !variables.isEmpty()) {
+            StringBuilder dataSection = new StringBuilder("\n\n## 输入数据\n");
+            for (Map.Entry<String, String> entry : variables.entrySet()) {
+                String value = entry.getValue();
+                if (value != null && !value.isBlank()) {
+                    dataSection.append("\n### ").append(entry.getKey()).append("\n```\n")
+                            .append(value).append("\n```\n");
+                }
+            }
+            merged += dataSection.toString();
+        }
+
         // 注入输出格式约束
         if (template.getOutputSchema() != null && !template.getOutputSchema().isBlank()) {
             merged += "\n\n## 输出格式\n请以严格 JSON 格式输出，遵循以下 Schema：\n```json\n"

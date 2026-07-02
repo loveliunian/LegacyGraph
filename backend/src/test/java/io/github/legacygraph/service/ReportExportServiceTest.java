@@ -6,7 +6,6 @@ import io.github.legacygraph.dto.report.TestCoverageReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -151,57 +150,6 @@ class ReportExportServiceTest {
         String content = new String(result, java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(content.contains("图谱质量报告"));
         assertTrue(content.contains("50"), "应包含节点总数");
-    }
-
-    @Test
-    @Disabled("Skipped: PDFBox 3.x API incompatibility with openhtmltopdf")
-    void testExportPdf_ReturnsNonEmptyBytes() {
-        // given
-        MigrationReadinessReport mockReport = new MigrationReadinessReport();
-        mockReport.setProjectId("project-1");
-        mockReport.setTotalNodes(0L);
-        mockReport.setConfirmedNodes(0L);
-        mockReport.setPendingNodes(0L);
-        mockReport.setTotalEdges(0L);
-        mockReport.setConfirmedEdges(0L);
-        mockReport.setPendingEdges(0L);
-        mockReport.setOverallScore(java.math.BigDecimal.ZERO);
-        mockReport.setArchitectureUnderstandingScore(java.math.BigDecimal.ZERO);
-        mockReport.setBusinessKnowledgeScore(java.math.BigDecimal.ZERO);
-        mockReport.setTestCoverageScore(java.math.BigDecimal.ZERO);
-        mockReport.setConfidenceLevel(java.math.BigDecimal.ZERO);
-        mockReport.setNodeTypeStats(java.util.Collections.emptyList());
-        mockReport.setRiskItems(java.util.Collections.emptyList());
-        mockReport.setRecommendations(java.util.Collections.emptyList());
-
-        when(reportingService.generateMigrationReport("project-1")).thenReturn(mockReport);
-
-        // when
-        byte[] result = reportExportService.exportToPdf("project-1", "v1",
-                ReportExportService.ReportType.MIGRATION_READINESS);
-
-        // then
-        assertNotNull(result);
-        assertTrue(result.length > 100, "PDF 应包含足够的字节内容");
-    }
-
-    @Test
-    @Disabled("Skipped: PDFBox 3.x API incompatibility with openhtmltopdf")
-    void testExportPdf_EmptyReport() {
-        // given
-        ConfidenceTrendReport emptyReport = new ConfidenceTrendReport();
-        emptyReport.setProjectId("project-empty");
-        emptyReport.setDailyData(java.util.Collections.emptyList());
-
-        when(reportingService.generateConfidenceTrend("project-empty", "v1")).thenReturn(emptyReport);
-
-        // when
-        byte[] result = reportExportService.exportToPdf("project-empty", "v1",
-                ReportExportService.ReportType.CONFIDENCE_TREND);
-
-        // then
-        assertNotNull(result);
-        assertTrue(result.length > 100, "即使空数据也应生成有效 PDF");
     }
 
     @Test

@@ -3,6 +3,7 @@ package io.github.legacygraph.agent;
 import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.graph.PatchPlan;
+import io.github.legacygraph.llm.LlmCallException;
 import io.github.legacygraph.llm.LlmGateway;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,8 +35,15 @@ public class PatchPlanAgent {
             return null;
         }
         Map<String, String> variables = buildVariables(input);
-        PatchPlan plan = llmGateway.callWithTemplate(
-                envelope.getProjectId(), "patch-plan", variables, PatchPlan.class);
+        PatchPlan plan;
+        try {
+            plan = llmGateway.callWithEnvelope(envelope, "patch-plan", variables, PatchPlan.class);
+        } catch (LlmCallException ex) {
+            if (!ex.isNeedsReview()) {
+                throw ex;
+            }
+            plan = manualReviewPlan(input, ex.getMessage());
+        }
         if (plan != null) {
             plan.setTaskId(input.taskId);
             plan.setTaskType("BUGFIX");
@@ -43,6 +51,18 @@ public class PatchPlanAgent {
         }
         log.info("PatchPlanAgent (envelope) generated plan for task {}: patches={}",
                 input.taskId, plan != null && plan.getPatches() != null ? plan.getPatches().size() : 0);
+        return plan;
+    }
+
+    private PatchPlan manualReviewPlan(PatchPlanInput input, String reason) {
+        PatchPlan plan = new PatchPlan();
+        plan.setTaskId(input.taskId);
+        plan.setTaskType("BUGFIX");
+        plan.setRiskLevel("REVIEW");
+        plan.setManualReviewNeeded(true);
+        plan.setGeneratedBy("PatchPlanAgent");
+        plan.setValidationGates(List.of("MANUAL_REVIEW"));
+        log.warn("PatchPlanAgent requires manual review for task {}: {}", input.taskId, reason);
         return plan;
     }
 

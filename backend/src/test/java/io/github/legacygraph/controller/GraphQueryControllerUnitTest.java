@@ -6,6 +6,8 @@ import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.graph.FeatureSlice;
 import io.github.legacygraph.service.GraphMergeService;
 import io.github.legacygraph.service.GraphQueryService;
+import io.github.legacygraph.service.GapFinderService;
+import io.github.legacygraph.service.KnowledgeClaimService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -33,6 +35,12 @@ class GraphQueryControllerUnitTest {
     @Mock
     private FeatureSliceBuilder featureSliceBuilder;
 
+    @Mock
+    private KnowledgeClaimService knowledgeClaimService;
+
+    @Mock
+    private GapFinderService gapFinderService;
+
     @Test
     void getFeatureSlicesDelegatesToFeatureSliceBuilder() {
         FeatureSlice slice = FeatureSlice.builder()
@@ -55,6 +63,14 @@ class GraphQueryControllerUnitTest {
     void getGraphQualityReportReturnsVersionStats() {
         when(neo4jGraphDao.versionGraphStats("project-1", "v1"))
                 .thenReturn(Map.of("totalNodes", 2L, "pendingNodes", 1L));
+        when(knowledgeClaimService.countClaimsByStatus("project-1", "v1"))
+                .thenReturn(Map.of("CONFIRMED", 2L, "PENDING_CONFIRM", 3L));
+        when(knowledgeClaimService.countAiOnlyClaims("project-1", "v1")).thenReturn(4L);
+        when(gapFinderService.countGapsByStatus("project-1", "v1"))
+                .thenReturn(Map.of("OPEN", 1L, "REOPENED", 1L));
+        when(gapFinderService.countHighSeverityGaps("project-1", "v1")).thenReturn(1L);
+        when(gapFinderService.countGapsByType("project-1", "v1"))
+                .thenReturn(Map.of("doc_only_feature", 2L));
 
         GraphQueryController controller = newController();
 
@@ -62,6 +78,10 @@ class GraphQueryControllerUnitTest {
 
         assertEquals(0, result.getCode());
         assertEquals(2L, result.getData().get("totalNodes"));
+        assertEquals(5L, result.getData().get("claimCount"));
+        assertEquals(2L, result.getData().get("openGapCount"));
+        assertEquals(1L, result.getData().get("highSeverityGapCount"));
+        assertEquals(Map.of("doc_only_feature", 2L), result.getData().get("gapCountByType"));
     }
 
     @Test
@@ -82,6 +102,7 @@ class GraphQueryControllerUnitTest {
     }
 
     private GraphQueryController newController() {
-        return new GraphQueryController(graphQueryService, graphMergeService, neo4jGraphDao, featureSliceBuilder);
+        return new GraphQueryController(graphQueryService, graphMergeService, neo4jGraphDao,
+                featureSliceBuilder, knowledgeClaimService, gapFinderService);
     }
 }

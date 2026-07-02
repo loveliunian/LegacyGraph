@@ -253,6 +253,9 @@ CREATE TABLE lg_graph_edge (
     status          VARCHAR(32) NOT NULL DEFAULT 'PENDING_CONFIRM',
     properties      TEXT,
     deleted         SMALLINT NOT NULL DEFAULT 0,
+    evidence_ids    TEXT,
+    verified_score  DECIMAL(5,4) DEFAULT 0.0000,
+    relation_status VARCHAR(32),
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(project_id, version_id, edge_key)
@@ -523,6 +526,8 @@ CREATE TABLE lg_llm_provider (
     endpoint         TEXT,
     deployment_mode  VARCHAR(64),
     api_config       TEXT,
+    is_default       BOOLEAN DEFAULT FALSE,
+    is_active        BOOLEAN DEFAULT TRUE,
     created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

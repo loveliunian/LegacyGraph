@@ -55,7 +55,7 @@ public class DatabaseMetadataExtractor {
 
     /**
      * 从指定schema抽取所有表元数据。
-     * @param isMySql 是否为 MySQL/MariaDB（此时 schema 用作 catalog）
+     * @param isMySql 是否为 MySQL/MariaDB
      */
     public List<TableMetadata> extractFromSchema(DataSource dataSource, String schema, boolean isMySql) throws SQLException {
         List<TableMetadata> tables = new ArrayList<>();
@@ -81,15 +81,17 @@ public class DatabaseMetadataExtractor {
                 table.setTableCatalog(tablesRs.getString("TABLE_CAT"));
                 table.setTableSchema(tablesRs.getString("TABLE_SCHEM"));
                 table.setTableName(tablesRs.getString("TABLE_NAME"));
-                // 获取表注释 - PostgreSQL特定
-                table.setTableComment(getTableComment(conn, schema, table.getTableName()));
+                // 获取表注释（PG/MySQL 不同方式）
+                table.setTableComment(isMySql
+                        ? getMySqlTableComment(conn, conn.getCatalog(), table.getTableName())
+                        : getTableComment(conn, schema, table.getTableName()));
 
                 // 抽取列
-                List<ColumnMetadata> columns = extractColumns(metaData, conn, conn.getCatalog(), schema, table.getTableName());
+                List<ColumnMetadata> columns = extractColumns(metaData, conn, catalog, schema, table.getTableName(), isMySql);
                 table.setColumns(columns);
 
                 // 识别主键
-                identifyPrimaryKeys(metaData, conn, conn.getCatalog(), schema, table.getTableName(), columns);
+                identifyPrimaryKeys(metaData, conn, catalog, schema, table.getTableName(), columns);
 
                 // 语义识别
                 semanticRecognize(columns);
@@ -107,7 +109,7 @@ public class DatabaseMetadataExtractor {
      * 抽取列信息
      */
     private List<ColumnMetadata> extractColumns(DatabaseMetaData metaData, Connection conn,
-            String catalog, String schema, String tableName) throws SQLException {
+            String catalog, String schema, String tableName, boolean isMySql) throws SQLException {
         List<ColumnMetadata> columns = new ArrayList<>();
 
         ResultSet columnsRs = metaData.getColumns(catalog, schema, tableName, "%");
@@ -119,8 +121,10 @@ public class DatabaseMetadataExtractor {
             col.setColumnSize(columnsRs.getInt("COLUMN_SIZE"));
             col.setNullable("YES".equals(columnsRs.getString("IS_NULLABLE")));
             col.setColumnDefault(columnsRs.getString("COLUMN_DEF"));
-            // PostgreSQL特有注释获取
-            col.setColumnComment(getColumnComment(conn, schema, tableName, col.getColumnName()));
+            // 列注释获取（PG/MySQL 不同方式）
+            col.setColumnComment(isMySql
+                    ? getMySqlColumnComment(conn, conn.getCatalog(), tableName, col.getColumnName())
+                    : getColumnComment(conn, schema, tableName, col.getColumnName()));
             columns.add(col);
         }
         columnsRs.close();
@@ -172,7 +176,7 @@ public class DatabaseMetadataExtractor {
      */
     private String getColumnComment(Connection conn, String schema, String tableName, String columnName) {
         try {
-            String sql = "SELECT col_description(('\"' || ? || '\"'.'\"' || ? || '\"')::regclass, ordinal_position) " +
+            String sql = "SELECT col_description(('\"' || ? || '\".\"' || ? || '\"')::regclass, ordinal_position) " +
                          "FROM information_schema.columns " +
                          "WHERE table_schema = ? AND table_name = ? AND column_name = ?";
             java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
@@ -189,6 +193,51 @@ public class DatabaseMetadataExtractor {
             stmt.close();
         } catch (Exception e) {
             log.debug("Failed to get column comment for {}.{}.{}: {}", schema, tableName, columnName, e.getMessage());
+        }
+        return "";
+    }
+
+    /**
+     * MySQL/MariaDB获取表注释
+     */
+    private String getMySqlTableComment(Connection conn, String catalog, String tableName) {
+        try {
+            String sql = "SELECT TABLE_COMMENT FROM information_schema.TABLES " +
+                         "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
+            java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, catalog);
+            stmt.setString(2, tableName);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString(1);
+            }
+            rs.close();
+            stmt.close();
+        } catch (Exception e) {
+            log.debug("Failed to get MySQL table comment for {}.{}: {}", catalog, tableName, e.getMessage());
+        }
+        return "";
+    }
+
+    /**
+     * MySQL/MariaDB获取列注释
+     */
+    private String getMySqlColumnComment(Connection conn, String catalog, String tableName, String columnName) {
+        try {
+            String sql = "SELECT COLUMN_COMMENT FROM information_schema.COLUMNS " +
+                         "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?";
+            java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setString(1, catalog);
+            stmt.setString(2, tableName);
+            stmt.setString(3, columnName);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString(1);
+            }
+            rs.close();
+            stmt.close();
+        } catch (Exception e) {
+            log.debug("Failed to get MySQL column comment for {}.{}.{}: {}", catalog, tableName, columnName, e.getMessage());
         }
         return "";
     }
