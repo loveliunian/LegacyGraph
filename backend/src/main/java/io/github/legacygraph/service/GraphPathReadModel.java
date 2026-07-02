@@ -66,7 +66,7 @@ public class GraphPathReadModel {
         chain.nodes = new ArrayList<>();
 
         List<GraphNode> tables = neo4jGraphDao.queryNodes(projectId, versionId, "Table",
-                null, null, null, 50);
+                null, null, null, 200);
         Optional<GraphNode> target = tables.stream()
                 .filter(t -> tableName.equalsIgnoreCase(t.getNodeName()))
                 .findFirst();
@@ -75,12 +75,13 @@ public class GraphPathReadModel {
         chain.startNodeId = target.get().getId();
         chain.nodes.add(toInfo(target.get()));
 
-        // 反向查找：谁写到这个表
-        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 200);
+        // 加载所有边
+        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, versionId, null, null, 500);
         Set<String> visited = new HashSet<>();
         visited.add(target.get().getId());
 
-        for (int depth = 0; depth < 8; depth++) {
+        // 反向遍历：谁依赖/引用这个表（上游：SqlStatement←Method←ApiEndpoint）
+        for (int depth = 0; depth < 6; depth++) {
             List<String> prevIds = new ArrayList<>();
             for (GraphEdge edge : allEdges) {
                 if (visited.contains(edge.getToNodeId()) && !visited.contains(edge.getFromNodeId())) {
@@ -88,7 +89,6 @@ public class GraphPathReadModel {
                     visited.add(edge.getFromNodeId());
                 }
             }
-            // 批量加载本跳所有节点，替代逐条 findNodeById
             if (!prevIds.isEmpty()) {
                 List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(prevIds);
                 for (GraphNode n : nodes) {
@@ -96,6 +96,37 @@ public class GraphPathReadModel {
                 }
             }
         }
+
+        // 正向遍历：查找关联表（通过 REFERENCES / JOINS 边，当前表→引用表）
+        Set<String> relatedVisited = new HashSet<>(visited);
+        for (int depth = 0; depth < 3; depth++) {
+            List<String> relatedIds = new ArrayList<>();
+            for (GraphEdge edge : allEdges) {
+                String edgeType = edge.getEdgeType();
+                // 从已访问节点出发的正向边（fromNodeId 已访问，toNodeId 未访问）
+                if (relatedVisited.contains(edge.getFromNodeId()) && !relatedVisited.contains(edge.getToNodeId())) {
+                    // 只收集 Table 类型的关联节点
+                    if ("REFERENCES".equalsIgnoreCase(edgeType) || "JOINS".equalsIgnoreCase(edgeType)) {
+                        relatedIds.add(edge.getToNodeId());
+                        relatedVisited.add(edge.getToNodeId());
+                    }
+                }
+                // 反向：其他表通过 REFERENCES 引用当前表（即当前表是被引用方）
+                if (relatedVisited.contains(edge.getToNodeId()) && !relatedVisited.contains(edge.getFromNodeId())) {
+                    if ("REFERENCES".equalsIgnoreCase(edgeType)) {
+                        relatedIds.add(edge.getFromNodeId());
+                        relatedVisited.add(edge.getFromNodeId());
+                    }
+                }
+            }
+            if (!relatedIds.isEmpty()) {
+                List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(relatedIds);
+                for (GraphNode n : nodes) {
+                    chain.nodes.add(toInfo(n));
+                }
+            }
+        }
+
         return chain;
     }
 

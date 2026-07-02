@@ -601,7 +601,8 @@ public class LlmGateway {
     }
 
     /**
-     * 清理JSON响应，移除markdown代码块标记
+     * 清理JSON响应，移除markdown代码块标记。
+     * 若 JSON 被截断（LLM 输出达到 max_tokens），尝试修复后再返回。
      */
     private String cleanJsonResponse(String response) {
         if (response == null) return "{}";
@@ -614,6 +615,97 @@ public class LlmGateway {
         if (cleaned.endsWith("```")) {
             cleaned = cleaned.substring(0, cleaned.length() - "```".length());
         }
-        return cleaned.trim();
+        cleaned = cleaned.trim();
+        // 尝试修复截断的 JSON（LLM 输出被 max_tokens 截断时常见）
+        return repairTruncatedJson(cleaned);
+    }
+
+    /**
+     * 修复 LLM 输出中被截断的 JSON。
+     * <p>常见场景：模型达到 max_tokens 限制，JSON 在字符串中间或对象中间截断。
+     * 修复策略：找到最后一个完整的 JSON token，关闭未闭合的字符串和容器。</p>
+     */
+    String repairTruncatedJson(String json) {
+        if (json == null || json.isEmpty()) return "{}";
+
+        // 先尝试直接解析，成功则无需修复
+        try {
+            objectMapper.readTree(json);
+            return json;
+        } catch (Exception ignored) {
+            // 解析失败，尝试修复
+        }
+
+        StringBuilder sb = new StringBuilder(json);
+        boolean inString = false;
+        boolean escaped = false;
+        int braceDepth = 0;
+        int bracketDepth = 0;
+        char lastChar = 0;
+
+        for (int i = 0; i < sb.length(); i++) {
+            char c = sb.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+            } else {
+                switch (c) {
+                    case '"' -> inString = true;
+                    case '{' -> braceDepth++;
+                    case '}' -> braceDepth--;
+                    case '[' -> bracketDepth++;
+                    case ']' -> bracketDepth--;
+                }
+            }
+            lastChar = c;
+        }
+
+        // 如果截断在字符串中间，关闭字符串
+        if (inString) {
+            // 找到最后一个非转义的引号位置并截断
+            sb.append('"');
+            inString = false;
+        }
+
+        // 如果最后非空白字符是逗号或冒号，移除它（不完整的键值对）
+        int end = sb.length() - 1;
+        while (end >= 0 && Character.isWhitespace(sb.charAt(end))) {
+            end--;
+        }
+        if (end >= 0) {
+            char last = sb.charAt(end);
+            if (last == ',' || last == ':') {
+                sb.setLength(end);
+            }
+        }
+
+        // 闭合未闭合的容器
+        while (bracketDepth > 0) {
+            sb.append(']');
+            bracketDepth--;
+        }
+        while (braceDepth > 0) {
+            sb.append('}');
+            braceDepth--;
+        }
+
+        String repaired = sb.toString().trim();
+        if (repaired.isEmpty()) return "{}";
+
+        // 验证修复结果
+        try {
+            objectMapper.readTree(repaired);
+            log.debug("JSON truncation repaired: original_len={}, repaired_len={}",
+                    json.length(), repaired.length());
+            return repaired;
+        } catch (Exception e) {
+            log.warn("JSON repair failed, returning empty object: {}", e.getMessage());
+            return "{}";
+        }
     }
 }

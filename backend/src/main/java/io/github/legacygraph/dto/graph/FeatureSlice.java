@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -57,28 +58,36 @@ public class FeatureSlice {
     // ========== 关键路径节点（传统固定层级，保留向后兼容） ==========
 
     /** 路径上的页面节点ID列表 */
-    private List<String> pageIds;
+    @Builder.Default
+    private List<String> pageIds = new ArrayList<>();
 
     /** 路径上的 API 节点ID列表 */
-    private List<String> apiIds;
+    @Builder.Default
+    private List<String> apiIds = new ArrayList<>();
 
     /** 路径上的方法节点ID列表 */
-    private List<String> methodIds;
+    @Builder.Default
+    private List<String> methodIds = new ArrayList<>();
 
     /** 路径上的 SQL 节点ID列表 */
-    private List<String> sqlIds;
+    @Builder.Default
+    private List<String> sqlIds = new ArrayList<>();
 
     /** 路径上的表节点ID列表 */
-    private List<String> tableIds;
+    @Builder.Default
+    private List<String> tableIds = new ArrayList<>();
 
     /** 路径上的权限节点ID列表 */
-    private List<String> permissionIds;
+    @Builder.Default
+    private List<String> permissionIds = new ArrayList<>();
 
     /** 关联的业务规则ID列表 */
-    private List<String> ruleIds;
+    @Builder.Default
+    private List<String> ruleIds = new ArrayList<>();
 
     /** 关联的测试场景ID列表 */
-    private List<String> testCaseIds;
+    @Builder.Default
+    private List<String> testCaseIds = new ArrayList<>();
 
     // ========== M5 动态多入口切片字段 ==========
 
@@ -87,22 +96,28 @@ public class FeatureSlice {
      * 支持多种入口类型：Page（页面）、ApiEndpoint（API接口）、ScheduledJob（定时任务）、
      * MessageConsumer（消息消费者）、BatchTask（批处理任务）、ExternalCallback（外部回调）。
      */
-    private List<SliceNodeRef> entrances;
+    @Builder.Default
+    private List<SliceNodeRef> entrances = new ArrayList<>();
 
     /** 实现节点列表：Controller/Service/Method/Mapper 等 */
-    private List<SliceNodeRef> implementation;
+    @Builder.Default
+    private List<SliceNodeRef> implementation = new ArrayList<>();
 
     /** 数据节点列表：SqlStatement/Table/Column 等 */
-    private List<SliceNodeRef> data;
+    @Builder.Default
+    private List<SliceNodeRef> data = new ArrayList<>();
 
     /** 规则节点列表：BusinessRule/Permission 等 */
-    private List<SliceNodeRef> rules;
+    @Builder.Default
+    private List<SliceNodeRef> rules = new ArrayList<>();
 
     /** 验证节点列表：TestCase/Assertion 等 */
-    private List<SliceNodeRef> verification;
+    @Builder.Default
+    private List<SliceNodeRef> verification = new ArrayList<>();
 
     /** 缺口节点列表：缺失的入口/实现/数据/规则/验证 */
-    private List<SliceNodeRef> gaps;
+    @Builder.Default
+    private List<SliceNodeRef> gaps = new ArrayList<>();
 
     // ========== 状态信息 ==========
 
@@ -119,7 +134,8 @@ public class FeatureSlice {
     private String coverageStatus;
 
     /** 证据来源类型列表 */
-    private List<String> evidenceSources;
+    @Builder.Default
+    private List<String> evidenceSources = new ArrayList<>();
 
     /** 创建时间 */
     private LocalDateTime createdAt;

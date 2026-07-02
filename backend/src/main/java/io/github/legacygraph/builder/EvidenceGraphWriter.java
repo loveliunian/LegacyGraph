@@ -220,6 +220,7 @@ public class EvidenceGraphWriter {
         ev.setAstPath(evidence.getAstPath());
         ev.setSqlHash(evidence.getSqlHash());
         applyPrivacy(ev, evidence);
+        ev.setDeleted(0);
         ev.setCreatedAt(LocalDateTime.now());
 
         // 2. 去重落库：有 contentHash 走 upsert，无则直接 insert
@@ -330,6 +331,7 @@ public class EvidenceGraphWriter {
         if (evidence.getRedactionPolicy() == null) {
             evidence.setRedactionPolicy("none");
         }
+        evidence.setDeleted(0);
         evidence.setCreatedAt(LocalDateTime.now());
 
         // 去重落库：优先 upsert by contentHash
@@ -455,7 +457,8 @@ public class EvidenceGraphWriter {
      * @return 写入结果摘要
      */
     public GraphWriteResult writeIntent(GraphWriteIntent intent) {
-        int nodeCount = 0, edgeCount = 0, evidenceCount = 0;
+        int nodeCount = 0, edgeCount = 0;
+        java.util.concurrent.atomic.AtomicInteger evidenceCount = new java.util.concurrent.atomic.AtomicInteger(0);
         if (intent.getNodeClaims() != null) {
             for (GraphNodeClaim nc : intent.getNodeClaims()) {
                 try {
@@ -496,19 +499,22 @@ public class EvidenceGraphWriter {
                         ev.setContent(er.getContent());
                         ev.setMetadata(er.getMetadata());
                         applyPrivacy(ev, er);
+                        ev.setDeleted(0);
                         ev.setCreatedAt(LocalDateTime.now());
-                        evidenceRepository.insertOrIgnore(ev);
+                        if (evidenceRepository.insertOrIgnore(ev) > 0) {
+                            evidenceCount.incrementAndGet();
+                        }
                     });
-                    evidenceCount++;
                 } catch (Exception e) {
                     log.error("writeIntent: evidence record failed (idempotencyKey={}): {}",
                             intent.getIdempotencyKey(), e.getMessage());
                 }
             }
         }
+        int ec = evidenceCount.get();
         log.info("writeIntent processed (idempotencyKey={}): {} nodes, {} edges, {} evidence",
-                intent.getIdempotencyKey(), nodeCount, edgeCount, evidenceCount);
-        return new GraphWriteResult(nodeCount, edgeCount, evidenceCount);
+                intent.getIdempotencyKey(), nodeCount, edgeCount, ec);
+        return new GraphWriteResult(nodeCount, edgeCount, ec);
     }
 
     /** 标记 Neo4j 节点为 INCOMPLETE（PG 证据写入失败补偿） */

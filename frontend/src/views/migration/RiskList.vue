@@ -19,9 +19,49 @@
         class="overall-alert"
       />
 
-      <el-divider content-position="left">风险列表</el-divider>
+      <!-- 统计信息 -->
+      <el-row :gutter="20" class="stats-row">
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-value">{{ stats.totalNodes }}</div>
+            <div class="stat-label">总节点数</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-value">{{ stats.confirmedNodes }}</div>
+            <div class="stat-label">已确认节点</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-value">{{ stats.pendingNodes }}</div>
+            <div class="stat-label">待确认节点</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="hover" class="stat-card">
+            <div class="stat-value">{{ stats.risks }}</div>
+            <div class="stat-label">风险项数量</div>
+          </el-card>
+        </el-col>
+      </el-row>
 
-      <el-table :data="risks" v-loading="loading" border style="width: 100%">
+      <!-- 风险列表 -->
+      <div class="table-header">
+        <span class="table-title">风险列表</span>
+        <el-button v-if="overallScore !== null" type="primary" size="small" @click="exportReport">
+          <el-icon><Download /></el-icon>
+          导出报告
+        </el-button>
+      </div>
+
+      <el-table
+        :data="pagedRisks"
+        v-loading="loading"
+        border
+        style="width: 100%"
+      >
         <el-table-column prop="riskType" label="风险类型" width="150">
           <template #default="{ row }">
             <el-tag :type="getRiskTypeTag(row.riskType)">
@@ -49,41 +89,15 @@
         </el-table-column>
       </el-table>
 
-      <el-divider content-position="left">统计信息</el-divider>
-
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
-            <div class="stat-value">{{ stats.totalNodes }}</div>
-            <div class="stat-label">总节点数</div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
-            <div class="stat-value">{{ stats.confirmedNodes }}</div>
-            <div class="stat-label">已确认节点</div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
-            <div class="stat-value">{{ stats.pendingNodes }}</div>
-            <div class="stat-label">待确认节点</div>
-          </el-card>
-        </el-col>
-        <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
-            <div class="stat-value">{{ stats.risks }}</div>
-            <div class="stat-label">风险项数量</div>
-          </el-card>
-        </el-col>
-      </el-row>
-
-      <div class="actions" v-if="overallScore !== null">
-        <el-button type="primary" @click="exportReport">
-          <el-icon><download /></el-icon>
-          导出报告
-        </el-button>
-      </div>
+      <el-pagination
+        v-if="risks.length > pageSize"
+        class="pagination"
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="risks.length"
+        layout="total, prev, pager, next"
+        background
+      />
     </el-card>
   </div>
 </template>
@@ -93,7 +107,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { reportApi } from '@/api'
-import { Download } from '@element-plus/icons-vue'
+import { Download, Refresh } from '@element-plus/icons-vue'
 import type { MigrationReadinessReport, RiskItem } from '@/types'
 import { ElMessage } from 'element-plus'
 
@@ -104,12 +118,21 @@ const loading = ref(false)
 const report = ref<MigrationReadinessReport | null>(null)
 const overallScore = ref<number | null>(null)
 const risks = ref<RiskItem[]>([])
+
+const currentPage = ref(1)
+const pageSize = ref(10)
+
 const stats = computed(() => ({
   totalNodes: report.value?.totalNodes || 0,
   confirmedNodes: report.value?.confirmedNodes || 0,
   pendingNodes: report.value?.pendingNodes || 0,
   risks: report.value?.riskItems?.length || 0,
 }))
+
+const pagedRisks = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return risks.value.slice(start, start + pageSize.value)
+})
 
 function getRiskTypeTag(riskType: string) {
   switch (riskType) {
@@ -147,6 +170,7 @@ async function refreshDetection() {
     report.value = data
     overallScore.value = data.overallScore
     risks.value = data.riskItems || []
+    currentPage.value = 1
     ElMessage.success('风险检测完成')
   } catch (error) {
     console.error(error)
@@ -165,7 +189,6 @@ function exportReport() {
   const projectId = projectStore.currentProjectId as string
   reportApi.generateMigrationReport(projectId)
     .then(data => {
-      // 导出JSON
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -203,6 +226,10 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.stats-row {
+  margin-bottom: 20px;
+}
+
 .stat-card {
   text-align: center;
 }
@@ -225,8 +252,21 @@ onMounted(() => {
   transition: transform 0.3s;
 }
 
-.actions {
-  margin-top: 24px;
-  text-align: center;
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.table-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.pagination {
+  margin-top: 16px;
+  justify-content: flex-end;
 }
 </style>

@@ -266,11 +266,15 @@ public class ProjectScanner {
             completeTask(dbDiscoveryTask, "Discovered " + dbCount + " database connections", null);
             log.info("Auto-discovered {} database connections", dbCount);
 
+            if (isCancelled(versionId)) return;
+
             // 0b. 自动检测前后端子路径，回填 CodeRepo
             ScanTask pathDiscoveryTask = createTask(projectId, versionId, "PATH_DISCOVERY", "前后端路径自动检测");
             int pathCount = discoverSubPaths(projectId, baseDir);
             completeTask(pathDiscoveryTask, "Updated " + pathCount + " repo sub-paths", null);
             log.info("Auto-detected sub-paths for {} repos", pathCount);
+
+            if (isCancelled(versionId)) return;
 
             // 0c. 自动发现文档文件（仅在未指定 scanTypes 或包含 DOC_PARSE 时执行）
             boolean shouldScanDocs = scopeScanTypes == null || scopeScanTypes.isEmpty()
@@ -284,6 +288,8 @@ public class ProjectScanner {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=skipped (DOC_PARSE not in scanTypes)",
                         projectId, versionId);
             }
+
+            if (isCancelled(versionId)) return;
 
             // 0d. Adapter Registry 扫描：按资产选择 Adapter 做抽取
             if (isCancelled(versionId)) return;
@@ -334,11 +340,14 @@ public class ProjectScanner {
                 int processedConnections = 0;
                 logTaskProgress(dbTask, 0, dbConnections.size(), "database connections");
                 for (DbConnection conn : dbConnections) {
+                    if (isCancelled(versionId)) break;
                     try {
                         DataSource dataSource = createDataSource(conn);
                         totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn.getSchemaName(), conn.getDbType());
                     } catch (Exception e) {
-                        log.warn("Failed to scan database connection {}: {}", conn.getId(), e.getMessage());
+                        log.warn("Failed to scan database connection id={} host={}:{}/{} dbType={}: {}",
+                                conn.getId(), conn.getHost(), conn.getPort(),
+                                conn.getDatabaseName(), conn.getDbType(), e.getMessage());
                     } finally {
                         processedConnections++;
                         logTaskProgress(dbTask, processedConnections, dbConnections.size(), "database connections");
@@ -358,6 +367,9 @@ public class ProjectScanner {
                         log.warn("DB schema LLM enrichment failed (non-blocking): {}", e.getMessage());
                     }
                 }
+            } else {
+                log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=no READY database connections found for project",
+                        projectId, versionId);
             }
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=skipped (DB_SCAN not in scanTypes)",
@@ -897,6 +909,7 @@ public class ProjectScanner {
 
             Path relativeRoot = basePath.toAbsolutePath();
             for (Path docFile : docFiles) {
+                if (isCancelled(versionId)) break;
                 try {
                     String relativePath;
                     try {
@@ -982,11 +995,10 @@ public class ProjectScanner {
         dataSource.setUsername(conn.getUsername());
         dataSource.setPassword(conn.getPassword() != null ? conn.getPassword() : "");
         dataSource.setDriverClassName(getDriverClassName(conn.getDbType()));
-        // 设置连接超时属性，避免卡死
-        Properties props = new Properties();
-        props.setProperty("connectTimeout", "10");
-        props.setProperty("socketTimeout", "30");
-        dataSource.setConnectionProperties(props);
+        // 注意：连接超时已在 buildJdbcUrl 的 URL 参数中设置。
+        // PostgreSQL 驱动使用秒为单位（connectTimeout=10, socketTimeout=30），
+        // MySQL 驱动使用毫秒为单位（connectTimeout=10000, socketTimeout=30000）。
+        // 不要在此处通过 connectionProperties 覆盖 URL 参数，避免单位混淆导致超时异常。
         return dataSource;
     }
 
@@ -998,9 +1010,9 @@ public class ProjectScanner {
                 : ("mysql".equalsIgnoreCase(dbType) || "mariadb".equalsIgnoreCase(dbType) ? 3306 : 5432);
         String dbName = conn.getDatabaseName() != null ? conn.getDatabaseName() : "";
         return switch (dbType.toLowerCase()) {
-            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s?sslmode=disable",
+            case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s?sslmode=disable&connectTimeout=10&socketTimeout=30",
                     host, port, dbName);
-            case "mysql", "mariadb" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
+            case "mysql", "mariadb" -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=10000&socketTimeout=30000",
                     host, port, dbName);
             default -> throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
         };
@@ -1061,7 +1073,10 @@ public class ProjectScanner {
             }
             logTaskProgress(task, 0, total, "adapter candidate files");
 
-            // 并发处理：虚拟线程，I/O 阻塞时自动切换，充分利用 CPU
+            // 并发处理：Semaphore 限流防止连接池耗尽（虚拟线程 I/O 阻塞时自动切换）
+            // HikariCP max pool=20，这里限制并发数为 16 留 4 给其他扫描阶段
+            int maxConcurrency = Math.max(1, Integer.getInteger("legacy-graph.scan.adapter-concurrency", 16));
+            java.util.concurrent.Semaphore semaphore = new java.util.concurrent.Semaphore(maxConcurrency);
             java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
             try {
                 var visited = new java.util.concurrent.atomic.AtomicInteger(0);
@@ -1073,6 +1088,7 @@ public class ProjectScanner {
                             if (isCancelled(versionId)) {
                                 return null;
                             }
+                            semaphore.acquire();
                             try {
                                 SourceAsset asset = toSourceAsset(root, file);
                                 var adapter = extractionAdapterRegistry.selectAdapter(context, asset);
@@ -1093,6 +1109,7 @@ public class ProjectScanner {
                             } catch (Exception e) {
                                 log.debug("Skip file {}: {}", file, e.getMessage());
                             } finally {
+                                semaphore.release();
                                 int v = visited.incrementAndGet();
                                 if (v % PROGRESS_LOG_INTERVAL == 0 || v == total) {
                                     logTaskProgress(task, v, total, "adapter candidate files");

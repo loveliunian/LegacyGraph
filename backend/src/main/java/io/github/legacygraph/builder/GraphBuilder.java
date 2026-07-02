@@ -316,9 +316,8 @@ public class GraphBuilder {
                         NodeStatus.CONFIRMED
                 );
 
-                // 如果推断为外键，添加关系
+                // 如果推断为外键，添加 Table→Table REFERENCES 边
                 if (Boolean.TRUE.equals(colMeta.getForeignKey()) && colMeta.getReferencedTableName() != null) {
-                    // 推断引用表
                     String refTableKey;
                     if (tableMeta.getTableSchema() != null) {
                         refTableKey = tableMeta.getTableSchema() + "." + colMeta.getReferencedTableName();
@@ -326,7 +325,16 @@ public class GraphBuilder {
                         refTableKey = colMeta.getReferencedTableName();
                     }
                     GraphNode refTable = findOrCreateTableNode(projectId, versionId, colMeta.getReferencedTableName());
-                    // 外键关系已经通过JOINS在SQL中处理，这里不重复
+                    // 创建表间外键引用边（FK: 当前表 → 引用表）
+                    String fkEdgeKey = tableKey + "->references->" + refTableKey + "." + colMeta.getColumnName();
+                    createEdge(projectId, versionId,
+                            tableNode.getId(), refTable.getId(),
+                            EdgeType.REFERENCES.name(),
+                            fkEdgeKey,
+                            SourceType.DB_METADATA.name(),
+                            BigDecimal.valueOf(0.9),
+                            NodeStatus.CONFIRMED
+                    );
                 }
             }
         }

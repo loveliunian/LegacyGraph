@@ -201,7 +201,7 @@ public class LlmProviderService {
                 : 0.1;
         int maxTokens = config.containsKey("max_tokens")
                 ? ((Number) config.get("max_tokens")).intValue()
-                : 4096;
+                : 16384;
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model(provider.getModelId())

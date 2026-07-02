@@ -33,6 +33,7 @@ import io.github.legacygraph.service.KnowledgeClaimService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PreDestroy;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,6 +45,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -88,6 +94,26 @@ public class AiScanOrchestrator {
     private static final int MAX_CODE_EXTRACT_NODES = 30;
     /** 单个代码文件读取上限（字符），配合 truncate 控制 prompt 体积 */
     private static final int CODE_CONTENT_LIMIT = 8000;
+
+    /** 文档并发抽取线程数（LLM 调用为瓶颈，4 线程可同时打 4 个 LLM 请求） */
+    private static final int DOC_EXTRACT_PARALLELISM = 4;
+    /** 文档 LLM 调用单次上限字符数 */
+    private static final int DOC_CONTENT_LIMIT = 8000;
+
+    private final ExecutorService docExtractExecutor = Executors.newFixedThreadPool(DOC_EXTRACT_PARALLELISM);
+
+    @PreDestroy
+    public void shutdown() {
+        docExtractExecutor.shutdown();
+        try {
+            if (!docExtractExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                docExtractExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            docExtractExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 
     public AiScanOrchestrator(ScanTaskRepository scanTaskRepository,
                               DocumentRepository documentRepository,
@@ -180,25 +206,45 @@ public class AiScanOrchestrator {
                     new LambdaQueryWrapper<Document>()
                             .eq(Document::getProjectId, projectId)
                             .eq(Document::getVersionId, versionId));
-            int factCount = 0;
-            for (Document doc : docs) {
-                String content = readDocContent(doc);
-                if (content == null || content.isBlank()) {
-                    continue;
-                }
-                try {
-                    DocUnderstandingAgent.BusinessFactExtraction extraction =
-                            docUnderstandingAgent.extractBusinessFacts(projectId,
-                                    truncate(content, 8000), doc.getFilePath());
-                    factCount += persistBusinessFacts(projectId, versionId, doc, extraction);
-                    buildBusinessGraph(projectId, versionId, doc, extraction);
-                    upsertClaimDrafts(projectId, versionId,
-                            docUnderstandingAgent.toClaimDrafts(projectId, versionId, extraction, doc.getFilePath()));
-                } catch (Exception e) {
-                    log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
-                }
+            if (docs.isEmpty()) {
+                completeTask(task, buildDocExtractSummary(0, 0), null);
+                return;
             }
-            completeTask(task, buildDocExtractSummary(factCount, docs.size()), null);
+
+            log.info("AI_DOC_EXTRACT starting: versionId={}, docCount={}, parallelism={}",
+                    versionId, docs.size(), DOC_EXTRACT_PARALLELISM);
+
+            AtomicInteger factCount = new AtomicInteger(0);
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+            for (Document doc : docs) {
+                futures.add(CompletableFuture.runAsync(() -> {
+                    String content = readDocContent(doc);
+                    if (content == null || content.isBlank()) {
+                        return;
+                    }
+                    try {
+                        DocUnderstandingAgent.BusinessFactExtraction extraction =
+                                docUnderstandingAgent.extractBusinessFacts(projectId,
+                                        truncate(content, DOC_CONTENT_LIMIT), doc.getFilePath());
+                        int count = persistBusinessFacts(projectId, versionId, doc, extraction);
+                        factCount.addAndGet(count);
+                        buildBusinessGraph(projectId, versionId, doc, extraction);
+                        upsertClaimDrafts(projectId, versionId,
+                                docUnderstandingAgent.toClaimDrafts(projectId, versionId, extraction, doc.getFilePath()));
+                    } catch (Exception e) {
+                        log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
+                    }
+                }, docExtractExecutor));
+            }
+
+            // 等待所有文档处理完成
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            int totalFacts = factCount.get();
+            log.info("AI_DOC_EXTRACT completed: versionId={}, factCount={}, docCount={}",
+                    versionId, totalFacts, docs.size());
+            completeTask(task, buildDocExtractSummary(totalFacts, docs.size()), null);
         } catch (Exception e) {
             log.error("AI_DOC_EXTRACT failed: versionId={}", versionId, e);
             completeTask(task, null, e.getMessage());

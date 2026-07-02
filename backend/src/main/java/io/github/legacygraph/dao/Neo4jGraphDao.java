@@ -1,5 +1,6 @@
 package io.github.legacygraph.dao;
 
+import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
@@ -1035,8 +1036,16 @@ public class Neo4jGraphDao {
                 session.run(String.format(
                         "CREATE INDEX IF NOT EXISTS FOR (n:%s) ON (n.nodeKey)", label));
             }
+
+            // Relationship 属性索引：加速按 projectId + versionId 查询边
+            for (EdgeType type : EdgeType.values()) {
+                String relType = type.name();
+                session.run(String.format(
+                        "CREATE INDEX IF NOT EXISTS FOR ()-[r:%s]-() ON (r.projectId, r.versionId)", relType));
+            }
+            log.info("Created Neo4j indexes for {} node types and {} edge types",
+                    NodeType.values().length, EdgeType.values().length);
             // id 属性已在 createConstraints 中通过 UNIQUE 约束自动索引，无需重复建
-            log.info("Created Neo4j indexes for {} node types", NodeType.values().length);
         }
     }
 

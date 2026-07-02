@@ -77,9 +77,9 @@ class GraphPathReadModelTest {
         tableNode.setId("tbl-1");
         tableNode.setNodeType("Table");
         tableNode.setNodeName("orders");
-        when(neo4jGraphDao.queryNodes("p1", "v1", "Table", null, null, null, 50))
+        when(neo4jGraphDao.queryNodes("p1", "v1", "Table", null, null, null, 200))
                 .thenReturn(List.of(tableNode));
-        when(neo4jGraphDao.queryEdges("p1", "v1", null, null, 200))
+        when(neo4jGraphDao.queryEdges("p1", "v1", null, null, 500))
                 .thenReturn(List.of());
 
         GraphPathReadModel.PathChain chain = pathReadModel.getTableImpact("p1", "v1", "orders");
