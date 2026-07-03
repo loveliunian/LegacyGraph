@@ -86,16 +86,16 @@ class VectorRetrievalServiceTest {
     @Test
     void testBatchUpsertVectors_SkipsEmptyContent() {
         VectorDocument doc = new VectorDocument();
-        doc.setProjectId(1001L);
+        doc.setProjectId("1001");
         doc.setChunkType("CODE");
         doc.setSourceUri("/path/Test.java");
         doc.setContent("");
         doc.setEmbeddingModel("model");
 
-        vectorRetrievalService.batchUpsertVectors("1001", Collections.singletonList(doc));
+        vectorRetrievalService.batchUpsertVectors("1001", "v1", Collections.singletonList(doc));
 
         verify(vectorizationService, never()).embedAndStore(
-                anyLong(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyString());
+                anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyString());
     }
 
     @Test
@@ -201,7 +201,7 @@ class VectorRetrievalServiceTest {
         int idx = 0;
         for (String chunk : chunks) {
             Long id = realVectorization.embedAndStore(
-                    1001L, "v1", "DOC_CHUNK", "/docs/spec.md", idx++, chunk, "text-embedding-3-small");
+                    "1001", "v1", "DOC_CHUNK", "/docs/spec.md", idx++, chunk, "text-embedding-3-small");
             assertNotNull(id);
         }
         // 每个 chunk 都落库一次

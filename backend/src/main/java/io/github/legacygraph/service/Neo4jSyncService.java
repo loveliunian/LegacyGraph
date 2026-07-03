@@ -21,8 +21,7 @@ public class Neo4jSyncService {
         this.neo4jGraphDao = neo4jGraphDao;
     }
 
-    /** @deprecated 图谱数据已直写 Neo4j，此方法仅做版本清理 */
-    @Deprecated
+    /** 清理 Neo4j 图谱数据（用于重新扫描前） */
     public void syncGraph(String projectId, String versionId) {
         log.info("Clearing Neo4j graph before rescan: projectId={}, versionId={}", projectId, versionId);
         neo4jGraphDao.deleteGraph(projectId, versionId);

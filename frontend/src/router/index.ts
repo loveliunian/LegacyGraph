@@ -229,6 +229,12 @@ const routes: RouteRecordRaw[] = [
             name: 'AgentHub',
             component: () => import('@/views/agent/AgentHub.vue'),
             meta: { title: 'AI 助手' }
+          },
+          {
+            path: 'understanding',
+            name: 'UnderstandingReport',
+            component: () => import('@/views/understanding/UnderstandingReportView.vue'),
+            meta: { title: '代码理解' }
           }
         ]
       },

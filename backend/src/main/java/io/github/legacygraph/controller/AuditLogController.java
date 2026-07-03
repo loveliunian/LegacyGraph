@@ -81,4 +81,27 @@ public class AuditLogController {
             "today", today
         ));
     }
+
+    @GetMapping("/{id}/download")
+    @Operation(summary = "下载审计日志详情", description = "以 JSON 格式下载单条审计日志")
+    public org.springframework.http.ResponseEntity<byte[]> download(
+            @PathVariable Long id) {
+        AuditLog log = auditLogService.getById(id);
+        if (log == null) {
+            return org.springframework.http.ResponseEntity.notFound().build();
+        }
+        try {
+            String json = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(log);
+            byte[] data = json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            return org.springframework.http.ResponseEntity.ok()
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=audit-log-" + id + ".json")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(data);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return org.springframework.http.ResponseEntity.internalServerError().build();
+        }
+    }
 }

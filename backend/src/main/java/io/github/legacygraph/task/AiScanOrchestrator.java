@@ -30,6 +30,8 @@ import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.service.DocumentContentService;
 import io.github.legacygraph.service.GapFinderService;
 import io.github.legacygraph.service.KnowledgeClaimService;
+import io.github.legacygraph.service.VectorizationService;
+import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -85,6 +88,11 @@ public class AiScanOrchestrator {
     private final DocumentContentService documentContentService = new DocumentContentService();
     private final KnowledgeClaimService knowledgeClaimService;
     private final GapFinderService gapFinderService;
+    /** 扫描后代码理解增强器 — 对扫描结果中的关键符号执行深入的代码理解 */
+    private final ScanUnderstandingEnhancer scanUnderstandingEnhancer;
+
+    /** 文档/代码向量化服务 — 将文档和代码内容嵌入到 pgvector 供语义检索 */
+    private final VectorizationService vectorizationService;
 
     /** 测试生成的高价值节点上限，避免编排耗时过长 */
     private static final int MAX_TEST_GEN_NODES = 20;
@@ -99,6 +107,12 @@ public class AiScanOrchestrator {
     private static final int DOC_EXTRACT_PARALLELISM = 4;
     /** 文档 LLM 调用单次上限字符数 */
     private static final int DOC_CONTENT_LIMIT = 8000;
+
+    /** 向量化分片参数 */
+    private static final int VECTOR_CHUNK_SIZE = 2000;
+    private static final int VECTOR_OVERLAP = 200;
+    /** 当前使用的 embedding 模型名 */
+    private static final String EMBEDDING_MODEL_NAME = "bge-m3";
 
     private final ExecutorService docExtractExecutor = Executors.newFixedThreadPool(DOC_EXTRACT_PARALLELISM);
 
@@ -128,7 +142,9 @@ public class AiScanOrchestrator {
                               BusinessGraphBuilder businessGraphBuilder,
                               ObjectMapper objectMapper,
                               KnowledgeClaimService knowledgeClaimService,
-                              GapFinderService gapFinderService) {
+                              GapFinderService gapFinderService,
+                              ScanUnderstandingEnhancer scanUnderstandingEnhancer,
+                              VectorizationService vectorizationService) {
         this.scanTaskRepository = scanTaskRepository;
         this.documentRepository = documentRepository;
         this.factRepository = factRepository;
@@ -143,6 +159,8 @@ public class AiScanOrchestrator {
         this.objectMapper = objectMapper;
         this.knowledgeClaimService = knowledgeClaimService;
         this.gapFinderService = gapFinderService;
+        this.scanUnderstandingEnhancer = scanUnderstandingEnhancer;
+        this.vectorizationService = vectorizationService;
     }
 
     /**
@@ -194,6 +212,9 @@ public class AiScanOrchestrator {
 
         runKnowledgeGapScan(projectId, versionId);
 
+        // 扫描后代码理解增强（try-catch 包裹，增强失败不影响基础扫描状态）
+        runScanUnderstandingEnhancement(projectId, versionId);
+
         log.info("AI orchestration completed: versionId={}", versionId);
     }
 
@@ -223,6 +244,8 @@ public class AiScanOrchestrator {
                     if (content == null || content.isBlank()) {
                         return;
                     }
+                    // 向量化文档内容（非阻塞：失败不影响后续 LLM 抽取）
+                    vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
                     try {
                         DocUnderstandingAgent.BusinessFactExtraction extraction =
                                 docUnderstandingAgent.extractBusinessFacts(projectId,
@@ -301,6 +324,8 @@ public class AiScanOrchestrator {
                     continue;
                 }
                 processed++;
+                // 向量化代码内容（非阻塞：失败不影响后续 LLM 抽取）
+                vectorizeContent(projectId, versionId, "CODE", node.getSourcePath(), content);
                 try {
                     FactExtractionResult result = codeFactAgent.extractFacts(
                             projectId, truncate(content, CODE_CONTENT_LIMIT), node.getSourcePath());
@@ -619,10 +644,15 @@ public class AiScanOrchestrator {
     private void runTestGenerate(String projectId, String versionId) {
         ScanTask task = createTask(projectId, versionId, "AI_TEST_GENERATE", "测试用例生成");
         try {
-            List<GraphNode> apiNodes = neo4jGraphDao.queryNodes(projectId, versionId,
-                    NodeType.ApiEndpoint.name(), null, null, null, MAX_TEST_GEN_NODES);
+            // 查询多种节点类型，与手动生成端点保持一致
+            List<GraphNode> allNodes = new ArrayList<>();
+            String[] types = {"ApiEndpoint", "Feature", "Controller"};
+            for (String t : types) {
+                allNodes.addAll(neo4jGraphDao.queryNodes(projectId, versionId,
+                        t, null, null, null, MAX_TEST_GEN_NODES));
+            }
             int generated = 0;
-            for (GraphNode node : apiNodes) {
+            for (GraphNode node : allNodes) {
                 try {
                     TestCaseAgent.TestGenerationRequest req = new TestCaseAgent.TestGenerationRequest();
                     req.setProjectId(projectId);
@@ -796,6 +826,26 @@ public class AiScanOrchestrator {
 
     // ==================== 工具方法 ====================
 
+    /**
+     * 向量化内容分片并存储到 pgvector（非阻塞：失败不影响扫描主流程）。
+     */
+    private void vectorizeContent(String projectId, String versionId, String chunkType,
+                                  String sourceUri, String content) {
+        if (vectorizationService == null || !vectorizationService.isAvailable()) {
+            return;
+        }
+        try {
+            int stored = vectorizationService.embedDocument(
+                    projectId, versionId, chunkType, sourceUri, content,
+                    VECTOR_CHUNK_SIZE, VECTOR_OVERLAP, EMBEDDING_MODEL_NAME);
+            if (stored > 0) {
+                log.debug("Vectorized {}: {} chunks stored", sourceUri, stored);
+            }
+        } catch (Exception e) {
+            log.debug("Vectorization skipped for {}: {}", sourceUri, e.getMessage());
+        }
+    }
+
     private boolean saveAiFact(String projectId, String versionId, String factType, String factKey,
                                String factName, String sourcePath, Object data, double confidence,
                                String sourceType) {
@@ -943,5 +993,95 @@ public class AiScanOrchestrator {
             log.error("AI_GAP_FINDING failed: versionId={}", versionId, e);
             completeTask(task, null, e.getMessage());
         }
+    }
+
+    /**
+     * 扫描后代码理解增强 — 提取扫描结果中优先级最高的符号，调用 ScanUnderstandingEnhancer 进行深入分析。
+     * <p>
+     * 增强失败不影响基础扫描状态，使用 try-catch 包裹整个增强流程。
+     * </p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 扫描版本 ID
+     */
+    private void runScanUnderstandingEnhancement(String projectId, String versionId) {
+        if (scanUnderstandingEnhancer == null) {
+            log.debug("ScanUnderstandingEnhancer not available, skipping: versionId={}", versionId);
+            return;
+        }
+        ScanTask task = createTask(projectId, versionId, "AI_CODE_UNDERSTANDING", "扫描后代码理解增强");
+        try {
+            // 提取 top symbols：按复杂度/入度排序的关键节点（Service/Controller/Method）
+            List<String> topSymbols = extractTopSymbols(projectId, versionId);
+            if (topSymbols.isEmpty()) {
+                completeTask(task, "⚠ 无关键符号需要增强（缺少 Service/Controller/Method 等高价值节点）", null);
+                return;
+            }
+
+            // 调用增强器
+            ScanUnderstandingEnhancer.EnhancementResult result =
+                    scanUnderstandingEnhancer.enhance(projectId, versionId, topSymbols);
+
+            String summary = result.isEnabled()
+                    ? String.format("增强 %d/%d 个符号成功（失败 %d），收集 %d 条证据：%s",
+                            result.getEnhancedCount(), result.getEnhancedCount() + result.getFailCount(),
+                            result.getFailCount(), result.getTotalEvidence(), result.getMessage())
+                    : "增强未启用：" + result.getMessage();
+            completeTask(task, summary, null);
+            log.info("扫描后增强完成: projectId={}, versionId={}, result={}",
+                    projectId, versionId, result.getMessage());
+        } catch (Exception e) {
+            // 增强失败不影响基础扫描状态
+            log.error("扫描后代码理解增强失败: projectId={}, versionId={}, err={}",
+                    projectId, versionId, e.getMessage());
+            completeTask(task, null, "增强失败（不影响基础扫描）: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 提取扫描结果中优先级最高的符号（按复杂度/入度排序）。
+     * <p>
+     * 优先选择 Service、Controller、Method 类型节点，按入度（被引用次数）降序排序。
+     * 取前 MAX_CODE_EXTRACT_NODES 个作为增强目标。
+     * </p>
+     */
+    private List<String> extractTopSymbols(String projectId, String versionId) {
+        List<String> symbols = new ArrayList<>();
+
+        // 查询 Service 节点
+        List<GraphNode> serviceNodes = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Service.name(), null, null, null, MAX_CODE_EXTRACT_NODES);
+        // 查询 Controller 节点
+        List<GraphNode> controllerNodes = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Controller.name(), null, null, null, MAX_CODE_EXTRACT_NODES);
+        // 查询 Method 节点
+        List<GraphNode> methodNodes = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Method.name(), null, null, null, MAX_CODE_EXTRACT_NODES);
+
+        // 合并并按优先级排序：Service > Controller > Method，同类取前几个
+        List<GraphNode> allNodes = new ArrayList<>();
+        allNodes.addAll(serviceNodes);
+        allNodes.addAll(controllerNodes);
+        allNodes.addAll(methodNodes);
+
+        // 按 traceCount（被追踪次数，作为复杂度/入度的代理指标）降序排序
+        allNodes.sort(Comparator.<GraphNode, Long>comparing(
+                n -> n.getTraceCount() != null ? n.getTraceCount() : 0L).reversed());
+
+        // 取前 MAX_CODE_EXTRACT_NODES 个
+        int limit = Math.min(allNodes.size(), MAX_CODE_EXTRACT_NODES);
+        for (int i = 0; i < limit; i++) {
+            GraphNode node = allNodes.get(i);
+            // 优先使用 nodeKey 作为符号标识，回退到 nodeName
+            String symbol = node.getNodeKey() != null ? node.getNodeKey() : node.getNodeName();
+            if (symbol != null && !symbol.isBlank()) {
+                symbols.add(symbol);
+            }
+        }
+
+        log.info("提取扫描后增强目标: projectId={}, versionId={}, count={}, types=[Service={}, Controller={}, Method={}]",
+                projectId, versionId, symbols.size(),
+                serviceNodes.size(), controllerNodes.size(), methodNodes.size());
+        return symbols;
     }
 }

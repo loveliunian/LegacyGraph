@@ -166,7 +166,7 @@ class DatabaseMetadataScanServiceTest {
         DatabaseConstraintExtractor.IndexInfo idx = new DatabaseConstraintExtractor.IndexInfo();
         idx.setIndexName("uk_orders_no");
         idx.setTableName("orders");
-        idx.setColumnName("order_no");
+        idx.setColumnNames(java.util.List.of("order_no"));
         idx.setNonUnique(false);
         idx.setUnique(true);
 

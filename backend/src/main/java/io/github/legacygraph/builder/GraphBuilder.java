@@ -401,28 +401,31 @@ public class GraphBuilder {
                         BigDecimal.ONE,
                         NodeStatus.CONFIRMED);
 
-                if (idx.isUnique() && idx.getColumnName() != null && !idx.getColumnName().isBlank()) {
-                    String columnKey = tableKey + "." + idx.getColumnName();
-                    GraphNode columnNode = findOrCreateNode(
-                            projectId, versionId,
-                            NodeType.Column.name(),
-                            columnKey,
-                            idx.getColumnName(),
-                            idx.getColumnName(),
-                            null,
-                            SourceType.DB_METADATA.name(),
-                            null,
-                            null,
-                            null,
-                            BigDecimal.ONE,
-                            NodeStatus.CONFIRMED);
-                    createEdge(projectId, versionId,
-                            indexNode.getId(), columnNode.getId(),
-                            EdgeType.UNIQUE_ON.name(),
-                            indexKey + "->unique_on->" + columnKey,
-                            SourceType.DB_METADATA.name(),
-                            BigDecimal.ONE,
-                            NodeStatus.CONFIRMED);
+                if (idx.isUnique() && idx.getColumnNames() != null) {
+                    for (String columnName : idx.getColumnNames()) {
+                        if (columnName == null || columnName.isBlank()) continue;
+                        String columnKey = tableKey + "." + columnName;
+                        GraphNode columnNode = findOrCreateNode(
+                                projectId, versionId,
+                                NodeType.Column.name(),
+                                columnKey,
+                                columnName,
+                                columnName,
+                                null,
+                                SourceType.DB_METADATA.name(),
+                                null,
+                                null,
+                                null,
+                                BigDecimal.ONE,
+                                NodeStatus.CONFIRMED);
+                        createEdge(projectId, versionId,
+                                indexNode.getId(), columnNode.getId(),
+                                EdgeType.UNIQUE_ON.name(),
+                                indexKey + "->unique_on->" + columnKey,
+                                SourceType.DB_METADATA.name(),
+                                BigDecimal.ONE,
+                                NodeStatus.CONFIRMED);
+                    }
                 }
             }
         }

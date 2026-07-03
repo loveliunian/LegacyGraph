@@ -19,7 +19,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -284,5 +286,40 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         cacheService.evictByPrefix("graph:node:");
 
         scanVersionRepository.deleteById(versionId);
+    }
+
+    /**
+     * 获取扫描日志
+     * 查询指定扫描版本的所有扫描任务，返回格式化的日志列表
+     */
+    public List<Map<String, Object>> getScanLogs(String versionId) {
+        List<ScanTask> tasks = scanTaskRepository.lambdaQuery()
+                .eq(ScanTask::getVersionId, versionId)
+                .orderByAsc(ScanTask::getCreatedAt)
+                .list();
+
+        List<Map<String, Object>> logs = new ArrayList<>();
+        for (ScanTask task : tasks) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("time", task.getCreatedAt() != null ? task.getCreatedAt().toString() : "-");
+            entry.put("type", "FAILED".equals(task.getTaskStatus()) ? "ERROR" : "INFO");
+            entry.put("message", task.getTaskName() != null
+                    ? "任务 [" + task.getTaskName() + "] 状态: " + task.getTaskStatus()
+                    : "扫描子任务状态: " + task.getTaskStatus());
+            if (task.getErrorMessage() != null) {
+                entry.put("error", task.getErrorMessage());
+            }
+            logs.add(entry);
+        }
+
+        if (logs.isEmpty()) {
+            logs.add(Map.of(
+                    "time", LocalDateTime.now().toString(),
+                    "type", "INFO",
+                    "message", "暂无扫描日志记录"
+            ));
+        }
+
+        return logs;
     }
 }

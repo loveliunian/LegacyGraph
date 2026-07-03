@@ -2,6 +2,7 @@ package io.github.legacygraph.controller;
 
 import io.github.legacygraph.agent.*;
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.config.AgentConfigProperties;
 import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.dto.GraphMergeDecision;
@@ -18,20 +19,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.annotation.PostConstruct;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 
 /**
  * LLM Agent 控制器
- * 提供大语言模型驱动的各类智能Agent执行接口，包括：
- * <ul>
- *   <li>代码事实抽取：从代码中抽取业务事实和知识</li>
- *   <li>文档理解：从文档中抽取业务事实</li>
- *   <li>功能映射：将UI、API、权限映射到功能模块</li>
- *   <li>测试用例生成：根据功能描述生成测试用例</li>
- *   <li>知识图谱合并：对重复节点进行合并决策</li>
- *   <li>代码评审：生成审核建议</li>
- * </ul>
+ * 提供大语言模型驱动的各类智能Agent执行接口。
+ *
+ * <p>通用 Agent 路由（{@link #runAgent}）通过 {@link #agentRegistry} 字典分发，
+ * 新增 Agent 类型只需在 {@code @PostConstruct} 中注册一行，无需修改 switch/case。
  */
 @Slf4j
 @RestController
@@ -55,12 +54,38 @@ public class LlmAgentController {
     private final PrDescriptionAgent prDescriptionAgent;
     private final GraphMergeService graphMergeService;
     private final Neo4jGraphDao neo4jGraphDao;
+    private final AgentConfigProperties agentConfig;
+
+    /**
+     * Agent 类型 → 执行器 的字典注册表。
+     * key: agentType (小写), value: (projectId, variables) → result
+     */
+    private final Map<String, BiFunction<String, Map<String, String>, ?>> agentRegistry = new HashMap<>();
+
+    @PostConstruct
+    void initAgentRegistry() {
+        // 注册所有通用 Agent 处理器 —— 新增 Agent 在此加一行即可
+        agentRegistry.put("codefact", (projectId, vars) -> {
+            String codeContent = vars.get("codeContent");
+            String sourcePath = vars.get("sourcePath");
+            return codeFactAgent.extractFacts(projectId, codeContent, sourcePath);
+        });
+        agentRegistry.put("docunderstanding", (projectId, vars) -> {
+            String docContent = vars.get("docContent");
+            String sourcePath = vars.get("sourcePath");
+            return docUnderstandingAgent.extractBusinessFacts(projectId, docContent, sourcePath);
+        });
+        agentRegistry.put("featuremapping", (projectId, vars) -> {
+            FeatureMappingAgent.MappingRequest req = parseMappingRequest(projectId, vars);
+            return featureMappingAgent.mapFeatures(req);
+        });
+        agentRegistry.put("testcasegeneration", (projectId, vars) ->
+                testCaseAgent.generateTestCases(parseTestGenRequest(projectId, vars)));
+    }
 
     /**
      * 通用运行指定Agent
-     * 根据Agent类型路由到对应的Agent实现，动态传入参数
-     * @param request 运行Agent请求，包含Agent类型、项目ID和参数变量
-     * @return Agent执行结果，根据Agent类型返回不同的数据结构
+     * 根据Agent类型从字典注册表中查找对应执行器。
      */
     @PostMapping("/run")
     @Operation(summary = "通用运行指定Agent", description = "根据Agent类型动态路由，运行指定的Agent并返回结果")
@@ -75,41 +100,15 @@ public class LlmAgentController {
         String projectId = request.getProjectId();
         Map<String, String> variables = request.getVariables();
 
-        // 根据 agentType 路由到对应实现
-        return switch (agentType.toLowerCase()) {
-            case "codefact" -> {
-                String codeContent = variables.get("codeContent");
-                String sourcePath = variables.get("sourcePath");
-                FactExtractionResult result = codeFactAgent.extractFacts(projectId, codeContent, sourcePath);
-                yield Result.ok(result);
-            }
-            case "docunderstanding" -> {
-                String docContent = variables.get("docContent");
-                String sourcePath = variables.get("sourcePath");
-                DocUnderstandingAgent.BusinessFactExtraction result =
-                        docUnderstandingAgent.extractBusinessFacts(projectId, docContent, sourcePath);
-                yield Result.ok(result);
-            }
-            case "featuremapping" -> {
-                FeatureMappingAgent.MappingResult result =
-                        featureMappingAgent.mapFeatures(parseMappingRequest(projectId, variables));
-                yield Result.ok(result);
-            }
-            case "testcasegeneration" -> {
-                List<GeneratedTestCase> result =
-                        testCaseAgent.generateTestCases(parseTestGenRequest(projectId, variables));
-                yield Result.ok(result);
-            }
-            default -> Result.badRequest("Unknown agent type: " + agentType);
-        };
+        BiFunction<String, Map<String, String>, ?> handler = agentRegistry.get(agentType.toLowerCase());
+        if (handler == null) {
+            return Result.badRequest("Unknown agent type: " + agentType);
+        }
+        return Result.ok(handler.apply(projectId, variables));
     }
 
     /**
      * 获取图谱合并候选对
-     * 根据相似度算法查找可能需要合并的重复节点对
-     * @param projectId 项目ID
-     * @param nodeType 节点类型
-     * @return 合并候选对列表
      */
     @GetMapping("/graph/merge/candidates")
     @Operation(summary = "获取合并候选对", description = "根据相似度算法查找可能需要合并的重复节点对")
@@ -125,11 +124,6 @@ public class LlmAgentController {
 
     /**
      * LLM决策两个节点是否应该合并
-     * 调用大语言模型分析两个节点的语义，判断是否应该合并为一个节点
-     * @param projectId 项目ID
-     * @param nodeAId 第一个节点ID
-     * @param nodeBId 第二个节点ID
-     * @return 合并决策结果，包含是否合并和理由
      */
     @PostMapping("/graph/merge/decide")
     @Operation(summary = "LLM决策节点合并", description = "调用大语言模型分析两个节点的语义，判断是否应该合并")
@@ -145,18 +139,16 @@ public class LlmAgentController {
         if (nodeA == null || nodeB == null) {
             return Result.badRequest("Node not found");
         }
+
+        AgentConfigProperties.MergeConfig cfg = agentConfig.getMerge();
         GraphMergeDecision decision = graphMergeAgent.decideMerge(projectId, nodeA, nodeB,
-                0.8, 0.7, 0.6, 0.5, 0.7);
+                cfg.getNameWeight(), cfg.getSemanticWeight(), cfg.getStructWeight(),
+                cfg.getNeighborWeight(), cfg.getEvidenceWeight());
         return Result.ok(decision);
     }
 
     /**
      * 执行节点合并
-     * 将源节点合并到目标节点，然后将源节点标记为删除
-     * @param projectId 项目ID
-     * @param targetNodeId 目标节点ID，保留这个节点
-     * @param mergeNodeId 待合并节点ID，合并后会被标记为删除
-     * @return 成功结果
      */
     @PostMapping("/graph/merge/execute")
     @Operation(summary = "执行节点合并", description = "将源节点合并到目标节点，源节点标记为删除")
@@ -173,9 +165,6 @@ public class LlmAgentController {
 
     /**
      * 根据功能节点生成测试用例
-     * 使用LLM根据功能描述、API信息和业务规则自动生成测试用例
-     * @param request 测试生成请求，包含功能信息和API定义
-     * @return 生成的测试用例列表
      */
     @PostMapping("/tests/generate")
     @Operation(summary = "生成测试用例", description = "根据功能节点信息，使用LLM自动生成测试用例")
@@ -188,9 +177,6 @@ public class LlmAgentController {
 
     /**
      * 生成审核建议
-     * 对图谱中的待审核项，使用LLm生成审核建议
-     * @param request 审核请求，包含待审核内容
-     * @return 审核结果，包含建议和评分
      */
     @PostMapping("/review/suggest")
     @Operation(summary = "生成审核建议", description = "对图谱中的待审核项，使用LLM生成审核建议和评分")
@@ -199,44 +185,6 @@ public class LlmAgentController {
             @RequestBody ReviewAgent.ReviewRequest request) {
         ReviewAgent.ReviewResult result = reviewAgent.generateReviewSuggestion(request);
         return Result.ok(result);
-    }
-
-    /**
-     * 解析功能映射请求
-     * 从通用变量map中解析出功能映射请求的各个字段
-     * @param projectId 项目ID
-     * @param vars 变量map
-     * @return 功能映射请求
-     */
-    private FeatureMappingAgent.MappingRequest parseMappingRequest(String projectId, Map<String, String> vars) {
-        FeatureMappingAgent.MappingRequest req = new FeatureMappingAgent.MappingRequest();
-        req.setProjectId(projectId);
-        req.setVueCode(vars.get("vueCode"));
-        req.setApiDefinitions(vars.get("apiDefinitions"));
-        req.setControllerCode(vars.get("controllerCode"));
-        req.setPermissionInfo(vars.get("permissionInfo"));
-        req.setProductDoc(vars.get("productDoc"));
-        return req;
-    }
-
-    /**
-     * 解析测试用例生成请求
-     * 从通用变量map中解析出测试生成请求的各个字段
-     * @param projectId 项目ID
-     * @param vars 变量map
-     * @return 测试用例生成请求
-     */
-    private TestCaseAgent.TestGenerationRequest parseTestGenRequest(String projectId, Map<String, String> vars) {
-        TestCaseAgent.TestGenerationRequest req = new TestCaseAgent.TestGenerationRequest();
-        req.setProjectId(projectId);
-        req.setFeatureKey(vars.get("featureKey"));
-        req.setFeatureName(vars.get("featureName"));
-        req.setApiEndpoint(vars.get("apiEndpoint"));
-        req.setHttpMethod(vars.get("httpMethod"));
-        req.setRequestSchema(vars.get("requestSchema"));
-        req.setRelatedTables(vars.get("relatedTables"));
-        req.setBusinessRules(vars.get("businessRules"));
-        return req;
     }
 
     /**
@@ -274,21 +222,6 @@ public class LlmAgentController {
         return Result.ok(result);
     }
 
-    @lombok.Data
-    public static class SqlAnalyzeRequest {
-        private String projectId;
-        private String sqlKey;
-        private String sql;
-        private String schemaInfo;
-    }
-
-    @lombok.Data
-    public static class ReportInsightRequest {
-        private String projectId;
-        private String metrics;
-        private String gaps;
-    }
-
     // ==================== Phase 4：后置能力 ====================
 
     @PostMapping("/refactor/suggest")
@@ -321,6 +254,49 @@ public class LlmAgentController {
             @RequestBody PrDescribeRequest request) {
         return Result.ok(prDescriptionAgent.generate(request.getProjectId(), request.getBranch(),
                 request.getIssue(), request.getDiff()));
+    }
+
+    // ==================== 辅助：解析通用变量 → Agent 专用请求 ====================
+
+    private FeatureMappingAgent.MappingRequest parseMappingRequest(String projectId, Map<String, String> vars) {
+        FeatureMappingAgent.MappingRequest req = new FeatureMappingAgent.MappingRequest();
+        req.setProjectId(projectId);
+        req.setVueCode(vars.get("vueCode"));
+        req.setApiDefinitions(vars.get("apiDefinitions"));
+        req.setControllerCode(vars.get("controllerCode"));
+        req.setPermissionInfo(vars.get("permissionInfo"));
+        req.setProductDoc(vars.get("productDoc"));
+        return req;
+    }
+
+    private TestCaseAgent.TestGenerationRequest parseTestGenRequest(String projectId, Map<String, String> vars) {
+        TestCaseAgent.TestGenerationRequest req = new TestCaseAgent.TestGenerationRequest();
+        req.setProjectId(projectId);
+        req.setFeatureKey(vars.get("featureKey"));
+        req.setFeatureName(vars.get("featureName"));
+        req.setApiEndpoint(vars.get("apiEndpoint"));
+        req.setHttpMethod(vars.get("httpMethod"));
+        req.setRequestSchema(vars.get("requestSchema"));
+        req.setRelatedTables(vars.get("relatedTables"));
+        req.setBusinessRules(vars.get("businessRules"));
+        return req;
+    }
+
+    // ==================== 请求 DTO ====================
+
+    @lombok.Data
+    public static class SqlAnalyzeRequest {
+        private String projectId;
+        private String sqlKey;
+        private String sql;
+        private String schemaInfo;
+    }
+
+    @lombok.Data
+    public static class ReportInsightRequest {
+        private String projectId;
+        private String metrics;
+        private String gaps;
     }
 
     @lombok.Data
@@ -356,12 +332,9 @@ public class LlmAgentController {
         private String diff;
     }
 
-    /**
-     * 通用运行Agent请求
-     */
     @lombok.Data
     public static class RunAgentRequest {
-        @io.swagger.v3.oas.annotations.media.Schema(description = "Agent类型，可选值: codefact|docunderstanding|featuremapping|testcasegeneration", example = "codefact")
+        @io.swagger.v3.oas.annotations.media.Schema(description = "Agent类型，可选值见 agentRegistry", example = "codefact")
         private String agentType;
 
         @io.swagger.v3.oas.annotations.media.Schema(description = "项目ID", requiredMode = io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED)

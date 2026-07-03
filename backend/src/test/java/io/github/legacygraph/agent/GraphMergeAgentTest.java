@@ -1,5 +1,6 @@
 package io.github.legacygraph.agent;
 
+import io.github.legacygraph.config.AgentConfigProperties;
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.llm.LlmGateway;
@@ -10,6 +11,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -20,10 +23,17 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class GraphMergeAgentTest {
 
     @Mock
     private LlmGateway llmGateway;
+
+    @Mock
+    private AgentConfigProperties agentConfig;
+
+    @Mock
+    private AgentConfigProperties.MergeConfig mergeConfig;
 
     @InjectMocks
     private GraphMergeAgent graphMergeAgent;
@@ -33,6 +43,15 @@ class GraphMergeAgentTest {
 
     @BeforeEach
     void setUp() {
+        // 注入默认权重配置，保持与旧硬编码值一致
+        when(agentConfig.getMerge()).thenReturn(mergeConfig);
+        when(mergeConfig.getConfidenceSupportWeight()).thenReturn(0.50);
+        when(mergeConfig.getConfidenceSemanticWeight()).thenReturn(0.15);
+        when(mergeConfig.getConfidenceStructWeight()).thenReturn(0.15);
+        when(mergeConfig.getConfidenceNeighborWeight()).thenReturn(0.10);
+        when(mergeConfig.getConfidenceRuntimeWeight()).thenReturn(0.05);
+        when(mergeConfig.getConfidenceHumanWeight()).thenReturn(0.05);
+        when(mergeConfig.getConfidenceConflictPenalty()).thenReturn(0.35);
         nodeA = new GraphNode();
         nodeA.setNodeKey("POST /api/users");
         nodeA.setNodeName("创建用户接口");

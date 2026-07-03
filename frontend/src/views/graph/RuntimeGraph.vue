@@ -172,6 +172,27 @@
       </el-col>
     </el-row>
   </div>
+
+  <!-- 异常分析弹窗 -->
+  <el-dialog v-model="errorAnalysisVisible" title="异常服务分析" width="600px">
+    <el-table :data="errorAnalysisData" style="width: 100%">
+      <el-table-column prop="name" label="服务名称" min-width="180" />
+      <el-table-column prop="p99" label="P99延迟(ms)" width="120" align="center">
+        <template #default="{ row }">
+          <span :style="{ color: row.p99 > 1000 ? '#f56c6c' : '#e6a23c' }">{{ row.p99 }}ms</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="errorRate" label="错误率" width="100" align="center">
+        <template #default="{ row }">
+          <span :style="{ color: row.errorRate > 5 ? '#f56c6c' : '#e6a23c' }">{{ row.errorRate }}%</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="reason" label="异常原因" min-width="200" />
+    </el-table>
+    <template #footer>
+      <el-button @click="errorAnalysisVisible = false">关闭</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -206,6 +227,9 @@ const instanceCount = ref(0)
 const errorCount = ref(0)
 // 是否已有真实上报的 trace 数据（决定是否显示"未接入"提示）
 const hasRealTrace = ref(false)
+// 异常分析弹窗
+const errorAnalysisVisible = ref(false)
+const errorAnalysisData = ref<Array<{ name: string; p99: number; errorRate: number; reason: string }>>([])
 
 /**
  * 从后端加载运行链路数据
@@ -366,13 +390,19 @@ const refreshTraces = async () => {
 }
 
 const showErrorAnalysis = () => {
-  // 过滤出状态异常的服务节点进行分析
   const errorNodes = services.value.filter(s => s.health === 'error')
   if (errorNodes.length === 0) {
     ElMessage.info('当前无异常服务')
     return
   }
-  ElMessage.warning(`发现 ${errorNodes.length} 个异常服务: ${errorNodes.map(s => s.name).join(', ')}`)
+  // Populate dialog data with error service details
+  errorAnalysisData.value = errorNodes.map(s => ({
+    name: s.name,
+    p99: s.p99 || 0,
+    errorRate: s.errorRate || 0,
+    reason: s.p99 > 1000 ? '响应延迟过高 (P99 > 1s)' : '错误率异常',
+  }))
+  errorAnalysisVisible.value = true
 }
 
 onMounted(async () => {

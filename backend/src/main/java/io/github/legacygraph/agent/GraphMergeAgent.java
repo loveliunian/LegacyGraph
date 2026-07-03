@@ -1,5 +1,6 @@
 package io.github.legacygraph.agent;
 
+import io.github.legacygraph.config.AgentConfigProperties;
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.entity.GraphNode;
@@ -22,6 +23,7 @@ import java.util.*;
 public class GraphMergeAgent {
 
     private final LlmGateway llmGateway;
+    private final AgentConfigProperties agentConfig;
 
     @Data
     public static class MergeInput {
@@ -76,9 +78,14 @@ public class GraphMergeAgent {
                                                  double structScore, double neighborScore,
                                                  boolean runtimeVerified, boolean humanReviewed,
                                                  double conflict) {
-        double result = 0.50 * support + 0.15 * semanticScore + 0.15 * structScore
-                + 0.10 * neighborScore + 0.05 * (runtimeVerified ? 1.0 : 0.0)
-                + 0.05 * (humanReviewed ? 1.0 : 0.0) - 0.35 * conflict;
+        AgentConfigProperties.MergeConfig cfg = agentConfig.getMerge();
+        double result = cfg.getConfidenceSupportWeight() * support
+                + cfg.getConfidenceSemanticWeight() * semanticScore
+                + cfg.getConfidenceStructWeight() * structScore
+                + cfg.getConfidenceNeighborWeight() * neighborScore
+                + cfg.getConfidenceRuntimeWeight() * (runtimeVerified ? 1.0 : 0.0)
+                + cfg.getConfidenceHumanWeight() * (humanReviewed ? 1.0 : 0.0)
+                - cfg.getConfidenceConflictPenalty() * conflict;
         result = Math.max(0, Math.min(1, result));
         return BigDecimal.valueOf(result).setScale(4, java.math.RoundingMode.HALF_UP);
     }

@@ -11,6 +11,11 @@ export const auditApi = {
   /** 获取审计日志详情 */
   getDetail: (id: string) => get(`/lg/audit/${id}`),
 
+  /** 下载审计日志详情（JSON格式） */
+  download: (id: string) => {
+    window.open(`/api/lg/audit/${id}/download`, '_blank')
+  },
+
   /** 清空审计日志 */
   clear: () => del('/lg/audit/clear'),
 

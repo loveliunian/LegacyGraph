@@ -92,23 +92,7 @@
                 <el-checkbox value="DOC_PARSE">
                   <div class="scan-type-item">
                     <span class="type-name">文档解析</span>
-                    <span class="type-desc">解析产品文档、API 文档，提取业务规则、流程、接口定义</span>
-                  </div>
-                </el-checkbox>
-              </el-col>
-              <el-col :span="12">
-                <el-checkbox value="GRAPH_BUILD">
-                  <div class="scan-type-item">
-                    <span class="type-name">图谱构建</span>
-                    <span class="type-desc">基于已有的事实构建知识图谱，生成节点和关系</span>
-                  </div>
-                </el-checkbox>
-              </el-col>
-              <el-col :span="12">
-                <el-checkbox value="TEST_GENERATE">
-                  <div class="scan-type-item">
-                    <span class="type-name">测试生成</span>
-                    <span class="type-desc">基于图谱和 API 信息，自动生成接口测试用例</span>
+                    <span class="type-desc">解析产品文档、API 文档，自动开启 AI 归纳提取业务规则、流程、接口定义</span>
                   </div>
                 </el-checkbox>
               </el-col>
@@ -242,7 +226,7 @@ const scanForm = reactive({
   enableAi: true,
   minConfidence: 0.6,
   overwriteGraph: false,
-  autoGenerateTestCase: false
+  autoGenerateTestCase: true
 })
 
 const getRepoName = (id: string) => {

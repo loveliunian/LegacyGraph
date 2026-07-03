@@ -31,6 +31,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Component;
@@ -138,10 +139,31 @@ public class ProjectScanner {
                          GraphBuilder graphBuilder,
                          FrontendGraphBuilder frontendGraphBuilder,
                          Neo4jGraphDao neo4jGraphDao,
+                         ObjectMapper objectMapper,
+                         AiScanOrchestrator aiScanOrchestrator,
+                         DbSchemaAnalysisAgent dbSchemaAnalysisAgent,
+                         ExtractionAdapterRegistry extractionAdapterRegistry) {
+        this(scanVersionRepository, scanTaskRepository, factRepository, dbConnectionRepository,
+                codeRepoRepository, documentRepository, graphBuilder, frontendGraphBuilder,
+                neo4jGraphDao, objectMapper, aiScanOrchestrator, dbSchemaAnalysisAgent,
+                extractionAdapterRegistry, new DatabaseMetadataScanService(graphBuilder));
+    }
+
+    @Autowired
+    public ProjectScanner(ScanVersionRepository scanVersionRepository,
+                         ScanTaskRepository scanTaskRepository,
+                         FactRepository factRepository,
+                         DbConnectionRepository dbConnectionRepository,
+                         CodeRepoRepository codeRepoRepository,
+                         DocumentRepository documentRepository,
+                         GraphBuilder graphBuilder,
+                         FrontendGraphBuilder frontendGraphBuilder,
+                         Neo4jGraphDao neo4jGraphDao,
 	                         ObjectMapper objectMapper,
 	                         AiScanOrchestrator aiScanOrchestrator,
 	                         DbSchemaAnalysisAgent dbSchemaAnalysisAgent,
-	                         ExtractionAdapterRegistry extractionAdapterRegistry) {
+	                         ExtractionAdapterRegistry extractionAdapterRegistry,
+                             DatabaseMetadataScanService databaseMetadataScanService) {
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
@@ -155,7 +177,7 @@ public class ProjectScanner {
         this.aiScanOrchestrator = aiScanOrchestrator;
         this.dbSchemaAnalysisAgent = dbSchemaAnalysisAgent;
         this.extractionAdapterRegistry = extractionAdapterRegistry;
-        this.databaseMetadataScanService = new DatabaseMetadataScanService(graphBuilder);
+        this.databaseMetadataScanService = databaseMetadataScanService;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -310,21 +332,18 @@ public class ProjectScanner {
 
             if (isCancelled(versionId)) return;
 
-            // 0d. Adapter Registry 扫描：按资产选择 Adapter 做抽取
-            if (isCancelled(versionId)) return;
-            log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
-                    projectId, versionId);
-            ScanTask adapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
-            int adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan);
-            completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
-            log.info("Adapter registry scan processed {} assets", adapterCount);
-
-            // === 1. 代码扫描阶段：Java / Service / MyBatis / 前端 ===
-            // Phase 1-2: 结构化代码抽取统一由 Adapter Registry 承接，不再回退到旧硬编码 Extractor 链。
+            // 0d. Adapter Registry 扫描：仅在 CODE_SCAN 已启用时执行代码结构抽取
             if (isCancelled(versionId)) return;
             boolean shouldScanCode = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("CODE_SCAN");
+            int adapterCount = 0;
             if (shouldScanCode) {
+                log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
+                        projectId, versionId);
+                ScanTask adapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
+                adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan);
+                completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
+                log.info("Adapter registry scan processed {} assets", adapterCount);
                 if (adapterCount > 0) {
                     log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=completed by Adapter Registry ({} assets)",
                             projectId, versionId, adapterCount);
@@ -396,23 +415,31 @@ public class ProjectScanner {
             }
 
             // 5. 图谱已由各 Builder 在扫描过程中直写 Neo4j，无需额外同步步骤
+            // 此子任务仅作为扫描阶段标记，不执行实质操作
             log.info("Scan still running: projectId={}, versionId={}, phase=GRAPH_BUILD, detail=graph built in Neo4j",
                     projectId, versionId);
             ScanTask buildTask = createTask(projectId, versionId, "GRAPH_BUILD", "图谱构建");
             completeTask(buildTask, "Graph built in Neo4j", null);
 
-            // 6. 扫描后 AI 编排（开关默认取后端配置 legacy-graph.ai.*，scanScope 可覆盖）
+            // 6. 扫描后 AI 编排
+            // DOC_PARSE 在 scanTypes 中时强制开启 AI 归纳，确保文档内容被分析
             if (isCancelled(versionId)) return;
             try {
+                boolean docParseEnabled = scopeScanTypes != null && scopeScanTypes.contains("DOC_PARSE");
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=starting",
                         projectId, versionId);
                 io.github.legacygraph.dto.AiScanConfig aiDefaults = new io.github.legacygraph.dto.AiScanConfig();
-                aiDefaults.setEnableAi(aiEnableDefault);
+                aiDefaults.setEnableAi(aiEnableDefault || docParseEnabled);
                 aiDefaults.setAutoGenerateTestCase(aiAutoGenerateTestCaseDefault);
                 aiDefaults.setMinConfidence(aiMinConfidenceDefault);
                 io.github.legacygraph.dto.AiScanConfig aiConfig =
                         io.github.legacygraph.dto.AiScanConfig.fromScanScope(
                                 version != null ? version.getScanScope() : null, objectMapper, aiDefaults);
+                // DOC_PARSE 时强制 AI 归纳（前端可能未勾选 enableAi）
+                if (docParseEnabled && !aiConfig.isEnableAi()) {
+                    aiConfig.setEnableAi(true);
+                    log.info("AI orchestration: enableAi forced to true because DOC_PARSE is in scanTypes");
+                }
                 aiScanOrchestrator.orchestrate(projectId, versionId, aiConfig,
                         () -> isCancelled(versionId));
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=completed",

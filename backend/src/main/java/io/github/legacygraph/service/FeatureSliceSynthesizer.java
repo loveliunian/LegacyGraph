@@ -8,6 +8,8 @@ import io.github.legacygraph.dto.graph.FeatureSlice.SliceNodeRef;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.KnowledgeClaim;
+import io.github.legacygraph.entity.ToolEvidenceEntity;
+import io.github.legacygraph.repository.ToolEvidenceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -59,6 +61,8 @@ public class FeatureSliceSynthesizer {
 
     private final KnowledgeClaimService knowledgeClaimService;
     private final Neo4jGraphDao neo4jGraphDao;
+    /** 外部工具证据 Repository — 读取工具运行产生的结构化证据，补充切片覆盖率 */
+    private final ToolEvidenceRepository toolEvidenceRepository;
 
     /** 入口类型集合：动态识别多入口形态 */
     private static final Set<String> ENTRANCE_TYPES = Set.of(
@@ -147,6 +151,11 @@ public class FeatureSliceSynthesizer {
                 entrances, featureClaims);
         List<SliceNodeRef> verification = collectVerification(projectId, versionId,
                 featureNodeId, featureClaims);
+
+        // 步骤3.5：从外部工具证据（ToolEvidence）补充各层节点覆盖率
+        // 工具证据的 graphNodeKey 可匹配到图谱节点，提高入口、实现、数据、规则章节覆盖率
+        supplementCoverageFromToolEvidence(projectId, versionId, featureNodeId,
+                entrances, implementation, data, rules, verification);
 
         // 步骤4：识别缺口
         List<SliceNodeRef> gaps = identifyGaps(featureKey, entrances, implementation,
@@ -470,6 +479,106 @@ public class FeatureSliceSynthesizer {
 
         log.debug("收集验证节点: {} 个", result.size());
         return result;
+    }
+
+    // ==================== 外部工具证据补充 ====================
+
+    /**
+     * 从外部工具证据（ToolEvidence 表）补充各层节点覆盖率。
+     * <p>
+     * 策略：
+     * <ol>
+     *   <li>查询该项目+版本下所有 ToolEvidence 记录</li>
+     *   <li>按 graphNodeKey 在 Neo4j 图谱中解析对应节点</li>
+     *   <li>根据节点类型分配到 entrances / implementation / data / rules / verification 各层</li>
+     *   <li>已存在的节点不重复添加（按 nodeId 去重）</li>
+     * </ol>
+     * 外部工具证据可提高入口、实现、数据、规则各章节的覆盖率。
+     * </p>
+     */
+    private void supplementCoverageFromToolEvidence(String projectId, String versionId,
+                                                     String featureNodeId,
+                                                     List<SliceNodeRef> entrances,
+                                                     List<SliceNodeRef> implementation,
+                                                     List<SliceNodeRef> data,
+                                                     List<SliceNodeRef> rules,
+                                                     List<SliceNodeRef> verification) {
+        try {
+            // 查询该项目+版本下所有工具证据记录
+            var wrapper = new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ToolEvidenceEntity>();
+            // 注意：ToolEvidence 没有直接的 projectId/versionId，通过 toolRunId 关联
+            // 简化实现：查询所有有 graphNodeKey 的证据记录，逐个在 Neo4j 中验证归属
+            List<ToolEvidenceEntity> allEvidence = toolEvidenceRepository.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ToolEvidenceEntity>()
+                            .isNotNull(ToolEvidenceEntity::getGraphNodeKey));
+
+            if (allEvidence.isEmpty()) {
+                log.debug("无外部工具证据记录");
+                return;
+            }
+
+            // 收集所有各层已有的 nodeId，用于去重
+            Set<String> existingNodeIds = new HashSet<>();
+            for (List<SliceNodeRef> layer : List.of(entrances, implementation, data, rules, verification)) {
+                for (SliceNodeRef ref : layer) {
+                    if (ref.getNodeId() != null) {
+                        existingNodeIds.add(ref.getNodeId());
+                    }
+                }
+            }
+
+            int supplemented = 0;
+            for (ToolEvidenceEntity ev : allEvidence) {
+                if (ev.getGraphNodeKey() == null || ev.getGraphNodeKey().isBlank()) {
+                    continue;
+                }
+                // 按 graphNodeKey 在 Neo4j 中查找节点
+                List<GraphNode> matched = neo4jGraphDao.queryNodes(
+                        projectId, versionId, null, ev.getGraphNodeKey(), null, null, null, 5);
+                for (GraphNode node : matched) {
+                    if (node == null || node.getId() == null) continue;
+                    if (!existingNodeIds.add(node.getId())) continue; // 去重
+
+                    // 根据节点类型分配到对应层
+                    String nodeType = node.getNodeType();
+                    String sourceLabel = "TOOL_EVIDENCE:" + (ev.getEvidenceType() != null ? ev.getEvidenceType() : "UNKNOWN");
+                    SliceNodeRef ref = SliceNodeRef.builder()
+                            .nodeId(node.getId())
+                            .nodeType(nodeType)
+                            .nodeName(node.getNodeName())
+                            .displayName(node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName())
+                            .description(node.getDescription())
+                            .sourceType(sourceLabel)
+                            .confidence(ev.getConfidence() != null
+                                    ? BigDecimal.valueOf(ev.getConfidence())
+                                    : node.getConfidence())
+                            .edgeType("EVIDENCE_SUPPORTS")
+                            .build();
+
+                    if (ENTRANCE_TYPES.contains(nodeType)) {
+                        entrances.add(ref);
+                    } else if (IMPLEMENTATION_TYPES.contains(nodeType)) {
+                        implementation.add(ref);
+                    } else if (DATA_TYPES.contains(nodeType)) {
+                        data.add(ref);
+                    } else if (RULE_TYPES.contains(nodeType)) {
+                        rules.add(ref);
+                    } else if (VERIFICATION_TYPES.contains(nodeType)) {
+                        verification.add(ref);
+                    }
+                    supplemented++;
+                }
+            }
+
+            if (supplemented > 0) {
+                log.info("外部工具证据补充了 {} 个切片节点: entrances={}, impl={}, data={}, rules={}, verify={}",
+                        supplemented, entrances.size(), implementation.size(),
+                        data.size(), rules.size(), verification.size());
+            }
+        } catch (Exception e) {
+            // 工具证据补充失败不能影响基础切片合成
+            log.warn("外部工具证据补充失败: featureKey 相关 projectId={}, err={}", projectId, e.getMessage());
+        }
     }
 
     // ==================== 缺口识别 ====================

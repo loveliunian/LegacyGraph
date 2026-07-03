@@ -2,6 +2,7 @@ package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.config.AgentConfigProperties;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
@@ -16,18 +17,33 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class GraphMergeServiceTest {
 
+    private final AgentConfigProperties agentConfig = createDefaultConfig();
+
+    private static AgentConfigProperties createDefaultConfig() {
+        AgentConfigProperties config = new AgentConfigProperties();
+        AgentConfigProperties.MergeConfig merge = config.getMerge();
+        merge.setScoreNameWeight(0.35);
+        merge.setScoreStructWeight(0.25);
+        merge.setScoreEvidenceWeight(0.20);
+        merge.setScoreRuntimeWeight(0.10);
+        merge.setScoreHistoryWeight(0.10);
+        merge.setAutoMergeThreshold(0.85);
+        merge.setReviewThreshold(0.50);
+        return config;
+    }
+
     private GraphMergeService graphMergeService;
 
     @Test
     void testConstruction() {
-        graphMergeService = new GraphMergeService(new FakeNeo4jGraphDao(), null);
+        graphMergeService = new GraphMergeService(new FakeNeo4jGraphDao(), null, agentConfig);
         assertNotNull(graphMergeService);
     }
 
     @Test
     void executeMergeRecordsLineageAsValidJsonWhenNodeNameContainsReplacementTokens() throws Exception {
         FakeNeo4jGraphDao neo4jGraphDao = new FakeNeo4jGraphDao();
-        graphMergeService = new GraphMergeService(neo4jGraphDao, null);
+        graphMergeService = new GraphMergeService(neo4jGraphDao, null, agentConfig);
         GraphNode targetNode = new GraphNode();
         targetNode.setId("target-1");
         targetNode.setProjectId("project-1");

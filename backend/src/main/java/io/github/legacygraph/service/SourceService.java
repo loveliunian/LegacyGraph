@@ -183,6 +183,7 @@ public class SourceService {
 
     /**
      * 解析文档并分块存档。
+     * 使用 DocumentExtractor 抽取 PDF/DOCX/MD/TXT 文本并按标题切分成 DocChunk 存档。
      */
     public Map<String, Object> parseDocument(String projectId, String docId) {
         Map<String, Object> result = new HashMap<>();
@@ -192,23 +193,70 @@ public class SourceService {
             result.put("message", "文档不存在");
             return result;
         }
+
+        String filePath = doc.getFilePath();
+        if (filePath == null || filePath.isBlank()) {
+            result.put("success", false);
+            result.put("message", "文档文件路径为空，无法解析");
+            return result;
+        }
+
+        java.io.File file = new java.io.File(filePath);
+        if (!file.exists()) {
+            result.put("success", false);
+            result.put("message", "文档文件不存在: " + filePath);
+            return result;
+        }
+
         // 标记为解析中
         doc.setParseStatus("PARSING");
         documentRepository.updateById(doc);
 
         try {
-            // TODO: 实际解析逻辑（PDF/DOCX/MD → 文本切片）
+            // 使用 DocumentExtractor 抽取文本
+            io.github.legacygraph.extractors.DocumentExtractor extractor =
+                    new io.github.legacygraph.extractors.DocumentExtractor();
+            String text = extractor.extractText(file);
+
+            // 按标题切分成文档片段（每片最多 2000 tokens）
+            int maxTokensPerChunk = 2000;
+            List<io.github.legacygraph.extractors.DocumentExtractor.DocumentChunk> chunks =
+                    extractor.chunkDocument(text, doc.getDocName(), maxTokensPerChunk);
+
+            // 保存文档片段到 lg_doc_chunk 表
+            int savedChunks = 0;
+            for (io.github.legacygraph.extractors.DocumentExtractor.DocumentChunk chunk : chunks) {
+                io.github.legacygraph.entity.DocChunk docChunk = new io.github.legacygraph.entity.DocChunk();
+                docChunk.setProjectId(projectId);
+                docChunk.setVersionId(doc.getVersionId());
+                docChunk.setDocName(doc.getDocName());
+                docChunk.setDocPath(filePath);
+                docChunk.setChunkIndex(chunk.getIndex());
+                docChunk.setTitlePath(chunk.getTitlePath());
+                docChunk.setContent(chunk.getContent());
+                docChunk.setTokenCount(chunk.getTokenCount());
+                docChunk.setCreatedAt(LocalDateTime.now());
+                docChunkRepository.insert(docChunk);
+                savedChunks++;
+            }
+
+            // 更新文档状态
             doc.setParseStatus("PARSED");
-            doc.setFactCount(0);
+            doc.setFactCount(savedChunks);
+            doc.setParsedAt(LocalDateTime.now());
             documentRepository.updateById(doc);
+
             result.put("success", true);
-            result.put("factCount", 0);
+            result.put("factCount", savedChunks);
+            result.put("chunkCount", savedChunks);
+            log.info("Document parsed successfully: docId={}, chunks={}, filePath={}", docId, savedChunks, filePath);
         } catch (Exception e) {
             doc.setParseStatus("FAILED");
+            doc.setErrorMessage(e.getMessage());
             documentRepository.updateById(doc);
             result.put("success", false);
             result.put("message", "解析失败: " + e.getMessage());
-            log.error("Document parse failed: docId={}", docId, e);
+            log.error("Document parse failed: docId={}, filePath={}", docId, filePath, e);
         }
         return result;
     }

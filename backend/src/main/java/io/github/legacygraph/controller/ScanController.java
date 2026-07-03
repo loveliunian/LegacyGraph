@@ -13,6 +13,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * 扫描管理控制器
  * 管理知识图谱扫描任务，支持创建扫描版本、启动/暂停/取消/恢复扫描，查询扫描进度
@@ -181,5 +184,17 @@ public class ScanController {
         projectScanner.requestCancel(versionId);
         scanVersionService.deleteScanVersion(versionId);
         return Result.success();
+    }
+
+    /**
+     * 获取扫描日志
+     * 返回指定扫描版本的所有扫描任务日志记录
+     */
+    @GetMapping("/{versionId}/logs")
+    @Operation(summary = "获取扫描日志", description = "获取指定扫描版本的所有扫描任务日志记录")
+    public Result<List<Map<String, Object>>> getLogs(
+            @PathVariable String projectId,
+            @PathVariable String versionId) {
+        return Result.success(scanVersionService.getScanLogs(versionId));
     }
 }

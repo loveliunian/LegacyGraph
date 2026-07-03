@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.GapTask;
 import io.github.legacygraph.entity.KnowledgeClaim;
+import io.github.legacygraph.entity.ToolRunEntity;
 import io.github.legacygraph.repository.GapTaskRepository;
 import io.github.legacygraph.repository.KnowledgeClaimRepository;
+import io.github.legacygraph.repository.ToolRunRepository;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,8 @@ public class GapFinderService {
     private final KnowledgeClaimRepository claimRepository;
     private final GapTaskRepository gapTaskRepository;
     private final ObjectMapper objectMapper;
+    /** 工具运行 Repository — 查询最近工具运行状态，用于判断外部工具证据是否充足 */
+    private final ToolRunRepository toolRunRepository;
 
     // ──────────── 缺口类型常量 ────────────
     private static final String DOC_ONLY_FEATURE = "doc_only_feature";
@@ -47,6 +51,8 @@ public class GapFinderService {
     private static final String FEATURE_WITHOUT_DATA_EFFECT = "feature_without_data_effect";
     private static final String BUSINESS_OBJECT_WITHOUT_TABLE = "business_object_without_table";
     private static final String RULE_WITHOUT_ENFORCEMENT = "rule_without_enforcement";
+    /** 新增缺口类型：外部工具证据不足（工具运行失败/不可用/超时/索引过期） */
+    private static final String TOOL_EVIDENCE_INSUFFICIENT = "tool_evidence_insufficient";
 
     /**
      * 扫描缺口结果 DTO。
@@ -122,6 +128,9 @@ public class GapFinderService {
             List<KnowledgeClaim> ruleClaims = claimsBySubject.getOrDefault(ruleKey, Collections.emptyList());
             newGaps.addAll(scanRuleWithoutEnforcement(projectId, versionId, ruleKey, ruleClaims, claimsBySubject));
         }
+
+        // 7. tool_evidence_insufficient — 检查最近工具运行状态，是否缺少外部工具证据
+        newGaps.addAll(scanToolEvidenceInsufficient(projectId, versionId, allClaims));
 
         // 幂等写入
         int created = 0;
@@ -340,6 +349,98 @@ public class GapFinderService {
         return Collections.emptyList();
     }
 
+    /**
+     * 扫描外部工具证据不足的缺口。
+     * <p>
+     * 查询最近工具运行记录，如果存在 FAILED / UNAVAILABLE / TIMEOUT 状态，
+     * 或索引过期（STALE），则生成 tool_evidence_insufficient 缺口。
+     * 在缺口描述中附加具体的工具异常原因，帮助定位外部工具不可用/索引过期问题。
+     * </p>
+     */
+    private List<GapTask> scanToolEvidenceInsufficient(String projectId, String versionId,
+                                                         List<KnowledgeClaim> allClaims) {
+        List<GapTask> gaps = new ArrayList<>();
+
+        // 查询该项目+版本下的最近工具运行记录
+        LambdaQueryWrapper<ToolRunEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ToolRunEntity::getProjectId, projectId);
+        wrapper.eq(ToolRunEntity::getVersionId, versionId);
+        wrapper.orderByDesc(ToolRunEntity::getCreatedAt);
+        List<ToolRunEntity> runs = toolRunRepository.selectList(wrapper);
+
+        if (runs.isEmpty()) {
+            // 没有任何工具运行记录，说明外部工具未被调用
+            gaps.add(buildGapWithReason(projectId, versionId, TOOL_EVIDENCE_INSUFFICIENT,
+                    "ext-tools:all",
+                    "外部工具证据缺失：该项目未产生任何工具运行记录",
+                    "ToolRun", projectId,
+                    "HIGH",
+                    "原因：外部工具（MCP/CLI/本地代码索引）未被调用或未启用。建议启用代码理解增强功能或在扫描配置中开启外部工具调用。",
+                    toClaimIds(allClaims)));
+            return gaps;
+        }
+
+        // 检查是否存在失败/不可用/超时的运行
+        List<ToolRunEntity> failedRuns = runs.stream()
+                .filter(r -> "FAILED".equals(r.getStatus())
+                        || "UNAVAILABLE".equals(r.getStatus())
+                        || "TIMEOUT".equals(r.getStatus()))
+                .toList();
+
+        // 检查是否存在索引过期
+        List<ToolRunEntity> staleRuns = runs.stream()
+                .filter(r -> "STALE".equals(r.getIndexFreshness()))
+                .toList();
+
+        for (ToolRunEntity run : failedRuns) {
+            String reason = buildToolFailureReason(run);
+            gaps.add(buildGapWithReason(projectId, versionId, TOOL_EVIDENCE_INSUFFICIENT,
+                    "tool:" + run.getToolName() + ":" + run.getStatus(),
+                    "外部工具异常: " + run.getToolName() + " (" + run.getStatus() + ")",
+                    "ToolRun", run.getId(),
+                    "HIGH",
+                    reason,
+                    toClaimIds(allClaims)));
+        }
+
+        for (ToolRunEntity run : staleRuns) {
+            gaps.add(buildGapWithReason(projectId, versionId, TOOL_EVIDENCE_INSUFFICIENT,
+                    "tool:" + run.getToolName() + ":STALE_INDEX",
+                    "外部工具索引过期: " + run.getToolName(),
+                    "ToolRun", run.getId(),
+                    "MEDIUM",
+                    "原因：索引新鲜度=STALE，工具 " + run.getToolName()
+                            + " 返回的索引可能已过期，建议触发重新索引或检查索引更新策略。",
+                    toClaimIds(allClaims)));
+        }
+
+        return gaps;
+    }
+
+    /**
+     * 根据工具运行状态构建失败原因描述。
+     */
+    private String buildToolFailureReason(ToolRunEntity run) {
+        StringBuilder reason = new StringBuilder();
+        reason.append("原因：工具 ").append(run.getToolName())
+                .append(" 运行状态=").append(run.getStatus());
+
+        if (run.getExitCode() != null) {
+            reason.append("，退出码=").append(run.getExitCode());
+        }
+        if (run.getErrorExcerpt() != null && !run.getErrorExcerpt().isBlank()) {
+            reason.append("，错误摘要：").append(run.getErrorExcerpt());
+        }
+        if ("UNAVAILABLE".equals(run.getStatus())) {
+            reason.append("。工具不可用，请检查工具配置/网络/权限。");
+        } else if ("TIMEOUT".equals(run.getStatus())) {
+            reason.append("。工具调用超时，可能网络延迟或查询范围过大。");
+        } else if ("FAILED".equals(run.getStatus())) {
+            reason.append("。工具执行失败，请检查工具日志。");
+        }
+        return reason.toString();
+    }
+
     // ──────────── 幂等写入 ────────────
 
     /**
@@ -432,6 +533,37 @@ public class GapFinderService {
         gap.setStatus("OPEN");
         gap.setSubjectType(subjectType);
         gap.setSubjectKey(subjectKey);
+        gap.setRelatedClaimIds(toJson(relatedClaimIds));
+        gap.setRelatedNodeIds("[]");
+        gap.setEvidenceIds("[]");
+        gap.setPriorityScore(BigDecimal.valueOf(0.5));
+        gap.setCreatedAt(LocalDateTime.now());
+        gap.setUpdatedAt(LocalDateTime.now());
+        return gap;
+    }
+
+    /**
+     * 构建带详细信息原因的 GapTask（用于工具证据不足等需要附加原因的缺口）。
+     * description 字段承载拼接后的完整原因说明。
+     */
+    private GapTask buildGapWithReason(String projectId, String versionId, String gapType,
+                                        String gapKey, String title, String subjectType,
+                                        String subjectKey, String severity, String reason,
+                                        List<String> relatedClaimIds) {
+        GapTask gap = new GapTask();
+        gap.setId(UUID.randomUUID().toString());
+        gap.setProjectId(projectId);
+        gap.setVersionId(versionId);
+        gap.setGapType(gapType);
+        gap.setGapKey(gapKey);
+        gap.setTitle(title);
+        // description 拼接标题与原因，便于在缺口详情中直接查看根本原因
+        gap.setDescription(title + "\n" + reason);
+        gap.setSeverity(severity);
+        gap.setStatus("OPEN");
+        gap.setSubjectType(subjectType);
+        gap.setSubjectKey(subjectKey);
+        gap.setSuggestedAction(reason); // 将原因存入建议操作字段，方便前端展示
         gap.setRelatedClaimIds(toJson(relatedClaimIds));
         gap.setRelatedNodeIds("[]");
         gap.setEvidenceIds("[]");

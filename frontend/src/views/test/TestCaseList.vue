@@ -83,17 +83,26 @@
 
     <el-dialog v-model="generateDialogVisible" title="AI 生成测试用例" width="700px">
       <el-form label-width="120px">
-        <el-form-item label="生成范围">
-          <el-checkbox-group v-model="generateForm.scopes">
-            <el-checkbox value="order_module">订单模块</el-checkbox>
-            <el-checkbox value="user_module">用户模块</el-checkbox>
-            <el-checkbox value="payment_module">支付模块</el-checkbox>
-            <el-checkbox value="product_module">商品模块</el-checkbox>
-            <el-checkbox value="inventory_module">库存模块</el-checkbox>
+        <el-form-item label="扫描版本">
+          <el-select v-model="generateForm.versionId" placeholder="选择扫描版本" style="width: 100%;" @focus="loadVersionsForGenerate">
+            <el-option
+              v-for="v in generateVersions"
+              :key="v.id"
+              :label="`${v.versionNumber || v.versionNo || v.id} (${v.nodeCount || 0} 节点)`"
+              :value="v.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="节点类型">
+          <el-checkbox-group v-model="generateForm.nodeTypes">
+            <el-checkbox label="ApiEndpoint">API端点</el-checkbox>
+            <el-checkbox label="Feature">功能模块</el-checkbox>
+            <el-checkbox label="Controller">控制器</el-checkbox>
+            <el-checkbox label="Service">服务类</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="用例类型">
-          <el-checkbox-group v-model="generateForm.types">
+          <el-checkbox-group v-model="generateForm.caseTypes">
             <el-checkbox value="API">API测试</el-checkbox>
             <el-checkbox value="E2E">端到端测试</el-checkbox>
             <el-checkbox value="DB_ASSERTION">数据库断言</el-checkbox>
@@ -162,7 +171,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MagicStick } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import { testApi } from '@/api'
+import { testApi, scanApi } from '@/api'
 import { useProjectStore } from '@/stores/project'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
@@ -176,6 +185,7 @@ const generateDialogVisible = ref(false)
 const detailVisible = ref(false)
 const selectedCase = ref<any>(null)
 const generating = ref(false)
+const generateVersions = ref<any[]>([])
 
 const filters = ref({
   caseType: '',
@@ -189,8 +199,9 @@ const pagination = ref({
 })
 
 const generateForm = ref({
-  scopes: ['order_module'],
-  types: ['API', 'E2E'],
+  versionId: '',
+  nodeTypes: ['ApiEndpoint'] as string[],
+  caseTypes: ['API', 'E2E'] as string[],
   count: 10,
   remark: ''
 })
@@ -275,15 +286,39 @@ const deleteCase = async (row: any) => {
 
 const showGenerateDialog = () => {
   generateDialogVisible.value = true
+  loadVersionsForGenerate()
+}
+
+const loadVersionsForGenerate = async () => {
+  if (!projectId || generateVersions.value.length > 0) return
+  try {
+    const res: any = await scanApi.list(projectId!, { pageNum: 1, pageSize: 100 })
+    const list = res?.list || res || []
+    generateVersions.value = list
+    // 自动选择最新的版本
+    if (list.length > 0 && !generateForm.value.versionId) {
+      generateForm.value.versionId = list[0].id
+    }
+  } catch (err) {
+    console.error('加载扫描版本失败:', err)
+  }
 }
 
 const generateCases = async () => {
+  if (!generateForm.value.versionId) {
+    ElMessage.warning('请先选择扫描版本')
+    return
+  }
+  if (generateForm.value.nodeTypes.length === 0) {
+    ElMessage.warning('请至少选择一种节点类型')
+    return
+  }
   generating.value = true
   try {
     await testApi.generate(projectId!, {
-      versionId: projectId!,
+      versionId: generateForm.value.versionId,
       scope: {
-        nodeTypes: generateForm.value.types,
+        nodeTypes: generateForm.value.nodeTypes,
         priority: ['high']
       }
     })

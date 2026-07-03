@@ -19,7 +19,7 @@ public class AiScanConfig {
     private boolean enableAi = false;
 
     /** 是否自动生成测试用例 */
-    private boolean autoGenerateTestCase = false;
+    private boolean autoGenerateTestCase = true;
 
     /** 最低置信度阈值：低于此值的节点进入人工审核准备 */
     private double minConfidence = 0.6;

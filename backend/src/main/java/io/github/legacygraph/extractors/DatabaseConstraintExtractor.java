@@ -7,7 +7,9 @@ import org.springframework.stereotype.Component;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 数据库约束抽取器 — 在 DatabaseMetadataExtractor 之外补充外键、索引、唯一约束抽取。
@@ -32,7 +34,7 @@ public class DatabaseConstraintExtractor {
     public static class IndexInfo {
         private String indexName;
         private String tableName;
-        private String columnName;
+        private List<String> columnNames;
         private boolean nonUnique;
         private boolean isUnique;
     }
@@ -79,18 +81,27 @@ public class DatabaseConstraintExtractor {
                 while (tables.next()) {
                     String tableName = tables.getString("TABLE_NAME");
                     try (ResultSet indexes = meta.getIndexInfo(catalog, schema, tableName, false, true)) {
+                        // 按 indexName 聚合，getIndexInfo 对复合索引每列返回一行
+                        Map<String, IndexInfo> indexMap = new LinkedHashMap<>();
                         while (indexes.next()) {
                             String indexName = indexes.getString("INDEX_NAME");
                             if (indexName == null) continue;
 
-                            IndexInfo idx = new IndexInfo();
-                            idx.setIndexName(indexName);
-                            idx.setTableName(tableName);
-                            idx.setColumnName(indexes.getString("COLUMN_NAME"));
-                            idx.setNonUnique(indexes.getBoolean("NON_UNIQUE"));
-                            idx.setUnique(!idx.isNonUnique());
-                            result.add(idx);
+                            IndexInfo idx = indexMap.computeIfAbsent(indexName, k -> {
+                                IndexInfo info = new IndexInfo();
+                                info.setIndexName(k);
+                                info.setTableName(tableName);
+                                info.setColumnNames(new ArrayList<>());
+                                return info;
+                            });
+                            idx.getColumnNames().add(indexes.getString("COLUMN_NAME"));
+                            // NON_UNIQUE 在每行结果中一致，取第一行即可
+                            if (idx.getColumnNames().size() == 1) {
+                                idx.setNonUnique(indexes.getBoolean("NON_UNIQUE"));
+                                idx.setUnique(!idx.isNonUnique());
+                            }
                         }
+                        result.addAll(indexMap.values());
                     }
                 }
             }

@@ -66,10 +66,6 @@ INSERT INTO sys_dict_item (id, dict_id, item_value, item_label, description, sor
 SELECT '5791cc62-e198-54f9-a727-d1d8797200a3', '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e', 'DB_SCAN',       '数据库扫描', '扫描数据库表结构、字段、索引、约束',        2, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e' AND item_value = 'DB_SCAN');
 INSERT INTO sys_dict_item (id, dict_id, item_value, item_label, description, sort_order, is_default, status, created_at, updated_at)
 SELECT 'a179c2d0-b4eb-585a-b7c4-6529a593201a', '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e', 'DOC_PARSE',     '文档解析',   '解析产品文档、API 文档',                   3, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e' AND item_value = 'DOC_PARSE');
-INSERT INTO sys_dict_item (id, dict_id, item_value, item_label, description, sort_order, is_default, status, created_at, updated_at)
-SELECT '6841462d-735c-5d8f-9fe3-1cfb36f3b4f2', '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e', 'GRAPH_BUILD',   '图谱构建',   '基于事实构建知识图谱节点和关系',            4, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e' AND item_value = 'GRAPH_BUILD');
-INSERT INTO sys_dict_item (id, dict_id, item_value, item_label, description, sort_order, is_default, status, created_at, updated_at)
-SELECT '9e8fbe7b-d1bb-5d65-b6af-a8ed3e6fbfd8', '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e', 'TEST_GENERATE', '测试生成',   '基于图谱和 API 自动生成接口测试用例',       5, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = '3dd5a665-e64c-5ff0-81fc-bb6b7ebe410e' AND item_value = 'TEST_GENERATE');
 
 -- ==================== 字典项 — scan_status ====================
 
@@ -103,7 +99,7 @@ SELECT '6fad1c1c-1702-5749-aa3e-2e5a987081f3', 'ca72f61c-393a-59e8-ac45-b0cbf051
 INSERT INTO sys_dict_item (id, dict_id, item_value, item_label, description, sort_order, is_default, status, created_at, updated_at)
 SELECT '8de2dd8a-38bf-5a96-a9a2-56b4f8490a86', 'ca72f61c-393a-59e8-ac45-b0cbf0512c63', 'GRAPH_BUILD',   '图谱构建中',   '正在构建知识图谱',              4, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = 'ca72f61c-393a-59e8-ac45-b0cbf0512c63' AND item_value = 'GRAPH_BUILD');
 INSERT INTO sys_dict_item (id, dict_id, item_value, item_label, description, sort_order, is_default, status, created_at, updated_at)
-SELECT '78474232-1134-5d88-a606-38937e1b9d57', 'ca72f61c-393a-59e8-ac45-b0cbf0512c63', 'TEST_GENERATE', '测试生成中',   '正在生成测试用例',              5, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = 'ca72f61c-393a-59e8-ac45-b0cbf0512c63' AND item_value = 'TEST_GENERATE');
+SELECT '78474232-1134-5d88-a606-38937e1b9d57', 'ca72f61c-393a-59e8-ac45-b0cbf0512c63', 'AI_TEST_GENERATE', '测试生成中', '正在 AI 生成测试用例',      5, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = 'ca72f61c-393a-59e8-ac45-b0cbf0512c63' AND item_value = 'AI_TEST_GENERATE');
 INSERT INTO sys_dict_item (id, dict_id, item_value, item_label, description, sort_order, is_default, status, created_at, updated_at)
 SELECT 'eb1fed33-50ff-59eb-b1ea-528372f2807f', 'ca72f61c-393a-59e8-ac45-b0cbf0512c63', 'COMPLETED',     '已完成',       '所有扫描阶段执行完毕',          6, false, 'ACTIVE', NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE dict_id = 'ca72f61c-393a-59e8-ac45-b0cbf0512c63' AND item_value = 'COMPLETED');
 

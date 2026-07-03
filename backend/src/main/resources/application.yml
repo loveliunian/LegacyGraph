@@ -127,6 +127,39 @@ springdoc:
     path: /swagger-ui.html
 
 # LegacyGraph 自定义配置
+legacygraph:
+  understanding:
+    scan-enhancement:
+      enabled: false
+      max-targets: 20
+    tools:
+      local-fallback:
+        enabled: true
+        kind: LOCAL
+      codebase-memory-mcp:
+        enabled: true
+        kind: MCP
+      codex:
+        enabled: true
+        kind: CLI
+        path: codex
+        timeout-seconds: 120
+        max-output-bytes: 100000
+      claude-code:
+        enabled: true
+        kind: CLI
+        path: claude
+        timeout-seconds: 120
+        max-output-bytes: 100000
+      zread:
+        enabled: false
+        kind: CLI
+        path: zread
+      repomix:
+        enabled: false
+        kind: CLI
+        path: repomix
+
 legacy-graph:
   scan:
     # 并发扫描文件数
@@ -141,3 +174,44 @@ legacy-graph:
   ai:
     # LLM 超时时间 (秒)
     llm-timeout: 120
+
+  # Agent 配置
+  agent:
+    merge:
+      # LLM 合并决策阈值
+      name-weight: 0.8
+      semantic-weight: 0.7
+      struct-weight: 0.6
+      neighbor-weight: 0.5
+      evidence-weight: 0.7
+      # 多证据评分权重
+      score-name-weight: 0.35
+      score-struct-weight: 0.25
+      score-evidence-weight: 0.20
+      score-runtime-weight: 0.10
+      score-history-weight: 0.10
+      # 自动决策阈值
+      auto-merge-threshold: 0.85
+      review-threshold: 0.50
+      # 置信度计算权重
+      confidence-support-weight: 0.50
+      confidence-semantic-weight: 0.15
+      confidence-struct-weight: 0.15
+      confidence-neighbor-weight: 0.10
+      confidence-runtime-weight: 0.05
+      confidence-human-weight: 0.05
+      confidence-conflict-penalty: 0.35
+
+  # CLI 工具适配器配置
+  tool:
+    cli:
+      # 工具名称（codex / claude-code / zread）
+      tool-name: codex
+      # 命令模板：{query} 占位符会被替换为实际查询内容
+      command-template: codex exec --no-write --json "{query}"
+      # 超时时间（秒）
+      timeout-seconds: 180
+      # 最大输出字节数
+      max-output-bytes: 200000
+      # 工作目录白名单（空列表 = 允许所有目录，生产环境必须配置）
+      work-dir-whitelist:

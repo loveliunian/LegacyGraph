@@ -5,6 +5,7 @@ import io.github.legacygraph.entity.GapTask;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.repository.GapTaskRepository;
 import io.github.legacygraph.repository.KnowledgeClaimRepository;
+import io.github.legacygraph.repository.ToolRunRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,12 +27,14 @@ class GapFinderServiceTest {
     private KnowledgeClaimRepository claimRepository;
     @Mock
     private GapTaskRepository gapTaskRepository;
+    @Mock
+    private ToolRunRepository toolRunRepository;
 
     private GapFinderService service;
 
     @BeforeEach
     void setUp() {
-        service = new GapFinderService(claimRepository, gapTaskRepository, new ObjectMapper());
+        service = new GapFinderService(claimRepository, gapTaskRepository, new ObjectMapper(), toolRunRepository);
     }
 
     @Test

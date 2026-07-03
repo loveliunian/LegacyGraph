@@ -26,6 +26,8 @@ import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.service.GapFinderService;
 import io.github.legacygraph.service.KnowledgeClaimService;
+import io.github.legacygraph.service.VectorizationService;
+import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -63,6 +65,8 @@ class AiScanOrchestratorTest {
     @Mock private BusinessGraphBuilder businessGraphBuilder;
     @Mock private KnowledgeClaimService knowledgeClaimService;
     @Mock private GapFinderService gapFinderService;
+    @Mock private ScanUnderstandingEnhancer scanUnderstandingEnhancer;
+    @Mock private VectorizationService vectorizationService;
 
     private AiScanOrchestrator orchestrator;
 
@@ -74,7 +78,7 @@ class AiScanOrchestratorTest {
         orchestrator = new AiScanOrchestrator(scanTaskRepository, documentRepository, factRepository,
                 reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
                 featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper(),
-                knowledgeClaimService, gapFinderService);
+                knowledgeClaimService, gapFinderService, scanUnderstandingEnhancer, vectorizationService);
         lenient().when(gapFinderService.scanGaps(anyString(), anyString()))
                 .thenReturn(GapFinderService.GapScanResult.builder()
                         .created(0)
@@ -89,6 +93,11 @@ class AiScanOrchestratorTest {
                 .thenCallRealMethod();
         lenient().when(featureMappingAgent.toClaimDrafts(anyString(), anyString(), any()))
                 .thenCallRealMethod();
+        lenient().when(scanUnderstandingEnhancer.enhance(anyString(), anyString(), anyList()))
+                .thenReturn(ScanUnderstandingEnhancer.EnhancementResult.builder()
+                        .enabled(false)
+                        .message("扫描后增强未启用")
+                        .build());
     }
 
     private GraphNode node(String type, String key, String name, double conf) {
@@ -196,9 +205,9 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
-        // 创建了 6 个子任务（含 AI_GAP_FINDING），未创建 TEST_GENERATE
+        // 创建了 7 个子任务（含 AI_GAP_FINDING / AI_CODE_UNDERSTANDING），未创建 TEST_GENERATE
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(6)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(7)).insert(taskCaptor.capture());
         List<String> types = taskCaptor.getAllValues().stream().map(ScanTask::getTaskType).toList();
         assertTrue(types.contains("AI_DOC_EXTRACT"));
         assertTrue(types.contains("AI_CODE_EXTRACT"));
@@ -206,6 +215,7 @@ class AiScanOrchestratorTest {
         assertTrue(types.contains("AI_FEATURE_MAPPING"));
         assertTrue(types.contains("AI_REVIEW_PREPARE"));
         assertTrue(types.contains("AI_GAP_FINDING"));
+        assertTrue(types.contains("AI_CODE_UNDERSTANDING"));
         assertFalse(types.contains("AI_TEST_GENERATE"));
 
         // 仅低置信节点(0.3<0.6)生成审核记录，高置信(0.9)跳过
@@ -250,13 +260,15 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
-        // 创建了 7 个子任务（含 AI_GAP_FINDING）
+        // 创建了 8 个子任务（含 AI_GAP_FINDING / AI_CODE_UNDERSTANDING）
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(7)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(8)).insert(taskCaptor.capture());
         assertTrue(taskCaptor.getAllValues().stream()
                 .anyMatch(t -> "AI_TEST_GENERATE".equals(t.getTaskType())));
         assertTrue(taskCaptor.getAllValues().stream()
                 .anyMatch(t -> "AI_GAP_FINDING".equals(t.getTaskType())));
+        assertTrue(taskCaptor.getAllValues().stream()
+                .anyMatch(t -> "AI_CODE_UNDERSTANDING".equals(t.getTaskType())));
 
         // 生成的测试用例被持久化
         verify(testCaseAgent, atLeastOnce()).generateTestCases(any());

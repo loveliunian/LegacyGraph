@@ -1,10 +1,10 @@
 package io.github.legacygraph.service;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
 import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;
+import io.github.legacygraph.understanding.CodeUnderstandingReportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,11 +30,14 @@ class ReportExportServiceTest {
     @Mock
     private ScanResearchReportService scanResearchReportService;
 
+    @Mock
+    private CodeUnderstandingReportService codeUnderstandingReportService;
+
     private ReportExportService reportExportService;
 
     @BeforeEach
     void setUp() {
-        reportExportService = new ReportExportService(objectMapper, reportingService, changeReportService, scanResearchReportService);
+        reportExportService = new ReportExportService(objectMapper, reportingService, changeReportService, scanResearchReportService, codeUnderstandingReportService);
     }
 
     @Test
@@ -201,6 +204,15 @@ class ReportExportServiceTest {
 
         assertNotNull(result);
         assertTrue(result.length > 100);
+    }
+
+    @Test
+    void testExportToExcel_CodeUnderstandingThrowsUnsupportedFormat() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> reportExportService.exportToExcel("project-1", "v1",
+                        ReportExportService.ReportType.CODE_UNDERSTANDING));
+
+        assertTrue(ex.getMessage().contains("暂不支持 Excel 导出"));
     }
 
     @Test

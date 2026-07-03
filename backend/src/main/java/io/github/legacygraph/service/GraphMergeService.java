@@ -9,6 +9,7 @@ import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.config.AgentConfigProperties;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,22 +36,14 @@ public class GraphMergeService {
 
     private final Neo4jGraphDao neo4jGraphDao;
     private final GraphCacheInvalidator graphCacheInvalidator;
-
-    // ========== 评分权重 ==========
-    private static final double W_NAME = 0.35;
-    private static final double W_STRUCT = 0.25;
-    private static final double W_EVIDENCE = 0.20;
-    private static final double W_RUNTIME = 0.10;
-    private static final double W_HISTORY = 0.10;
-
-    // ========== 决策阈值 ==========
-    private static final double AUTO_MERGE_THRESHOLD = 0.85;
-    private static final double REVIEW_THRESHOLD = 0.50;
+    private final AgentConfigProperties agentConfig;
 
     public GraphMergeService(Neo4jGraphDao neo4jGraphDao,
-                             GraphCacheInvalidator graphCacheInvalidator) {
+                             GraphCacheInvalidator graphCacheInvalidator,
+                             AgentConfigProperties agentConfig) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.graphCacheInvalidator = graphCacheInvalidator;
+        this.agentConfig = agentConfig;
     }
 
     /**
@@ -157,13 +150,14 @@ public class GraphMergeService {
         // 5. 人工历史分（简化：同项目同类型且同名接近）
         c.setHistoryScore(c.getNameScore() > 0.7 ? 0.3 : 0.0);
 
-        // 加权综合
+        // 加权综合 — 权重从配置读取
+        AgentConfigProperties.MergeConfig cfg = agentConfig.getMerge();
         c.setSimilarityScore(
-                W_NAME * c.getNameScore()
-                + W_STRUCT * c.getStructScore()
-                + W_EVIDENCE * c.getEvidenceScore()
-                + W_RUNTIME * c.getRuntimeCooccurrenceScore()
-                + W_HISTORY * c.getHistoryScore()
+                cfg.getScoreNameWeight() * c.getNameScore()
+                + cfg.getScoreStructWeight() * c.getStructScore()
+                + cfg.getScoreEvidenceWeight() * c.getEvidenceScore()
+                + cfg.getScoreRuntimeWeight() * c.getRuntimeCooccurrenceScore()
+                + cfg.getScoreHistoryWeight() * c.getHistoryScore()
         );
 
         return c;
@@ -276,10 +270,13 @@ public class GraphMergeService {
         // 冲突证据提示
         boolean conflictingSource = !Objects.equals(nodeA.getSourceType(), nodeB.getSourceType());
 
-        if (score >= AUTO_MERGE_THRESHOLD && !bothAi && !conflictingSource) {
+        double autoMergeThreshold = agentConfig.getMerge().getAutoMergeThreshold();
+        double reviewThreshold = agentConfig.getMerge().getReviewThreshold();
+
+        if (score >= autoMergeThreshold && !bothAi && !conflictingSource) {
             decision.setDecision(GraphMergeDecision.Decision.AUTO_MERGE);
             reasons.add("高综合相似度，已自动合并");
-        } else if (score >= REVIEW_THRESHOLD) {
+        } else if (score >= reviewThreshold) {
             decision.setDecision(GraphMergeDecision.Decision.REVIEW);
             reasons.add("中综合相似度，建议人工审核");
             if (bothAi) reasons.add("双方均来自AI推断，需人工确认");

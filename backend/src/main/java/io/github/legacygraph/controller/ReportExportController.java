@@ -137,6 +137,25 @@ public class ReportExportController {
     }
 
     /**
+     * 导出代码理解报告（CODE_UNDERSTANDING）。
+     * <p>
+     * 基于外部工具证据（MCP/CLI/本地代码索引）和扫描增强结果，
+     * 生成包含工具运行状态、架构视图、功能链路、已确认事实、AI 推断、缺口风险的完整报告。
+     * </p>
+     */
+    @GetMapping("/code-understanding/{projectId}/{versionId}")
+    public ResponseEntity<byte[]> exportCodeUnderstandingReport(
+            @PathVariable String projectId,
+            @PathVariable String versionId,
+            @RequestParam(defaultValue = "MD") String format) {
+
+        ReportExportService.ExportFormat exportFormat = parseFormat(format);
+        byte[] data = reportExportService.exportReport(
+                projectId, versionId, ReportExportService.ReportType.CODE_UNDERSTANDING, exportFormat);
+        return buildResponse(data, "代码理解报告", exportFormat);
+    }
+
+    /**
      * 支持的报告格式列表
      */
     @GetMapping("/formats")

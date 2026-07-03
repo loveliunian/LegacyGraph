@@ -65,19 +65,18 @@ public class VectorRetrievalService {
      * 批量 upsert 向量（这里简化为单个插入，由调用方处理批量）
      */
     @Transactional
-    public void batchUpsertVectors(String projectId, List<VectorDocument> documents) {
-        log.info("Batch upserting {} vectors for projectId={}", documents.size(), projectId);
+    public void batchUpsertVectors(String projectId, String versionId, List<VectorDocument> documents) {
+        log.info("Batch upserting {} vectors for projectId={}, versionId={}", documents.size(), projectId, versionId);
         for (VectorDocument doc : documents) {
             if (doc.getContent() != null && !doc.getContent().isBlank()) {
-                Long projectIdLong = doc.getProjectId();
                 vectorizationService.embedAndStore(
-                    projectIdLong,
-                    null,
+                    doc.getProjectId() != null ? doc.getProjectId() : projectId,
+                    doc.getVersionId() != null ? doc.getVersionId() : versionId,
                     doc.getChunkType(),
                     doc.getSourceUri(),
                     doc.getChunkIndex() != null ? doc.getChunkIndex() : 0,
                     doc.getContent(),
-                    doc.getEmbeddingModel() != null ? doc.getEmbeddingModel() : "text-embedding-3-small"
+                    doc.getEmbeddingModel() != null ? doc.getEmbeddingModel() : "bge-m3"
                 );
             }
         }

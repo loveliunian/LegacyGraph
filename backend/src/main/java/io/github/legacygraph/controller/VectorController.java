@@ -29,8 +29,9 @@ public class VectorController {
     @Operation(summary = "批量upsert向量文档", description = "批量向量化并存储文档/代码片段")
     public Result<Void> batchUpsert(
             @PathVariable String projectId,
+            @RequestParam(required = false) String versionId,
             @RequestBody List<VectorDocument> documents) {
-        vectorRetrievalService.batchUpsertVectors(projectId, documents);
+        vectorRetrievalService.batchUpsertVectors(projectId, versionId, documents);
         return Result.success();
     }
 

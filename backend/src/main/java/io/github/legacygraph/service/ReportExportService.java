@@ -6,6 +6,7 @@ import com.vladsch.flexmark.html.HtmlRenderer;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
 import io.github.legacygraph.dto.report.*;
+import io.github.legacygraph.understanding.CodeUnderstandingReportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
@@ -34,15 +35,18 @@ public class ReportExportService {
     private final ReportingService reportingService;
     private final ChangeReportService changeReportService;
     private final ScanResearchReportService scanResearchReportService;
+    private final CodeUnderstandingReportService codeUnderstandingReportService;
 
     public ReportExportService(ObjectMapper objectMapper,
                                @Lazy ReportingService reportingService,
                                ChangeReportService changeReportService,
-                               ScanResearchReportService scanResearchReportService) {
+                               ScanResearchReportService scanResearchReportService,
+                               CodeUnderstandingReportService codeUnderstandingReportService) {
         this.objectMapper = objectMapper;
         this.reportingService = reportingService;
         this.changeReportService = changeReportService;
         this.scanResearchReportService = scanResearchReportService;
+        this.codeUnderstandingReportService = codeUnderstandingReportService;
     }
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -103,8 +107,9 @@ public class ReportExportService {
             case TEST_COVERAGE -> generateTestCoverageMarkdown(projectId, versionId);
             case GRAPH_QUALITY -> generateGraphQualityMarkdown(projectId, versionId);
             case SCAN_RESEARCH -> scanResearchReportService.generateMarkdown(projectId, versionId);
-            case CODE_UNDERSTANDING, GRAPH_BUILD_DETAIL -> throw new UnsupportedOperationException(
-                    reportType + " 尚未实现");
+            case CODE_UNDERSTANDING -> codeUnderstandingReportService.generateMarkdown(
+                    projectId, null, null, null);
+            case GRAPH_BUILD_DETAIL -> generateGraphBuildDetailMarkdown(projectId, versionId);
             case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
                     reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };
@@ -121,8 +126,9 @@ public class ReportExportService {
             case TEST_COVERAGE -> generateTestCoverageMarkdown(projectId, versionId);
             case GRAPH_QUALITY -> generateGraphQualityMarkdown(projectId, versionId);
             case SCAN_RESEARCH -> scanResearchReportService.generateMarkdown(projectId, versionId);
-            case CODE_UNDERSTANDING, GRAPH_BUILD_DETAIL -> throw new UnsupportedOperationException(
-                    reportType + " 尚未实现");
+            case CODE_UNDERSTANDING -> codeUnderstandingReportService.generateMarkdown(
+                    projectId, null, null, null);
+            case GRAPH_BUILD_DETAIL -> generateGraphBuildDetailMarkdown(projectId, versionId);
             case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
                     reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };
@@ -171,7 +177,7 @@ public class ReportExportService {
                 case CONFIDENCE_TREND -> createConfidenceTrendExcel(workbook, projectId, versionId, headerStyle, dataStyle);
                 case TEST_COVERAGE -> createTestCoverageExcel(workbook, projectId, versionId, headerStyle, dataStyle);
                 case GRAPH_QUALITY -> createGraphQualityExcel(workbook, projectId, versionId, headerStyle, dataStyle);
-                case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
+                case FEATURE_SLICE, CHANGE_TASK, SCAN_RESEARCH, CODE_UNDERSTANDING, GRAPH_BUILD_DETAIL -> throw new IllegalArgumentException(
                         reportType + " 暂不支持 Excel 导出，请使用 MD 或 PDF");
             }
 
@@ -369,6 +375,59 @@ public class ReportExportService {
             for (GraphQualityReport.QualityIssue issue : report.getQualityIssues()) {
                 sb.append(String.format("| %s | %s | %s | %.2f |\n",
                         issue.getIssueType(), issue.getNodeName(), issue.getDescription(), issue.getImpact().multiply(BigDecimal.valueOf(100))));
+            }
+        }
+        sb.append("\n");
+
+        sb.append("---\n");
+        sb.append("*由 LegacyGraph 自动生成*");
+
+        return sb.toString();
+    }
+
+    /**
+     * 生成图谱构建详情报告 Markdown
+     * 展示扫描构建过程的详细信息：扫描任务、节点来源、提取器统计
+     */
+    private String generateGraphBuildDetailMarkdown(String projectId, String versionId) {
+        var stats = reportingService.getGraphBuildStats(projectId, versionId);
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("# 图谱构建详情报告\n\n");
+        sb.append(String.format("**项目ID:** %s\n", projectId));
+        sb.append(String.format("**版本ID:** %s\n", versionId != null ? versionId : "最新"));
+        sb.append(String.format("**生成时间:** %s\n\n", LocalDateTime.now().format(DATE_FORMATTER)));
+
+        sb.append("## 📊 构建统计\n\n");
+        sb.append(String.format("| 指标 | 值 |\n"));
+        sb.append(String.format("|------|----|\n"));
+        sb.append(String.format("| 扫描任务数 | %d |\n", stats.getOrDefault("scanTaskCount", 0L)));
+        sb.append(String.format("| 代码文件扫描数 | %d |\n", stats.getOrDefault("codeFileCount", 0L)));
+        sb.append(String.format("| SQL 文件扫描数 | %d |\n", stats.getOrDefault("sqlFileCount", 0L)));
+        sb.append(String.format("| 文档文件扫描数 | %d |\n", stats.getOrDefault("docFileCount", 0L)));
+        sb.append(String.format("| 提取器使用数 | %d |\n", stats.getOrDefault("extractorCount", 0L)));
+        sb.append(String.format("| 生成节点总数 | %d |\n", stats.getOrDefault("totalNodes", 0L)));
+        sb.append(String.format("| 生成边总数 | %d |\n", stats.getOrDefault("totalEdges", 0L)));
+        sb.append(String.format("| AI 推断节点数 | %d |\n", stats.getOrDefault("aiNodes", 0L)));
+        sb.append(String.format("| AI 推断边数 | %d |\n", stats.getOrDefault("aiEdges", 0L)));
+        sb.append(String.format("| 证据记录数 | %d |\n", stats.getOrDefault("evidenceCount", 0L)));
+        sb.append("\n");
+
+        sb.append("## 🔧 提取器详情\n\n");
+        @SuppressWarnings("unchecked")
+        var extractorDetails = (java.util.List<java.util.Map<String, Object>>) stats.getOrDefault("extractorDetails",
+                java.util.Collections.emptyList());
+        if (extractorDetails.isEmpty()) {
+            sb.append("暂无提取器详情记录\n\n");
+        } else {
+            sb.append(String.format("| 提取器名称 | 处理文件数 | 生成节点 | 状态 |\n"));
+            sb.append(String.format("|------------|-----------|---------|------|\n"));
+            for (var detail : extractorDetails) {
+                sb.append(String.format("| %s | %s | %s | %s |\n",
+                        detail.getOrDefault("name", "-"),
+                        detail.getOrDefault("files", "0"),
+                        detail.getOrDefault("nodes", "0"),
+                        detail.getOrDefault("status", "-")));
             }
         }
         sb.append("\n");

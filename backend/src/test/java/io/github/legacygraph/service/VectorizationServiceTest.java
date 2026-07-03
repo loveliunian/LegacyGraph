@@ -53,7 +53,7 @@ class VectorizationServiceTest {
 
         // when
         Long resultId = vectorizationService.embedAndStore(
-                1001L, "v1", "CODE_SNIPPET", "/src/main/java/Test.java",
+                "1001", "v1", "CODE_SNIPPET", "/src/main/java/Test.java",
                 0, content, "text-embedding-3-small");
 
         // then
@@ -64,23 +64,18 @@ class VectorizationServiceTest {
 
     @Test
     void testEmbedAndStore_EmptyContent() {
-        // given: empty content - embed() 仍然会被调用，但不会引发异常
+        // given: empty content — embedAndStore 不再调用 embed 对空内容，直接返回 null
         String content = "";
-        float[] mockEmbedding = {0.0f, 0.0f};
-        when(embeddingModel.embed(content)).thenReturn(mockEmbedding);
-        when(vectorDocumentRepository.insert(any(VectorDocument.class))).thenAnswer(inv -> {
-            inv.getArgument(0, VectorDocument.class).setId(2L);
-            return 1;
-        });
 
         // when
         Long resultId = vectorizationService.embedAndStore(
-                1001L, "v1", "CODE_SNIPPET", "/src/main/java/Test.java",
+                "1001", "v1", "CODE_SNIPPET", "/src/main/java/Test.java",
                 0, content, "text-embedding-3-small");
 
-        // then
-        assertNotNull(resultId);
-        verify(vectorDocumentRepository, times(1)).insert(any(VectorDocument.class));
+        // then — 空内容直接返回 null，不调用 embedding 和 insert
+        assertNull(resultId);
+        verify(vectorDocumentRepository, never()).insert(any(VectorDocument.class));
+        verify(embeddingModel, never()).embed(anyString());
     }
 
     @Test
@@ -196,8 +191,8 @@ class VectorizationServiceTest {
         when(embeddingModel.embed(contentA)).thenReturn(embeddingA);
         when(embeddingModel.embed(contentB)).thenReturn(embeddingB);
 
-        vectorizationService.embedAndStore(1001L, "v1", "TEXT", "/a.txt", 0, contentA, "model");
-        vectorizationService.embedAndStore(1001L, "v1", "TEXT", "/b.txt", 0, contentB, "model");
+        vectorizationService.embedAndStore("1001", "v1", "TEXT", "/a.txt", 0, contentA, "model");
+        vectorizationService.embedAndStore("1001", "v1", "TEXT", "/b.txt", 0, contentB, "model");
 
         verify(vectorDocumentRepository, times(2)).insert(any(VectorDocument.class));
     }

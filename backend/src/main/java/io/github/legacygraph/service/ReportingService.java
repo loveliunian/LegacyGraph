@@ -676,13 +676,55 @@ public class ReportingService {
     }
 
     /**
-     * 导出报告到文件
-     * 委托给 ReportExportService 实现多格式导出（MD/PDF/Excel）
-     * @deprecated 请使用 ReportExportService 替代
+     * 获取图谱构建过程统计数据
+     * 用于 GRAPH_BUILD_DETAIL 报告类型的生成
      */
-    @Deprecated
+    public Map<String, Object> getGraphBuildStats(String projectId, String versionId) {
+        Map<String, Object> stats = new LinkedHashMap<>();
+
+        try {
+            Map<String, Object> gs = versionId != null && !versionId.isBlank()
+                    ? neo4jGraphDao.versionGraphStats(projectId, versionId)
+                    : neo4jGraphDao.graphStats(projectId);
+
+            stats.put("totalNodes", gs.getOrDefault("totalNodes", 0L));
+            stats.put("totalEdges", gs.getOrDefault("totalEdges", 0L));
+            stats.put("aiNodes", gs.getOrDefault("aiOnlyNodes", 0L));
+            stats.put("aiEdges", gs.getOrDefault("aiOnlyEdges", 0L));
+            stats.put("evidenceCount", gs.getOrDefault("withEvidenceCount", 0L));
+        } catch (Exception e) {
+            log.warn("Failed to load graph stats for build detail: projectId={}, versionId={}", projectId, versionId, e);
+            stats.put("totalNodes", 0L);
+            stats.put("totalEdges", 0L);
+            stats.put("aiNodes", 0L);
+            stats.put("aiEdges", 0L);
+            stats.put("evidenceCount", 0L);
+        }
+
+        // 扫描相关统计（从 report 表获取最近报告记录）
+        try {
+            long scanTaskCount = reportRepository.lambdaQuery()
+                    .eq(io.github.legacygraph.entity.Report::getProjectId, projectId)
+                    .count();
+            stats.put("scanTaskCount", scanTaskCount);
+        } catch (Exception e) {
+            stats.put("scanTaskCount", 0L);
+        }
+
+        stats.putIfAbsent("codeFileCount", 0L);
+        stats.putIfAbsent("sqlFileCount", 0L);
+        stats.putIfAbsent("docFileCount", 0L);
+        stats.putIfAbsent("extractorCount", 0L);
+        stats.putIfAbsent("extractorDetails", Collections.emptyList());
+
+        return stats;
+    }
+
+    /**
+     * 导出报告到文件（委托给 ReportExportService 实现多格式导出）
+     */
     public byte[] exportReport(String reportId, String format) throws Exception {
-        log.info("ReportingService.exportReport called (deprecated), delegating to ReportExportService: reportId={}, format={}",
+        log.info("ReportingService.exportReport delegating to ReportExportService: reportId={}, format={}",
                 reportId, format);
 
         Report report = reportRepository.selectById(reportId);

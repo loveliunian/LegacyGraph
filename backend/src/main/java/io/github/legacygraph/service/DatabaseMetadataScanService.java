@@ -16,11 +16,11 @@ public class DatabaseMetadataScanService {
     private final GraphBuilder graphBuilder;
     private final DatabaseConstraintExtractor databaseConstraintExtractor;
 
-    @Autowired
     public DatabaseMetadataScanService(GraphBuilder graphBuilder) {
         this(graphBuilder, new DatabaseConstraintExtractor());
     }
 
+    @Autowired
     public DatabaseMetadataScanService(GraphBuilder graphBuilder, DatabaseConstraintExtractor databaseConstraintExtractor) {
         this.graphBuilder = graphBuilder;
         this.databaseConstraintExtractor = databaseConstraintExtractor;

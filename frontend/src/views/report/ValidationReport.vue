@@ -283,7 +283,13 @@ const coverageData = ref({
 const getRiskTypeText = (type: string) => dictLabel('risk_type', type)
 
 const exportReport = () => {
-  ElMessage.success('报告导出中...')
+  if (!projectId || !selectedVersion.value) {
+    ElMessage.warning('请先选择版本')
+    return
+  }
+  const url = `/api/reports/confidence/${projectId}/${selectedVersion.value}?format=MD`
+  window.open(url, '_blank')
+  ElMessage.success('正在下载报告...')
 }
 
 const loadAiInsights = async () => {

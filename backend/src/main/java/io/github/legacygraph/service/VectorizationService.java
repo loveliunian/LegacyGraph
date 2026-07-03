@@ -10,13 +10,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * 向量化服务 - 使用 Spring AI + OpenAI 实现文本向量化
- * 将文档分片转换为 embedding 向量存储到 pgvector
+ * 向量化服务 - 使用 Spring AI 实现文本向量化
+ * 将文档/代码分片转换为 embedding 向量存储到 pgvector
  */
 @Slf4j
 @Service
@@ -24,7 +25,7 @@ public class VectorizationService {
 
     private final VectorDocumentRepository vectorDocumentRepository;
 
-    /** EmbeddingModel 可选：设置 SILICONFLOW_API_KEY 环境变量后可用 */
+    /** EmbeddingModel 可选：未配置时向量化静默跳过 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private EmbeddingModel embeddingModel;
 
@@ -33,28 +34,47 @@ public class VectorizationService {
     }
 
     /**
-     * 对单个文档分片进行向量化并存储
+     * 检查 EmbeddingModel 是否可用
+     */
+    public boolean isAvailable() {
+        return embeddingModel != null;
+    }
+
+    /**
+     * 对单个文本分片进行向量化并存储
+     *
+     * @param projectId          项目ID（UUID字符串）
+     * @param versionId          扫描版本ID
+     * @param chunkType          分片类型：DOC/CODE/DB/UI
+     * @param sourceUri           来源文件路径
+     * @param chunkIndex          分片索引
+     * @param content             分片文本内容
+     * @param embeddingModelName 使用的 embedding 模型名
      * @return 存储后的记录 ID，EmbeddingModel 不可用时返回 null
      */
     @Transactional
-    public Long embedAndStore(Long projectId, String versionId, String chunkType, String sourceUri,
+    public Long embedAndStore(String projectId, String versionId, String chunkType, String sourceUri,
                               int chunkIndex, String content, String embeddingModelName) {
         if (embeddingModel == null) {
             log.debug("EmbeddingModel not available, skip vectorization for chunk {}", chunkIndex);
             return null;
         }
-        log.info("Vectorizing: projectId={}, chunkIndex={}, length={}", projectId, chunkIndex, content.length());
+        if (content == null || content.isBlank()) {
+            return null;
+        }
+        log.debug("Vectorizing: projectId={}, chunkIndex={}, length={}", projectId, chunkIndex, content.length());
 
         // 计算 hash 用于去重
         String contentSha256 = sha256Hex(content);
         String sourceHash = sha256Hex(sourceUri + chunkIndex);
 
-        // 执行向量化 - Spring AI 1.0+ API
+        // 执行向量化
         float[] embeddingFloat = embeddingModel.embed(content);
         List<Double> embedding = floatArrayToDoubleList(embeddingFloat);
 
         VectorDocument doc = new VectorDocument();
         doc.setProjectId(projectId);
+        doc.setVersionId(versionId);
         doc.setChunkType(chunkType);
         doc.setSourceUri(sourceUri);
         doc.setSourceHash(sourceHash);
@@ -64,12 +84,51 @@ public class VectorizationService {
         doc.setMeta("{}");
         doc.setEmbeddingModel(embeddingModelName);
         doc.setEmbeddingDim(embedding.size());
-        doc.setCreatedAt(java.time.LocalDateTime.now());
+        doc.setCreatedAt(LocalDateTime.now());
 
         vectorDocumentRepository.insert(doc);
 
-        log.info("Vectorized and stored chunk: id={}, projectId={}, chunkIndex={}", doc.getId(), projectId, chunkIndex);
+        log.debug("Vectorized and stored chunk: id={}, projectId={}, chunkIndex={}", doc.getId(), projectId, chunkIndex);
         return doc.getId();
+    }
+
+    /**
+     * 对文本进行分片并批量向量化存储
+     *
+     * @param projectId          项目ID
+     * @param versionId          扫描版本ID
+     * @param chunkType          分片类型
+     * @param sourceUri           来源文件路径
+     * @param content             完整文本内容
+     * @param maxChars            每片最大字符数
+     * @param overlapChars        重叠字符数
+     * @param embeddingModelName embedding 模型名
+     * @return 成功存储的分片数
+     */
+    public int embedDocument(String projectId, String versionId, String chunkType, String sourceUri,
+                             String content, int maxChars, int overlapChars, String embeddingModelName) {
+        if (embeddingModel == null) {
+            log.debug("EmbeddingModel not available, skip vectorization for {}", sourceUri);
+            return 0;
+        }
+        if (content == null || content.isBlank()) {
+            return 0;
+        }
+
+        List<String> chunks = chunkDocument(content, maxChars, overlapChars);
+        int stored = 0;
+        for (int i = 0; i < chunks.size(); i++) {
+            try {
+                Long id = embedAndStore(projectId, versionId, chunkType, sourceUri, i, chunks.get(i), embeddingModelName);
+                if (id != null) {
+                    stored++;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to embed chunk {}/{} for {}: {}", i, chunks.size(), sourceUri, e.getMessage());
+            }
+        }
+        log.info("Vectorized document {}: {} chunks, {} stored", sourceUri, chunks.size(), stored);
+        return stored;
     }
 
     /**
@@ -101,7 +160,7 @@ public class VectorizationService {
             if (end >= length) {
                 break;
             }
-            // 计算下一段起点，保证严格前进，避免末段 chunk 短于 overlap 时原地死循环
+            // 计算下一段起点，保证严格前进
             int nextStart = end - overlapChars;
             if (nextStart <= start) {
                 nextStart = end;
@@ -115,7 +174,6 @@ public class VectorizationService {
 
     /**
      * 计算两个向量的余弦相似度，用于去重检测
-     * @return 相似度 >= 0.9 表示高度相似可能重复
      */
     public double cosineSimilarity(List<Double> a, List<Double> b) {
         if (a.size() != b.size()) {
@@ -143,16 +201,12 @@ public class VectorizationService {
 
     /**
      * 近似去重检测
-     * @return true 如果相似度超过阈值，认为可能重复
      */
     public boolean isProbablyDuplicate(List<Double> embedding1, List<Double> embedding2) {
         double similarity = cosineSimilarity(embedding1, embedding2);
         return similarity >= 0.92;
     }
 
-    /**
-     * SHA-256 hash
-     */
     private String sha256Hex(String input) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -171,9 +225,6 @@ public class VectorizationService {
         }
     }
 
-    /**
-     * Convert float array to List<Double>
-     */
     private List<Double> floatArrayToDoubleList(float[] floats) {
         List<Double> result = new ArrayList<>(floats.length);
         for (float f : floats) {
