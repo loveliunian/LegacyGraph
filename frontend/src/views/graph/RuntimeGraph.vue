@@ -3,12 +3,26 @@
     <div class="page-header">
       <h3>运行链路图谱</h3>
       <div class="header-actions">
-        <el-select v-model="selectedEnv" placeholder="选择环境" size="small" style="width: 120px;">
-          <el-option label="生产环境" value="prod" />
-          <el-option label="测试环境" value="test" />
-          <el-option label="开发环境" value="dev" />
+        <el-select
+          v-model="selectedEnv"
+          placeholder="选择环境"
+          size="small"
+          style="width: 120px;">
+          <el-option
+            label="生产环境"
+            value="prod" />
+          <el-option
+            label="测试环境"
+            value="test" />
+          <el-option
+            label="开发环境"
+            value="dev" />
         </el-select>
-        <el-button type="primary" size="small" @click="refreshTraces" :loading="loading">
+        <el-button
+          type="primary"
+          size="small"
+          :loading="loading"
+          @click="refreshTraces">
           <el-icon><Refresh /></el-icon>
           刷新链路
         </el-button>
@@ -32,8 +46,12 @@
             <span>最近请求链路</span>
           </template>
           <div class="trace-list">
-            <div v-if="traces.length === 0 && !loading" class="trace-empty">
-              <el-empty description="暂无链路数据" :image-size="60" />
+            <div
+              v-if="traces.length === 0 && !loading"
+              class="trace-empty">
+              <el-empty
+                description="暂无链路数据"
+                :image-size="60" />
             </div>
             <div
               v-for="trace in traces"
@@ -43,7 +61,9 @@
               @click="selectTrace(trace.id)"
             >
               <div class="trace-header">
-                <el-tag size="small" :type="trace.status === 'success' ? 'success' : 'danger'">
+                <el-tag
+                  size="small"
+                  :type="trace.status === 'success' ? 'success' : 'danger'">
                   {{ trace.status === 'success' ? '成功' : '失败' }}
                 </el-tag>
                 <span class="trace-duration">{{ trace.duration }}ms</span>
@@ -62,35 +82,60 @@
         <el-card class="graph-card">
           <div class="graph-toolbar">
             <el-button-group>
-              <el-button size="small" :type="viewType === 'topology' ? 'primary' : ''" @click="viewType = 'topology'">
+              <el-button
+                size="small"
+                :type="viewType === 'topology' ? 'primary' : ''"
+                @click="viewType = 'topology'">
                 服务拓扑
               </el-button>
-              <el-button size="small" :type="viewType === 'timeline' ? 'primary' : ''" @click="viewType = 'timeline'">
+              <el-button
+                size="small"
+                :type="viewType === 'timeline' ? 'primary' : ''"
+                @click="viewType = 'timeline'">
                 调用时序
               </el-button>
             </el-button-group>
-            <el-button type="primary" size="small" @click="showErrorAnalysis">
+            <el-button
+              type="primary"
+              size="small"
+              @click="showErrorAnalysis">
               错误分析
             </el-button>
           </div>
           <div class="graph-container">
-            <div v-if="loading" class="graph-state">
-              <el-icon :size="32" class="is-loading"><Refresh /></el-icon>
+            <div
+              v-if="loading"
+              class="graph-state">
+              <el-icon
+                :size="32"
+                class="is-loading">
+                <Refresh />
+              </el-icon>
               <p>加载中...</p>
             </div>
-            <div v-else-if="!selectedTrace" class="graph-placeholder">
+            <div
+              v-else-if="!selectedTrace"
+              class="graph-placeholder">
               <div class="placeholder-content">
-                <el-icon :size="64" color="#c0c4cc"><Connection /></el-icon>
+                <el-icon
+                  :size="64"
+                  color="#c0c4cc">
+                  <Connection />
+                </el-icon>
                 <p>运行链路可视化</p>
                 <p class="placeholder-tip">选择左侧请求链路查看调用拓扑</p>
-                <div class="stats" v-if="traces.length > 0">
+                <div
+                  v-if="traces.length > 0"
+                  class="stats">
                   <el-tag type="primary">服务数: {{ services.length }}</el-tag>
                   <el-tag type="success">实例数: {{ instanceCount }}</el-tag>
                   <el-tag type="danger">错误数: {{ errorCount }}</el-tag>
                 </div>
               </div>
             </div>
-            <div v-else class="trace-detail-view">
+            <div
+              v-else
+              class="trace-detail-view">
               <!-- 拓扑图：简化示意，VueFlow 渲染 -->
               <VueFlow
                 v-if="traceNodes.length > 0"
@@ -112,7 +157,9 @@
                   </div>
                 </template>
               </VueFlow>
-              <div v-else class="graph-placeholder">
+              <div
+                v-else
+                class="graph-placeholder">
                 <p>该链路暂无详细拓扑数据</p>
               </div>
             </div>
@@ -125,10 +172,16 @@
           <template #header>
             <span>服务详情</span>
           </template>
-          <div v-if="services.length === 0 && !loading" class="trace-empty">
-            <el-empty description="暂无服务数据" :image-size="60" />
+          <div
+            v-if="services.length === 0 && !loading"
+            class="trace-empty">
+            <el-empty
+              description="暂无服务数据"
+              :image-size="60" />
           </div>
-          <div class="service-list" v-else>
+          <div
+            v-else
+            class="service-list">
             <div
               v-for="service in services"
               :key="service.id"
@@ -138,7 +191,9 @@
             >
               <div class="service-header">
                 <span class="service-name">{{ service.name }}</span>
-                <el-tag size="small" :type="service.health === 'healthy' ? 'success' : 'danger'">
+                <el-tag
+                  size="small"
+                  :type="service.health === 'healthy' ? 'success' : 'danger'">
                   {{ service.health === 'healthy' ? '健康' : '异常' }}
                 </el-tag>
               </div>
@@ -151,21 +206,34 @@
           </div>
         </el-card>
 
-        <el-card class="slow-card" style="margin-top: 16px;">
+        <el-card
+          class="slow-card"
+          style="margin-top: 16px;">
           <template #header>
             <span>慢请求 Top 5</span>
           </template>
-          <div v-if="slowRequests.length === 0 && !loading" class="trace-empty">
-            <el-empty description="暂无慢请求数据" :image-size="40" />
+          <div
+            v-if="slowRequests.length === 0 && !loading"
+            class="trace-empty">
+            <el-empty
+              description="暂无慢请求数据"
+              :image-size="40" />
           </div>
-          <div class="slow-list" v-else>
-            <div class="slow-item" v-for="slow in slowRequests" :key="slow.id">
+          <div
+            v-else
+            class="slow-list">
+            <div
+              v-for="slow in slowRequests"
+              :key="slow.id"
+              class="slow-item">
               <div class="slow-api">{{ slow.api }}</div>
               <div class="slow-info">
                 <span class="slow-duration">{{ slow.avgDuration }}ms</span>
                 <span class="slow-count">{{ slow.count }} 次</span>
               </div>
-              <el-progress :percentage="slow.warningLevel * 20" :status="slow.warningLevel >= 4 ? 'exception' : 'warning'" />
+              <el-progress
+                :percentage="slow.warningLevel * 20"
+                :status="slow.warningLevel >= 4 ? 'exception' : 'warning'" />
             </div>
           </div>
         </el-card>
@@ -174,20 +242,39 @@
   </div>
 
   <!-- 异常分析弹窗 -->
-  <el-dialog v-model="errorAnalysisVisible" title="异常服务分析" width="600px">
-    <el-table :data="errorAnalysisData" style="width: 100%">
-      <el-table-column prop="name" label="服务名称" min-width="180" />
-      <el-table-column prop="p99" label="P99延迟(ms)" width="120" align="center">
+  <el-dialog
+    v-model="errorAnalysisVisible"
+    title="异常服务分析"
+    width="600px">
+    <el-table
+      :data="errorAnalysisData"
+      style="width: 100%">
+      <el-table-column
+        prop="name"
+        label="服务名称"
+        min-width="180" />
+      <el-table-column
+        prop="p99"
+        label="P99延迟(ms)"
+        width="120"
+        align="center">
         <template #default="{ row }">
           <span :style="{ color: row.p99 > 1000 ? '#f56c6c' : '#e6a23c' }">{{ row.p99 }}ms</span>
         </template>
       </el-table-column>
-      <el-table-column prop="errorRate" label="错误率" width="100" align="center">
+      <el-table-column
+        prop="errorRate"
+        label="错误率"
+        width="100"
+        align="center">
         <template #default="{ row }">
           <span :style="{ color: row.errorRate > 5 ? '#f56c6c' : '#e6a23c' }">{{ row.errorRate }}%</span>
         </template>
       </el-table-column>
-      <el-table-column prop="reason" label="异常原因" min-width="200" />
+      <el-table-column
+        prop="reason"
+        label="异常原因"
+        min-width="200" />
     </el-table>
     <template #footer>
       <el-button @click="errorAnalysisVisible = false">关闭</el-button>
@@ -240,7 +327,7 @@ async function loadTraces() {
   loading.value = true
   try {
     // 1) 优先加载真实运行时 trace 拓扑
-    const topo = await traceApi.getTopology(projectId.value).catch(() => null) as any
+    const topo = await traceApi.getTopology(projectId.value).catch(() => null)
     if (topo && topo.totalSpans > 0) {
       hasRealTrace.value = true
       services.value = (topo.services || []).map((s: any, idx: number) => ({
@@ -269,7 +356,7 @@ async function loadTraces() {
       }))
 
       // 链路列表
-      const recent = await traceApi.listTraces(projectId.value, undefined, 50).catch(() => []) as any
+      const recent = await traceApi.listTraces(projectId.value, undefined, 50).catch(() => [])
       traces.value = (recent || []).map((t: any) => ({
         id: t.id,
         status: t.status === 'ERROR' ? 'error' : 'success',
@@ -300,7 +387,7 @@ async function loadTraces() {
     // 加载统一图谱获取节点用作服务拓扑
     const lastVersion = versions?.[0]
     if (lastVersion?.id) {
-      const graphData = await graphApi.getUnifiedGraph(projectId.value, lastVersion.id, 0) as any
+      const graphData = await graphApi.getUnifiedGraph(projectId.value, lastVersion.id, 0)
       if (graphData?.nodes) {
         // 从图谱节点中提取 "服务" 类节点
         const serviceNodes = (graphData.nodes || []).filter((n: any) =>

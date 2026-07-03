@@ -1,0 +1,40 @@
+# 开发环境配置
+# 敏感信息通过环境变量注入；仓库内不保留外部地址、账号密码或 JWT secret 默认值。
+# 生产环境使用 application-prod.yml
+
+spring:
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/legacy_graph}
+    username: ${POSTGRES_USERNAME:legacy_graph}
+    password: ${POSTGRES_PASSWORD:}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:11}
+
+  neo4j:
+      uri: ${NEO4J_URI:bolt://localhost:7687}
+      authentication:
+        username: ${NEO4J_USERNAME:neo4j}
+        password: ${NEO4J_PASSWORD:}
+
+  ai:
+    openai:
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: https://api.deepseek.com/v1
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:}
+  secret-key: ${MINIO_SECRET_KEY:}
+
+jwt:
+  secret: ${JWT_SECRET:}
+
+logging:
+  level:
+    io.github.legacygraph: debug
+    org.springframework.security: info

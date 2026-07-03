@@ -11,7 +11,9 @@
       <slot />
     </el-table>
 
-    <div v-if="pagination" class="base-table__pagination">
+    <div
+      v-if="pagination"
+      class="base-table__pagination">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"

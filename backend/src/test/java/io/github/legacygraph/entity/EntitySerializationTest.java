@@ -405,7 +405,7 @@ class EntitySerializationTest {
         assertThat(restored.getStatus()).isEqualTo("SUCCESS");
 
         TableName tableName = AuditLog.class.getAnnotation(TableName.class);
-        assertThat(tableName.value()).isEqualTo("sys_operation_log");
+        assertThat(tableName.value()).isEqualTo("lg_sys_operation_log");
     }
 
     // ========== 补充：验证 getter/setter 字段完整性 ==========

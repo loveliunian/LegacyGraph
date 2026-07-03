@@ -4,24 +4,50 @@
       <template #header>
         <div class="card-header">
           <span>系统配置</span>
-          <el-button type="primary" size="small" @click="showCreateDialog">
+          <el-button
+            type="primary"
+            size="small"
+            @click="showCreateDialog">
             <el-icon><Plus /></el-icon>
             新建配置
           </el-button>
         </div>
       </template>
 
-      <SearchForm :model="filterParams" @search="loadData" @reset="resetFilter">
+      <SearchForm
+        :model="filterParams"
+        @search="loadData"
+        @reset="resetFilter">
         <el-form-item label="配置键">
-          <el-input v-model="filterParams.configKey" placeholder="请输入配置键" clearable style="width: 250px" />
+          <el-input
+            v-model="filterParams.configKey"
+            placeholder="请输入配置键"
+            clearable
+            style="width: 250px" />
         </el-form-item>
       </SearchForm>
 
-      <el-table :data="list" v-loading="loading" border style="width: 100%">
-        <el-table-column prop="id" label="ID" width="100" />
-        <el-table-column prop="configKey" label="配置键" width="200" />
-        <el-table-column prop="configName" label="配置名称" width="180" />
-        <el-table-column prop="configValue" label="配置值" min-width="250">
+      <el-table
+        v-loading="loading"
+        :data="list"
+        border
+        style="width: 100%">
+        <el-table-column
+          prop="id"
+          label="ID"
+          width="100" />
+        <el-table-column
+          prop="configKey"
+          label="配置键"
+          width="200" />
+        <el-table-column
+          prop="configName"
+          label="配置名称"
+          width="180" />
+        <el-table-column
+          prop="configValue"
+          label="配置值"
+          min-width="250">
           <template #default="{ row }">
             <el-input
               v-if="editingId === row.id"
@@ -32,8 +58,14 @@
             <span v-else>{{ row.configValue }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="configDesc" label="描述" min-width="200" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column
+          prop="configDesc"
+          label="描述"
+          min-width="200" />
+        <el-table-column
+          label="操作"
+          width="150"
+          fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="editingId !== row.id"
@@ -57,21 +89,43 @@
     </el-card>
 
     <!-- 新建配置对话框 -->
-    <el-dialog v-model="dialogVisible" title="新建系统配置" width="500px" destroy-on-close>
-      <el-form :model="formData" label-width="80px">
-        <el-form-item label="配置键" required>
-          <el-input v-model="formData.configKey" placeholder="如：scan.defaultTimeout" />
+    <el-dialog
+      v-model="dialogVisible"
+      title="新建系统配置"
+      width="500px"
+      destroy-on-close>
+      <el-form
+        :model="formData"
+        label-width="80px">
+        <el-form-item
+          label="配置键"
+          required>
+          <el-input
+            v-model="formData.configKey"
+            placeholder="如：scan.defaultTimeout" />
         </el-form-item>
-        <el-form-item label="配置值" required>
-          <el-input v-model="formData.configValue" placeholder="配置值" />
+        <el-form-item
+          label="配置值"
+          required>
+          <el-input
+            v-model="formData.configValue"
+            placeholder="配置值" />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="formData.configDesc" placeholder="配置说明" type="textarea" />
+          <el-input
+            v-model="formData.configDesc"
+            placeholder="配置说明"
+            type="textarea" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate" :loading="submitting">创建</el-button>
+        <el-button
+          type="primary"
+          :loading="submitting"
+          @click="handleCreate">
+          创建
+        </el-button>
       </template>
     </el-dialog>
   </div>

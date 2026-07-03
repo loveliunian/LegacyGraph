@@ -1,66 +1,147 @@
 <template>
   <div class="graph-toolbar">
     <div class="toolbar-group">
-      <el-tooltip content="放大" placement="bottom">
-        <el-button :icon="ZoomIn" size="small" circle @click="emit('zoomIn')" />
+      <el-tooltip
+        content="放大"
+        placement="bottom">
+        <el-button
+          :icon="ZoomIn"
+          size="small"
+          circle
+          @click="emit('zoomIn')" />
       </el-tooltip>
-      <el-tooltip content="缩小" placement="bottom">
-        <el-button :icon="ZoomOut" size="small" circle @click="emit('zoomOut')" />
+      <el-tooltip
+        content="缩小"
+        placement="bottom">
+        <el-button
+          :icon="ZoomOut"
+          size="small"
+          circle
+          @click="emit('zoomOut')" />
       </el-tooltip>
-      <el-tooltip content="适应视图" placement="bottom">
-        <el-button :icon="FullScreen" size="small" circle @click="emit('fitView')" />
+      <el-tooltip
+        content="适应视图"
+        placement="bottom">
+        <el-button
+          :icon="FullScreen"
+          size="small"
+          circle
+          @click="emit('fitView')" />
       </el-tooltip>
-      <el-tooltip content="居中小球" placement="bottom">
-        <el-button :icon="Location" size="small" circle @click="emit('centerView')" />
-      </el-tooltip>
-    </div>
-
-    <el-divider direction="vertical" />
-
-    <div class="toolbar-group">
-      <el-tooltip content="力导布局" placement="bottom">
-        <el-button :icon="Connection" size="small" circle :type="layout === 'elk' ? 'primary' : ''" @click="changeLayout('elk')" />
-      </el-tooltip>
-      <el-tooltip content="层次布局" placement="bottom">
-        <el-button :icon="Grid" size="small" circle :type="layout === 'dagre' ? 'primary' : ''" @click="changeLayout('dagre')" />
-      </el-tooltip>
-      <el-tooltip content="环形布局" placement="bottom">
-        <el-button :icon="RefreshRight" size="small" circle :type="layout === 'circular' ? 'primary' : ''" @click="changeLayout('circular')" />
-      </el-tooltip>
-    </div>
-
-    <el-divider direction="vertical" />
-
-    <div class="toolbar-group">
-      <el-tooltip content="展开全部" placement="bottom">
-        <el-button :icon="Plus" size="small" circle @click="emit('expandAll')" />
-      </el-tooltip>
-      <el-tooltip content="收起全部" placement="bottom">
-        <el-button :icon="Minus" size="small" circle @click="emit('collapseAll')" />
-      </el-tooltip>
-    </div>
-
-    <el-divider direction="vertical" />
-
-    <div class="toolbar-group">
-      <el-tooltip content="搜索节点" placement="bottom">
-        <el-button :icon="Search" size="small" circle @click="showSearch = !showSearch" />
-      </el-tooltip>
-
-      <el-tooltip content="筛选" placement="bottom">
-        <el-button :icon="Filter" size="small" circle @click="showFilter = !showFilter" />
-      </el-tooltip>
-
-      <el-tooltip content="设置" placement="bottom">
-        <el-button :icon="Setting" size="small" circle @click="showSettings = !showSettings" />
+      <el-tooltip
+        content="居中小球"
+        placement="bottom">
+        <el-button
+          :icon="Location"
+          size="small"
+          circle
+          @click="emit('centerView')" />
       </el-tooltip>
     </div>
 
     <el-divider direction="vertical" />
 
     <div class="toolbar-group">
-      <el-dropdown @command="handleExport" trigger="click">
-        <el-button size="small" :icon="Download">导出</el-button>
+      <el-tooltip
+        content="力导布局"
+        placement="bottom">
+        <el-button
+          :icon="Connection"
+          size="small"
+          circle
+          :type="layout === 'elk' ? 'primary' : ''"
+          @click="changeLayout('elk')" />
+      </el-tooltip>
+      <el-tooltip
+        content="层次布局"
+        placement="bottom">
+        <el-button
+          :icon="Grid"
+          size="small"
+          circle
+          :type="layout === 'dagre' ? 'primary' : ''"
+          @click="changeLayout('dagre')" />
+      </el-tooltip>
+      <el-tooltip
+        content="环形布局"
+        placement="bottom">
+        <el-button
+          :icon="RefreshRight"
+          size="small"
+          circle
+          :type="layout === 'circular' ? 'primary' : ''"
+          @click="changeLayout('circular')" />
+      </el-tooltip>
+    </div>
+
+    <el-divider direction="vertical" />
+
+    <div class="toolbar-group">
+      <el-tooltip
+        content="展开全部"
+        placement="bottom">
+        <el-button
+          :icon="Plus"
+          size="small"
+          circle
+          @click="emit('expandAll')" />
+      </el-tooltip>
+      <el-tooltip
+        content="收起全部"
+        placement="bottom">
+        <el-button
+          :icon="Minus"
+          size="small"
+          circle
+          @click="emit('collapseAll')" />
+      </el-tooltip>
+    </div>
+
+    <el-divider direction="vertical" />
+
+    <div class="toolbar-group">
+      <el-tooltip
+        content="搜索节点"
+        placement="bottom">
+        <el-button
+          :icon="Search"
+          size="small"
+          circle
+          @click="showSearch = !showSearch" />
+      </el-tooltip>
+
+      <el-tooltip
+        content="筛选"
+        placement="bottom">
+        <el-button
+          :icon="Filter"
+          size="small"
+          circle
+          @click="showFilter = !showFilter" />
+      </el-tooltip>
+
+      <el-tooltip
+        content="设置"
+        placement="bottom">
+        <el-button
+          :icon="Setting"
+          size="small"
+          circle
+          @click="showSettings = !showSettings" />
+      </el-tooltip>
+    </div>
+
+    <el-divider direction="vertical" />
+
+    <div class="toolbar-group">
+      <el-dropdown
+        trigger="click"
+        @command="handleExport">
+        <el-button
+          size="small"
+          :icon="Download">
+          导出
+        </el-button>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="png">PNG 图片</el-dropdown-item>
@@ -71,8 +152,14 @@
         </template>
       </el-dropdown>
 
-      <el-dropdown @command="handleShare" trigger="click">
-        <el-button size="small" :icon="Share">分享</el-button>
+      <el-dropdown
+        trigger="click"
+        @command="handleShare">
+        <el-button
+          size="small"
+          :icon="Share">
+          分享
+        </el-button>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="link">复制链接</el-dropdown-item>
@@ -109,12 +196,20 @@
         >
           <div class="result-label">{{ node.label }}</div>
           <div class="result-meta">
-            <el-tag size="small" :type="getNodeTypeColor(node.type)">{{ node.type }}</el-tag>
+            <el-tag
+              size="small"
+              :type="getNodeTypeColor(node.type)">
+              {{ node.type }}
+            </el-tag>
             <span class="result-desc">{{ truncate(node.description || '', 50) }}</span>
           </div>
         </div>
-        <div v-if="filteredNodes.length === 0" class="empty-result">
-          <el-empty description="未找到匹配节点" :image-size="80" />
+        <div
+          v-if="filteredNodes.length === 0"
+          class="empty-result">
+          <el-empty
+            description="未找到匹配节点"
+            :image-size="80" />
         </div>
       </div>
     </el-drawer>
@@ -156,8 +251,17 @@
       </div>
 
       <div class="filter-actions">
-        <el-button size="small" @click="resetFilter">重置</el-button>
-        <el-button size="small" type="primary" @click="applyFilter">应用筛选</el-button>
+        <el-button
+          size="small"
+          @click="resetFilter">
+          重置
+        </el-button>
+        <el-button
+          size="small"
+          type="primary"
+          @click="applyFilter">
+          应用筛选
+        </el-button>
       </div>
     </el-drawer>
 
@@ -171,13 +275,22 @@
         <h4>样式</h4>
         <el-form label-width="100px">
           <el-form-item label="节点大小">
-            <el-slider v-model="nodeSize" :min="20" :max="80" />
+            <el-slider
+              v-model="nodeSize"
+              :min="20"
+              :max="80" />
           </el-form-item>
           <el-form-item label="连接线粗细">
-            <el-slider v-model="edgeWidth" :min="1" :max="10" />
+            <el-slider
+              v-model="edgeWidth"
+              :min="1"
+              :max="10" />
           </el-form-item>
           <el-form-item label="字体大小">
-            <el-slider v-model="fontSize" :min="10" :max="24" />
+            <el-slider
+              v-model="fontSize"
+              :min="10"
+              :max="24" />
           </el-form-item>
         </el-form>
       </div>

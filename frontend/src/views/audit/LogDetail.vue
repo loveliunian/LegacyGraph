@@ -3,40 +3,61 @@
     <el-card shadow="hover">
       <template #header>
         <div class="card-header">
-          <el-button :icon="ArrowLeft" @click="goBack">返回</el-button>
+          <el-button
+            :icon="ArrowLeft"
+            @click="goBack">
+            返回
+          </el-button>
           <span>日志详情</span>
           <div class="header-actions">
-            <el-button :icon="Download" @click="exportLog">导出</el-button>
+            <el-button
+              :icon="Download"
+              @click="exportLog">
+              导出
+            </el-button>
           </div>
         </div>
       </template>
 
-      <div class="log-detail" v-if="logDetail">
+      <div
+        v-if="logDetail"
+        class="log-detail">
         <div class="detail-section">
           <h4>基本信息</h4>
-          <el-descriptions :column="2" border size="small">
+          <el-descriptions
+            :column="2"
+            border
+            size="small">
             <el-descriptions-item label="操作ID">{{ logDetail.id }}</el-descriptions-item>
             <el-descriptions-item label="操作类型">
-              <el-tag :type="getOperationTypeColor(logDetail.operationType)" size="small">
+              <el-tag
+                :type="getOperationTypeColor(logDetail.operationType)"
+                size="small">
                 {{ logDetail.operationType }}
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="操作描述">{{ logDetail.description }}</el-descriptions-item>
             <el-descriptions-item label="操作时间">{{ logDetail.createTime }}</el-descriptions-item>
             <el-descriptions-item label="操作人">
-              <el-avatar :size="24" style="margin-right: 8px">
+              <el-avatar
+                :size="24"
+                style="margin-right: 8px">
                 {{ logDetail.operator?.charAt(0) }}
               </el-avatar>
               {{ logDetail.operator }}
             </el-descriptions-item>
             <el-descriptions-item label="IP地址">{{ logDetail.ip }}</el-descriptions-item>
             <el-descriptions-item label="执行耗时">
-              <el-tag :type="logDetail.duration > 1000 ? 'warning' : 'info'" size="small">
+              <el-tag
+                :type="logDetail.duration > 1000 ? 'warning' : 'info'"
+                size="small">
                 {{ logDetail.duration }}ms
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="操作状态">
-              <el-tag :type="logDetail.success ? 'success' : 'danger'" size="small">
+              <el-tag
+                :type="logDetail.success ? 'success' : 'danger'"
+                size="small">
                 {{ logDetail.success ? '成功' : '失败' }}
               </el-tag>
             </el-descriptions-item>
@@ -49,7 +70,9 @@
           <h4>请求信息</h4>
           <div class="code-wrapper">
             <div class="request-line">
-              <span class="method-badge" :class="logDetail.method?.toLowerCase()">
+              <span
+                class="method-badge"
+                :class="logDetail.method?.toLowerCase()">
                 {{ logDetail.method }}
               </span>
               <span class="request-url">{{ logDetail.url }}</span>
@@ -68,7 +91,9 @@
           <h4>响应信息</h4>
           <div class="code-wrapper">
             <div class="status-line">
-              <span class="status-badge" :class="logDetail.success ? 'success' : 'error'">
+              <span
+                class="status-badge"
+                :class="logDetail.success ? 'success' : 'error'">
                 {{ logDetail.httpStatus || 200 }}
               </span>
               <span class="status-text">{{ logDetail.success ? 'OK' : 'Error' }}</span>
@@ -83,16 +108,23 @@
 
         <el-divider v-if="logDetail.errorMessage" />
 
-        <div class="detail-section" v-if="logDetail.errorMessage">
+        <div
+          v-if="logDetail.errorMessage"
+          class="detail-section">
           <h4>错误信息</h4>
           <el-alert
-            title="异常堆栈" type="error" :closable="false" show-icon>
+            title="异常堆栈"
+            type="error"
+            :closable="false"
+            show-icon>
             <pre class="error-stack">{{ logDetail.errorMessage }}</pre>
           </el-alert>
         </div>
       </div>
 
-      <el-empty v-else description="加载中..." />
+      <el-empty
+        v-else
+        description="加载中..." />
     </el-card>
   </div>
 </template>

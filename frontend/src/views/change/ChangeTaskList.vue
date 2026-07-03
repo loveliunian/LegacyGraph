@@ -4,66 +4,114 @@
       <template #header>
         <div class="card-header">
           <span>变更任务</span>
-          <el-button type="primary" size="small" @click="showCreateDialog">
+          <el-button
+            type="primary"
+            size="small"
+            @click="showCreateDialog">
             <el-icon><Plus /></el-icon>
             新建任务
           </el-button>
         </div>
       </template>
 
-      <el-table :data="list" v-loading="loading" border style="width: 100%" empty-text="暂无变更任务">
-        <el-table-column prop="id" label="任务ID" width="120" show-overflow-tooltip />
-        <el-table-column prop="title" label="标题" min-width="180" />
-        <el-table-column prop="taskType" label="类型" width="100" align="center">
+      <el-table
+        v-loading="loading"
+        :data="list"
+        border
+        style="width: 100%"
+        empty-text="暂无变更任务">
+        <el-table-column
+          prop="id"
+          label="任务ID"
+          width="120"
+          show-overflow-tooltip />
+        <el-table-column
+          prop="title"
+          label="标题"
+          min-width="180" />
+        <el-table-column
+          prop="taskType"
+          label="类型"
+          width="100"
+          align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="taskTypeTag(row.taskType)">{{ taskTypeLabel(row.taskType) }}</el-tag>
+            <el-tag
+              size="small"
+              :type="taskTypeTag(row.taskType)">
+              {{ taskTypeLabel(row.taskType) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100" align="center">
+        <el-table-column
+          prop="status"
+          label="状态"
+          width="100"
+          align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="statusTag(row.status)">{{ dictLabel('change_task_status', row.status) }}</el-tag>
+            <el-tag
+              size="small"
+              :type="statusTag(row.status)">
+              {{ dictLabel('change_task_status', row.status) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="影响子图" width="100" align="center">
+        <el-table-column
+          label="影响子图"
+          width="100"
+          align="center">
           <template #default="{ row }">
             <el-button
               link
               size="small"
               type="primary"
-              @click="handleRefreshImpact(row)"
               :loading="impactLoading.has(row.id)"
+              @click="handleRefreshImpact(row)"
             >
               刷新
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column label="补丁" width="100" align="center">
+        <el-table-column
+          label="补丁"
+          width="100"
+          align="center">
           <template #default="{ row }">
             <el-button
               link
               size="small"
               type="success"
-              @click="handleGeneratePatch(row)"
               :loading="patchLoading.has(row.id)"
+              @click="handleGeneratePatch(row)"
             >
               生成
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="170">
+        <el-table-column
+          prop="createdAt"
+          label="创建时间"
+          width="170">
           <template #default="{ row }">
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column
+          label="操作"
+          width="120"
+          fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" @click="handleDetail(row)">详情</el-button>
+            <el-button
+              link
+              size="small"
+              @click="handleDetail(row)">
+              详情
+            </el-button>
             <el-button
               link
               size="small"
               type="warning"
-              @click="handleRunValidation(row)"
               :loading="validationLoading.has(row.id)"
+              @click="handleRunValidation(row)"
             >
               验证
             </el-button>
@@ -73,20 +121,37 @@
     </el-card>
 
     <!-- 新建任务对话框 -->
-    <el-dialog v-model="dialogVisible" title="新建变更任务" width="550px" destroy-on-close>
-      <el-form :model="formData" label-width="80px">
-        <el-form-item label="任务标题" required>
-          <el-input v-model="formData.title" placeholder="简要描述变更内容" />
+    <el-dialog
+      v-model="dialogVisible"
+      title="新建变更任务"
+      width="550px"
+      destroy-on-close>
+      <el-form
+        :model="formData"
+        label-width="80px">
+        <el-form-item
+          label="任务标题"
+          required>
+          <el-input
+            v-model="formData.title"
+            placeholder="简要描述变更内容" />
         </el-form-item>
-        <el-form-item label="任务类型" required>
+        <el-form-item
+          label="任务类型"
+          required>
           <el-radio-group v-model="formData.taskType">
             <el-radio label="BUGFIX">Bug修复</el-radio>
             <el-radio label="REFACTOR">重构</el-radio>
             <el-radio label="UPGRADE">升级</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="扫描版本" required>
-          <el-select v-model="formData.versionId" placeholder="选择扫描版本" style="width: 100%">
+        <el-form-item
+          label="扫描版本"
+          required>
+          <el-select
+            v-model="formData.versionId"
+            placeholder="选择扫描版本"
+            style="width: 100%">
             <el-option
               v-for="v in versions"
               :key="v.id"
@@ -106,26 +171,57 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate" :loading="submitting">创建任务</el-button>
+        <el-button
+          type="primary"
+          :loading="submitting"
+          @click="handleCreate">
+          创建任务
+        </el-button>
       </template>
     </el-dialog>
 
     <!-- 详情对话框 -->
-    <el-dialog v-model="detailVisible" title="任务详情" width="700px" destroy-on-close>
-      <el-descriptions v-if="currentTask" :column="2" border>
+    <el-dialog
+      v-model="detailVisible"
+      title="任务详情"
+      width="700px"
+      destroy-on-close>
+      <el-descriptions
+        v-if="currentTask"
+        :column="2"
+        border>
         <el-descriptions-item label="任务ID">{{ currentTask.id }}</el-descriptions-item>
         <el-descriptions-item label="标题">{{ currentTask.title }}</el-descriptions-item>
         <el-descriptions-item label="类型">
-          <el-tag size="small" :type="taskTypeTag(currentTask.taskType)">{{ taskTypeLabel(currentTask.taskType) }}</el-tag>
+          <el-tag
+            size="small"
+            :type="taskTypeTag(currentTask.taskType)">
+            {{ taskTypeLabel(currentTask.taskType) }}
+          </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag size="small" :type="statusTag(currentTask.status)">{{ dictLabel('change_task_status', currentTask.status) }}</el-tag>
+          <el-tag
+            size="small"
+            :type="statusTag(currentTask.status)">
+            {{ dictLabel('change_task_status', currentTask.status) }}
+          </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="项目ID">{{ currentTask.projectId }}</el-descriptions-item>
         <el-descriptions-item label="版本ID">{{ currentTask.versionId }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间" :span="2">{{ formatTime(currentTask.createdAt) }}</el-descriptions-item>
-        <el-descriptions-item label="问题描述" :span="2">{{ currentTask.inputIssue || '-' }}</el-descriptions-item>
-        <el-descriptions-item v-if="currentTask.impactedNodes" label="影响节点数" :span="1">
+        <el-descriptions-item
+          label="创建时间"
+          :span="2">
+          {{ formatTime(currentTask.createdAt) }}
+        </el-descriptions-item>
+        <el-descriptions-item
+          label="问题描述"
+          :span="2">
+          {{ currentTask.inputIssue || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item
+          v-if="currentTask.impactedNodes"
+          label="影响节点数"
+          :span="1">
           {{ Array.isArray(currentTask.impactedNodes) ? currentTask.impactedNodes.length : 0 }}
         </el-descriptions-item>
       </el-descriptions>

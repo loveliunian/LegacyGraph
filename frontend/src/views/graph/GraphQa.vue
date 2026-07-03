@@ -1,100 +1,209 @@
 <template>
   <div class="graph-qa-page">
-    <el-card class="qa-card">
-      <template #header>
-        <div class="card-header">
-          <el-icon><ChatDotRound /></el-icon>
-          <span style="margin-left: 8px; font-weight: 600;">图谱问答</span>
-          <el-tag size="small" type="info" style="margin-left: 12px;">基于知识图谱的智能问答</el-tag>
-        </div>
-      </template>
-
-      <div class="chat-container" ref="chatContainer">
-        <div v-if="messages.length === 0" class="welcome-hint">
-          <el-icon :size="48" color="#c0c4cc"><ChatDotRound /></el-icon>
-          <p>向我提问关于项目代码、架构、数据关系的任何问题</p>
-          <div class="example-questions">
-            <el-tag
-              v-for="q in exampleQuestions"
-              :key="q"
-              class="example-tag"
-              @click="askQuestion(q)"
-            >
-              {{ q }}
-            </el-tag>
-          </div>
-        </div>
-
-        <div
-          v-for="(msg, idx) in messages"
-          :key="idx"
-          :class="['message-item', msg.role === 'user' ? 'message-user' : 'message-assistant']"
-        >
-          <div class="message-avatar">
-            <el-icon v-if="msg.role === 'user'" :size="20"><User /></el-icon>
-            <el-icon v-else :size="20"><Cpu /></el-icon>
-          </div>
-          <div class="message-body">
-            <div class="message-content" v-html="renderMarkdown(msg.content)"></div>
-            <div v-if="msg.evidences && msg.evidences.length > 0" class="message-evidences">
-              <p class="evidence-title">📎 引用证据（{{ msg.evidences.length }} 条）：</p>
-              <div v-for="(ev, ei) in msg.evidences" :key="ei" class="evidence-item">
-                <el-tag size="small" :type="ev.sourceKind === 'GRAPH_NODE' ? 'success' : 'warning'">
-                  {{ ev.sourceKind === 'GRAPH_NODE' ? '图谱节点' : '文档片段' }}
-                </el-tag>
-                <span class="evidence-title-text">{{ ev.title }}</span>
-                <p v-if="ev.excerpt" class="evidence-excerpt">{{ ev.excerpt }}</p>
-              </div>
-            </div>
-            <div v-if="msg.confidence != null" class="message-confidence">
-              置信度：{{ (msg.confidence * 100).toFixed(0) }}%
-            </div>
-          </div>
-        </div>
-
-        <div v-if="thinking" class="message-item message-assistant">
-          <div class="message-avatar">
-            <el-icon :size="20"><Cpu /></el-icon>
-          </div>
-          <div class="message-body">
-            <div class="thinking-dots">
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="input-area">
-        <el-input
-          v-model="inputText"
-          placeholder="输入你的问题，例如：这个项目用了哪些数据库表？"
-          :rows="3"
-          type="textarea"
-          @keydown.enter.exact.prevent="handleSend"
-        />
-        <div class="input-actions">
-          <span class="char-count">{{ inputText.length }}/500</span>
+    <el-container class="qa-container">
+      <!-- 左侧对话列表 -->
+      <el-aside
+        width="260px"
+        class="conversation-sidebar">
+        <div class="sidebar-header">
           <el-button
             type="primary"
-            :disabled="!inputText.trim() || thinking"
-            :loading="thinking"
-            @click="handleSend"
-          >
-            <el-icon><Promotion /></el-icon>
-            发送
+            :icon="Plus"
+            @click="createNewConversation">
+            新对话
           </el-button>
-          <el-button @click="clearChat" :disabled="messages.length === 0">清空</el-button>
         </div>
-      </div>
-    </el-card>
+        <div class="conversation-list">
+          <div
+            v-for="conv in conversations"
+            :key="conv.id"
+            :class="['conversation-item', { active: currentConversationId === conv.id }]"
+            @click="switchConversation(conv.id)"
+          >
+            <div class="conv-title">{{ conv.title || '新对话' }}</div>
+            <div class="conv-meta">{{ conv.messageCount ?? 0 }} 条消息</div>
+            <el-button
+              class="delete-btn"
+              :icon="Delete"
+              size="small"
+              text
+              @click.stop="deleteConversation(conv.id)"
+            />
+          </div>
+        </div>
+      </el-aside>
+
+      <!-- 右侧聊天区域 -->
+      <el-main class="chat-main">
+        <el-card class="qa-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon><ChatDotRound /></el-icon>
+              <span style="margin-left: 8px; font-weight: 600;">图谱问答</span>
+              <el-tag
+                size="small"
+                type="info"
+                style="margin-left: 12px;">
+                基于知识图谱的智能问答
+              </el-tag>
+            </div>
+          </template>
+
+          <div
+            ref="chatContainer"
+            class="chat-container">
+            <div
+              v-if="messages.length === 0"
+              class="welcome-hint">
+              <el-icon
+                :size="48"
+                color="#c0c4cc">
+                <ChatDotRound />
+              </el-icon>
+              <p>向我提问关于项目代码、架构、数据关系的任何问题</p>
+              <div class="example-questions">
+                <el-tag
+                  v-for="q in exampleQuestions"
+                  :key="q"
+                  class="example-tag"
+                  @click="askQuestion(q)"
+                >
+                  {{ q }}
+                </el-tag>
+              </div>
+            </div>
+
+            <div
+              v-for="(msg, idx) in messages"
+              :key="idx"
+              :class="['message-item', msg.role === 'user' ? 'message-user' : 'message-assistant']"
+            >
+              <div class="message-avatar">
+                <el-icon
+                  v-if="msg.role === 'user'"
+                  :size="20">
+                  <User />
+                </el-icon>
+                <el-icon
+                  v-else
+                  :size="20">
+                  <Cpu />
+                </el-icon>
+              </div>
+              <div class="message-body">
+                <div
+                  class="message-content"
+                  v-html="renderMarkdown(msg.content)" />
+                <div
+                  v-if="msg.evidences && msg.evidences.length > 0"
+                  class="message-evidences">
+                  <p class="evidence-title">📎 引用证据（{{ msg.evidences.length }} 条）：</p>
+                  <div
+                    v-for="(ev, ei) in msg.evidences"
+                    :key="ei"
+                    class="evidence-item">
+                    <el-tag
+                      size="small"
+                      :type="ev.sourceKind === 'GRAPH_NODE' ? 'success' : 'warning'">
+                      {{ ev.sourceKind === 'GRAPH_NODE' ? '图谱节点' : '文档片段' }}
+                    </el-tag>
+                    <a
+                      v-if="ev.jumpUrl"
+                      :href="ev.jumpUrl"
+                      target="_blank"
+                      class="evidence-title-text evidence-link"
+                    >
+                      {{ ev.title }}
+                      <el-icon><Link /></el-icon>
+                    </a>
+                    <span
+                      v-else
+                      class="evidence-title-text">{{ ev.title }}</span>
+                    <p
+                      v-if="ev.excerpt"
+                      class="evidence-excerpt">
+                      {{ ev.excerpt }}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  v-if="msg.confidence != null"
+                  class="message-confidence">
+                  置信度：{{ (msg.confidence * 100).toFixed(0) }}%
+                </div>
+                <div
+                  v-if="msg.role === 'assistant' && !thinking"
+                  class="message-actions">
+                  <el-button
+                    size="small"
+                    text
+                    @click="submitFeedback(idx, true)">
+                    👍 有帮助
+                  </el-button>
+                  <el-button
+                    size="small"
+                    text
+                    @click="submitFeedback(idx, false)">
+                    👎 需改进
+                  </el-button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="thinking"
+              class="message-item message-assistant">
+              <div class="message-avatar">
+                <el-icon :size="20"><Cpu /></el-icon>
+              </div>
+              <div class="message-body">
+                <div class="message-content streaming-content">
+                  {{ streamingContent }}
+                  <span class="cursor">▊</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-area">
+            <el-input
+              v-model="inputText"
+              placeholder="输入你的问题，例如：这个项目用了哪些数据库表？"
+              :rows="3"
+              type="textarea"
+              @keydown.enter.exact.prevent="handleSend"
+            />
+            <div class="input-actions">
+              <span class="char-count">{{ inputText.length }}/500</span>
+              <el-button
+                type="primary"
+                :disabled="!inputText.trim() || thinking"
+                :loading="thinking"
+                @click="handleSend"
+              >
+                <el-icon><Promotion /></el-icon>
+                发送
+              </el-button>
+              <el-button
+                :disabled="messages.length === 0"
+                @click="clearChat">
+                清空
+              </el-button>
+            </div>
+          </div>
+        </el-card>
+      </el-main>
+    </el-container>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChatDotRound, User, Cpu, Promotion } from '@element-plus/icons-vue'
-import { qaApi } from '@/api'
+import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, Link } from '@element-plus/icons-vue'
+import { qaApi, type QaConversation, type EvidenceItem } from '@/api/qa.api'
+import { mapQaHistoryMessages } from './qaMessageMapper'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -103,19 +212,18 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   confidence?: number
-  evidences?: Array<{
-    sourceKind: string
-    ref: string
-    title: string
-    excerpt: string
-    sourcePath?: string
-    score?: number
-  }>
+  evidences?: EvidenceItem[]
+  messageId?: string
+  conversationId?: string
 }
 
+const conversations = ref<QaConversation[]>([])
+const currentConversationId = ref<string | null>(null)
 const messages = ref<Message[]>([])
 const inputText = ref('')
 const thinking = ref(false)
+const streamingContent = ref('')
+const streamingEvidences = ref<EvidenceItem[]>([])
 const chatContainer = ref<HTMLElement>()
 
 const exampleQuestions = [
@@ -127,7 +235,6 @@ const exampleQuestions = [
 
 const renderMarkdown = (text: string) => {
   if (!text) return ''
-  // 简单 markdown 渲染：代码块、粗体、换行
   return text
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -154,40 +261,233 @@ const handleSend = async () => {
   messages.value.push({ role: 'user', content: question })
   inputText.value = ''
   thinking.value = true
+  streamingContent.value = ''
+  streamingEvidences.value = []
   await scrollToBottom()
 
   try {
-    const res = await qaApi.ask({ question, projectId }) as any
-    const data = res?.data || res
-    messages.value.push({
-      role: 'assistant',
-      content: data.answer || '未获取到回答',
-      confidence: data.confidence,
-      evidences: data.evidences || [],
-    })
-  } catch {
+    qaApi.askStreamFetch(
+      {
+        question,
+        projectId,
+        conversationId: currentConversationId.value || undefined,
+      },
+      {
+        onToken: (token) => {
+          streamingContent.value += token
+          scrollToBottom()
+        },
+        onEvidence: (evidences) => {
+          streamingEvidences.value = evidences
+        },
+        onComplete: (data) => {
+          if (data.conversationId) {
+            currentConversationId.value = data.conversationId
+          }
+
+          const evidences = data.evidences || streamingEvidences.value || []
+          const confidence = data.confidence
+          const messageId = data.messageId
+
+          messages.value.push({
+            role: 'assistant',
+            content: streamingContent.value,
+            confidence,
+            evidences,
+            messageId,
+            conversationId: data.conversationId || currentConversationId.value || undefined,
+          })
+
+          streamingContent.value = ''
+          streamingEvidences.value = []
+          thinking.value = false
+          scrollToBottom()
+          refreshConversations()
+        },
+        onError: (err) => {
+          console.error('Stream error:', err)
+          messages.value.push({
+            role: 'assistant',
+            content: '抱歉，问答服务暂时不可用，请稍后重试。',
+          })
+          streamingContent.value = ''
+          streamingEvidences.value = []
+          thinking.value = false
+          scrollToBottom()
+        },
+      }
+    )
+  } catch (err) {
+    console.error('Failed to start stream:', err)
     messages.value.push({
       role: 'assistant',
       content: '抱歉，问答服务暂时不可用，请稍后重试。',
     })
-  } finally {
     thinking.value = false
-    await scrollToBottom()
+    streamingEvidences.value = []
+    scrollToBottom()
   }
 }
 
 const clearChat = () => {
   messages.value = []
+  currentConversationId.value = null
+}
+
+const createNewConversation = async () => {
+  currentConversationId.value = null
+  messages.value = []
+}
+
+const switchConversation = async (convId: string) => {
+  if (currentConversationId.value === convId) return
+
+  currentConversationId.value = convId
+  await loadConversationMessages(convId)
+}
+
+const loadConversationMessages = async (convId: string) => {
+  try {
+    const res = await qaApi.getMessages(convId)
+    const msgs = res.data || []
+    messages.value = mapQaHistoryMessages(msgs)
+    scrollToBottom()
+  } catch (err) {
+    console.error('Failed to load messages:', err)
+    ElMessage.error('加载对话失败')
+  }
+}
+
+const deleteConversation = async (convId: string) => {
+  try {
+    await qaApi.deleteConversation(convId)
+    ElMessage.success('对话已删除')
+    if (currentConversationId.value === convId) {
+      currentConversationId.value = null
+      messages.value = []
+    }
+    refreshConversations()
+  } catch (err) {
+    console.error('Failed to delete conversation:', err)
+    ElMessage.error('删除失败')
+  }
+}
+
+const refreshConversations = async () => {
+  try {
+    const res = await qaApi.listConversations(projectId)
+    conversations.value = res.data || []
+  } catch (err) {
+    console.error('Failed to load conversations:', err)
+  }
+}
+
+const submitFeedback = async (msgIndex: number, helpful: boolean) => {
+  const msg = messages.value[msgIndex]
+  if (!msg || msg.role !== 'assistant' || !msg.messageId) return
+  const conversationId = msg.conversationId || currentConversationId.value
+  if (!conversationId) return
+
+  try {
+    await qaApi.submitFeedback({
+      messageId: msg.messageId,
+      conversationId,
+      projectId,
+      helpful,
+      usedEvidenceIds: (msg.evidences || []).map((evidence) => evidence.ref).filter(Boolean),
+      question: messages.value[msgIndex - 1]?.content,
+      answer: msg.content,
+    })
+    ElMessage.success('感谢反馈！')
+  } catch (err) {
+    console.error('Failed to submit feedback:', err)
+    ElMessage.error('反馈提交失败')
+  }
 }
 
 onMounted(() => {
-  // 页面加载完成
+  refreshConversations()
 })
 </script>
 
 <style scoped>
 .graph-qa-page {
   height: calc(100vh - 180px);
+}
+
+.qa-container {
+  height: 100%;
+}
+
+.conversation-sidebar {
+  border-right: 1px solid #ebeef5;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+}
+
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.sidebar-header .el-button {
+  width: 100%;
+}
+
+.conversation-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.conversation-item {
+  padding: 12px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.conversation-item:hover {
+  background: #f0f2f5;
+}
+
+.conversation-item.active {
+  background: #e6f4ff;
+  border-left: 3px solid #1890ff;
+}
+
+.conv-title {
+  font-size: 14px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-meta {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+}
+
+.delete-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.conversation-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.chat-main {
+  padding: 0;
   display: flex;
   flex-direction: column;
 }
@@ -196,6 +496,7 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 .qa-card :deep(.el-card__body) {
@@ -404,5 +705,38 @@ onMounted(() => {
   font-size: 12px;
   color: #c0c4cc;
   margin-right: auto;
+}
+
+.streaming-content {
+  background: #f5f7fa;
+  white-space: pre-wrap;
+}
+
+.cursor {
+  animation: blink 1s infinite;
+  color: #1890ff;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.evidence-link {
+  color: #1890ff;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.evidence-link:hover {
+  text-decoration: underline;
+}
+
+.message-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
 }
 </style>

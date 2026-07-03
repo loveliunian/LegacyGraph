@@ -4,11 +4,17 @@
       <template #header>
         <div class="card-header">
           <span>测试执行详情 #{{ run?.id }}</span>
-          <el-button type="primary" @click="rerunAll">重跑全部失败用例</el-button>
+          <el-button
+            type="primary"
+            @click="rerunAll">
+            重跑全部失败用例
+          </el-button>
         </div>
       </template>
 
-      <el-descriptions :column="2" border>
+      <el-descriptions
+        :column="2"
+        border>
         <el-descriptions-item label="环境">{{ run?.environment }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="getStatusType(run?.status || '')">{{ getStatusText(run?.status || '') }}</el-tag>
@@ -29,27 +35,54 @@
 
       <el-divider>用例结果</el-divider>
 
-      <el-table :data="caseResults" border style="width: 100%">
-        <el-table-column prop="caseName" label="用例名称" min-width="200" />
-        <el-table-column prop="caseType" label="类型" width="100" />
-        <el-table-column prop="resultStatus" label="结果" width="100" align="center">
+      <el-table
+        :data="caseResults"
+        border
+        style="width: 100%">
+        <el-table-column
+          prop="caseName"
+          label="用例名称"
+          min-width="200" />
+        <el-table-column
+          prop="caseType"
+          label="类型"
+          width="100" />
+        <el-table-column
+          prop="resultStatus"
+          label="结果"
+          width="100"
+          align="center">
           <template #default="{ row }">
             <el-tag :type="row.resultStatus === 'PASSED' ? 'success' : 'danger'">
               {{ row.resultStatus }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="durationMs" label="耗时" width="100" />
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column
+          prop="durationMs"
+          label="耗时"
+          width="100" />
+        <el-table-column
+          label="操作"
+          width="120"
+          fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" @click="showResult(row)">查看结果</el-button>
+            <el-button
+              link
+              size="small"
+              @click="showResult(row)">
+              查看结果
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
     <!-- 结果详情对话框 -->
-    <el-dialog v-model="resultDialogVisible" title="用例结果" width="70%">
+    <el-dialog
+      v-model="resultDialogVisible"
+      title="用例结果"
+      width="70%">
       <el-descriptions border>
         <el-descriptions-item label="请求">
           <pre class="code-block">{{ resultDialogData.requestData }}</pre>
@@ -57,7 +90,9 @@
         <el-descriptions-item label="响应">
           <pre class="code-block">{{ resultDialogData.responseData }}</pre>
         </el-descriptions-item>
-        <el-descriptions-item label="错误信息" v-if="resultDialogData.errorMessage">
+        <el-descriptions-item
+          v-if="resultDialogData.errorMessage"
+          label="错误信息">
           <pre class="code-block error">{{ resultDialogData.errorMessage }}</pre>
         </el-descriptions-item>
       </el-descriptions>

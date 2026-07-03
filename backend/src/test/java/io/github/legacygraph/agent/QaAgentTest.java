@@ -6,7 +6,7 @@ import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.llm.LlmGateway;
-import io.github.legacygraph.service.VectorRetrievalService;
+import io.github.legacygraph.service.qa.VectorRetrievalService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

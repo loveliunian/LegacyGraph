@@ -8,42 +8,86 @@
       </template>
 
       <div class="filter-bar">
-        <el-form inline :model="filterParams">
+        <el-form
+          inline
+          :model="filterParams">
           <el-form-item label="状态">
-            <el-select v-model="filterParams.status" placeholder="全部" clearable>
-              <el-option label="等待中" value="SCHEDULED" />
-              <el-option label="执行中" value="RUNNING" />
-              <el-option label="已完成" value="COMPLETED" />
-              <el-option label="失败" value="FAILED" />
+            <el-select
+              v-model="filterParams.status"
+              placeholder="全部"
+              clearable>
+              <el-option
+                label="等待中"
+                value="SCHEDULED" />
+              <el-option
+                label="执行中"
+                value="RUNNING" />
+              <el-option
+                label="已完成"
+                value="COMPLETED" />
+              <el-option
+                label="失败"
+                value="FAILED" />
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-button @click="loadData" type="primary">搜索</el-button>
+            <el-button
+              type="primary"
+              @click="loadData">
+              搜索
+            </el-button>
             <el-button @click="resetFilter">重置</el-button>
           </el-form-item>
         </el-form>
       </div>
 
-      <el-table :data="list" v-loading="loading" border style="width: 100%">
-        <el-table-column prop="id" label="执行ID" width="180" />
-        <el-table-column prop="environment" label="环境" width="100" />
-        <el-table-column prop="status" label="状态" width="100" align="center">
+      <el-table
+        v-loading="loading"
+        :data="list"
+        border
+        style="width: 100%">
+        <el-table-column
+          prop="id"
+          label="执行ID"
+          width="180" />
+        <el-table-column
+          prop="environment"
+          label="环境"
+          width="100" />
+        <el-table-column
+          prop="status"
+          label="状态"
+          width="100"
+          align="center">
           <template #default="{ row }">
             <StatusTag :status="row.status" />
           </template>
         </el-table-column>
-        <el-table-column prop="totalCases" label="总用例" width="80" align="right" />
-        <el-table-column prop="passedCases" label="通过" width="80" align="right">
+        <el-table-column
+          prop="totalCases"
+          label="总用例"
+          width="80"
+          align="right" />
+        <el-table-column
+          prop="passedCases"
+          label="通过"
+          width="80"
+          align="right">
           <template #default="{ row }">
             <span :class="{ 'text-success': row.passedCases === row.totalCases }">
               {{ row.passedCases }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="startedAt" label="开始时间" width="180">
+        <el-table-column
+          prop="startedAt"
+          label="开始时间"
+          width="180">
           <template #default="{ row }">{{ formatDate(row.startedAt) }}</template>
         </el-table-column>
-        <el-table-column label="覆盖率" width="120">
+        <el-table-column
+          label="覆盖率"
+          width="120">
           <template #default="{ row }">
             <el-progress
               :percentage="getPercentage(row)"
@@ -52,9 +96,17 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column
+          label="操作"
+          width="220"
+          fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" @click="goToDetail(row.id)">查看详情</el-button>
+            <el-button
+              link
+              size="small"
+              @click="goToDetail(row.id)">
+              查看详情
+            </el-button>
             <el-button
               v-if="hasFailed(row)"
               link

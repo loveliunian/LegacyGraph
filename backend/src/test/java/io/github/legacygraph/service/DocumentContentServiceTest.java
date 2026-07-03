@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.service.scan.DocumentContentService;
 
 /**
  * DocumentContentService 单元测试。

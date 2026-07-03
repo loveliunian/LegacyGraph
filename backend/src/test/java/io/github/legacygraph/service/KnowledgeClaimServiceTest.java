@@ -17,6 +17,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
 
 @ExtendWith(MockitoExtension.class)
 class KnowledgeClaimServiceTest {

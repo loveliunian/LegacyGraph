@@ -4,7 +4,7 @@ import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.dto.understanding.CodeUnderstandingRequest;
 import io.github.legacygraph.dto.understanding.CodeUnderstandingTaskResult;
 import io.github.legacygraph.entity.ToolRunEntity;
-import io.github.legacygraph.service.KnowledgeClaimService;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import io.github.legacygraph.understanding.tool.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -1,6 +1,6 @@
 package io.github.legacygraph.controller;
 
-import io.github.legacygraph.service.ReportExportService;
+import io.github.legacygraph.service.report.ReportExportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;

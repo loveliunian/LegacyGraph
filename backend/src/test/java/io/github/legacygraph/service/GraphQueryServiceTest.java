@@ -19,6 +19,10 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.service.graph.GraphPathReadModel;
+import io.github.legacygraph.service.graph.GraphProjectionReadModel;
+import io.github.legacygraph.service.graph.GraphQueryService;
 
 /**
  * GraphQueryService 测试（Phase 2.6 更新：Driver 已移除，全部委托读模型）。

@@ -11,7 +11,9 @@
         </div>
       </template>
 
-      <el-descriptions :column="2" border>
+      <el-descriptions
+        :column="2"
+        border>
         <el-descriptions-item label="风险类型">
           <el-tag :type="getRiskTypeTag(risk?.riskType || '')">
             {{ getRiskTypeName(risk?.riskType || '') }}
@@ -34,9 +36,13 @@
 
       <el-divider />
 
-      <div class="node-info" v-if="nodeInfo">
+      <div
+        v-if="nodeInfo"
+        class="node-info">
         <h4>节点信息</h4>
-        <el-descriptions :column="2" border>
+        <el-descriptions
+          :column="2"
+          border>
           <el-descriptions-item label="节点类型">{{ nodeInfo.nodeType }}</el-descriptions-item>
           <el-descriptions-item label="置信度">
             <el-progress
@@ -51,7 +57,9 @@
       </div>
 
       <div class="actions">
-        <el-button type="primary" @click="goToNodeGraph">
+        <el-button
+          type="primary"
+          @click="goToNodeGraph">
           在图谱中查看
         </el-button>
         <el-button @click="markConfirmed">

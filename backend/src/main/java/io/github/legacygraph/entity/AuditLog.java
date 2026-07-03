@@ -1,6 +1,7 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -11,7 +12,7 @@ import java.time.LocalDateTime;
  * 系统审计日志实体
  */
 @Data
-@TableName("sys_operation_log")
+@TableName("lg_sys_operation_log")
 public class AuditLog {
 
     @TableId(type = IdType.AUTO)
@@ -28,7 +29,7 @@ public class AuditLog {
     private String operation;
 
     /**
-     * 方法签名
+     * 方法签名（DB 列名: method）
      */
     private String method;
 

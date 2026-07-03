@@ -4,7 +4,7 @@ import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.entity.AuditLog;
-import io.github.legacygraph.service.AuditLogService;
+import io.github.legacygraph.service.system.AuditLogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;

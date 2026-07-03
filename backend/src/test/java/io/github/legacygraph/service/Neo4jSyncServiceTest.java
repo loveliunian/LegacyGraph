@@ -15,6 +15,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.graph.Neo4jSyncService;
 
 @ExtendWith(MockitoExtension.class)
 class Neo4jSyncServiceTest {

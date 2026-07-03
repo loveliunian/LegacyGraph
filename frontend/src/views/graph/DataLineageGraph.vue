@@ -2,7 +2,11 @@
   <div class="data-lineage-graph">
     <div class="page-header">
       <h3>数据血缘图谱</h3>
-      <el-button type="primary" size="small" @click="refreshGraph" :loading="loading">
+      <el-button
+        type="primary"
+        size="small"
+        :loading="loading"
+        @click="refreshGraph">
         <el-icon><Refresh /></el-icon>
         刷新图谱
       </el-button>
@@ -13,7 +17,11 @@
         <el-card class="table-card">
           <template #header>
             <span>数据表</span>
-            <el-tag size="small" type="info">{{ tables.length }} 个</el-tag>
+            <el-tag
+              size="small"
+              type="info">
+              {{ tables.length }} 个
+            </el-tag>
           </template>
           <el-input
             v-model="searchKeyword"
@@ -23,8 +31,12 @@
             style="margin-bottom: 12px;"
           />
           <div class="table-list">
-            <div v-if="tables.length === 0 && !loading" class="table-empty">
-              <el-empty description="暂无数据表" :image-size="60" />
+            <div
+              v-if="tables.length === 0 && !loading"
+              class="table-empty">
+              <el-empty
+                description="暂无数据表"
+                :image-size="60" />
             </div>
             <div
               v-for="table in filteredTables"
@@ -33,7 +45,9 @@
               :class="{ active: selectedTable === table.id }"
               @click="selectTable(table.id)"
             >
-              <div class="table-icon" :class="table.type">
+              <div
+                class="table-icon"
+                :class="table.type">
                 <el-icon><Tickets /></el-icon>
               </div>
               <div class="table-info">
@@ -51,35 +65,66 @@
         <el-card class="graph-card">
           <div class="graph-toolbar">
             <el-button-group>
-              <el-button size="small" :type="viewMode === 'lineage' ? 'primary' : ''" @click="viewMode = 'lineage'">
+              <el-button
+                size="small"
+                :type="viewMode === 'lineage' ? 'primary' : ''"
+                @click="viewMode = 'lineage'">
                 完整血缘
               </el-button>
-              <el-button size="small" :type="viewMode === 'downstream' ? 'primary' : ''" @click="viewMode = 'downstream'">
+              <el-button
+                size="small"
+                :type="viewMode === 'downstream' ? 'primary' : ''"
+                @click="viewMode = 'downstream'">
                 下游影响
               </el-button>
-              <el-button size="small" :type="viewMode === 'upstream' ? 'primary' : ''" @click="viewMode = 'upstream'">
+              <el-button
+                size="small"
+                :type="viewMode === 'upstream' ? 'primary' : ''"
+                @click="viewMode = 'upstream'">
                 上游来源
               </el-button>
             </el-button-group>
-            <div v-if="selectedTableName" class="graph-context">
+            <div
+              v-if="selectedTableName"
+              class="graph-context">
               当前表: <b>{{ selectedTableName }}</b>
             </div>
           </div>
-          <div class="graph-container" ref="graphContainer">
-            <div v-if="loading" class="graph-loading">
-              <el-icon :size="32" class="is-loading"><Refresh /></el-icon>
+          <div
+            ref="graphContainer"
+            class="graph-container">
+            <div
+              v-if="loading"
+              class="graph-loading">
+              <el-icon
+                :size="32"
+                class="is-loading">
+                <Refresh />
+              </el-icon>
               <p>加载中...</p>
             </div>
-            <div v-else-if="!lineageData.nodes.length && !selectedTable" class="graph-placeholder">
+            <div
+              v-else-if="!lineageData.nodes.length && !selectedTable"
+              class="graph-placeholder">
               <div class="placeholder-content">
-                <el-icon :size="64" color="#c0c4cc"><Share /></el-icon>
+                <el-icon
+                  :size="64"
+                  color="#c0c4cc">
+                  <Share />
+                </el-icon>
                 <p>数据血缘可视化</p>
                 <p class="placeholder-tip">选择左侧数据表查看表之间的数据流转关系</p>
               </div>
             </div>
-            <div v-else-if="!lineageData.nodes.length && selectedTable" class="graph-placeholder">
+            <div
+              v-else-if="!lineageData.nodes.length && selectedTable"
+              class="graph-placeholder">
               <div class="placeholder-content">
-                <el-icon :size="64" color="#e6a23c"><WarningFilled /></el-icon>
+                <el-icon
+                  :size="64"
+                  color="#e6a23c">
+                  <WarningFilled />
+                </el-icon>
                 <p>暂无血缘数据</p>
                 <p class="placeholder-tip">该表暂未检测到上下游血缘关系</p>
               </div>
@@ -110,7 +155,9 @@
       </el-col>
 
       <el-col :span="5">
-        <el-card class="detail-card" v-if="selectedTableName">
+        <el-card
+          v-if="selectedTableName"
+          class="detail-card">
           <template #header>
             <span>表结构详情</span>
           </template>
@@ -139,12 +186,18 @@
           </div>
         </el-card>
 
-        <el-card class="risk-card" style="margin-top: 16px;" v-if="tableRisks.length > 0">
+        <el-card
+          v-if="tableRisks.length > 0"
+          class="risk-card"
+          style="margin-top: 16px;">
           <template #header>
             <span>数据风险提示</span>
           </template>
           <div class="risk-list">
-            <div class="risk-item" v-for="risk in tableRisks" :key="risk.id">
+            <div
+              v-for="risk in tableRisks"
+              :key="risk.id"
+              class="risk-item">
               <el-tag
                 :type="risk.level === 'high' ? 'danger' : risk.level === 'medium' ? 'warning' : 'info'"
                 size="small"
@@ -156,7 +209,10 @@
           </div>
         </el-card>
 
-        <el-card class="stats-card" style="margin-top: 16px;" v-if="tables.length > 0 && !selectedTable">
+        <el-card
+          v-if="tables.length > 0 && !selectedTable"
+          class="stats-card"
+          style="margin-top: 16px;">
           <template #header>
             <span>数据统计</span>
           </template>

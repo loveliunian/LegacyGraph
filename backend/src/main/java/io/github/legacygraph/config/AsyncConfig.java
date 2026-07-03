@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.annotation.AsyncConfigurer;
 
 import java.lang.reflect.Method;
@@ -24,8 +25,9 @@ public class AsyncConfig implements AsyncConfigurer {
 
     /**
      * 通用异步任务执行器（虚拟线程）
-     * 用于：扫描任务、报告生成、向量化等一般任务
+     * 用于：扫描任务、报告生成、向量化、QA 流式问答等一般任务
      */
+    @Primary
     @Bean(name = "taskExecutor")
     public Executor taskExecutor() {
         var executor = Executors.newVirtualThreadPerTaskExecutor();

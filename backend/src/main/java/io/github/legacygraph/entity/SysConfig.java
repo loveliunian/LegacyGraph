@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * 系统配置实体
  */
 @Data
-@TableName("sys_config")
+@TableName("lg_sys_config")
 public class SysConfig {
 
     @TableId(type = IdType.ASSIGN_UUID)

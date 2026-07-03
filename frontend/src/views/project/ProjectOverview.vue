@@ -1,8 +1,12 @@
 <template>
   <div class="project-overview">
-    <el-row :gutter="16" class="stats-row">
+    <el-row
+      :gutter="16"
+      class="stats-row">
       <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
+        <el-card
+          shadow="hover"
+          class="stat-card">
           <div class="stat-content">
             <div class="stat-icon code">
               <el-icon><FolderOpened /></el-icon>
@@ -15,10 +19,12 @@
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
+        <el-card
+          shadow="hover"
+          class="stat-card">
           <div class="stat-content">
             <div class="stat-icon db">
-        <el-icon><Coin /></el-icon>
+              <el-icon><Coin /></el-icon>
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ overview?.sourceStatus?.databases?.configured || 0 }}</div>
@@ -28,7 +34,9 @@
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
+        <el-card
+          shadow="hover"
+          class="stat-card">
           <div class="stat-content">
             <div class="stat-icon doc">
               <el-icon><Document /></el-icon>
@@ -41,7 +49,9 @@
         </el-card>
       </el-col>
       <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
+        <el-card
+          shadow="hover"
+          class="stat-card">
           <div class="stat-content">
             <div class="stat-icon graph">
               <el-icon><Connection /></el-icon>
@@ -55,13 +65,23 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" class="content-row">
+    <el-row
+      :gutter="16"
+      class="content-row">
       <el-col :span="12">
-        <el-card shadow="never" class="section-card">
+        <el-card
+          shadow="never"
+          class="section-card">
           <template #header>
             <div class="card-header">
               <span>资料接入状态</span>
-              <el-button type="primary" link size="small" @click="goToSources">查看全部</el-button>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="goToSources">
+                查看全部
+              </el-button>
             </div>
           </template>
           <div class="source-status">
@@ -90,7 +110,9 @@
               </div>
             </div>
             <div class="status-item">
-              <div class="status-icon" :class="overview?.sourceStatus?.documents?.uploaded ? 'success' : 'warning'">
+              <div
+                class="status-icon"
+                :class="overview?.sourceStatus?.documents?.uploaded ? 'success' : 'warning'">
                 <el-icon v-if="overview?.sourceStatus?.documents?.uploaded"><Check /></el-icon>
                 <el-icon v-else><Warning /></el-icon>
               </div>
@@ -102,7 +124,9 @@
               </div>
             </div>
             <div class="status-item">
-              <div class="status-icon" :class="overview?.sourceStatus?.testEnv?.configured ? 'success' : 'info'">
+              <div
+                class="status-icon"
+                :class="overview?.sourceStatus?.testEnv?.configured ? 'success' : 'info'">
                 <el-icon v-if="overview?.sourceStatus?.testEnv?.configured"><Check /></el-icon>
                 <el-icon v-else><QuestionFilled /></el-icon>
               </div>
@@ -118,14 +142,24 @@
       </el-col>
 
       <el-col :span="12">
-        <el-card shadow="never" class="section-card">
+        <el-card
+          shadow="never"
+          class="section-card">
           <template #header>
             <div class="card-header">
               <span>图谱构建状态</span>
-              <el-button type="primary" link size="small" @click="goToGraphs">查看图谱</el-button>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="goToGraphs">
+                查看图谱
+              </el-button>
             </div>
           </template>
-          <div v-if="graphStats" class="graph-status">
+          <div
+            v-if="graphStats"
+            class="graph-status">
             <div class="graph-stat-item">
               <span class="stat-label">总节点数</span>
               <span class="stat-value">{{ graphStats.totalNodes }}</span>
@@ -151,18 +185,30 @@
               <span class="stat-value">{{ graphStats.withEvidenceCount }}</span>
             </div>
           </div>
-          <el-empty v-else description="暂无图谱数据" />
+          <el-empty
+            v-else
+            description="暂无图谱数据" />
         </el-card>
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" class="content-row">
+    <el-row
+      :gutter="16"
+      class="content-row">
       <el-col :span="12">
-        <el-card shadow="never" class="section-card">
+        <el-card
+          shadow="never"
+          class="section-card">
           <template #header>
             <div class="card-header">
               <span>最近扫描任务</span>
-              <el-button type="primary" link size="small" @click="goToScans">查看全部</el-button>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="goToScans">
+                查看全部
+              </el-button>
             </div>
           </template>
           <el-timeline v-if="recentScans && recentScans.length > 0">
@@ -175,22 +221,34 @@
               <div class="scan-item">
                 <div class="scan-name">{{ scan.taskName }}</div>
                 <div class="scan-type">{{ scan.taskType }}</div>
-                <el-tag size="small" :type="getScanStatusType(scan.status)">
+                <el-tag
+                  size="small"
+                  :type="getScanStatusType(scan.status)">
                   {{ getScanStatusText(scan.status) }}
                 </el-tag>
               </div>
             </el-timeline-item>
           </el-timeline>
-          <el-empty v-else description="暂无扫描任务" />
+          <el-empty
+            v-else
+            description="暂无扫描任务" />
         </el-card>
       </el-col>
 
       <el-col :span="12">
-        <el-card shadow="never" class="section-card">
+        <el-card
+          shadow="never"
+          class="section-card">
           <template #header>
             <div class="card-header">
               <span>最近审核记录</span>
-              <el-button type="primary" link size="small" @click="goToReviews">查看全部</el-button>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click="goToReviews">
+                查看全部
+              </el-button>
             </div>
           </template>
           <el-timeline v-if="recentReviews && recentReviews.length > 0">
@@ -203,27 +261,38 @@
               <div class="review-item">
                 <div class="review-target">{{ review.targetName }}</div>
                 <div class="review-type">{{ review.targetType }}</div>
-                <el-tag size="small" :type="getReviewStatusType(review.status)">
+                <el-tag
+                  size="small"
+                  :type="getReviewStatusType(review.status)">
                   {{ getReviewStatusText(review.status) }}
                 </el-tag>
               </div>
             </el-timeline-item>
           </el-timeline>
-          <el-empty v-else description="暂无审核记录" />
+          <el-empty
+            v-else
+            description="暂无审核记录" />
         </el-card>
       </el-col>
     </el-row>
 
     <div class="action-bar">
-      <el-button type="primary" size="large" @click="startNewScan">
+      <el-button
+        type="primary"
+        size="large"
+        @click="startNewScan">
         <el-icon><VideoPlay /></el-icon>
         开始扫描
       </el-button>
-      <el-button size="large" @click="goToGraphs">
+      <el-button
+        size="large"
+        @click="goToGraphs">
         <el-icon><Connection /></el-icon>
         查看图谱
       </el-button>
-      <el-button size="large" @click="generateTestCases">
+      <el-button
+        size="large"
+        @click="generateTestCases">
         <el-icon><DocumentChecked /></el-icon>
         生成测试用例
       </el-button>

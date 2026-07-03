@@ -3,7 +3,7 @@ package io.github.legacygraph.controller;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.entity.LlmProvider;
 import io.github.legacygraph.llm.LlmGateway;
-import io.github.legacygraph.service.LlmProviderService;
+import io.github.legacygraph.service.system.LlmProviderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;

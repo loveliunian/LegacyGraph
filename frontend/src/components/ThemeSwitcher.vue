@@ -1,6 +1,11 @@
 <template>
-  <el-tooltip :content="isDark ? '切换到亮色模式' : '切换到暗色模式'" placement="bottom">
-    <el-button :icon="isDark ? Sunny : Moon" circle @click="toggleTheme" />
+  <el-tooltip
+    :content="isDark ? '切换到亮色模式' : '切换到暗色模式'"
+    placement="bottom">
+    <el-button
+      :icon="isDark ? Sunny : Moon"
+      circle
+      @click="toggleTheme" />
   </el-tooltip>
 </template>
 

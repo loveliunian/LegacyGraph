@@ -14,6 +14,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.change.ChangeReportService;
+import io.github.legacygraph.service.report.ReportExportService;
+import io.github.legacygraph.service.report.ReportingService;
+import io.github.legacygraph.service.report.ScanResearchReportService;
 
 @ExtendWith(MockitoExtension.class)
 class ReportExportServiceTest {

@@ -3,50 +3,122 @@
     <div class="page-header">
       <h3>证据检索</h3>
       <div class="header-actions">
-        <el-select v-model="filters.evidenceType" placeholder="证据类型" size="small" clearable style="width: 140px;">
-          <el-option label="代码行" value="FILE_LINE" />
-          <el-option label="SQL语句" value="SQL_STATEMENT" />
-          <el-option label="数据库模式" value="DB_SCHEMA" />
-          <el-option label="文档段落" value="DOC_PARAGRAPH" />
-          <el-option label="API文档" value="API_DOC" />
-          <el-option label="测试结果" value="TEST_RESULT" />
-          <el-option label="AI推理" value="AI_REASONING" />
+        <el-select
+          v-model="filters.evidenceType"
+          placeholder="证据类型"
+          size="small"
+          clearable
+          style="width: 140px;">
+          <el-option
+            label="代码行"
+            value="FILE_LINE" />
+          <el-option
+            label="SQL语句"
+            value="SQL_STATEMENT" />
+          <el-option
+            label="数据库模式"
+            value="DB_SCHEMA" />
+          <el-option
+            label="文档段落"
+            value="DOC_PARAGRAPH" />
+          <el-option
+            label="API文档"
+            value="API_DOC" />
+          <el-option
+            label="测试结果"
+            value="TEST_RESULT" />
+          <el-option
+            label="AI推理"
+            value="AI_REASONING" />
         </el-select>
-        <el-input v-model="filters.keyword" placeholder="搜索证据内容" size="small" style="width: 300px;" clearable>
+        <el-input
+          v-model="filters.keyword"
+          placeholder="搜索证据内容"
+          size="small"
+          style="width: 300px;"
+          clearable>
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button type="primary" size="small" @click="doSearch">
+        <el-button
+          type="primary"
+          size="small"
+          @click="doSearch">
           <el-icon><Search /></el-icon>
           搜索
         </el-button>
       </div>
     </div>
 
-    <el-table :data="evidenceList" v-loading="loading" border stripe>
-      <el-table-column prop="evidenceType" label="证据类型" width="120">
+    <el-table
+      v-loading="loading"
+      :data="evidenceList"
+      border
+      stripe>
+      <el-table-column
+        prop="evidenceType"
+        label="证据类型"
+        width="120">
         <template #default="{ row }">
-          <el-tag size="small" :type="getEvidenceTypeColor(row.evidenceType)">
+          <el-tag
+            size="small"
+            :type="getEvidenceTypeColor(row.evidenceType)">
             {{ getEvidenceTypeText(row.evidenceType) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="sourceName" label="来源名称" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="location" label="位置" width="150" show-overflow-tooltip />
-      <el-table-column prop="summary" label="摘要" min-width="300" show-overflow-tooltip />
-      <el-table-column prop="relatedNodeCount" label="关联节点" width="100" align="center">
+      <el-table-column
+        prop="sourceName"
+        label="来源名称"
+        min-width="200"
+        show-overflow-tooltip />
+      <el-table-column
+        prop="location"
+        label="位置"
+        width="150"
+        show-overflow-tooltip />
+      <el-table-column
+        prop="summary"
+        label="摘要"
+        min-width="300"
+        show-overflow-tooltip />
+      <el-table-column
+        prop="relatedNodeCount"
+        label="关联节点"
+        width="100"
+        align="center">
         <template #default="{ row }">
-          <el-badge :value="row.relatedNodeCount" class="item" />
+          <el-badge
+            :value="row.relatedNodeCount"
+            class="item" />
         </template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="提取时间" width="180">
+      <el-table-column
+        prop="createdAt"
+        label="提取时间"
+        width="180">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column
+        label="操作"
+        width="200"
+        fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="viewContent(row)">查看原文</el-button>
-          <el-button type="success" link size="small" @click="viewRelated(row)">关联图谱</el-button>
+          <el-button
+            type="primary"
+            link
+            size="small"
+            @click="viewContent(row)">
+            查看原文
+          </el-button>
+          <el-button
+            type="success"
+            link
+            size="small"
+            @click="viewRelated(row)">
+            关联图谱
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -62,22 +134,42 @@
       @current-change="doSearch"
     />
 
-    <el-dialog v-model="contentVisible" title="证据原文" width="900px">
-      <div v-if="selectedEvidence" class="evidence-content">
-        <el-descriptions border :column="2" size="small">
+    <el-dialog
+      v-model="contentVisible"
+      title="证据原文"
+      width="900px">
+      <div
+        v-if="selectedEvidence"
+        class="evidence-content">
+        <el-descriptions
+          border
+          :column="2"
+          size="small">
           <el-descriptions-item label="证据类型">{{ getEvidenceTypeText(selectedEvidence.evidenceType) }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ selectedEvidence.sourceName }}</el-descriptions-item>
-          <el-descriptions-item label="位置" :span="2">{{ selectedEvidence.location }}</el-descriptions-item>
+          <el-descriptions-item
+            label="位置"
+            :span="2">
+            {{ selectedEvidence.location }}
+          </el-descriptions-item>
         </el-descriptions>
 
-        <div class="content-section" style="margin-top: 20px;">
+        <div
+          class="content-section"
+          style="margin-top: 20px;">
           <h4>内容</h4>
           <div class="code-block">{{ selectedEvidence.content || selectedEvidence.summary }}</div>
         </div>
 
-        <div class="content-section" style="margin-top: 20px;">
+        <div
+          class="content-section"
+          style="margin-top: 20px;">
           <h4>关联节点 ({{ selectedEvidence.relatedNodeCount || 0 }})</h4>
-          <el-tag v-for="node in selectedEvidence.relatedNodeIdList" :key="node" size="small" style="margin-right: 8px; margin-bottom: 8px;">
+          <el-tag
+            v-for="node in selectedEvidence.relatedNodeIdList"
+            :key="node"
+            size="small"
+            style="margin-right: 8px; margin-bottom: 8px;">
             {{ node }}
           </el-tag>
         </div>

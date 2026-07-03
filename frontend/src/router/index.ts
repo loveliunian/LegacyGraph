@@ -235,6 +235,36 @@ const routes: RouteRecordRaw[] = [
             name: 'UnderstandingReport',
             component: () => import('@/views/understanding/UnderstandingReportView.vue'),
             meta: { title: '代码理解' }
+          },
+          {
+            path: 'vector-search',
+            name: 'VectorSearch',
+            component: () => import('@/views/vector/VectorSearch.vue'),
+            meta: { title: '向量检索' }
+          },
+          {
+            path: 'pr-workbench',
+            name: 'PrWorkbench',
+            component: () => import('@/views/change/PrWorkbench.vue'),
+            meta: { title: 'PR 工作台' }
+          },
+          {
+            path: 'graph-diff',
+            name: 'GraphDiff',
+            component: () => import('@/views/graph/GraphDiff.vue'),
+            meta: { title: '图谱对比' }
+          },
+          {
+            path: 'agents/history',
+            name: 'AgentHistory',
+            component: () => import('@/views/agent/AgentHistory.vue'),
+            meta: { title: 'Agent 运行历史' }
+          },
+          {
+            path: 'evidence/conflicts',
+            name: 'EvidenceConflict',
+            component: () => import('@/views/workbench/EvidenceConflict.vue'),
+            meta: { title: '证据冲突处理' }
           }
         ]
       },
@@ -273,6 +303,12 @@ const routes: RouteRecordRaw[] = [
             name: 'PromptTemplateList',
             component: () => import('@/views/system/PromptList.vue'),
             meta: { title: '提示词管理' }
+          },
+          {
+            path: 'plugins',
+            name: 'PluginManagement',
+            component: () => import('@/views/system/PluginManagement.vue'),
+            meta: { title: '插件管理' }
           }
         ]
       },

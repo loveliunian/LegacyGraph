@@ -10,6 +10,7 @@ import org.springframework.test.context.ActiveProfiles;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.service.qa.VectorizationService;
 
 /**
  * 快速验证：向量化写入 lg_vector_document 表是否正常

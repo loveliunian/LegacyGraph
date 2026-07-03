@@ -4,21 +4,38 @@
       <template #header>
         <div class="card-header">
           <span>字典管理</span>
-          <el-button type="primary" @click="handleCreateType">
+          <el-button
+            type="primary"
+            @click="handleCreateType">
             <el-icon><Plus /></el-icon>
             新增字典类型
           </el-button>
         </div>
       </template>
 
-      <SearchForm :model="filterParams" @search="loadDictTypes" @reset="resetFilter">
+      <SearchForm
+        :model="filterParams"
+        @search="loadDictTypes"
+        @reset="resetFilter">
         <el-form-item label="搜索">
-          <el-input v-model="filterParams.keyword" placeholder="编码或名称" clearable style="width: 200px" />
+          <el-input
+            v-model="filterParams.keyword"
+            placeholder="编码或名称"
+            clearable
+            style="width: 200px" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="filterParams.status" placeholder="全部" clearable style="width: 120px">
-            <el-option label="启用" value="ACTIVE" />
-            <el-option label="禁用" value="DISABLED" />
+          <el-select
+            v-model="filterParams.status"
+            placeholder="全部"
+            clearable
+            style="width: 120px">
+            <el-option
+              label="启用"
+              value="ACTIVE" />
+            <el-option
+              label="禁用"
+              value="DISABLED" />
           </el-select>
         </el-form-item>
       </SearchForm>
@@ -32,22 +49,61 @@
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
       >
-        <el-table-column prop="dictCode" label="字典编码" width="160" />
-        <el-table-column prop="dictName" label="字典名称" width="160" />
-        <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="sortOrder" label="排序" width="80" align="center" />
-        <el-table-column prop="status" label="状态" width="90" align="center">
+        <el-table-column
+          prop="dictCode"
+          label="字典编码"
+          width="160" />
+        <el-table-column
+          prop="dictName"
+          label="字典名称"
+          width="160" />
+        <el-table-column
+          prop="description"
+          label="描述"
+          min-width="180"
+          show-overflow-tooltip />
+        <el-table-column
+          prop="sortOrder"
+          label="排序"
+          width="80"
+          align="center" />
+        <el-table-column
+          prop="status"
+          label="状态"
+          width="90"
+          align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" size="small">
+            <el-tag
+              :type="row.status === 'ACTIVE' ? 'success' : 'info'"
+              size="small">
               {{ row.status === 'ACTIVE' ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column
+          label="操作"
+          width="220"
+          fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" @click="handleManageItems(row)">管理字典项</el-button>
-            <el-button link size="small" @click="handleEditType(row)">编辑</el-button>
-            <el-button link size="small" type="danger" @click="handleDeleteType(row)">删除</el-button>
+            <el-button
+              link
+              size="small"
+              @click="handleManageItems(row)">
+              管理字典项
+            </el-button>
+            <el-button
+              link
+              size="small"
+              @click="handleEditType(row)">
+              编辑
+            </el-button>
+            <el-button
+              link
+              size="small"
+              type="danger"
+              @click="handleDeleteType(row)">
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </BaseTable>
@@ -59,29 +115,56 @@
       :title="isTypeEdit ? '编辑字典类型' : '新增字典类型'"
       width="500px"
     >
-      <el-form :model="typeForm" label-width="100px">
-        <el-form-item label="字典编码" required>
-          <el-input v-model="typeForm.dictCode" placeholder="例如: repo_type" :disabled="isTypeEdit" />
+      <el-form
+        :model="typeForm"
+        label-width="100px">
+        <el-form-item
+          label="字典编码"
+          required>
+          <el-input
+            v-model="typeForm.dictCode"
+            placeholder="例如: repo_type"
+            :disabled="isTypeEdit" />
         </el-form-item>
-        <el-form-item label="字典名称" required>
-          <el-input v-model="typeForm.dictName" placeholder="例如: 仓库类型" />
+        <el-form-item
+          label="字典名称"
+          required>
+          <el-input
+            v-model="typeForm.dictName"
+            placeholder="例如: 仓库类型" />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="typeForm.description" placeholder="字典用途说明" type="textarea" :rows="2" />
+          <el-input
+            v-model="typeForm.description"
+            placeholder="字典用途说明"
+            type="textarea"
+            :rows="2" />
         </el-form-item>
         <el-form-item label="排序">
-          <el-input-number v-model="typeForm.sortOrder" :min="0" :max="1000" />
+          <el-input-number
+            v-model="typeForm.sortOrder"
+            :min="0"
+            :max="1000" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="typeForm.status">
-            <el-option label="启用" value="ACTIVE" />
-            <el-option label="禁用" value="DISABLED" />
+            <el-option
+              label="启用"
+              value="ACTIVE" />
+            <el-option
+              label="禁用"
+              value="DISABLED" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="typeDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveType" :loading="saving">保存</el-button>
+        <el-button
+          type="primary"
+          :loading="saving"
+          @click="saveType">
+          保存
+        </el-button>
       </template>
     </el-dialog>
 
@@ -93,27 +176,73 @@
       destroy-on-close
     >
       <div style="margin-bottom: 12px;">
-        <el-button type="primary" size="small" @click="handleCreateItem">
+        <el-button
+          type="primary"
+          size="small"
+          @click="handleCreateItem">
           <el-icon><Plus /></el-icon>
           新增字典项
         </el-button>
       </div>
 
-      <el-table :data="itemList" border size="small" v-loading="itemsLoading">
-        <el-table-column prop="itemValue" label="项值" width="140" />
-        <el-table-column prop="itemLabel" label="项标签" width="140" />
-        <el-table-column prop="description" label="描述" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="sortOrder" label="排序" width="70" align="center" />
-        <el-table-column prop="isDefault" label="默认" width="70" align="center">
+      <el-table
+        v-loading="itemsLoading"
+        :data="itemList"
+        border
+        size="small">
+        <el-table-column
+          prop="itemValue"
+          label="项值"
+          width="140" />
+        <el-table-column
+          prop="itemLabel"
+          label="项标签"
+          width="140" />
+        <el-table-column
+          prop="description"
+          label="描述"
+          min-width="140"
+          show-overflow-tooltip />
+        <el-table-column
+          prop="sortOrder"
+          label="排序"
+          width="70"
+          align="center" />
+        <el-table-column
+          prop="isDefault"
+          label="默认"
+          width="70"
+          align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.isDefault" type="success" size="small">是</el-tag>
-            <span v-else class="text-gray">-</span>
+            <el-tag
+              v-if="row.isDefault"
+              type="success"
+              size="small">
+              是
+            </el-tag>
+            <span
+              v-else
+              class="text-gray">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column
+          label="操作"
+          width="120"
+          fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" @click="handleEditItem(row)">编辑</el-button>
-            <el-button link size="small" type="danger" @click="handleDeleteItem(row)">删除</el-button>
+            <el-button
+              link
+              size="small"
+              @click="handleEditItem(row)">
+              编辑
+            </el-button>
+            <el-button
+              link
+              size="small"
+              type="danger"
+              @click="handleDeleteItem(row)">
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -129,32 +258,57 @@
       :title="isItemEdit ? '编辑字典项' : '新增字典项'"
       width="500px"
     >
-      <el-form :model="itemForm" label-width="100px">
-        <el-form-item label="项值" required>
-          <el-input v-model="itemForm.itemValue" placeholder="例如: FULLSTACK" :disabled="isItemEdit" />
+      <el-form
+        :model="itemForm"
+        label-width="100px">
+        <el-form-item
+          label="项值"
+          required>
+          <el-input
+            v-model="itemForm.itemValue"
+            placeholder="例如: FULLSTACK"
+            :disabled="isItemEdit" />
         </el-form-item>
-        <el-form-item label="项标签" required>
-          <el-input v-model="itemForm.itemLabel" placeholder="例如: 全栈" />
+        <el-form-item
+          label="项标签"
+          required>
+          <el-input
+            v-model="itemForm.itemLabel"
+            placeholder="例如: 全栈" />
         </el-form-item>
         <el-form-item label="描述">
-          <el-input v-model="itemForm.description" placeholder="说明" />
+          <el-input
+            v-model="itemForm.description"
+            placeholder="说明" />
         </el-form-item>
         <el-form-item label="排序">
-          <el-input-number v-model="itemForm.sortOrder" :min="0" :max="1000" />
+          <el-input-number
+            v-model="itemForm.sortOrder"
+            :min="0"
+            :max="1000" />
         </el-form-item>
         <el-form-item label="是否默认">
           <el-switch v-model="itemForm.isDefault" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="itemForm.status">
-            <el-option label="启用" value="ACTIVE" />
-            <el-option label="禁用" value="DISABLED" />
+            <el-option
+              label="启用"
+              value="ACTIVE" />
+            <el-option
+              label="禁用"
+              value="DISABLED" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="itemDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveItem" :loading="saving">保存</el-button>
+        <el-button
+          type="primary"
+          :loading="saving"
+          @click="saveItem">
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </div>

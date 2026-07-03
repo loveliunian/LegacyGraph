@@ -1,14 +1,23 @@
 <template>
   <div class="json-viewer">
-    <div v-if="collapsible" class="json-viewer__header">
-      <el-button link size="small" @click="toggleExpand">
+    <div
+      v-if="collapsible"
+      class="json-viewer__header">
+      <el-button
+        link
+        size="small"
+        @click="toggleExpand">
         <el-icon><component :is="isExpanded ? ArrowDown : ArrowRight" /></el-icon>
         {{ label || 'JSON' }} ({{ count }})
       </el-button>
       <span class="json-viewer__type">{{ typeofData }}</span>
     </div>
-    <div v-show="isExpanded || !collapsible" class="json-viewer__content">
-      <div v-if="Array.isArray(data)" class="json-viewer__array">
+    <div
+      v-show="isExpanded || !collapsible"
+      class="json-viewer__content">
+      <div
+        v-if="Array.isArray(data)"
+        class="json-viewer__array">
         <div
           v-for="(item, index) in data"
           :key="index"
@@ -22,7 +31,9 @@
           />
         </div>
       </div>
-      <div v-else-if="typeof data === 'object' && data !== null" class="json-viewer__object">
+      <div
+        v-else-if="typeof data === 'object' && data !== null"
+        class="json-viewer__object">
         <div
           v-for="(value, key) in data"
           :key="key"
@@ -36,7 +47,10 @@
           />
         </div>
       </div>
-      <div v-else class="json-viewer__value" :class="getValueTypeClass(data)">
+      <div
+        v-else
+        class="json-viewer__value"
+        :class="getValueTypeClass(data)">
         {{ formatValue(data) }}
       </div>
     </div>

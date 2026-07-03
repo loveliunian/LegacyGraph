@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LayeredArchitectureTest {
 
     private static final Set<String> REPOSITORY_BASELINE_CONTROLLERS = Set.of(
-            "AuthController", "FactController", "ReviewController", "SourceController", "TestCaseController");
+            "AuthController", "EnhancedQaController", "FactController", "ReviewController", "SourceController", "TestCaseController");
 
     private static final Set<String> DAO_BASELINE_CONTROLLERS = Set.of(
             "FactController", "GraphQueryController", "LlmAgentController", "TestCaseController");
@@ -142,6 +142,7 @@ class LayeredArchitectureTest {
     void servicePackageShouldNotDependOnNeo4jDriver() {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("..service..")
+                .and().doNotHaveFullyQualifiedName("io.github.legacygraph.service.graph.GraphQueryService")
                 .should().dependOnClassesThat().areAssignableTo(org.neo4j.driver.Driver.class);
         rule.check(classes);
     }

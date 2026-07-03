@@ -8,8 +8,8 @@ import io.github.legacygraph.entity.LlmProvider;
 import io.github.legacygraph.entity.PromptRun;
 import io.github.legacygraph.repository.AgentRunRepository;
 import io.github.legacygraph.repository.PromptRunRepository;
-import io.github.legacygraph.service.CacheService;
-import io.github.legacygraph.service.LlmProviderService;
+import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.service.system.LlmProviderService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -17,6 +17,7 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -706,6 +707,89 @@ public class LlmGateway {
         } catch (Exception e) {
             log.warn("JSON repair failed, returning empty object: {}", e.getMessage());
             return "{}";
+        }
+    }
+
+    // ==================== 流式调用支持 ====================
+
+    /**
+     * 流式回调接口
+     */
+    public interface StreamCallback {
+        void onToken(String token);
+        void onComplete(String fullResponse);
+        void onError(Throwable error);
+    }
+
+    /**
+     * 流式调用 LLM，通过回调逐字返回结果
+     */
+    public void callStream(String projectId, String templateName,
+                           Map<String, String> variables, StreamCallback callback) {
+        try {
+            String prompt = templateLoader.render(templateName, variables);
+            String safePrompt = redactForEgress(prompt);
+            log.info("LLM stream call: projectId={}, template={}", projectId, templateName);
+
+            OpenAiChatModel chatModel = getChatModelWithHealing(null);
+            ChatClient chatClient = ChatClient.create(chatModel);
+
+            // 使用 Reactor Flux 进行流式调用
+            Flux<ChatResponse> stream = chatClient.prompt()
+                    .user(safePrompt)
+                    .stream()
+                    .chatResponse();
+
+            StringBuilder fullResponse = new StringBuilder();
+            
+            stream.subscribe(
+                    response -> {
+                        String text = extractText(response);
+                        if (text != null) {
+                            fullResponse.append(text);
+                            callback.onToken(text);
+                        }
+                    },
+                    error -> {
+                        log.error("Stream error: {}", error.getMessage());
+                        callback.onError(error);
+                    },
+                    () -> {
+                        callback.onComplete(fullResponse.toString());
+                        log.info("Stream completed, total length: {}", fullResponse.length());
+                    }
+            );
+        } catch (Exception e) {
+            log.error("Failed to start stream: {}", e.getMessage(), e);
+            callback.onError(e);
+        }
+    }
+
+    /**
+     * 同步流式调用，返回 Flux 供调用方处理
+     */
+    public Flux<String> callStreamFlux(String projectId, String templateName,
+                                       Map<String, String> variables) {
+        try {
+            String prompt = templateLoader.render(templateName, variables);
+            String safePrompt = redactForEgress(prompt);
+            log.info("LLM stream call (Flux): projectId={}, template={}", projectId, templateName);
+
+            OpenAiChatModel chatModel = getChatModelWithHealing(null);
+            ChatClient chatClient = ChatClient.create(chatModel);
+
+            return chatClient.prompt()
+                    .user(safePrompt)
+                    .stream()
+                    .chatResponse()
+                    .mapNotNull(this::extractText)
+                    .onErrorResume(e -> {
+                        log.error("Stream error: {}", e.getMessage());
+                        return Flux.empty();
+                    });
+        } catch (Exception e) {
+            log.error("Failed to create stream Flux: {}", e.getMessage(), e);
+            return Flux.error(e);
         }
     }
 }

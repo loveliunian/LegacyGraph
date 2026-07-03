@@ -2,10 +2,12 @@ package io.github.legacygraph.config;
 
 import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@ConditionalOnExpression("not '${minio.access-key:}'.blank")
 public class MinioConfig {
 
     @Value("${minio.endpoint}")

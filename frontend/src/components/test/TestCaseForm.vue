@@ -1,19 +1,39 @@
 <template>
-  <el-form :model="form" label-width="100px">
-    <el-form-item label="用例编码" required>
-      <el-input v-model="form.caseCode" placeholder="例如: user-login-api-test" />
+  <el-form
+    :model="form"
+    label-width="100px">
+    <el-form-item
+      label="用例编码"
+      required>
+      <el-input
+        v-model="form.caseCode"
+        placeholder="例如: user-login-api-test" />
     </el-form-item>
 
-    <el-form-item label="用例名称" required>
-      <el-input v-model="form.caseName" placeholder="例如: 用户登录接口测试" />
+    <el-form-item
+      label="用例名称"
+      required>
+      <el-input
+        v-model="form.caseName"
+        placeholder="例如: 用户登录接口测试" />
     </el-form-item>
 
     <el-form-item label="用例类型">
-      <el-select v-model="form.caseType" placeholder="选择测试类型">
-        <el-option label="API测试" value="API" />
-        <el-option label="DB断言" value="DB_ASSERTION" />
-        <el-option label="权限测试" value="PERMISSION" />
-        <el-option label="E2E测试" value="E2E" />
+      <el-select
+        v-model="form.caseType"
+        placeholder="选择测试类型">
+        <el-option
+          label="API测试"
+          value="API" />
+        <el-option
+          label="DB断言"
+          value="DB_ASSERTION" />
+        <el-option
+          label="权限测试"
+          value="PERMISSION" />
+        <el-option
+          label="E2E测试"
+          value="E2E" />
       </el-select>
     </el-form-item>
 
@@ -35,14 +55,38 @@
 
     <el-divider content-position="left">前置条件</el-divider>
     <div class="preconditions">
-      <div v-for="(pre, index) in form.preconditions" :key="index" class="precondition-item">
-        <el-select v-model="pre.type" placeholder="前置条件类型" size="small">
-          <el-option label="登录获取Token" value="LOGIN" />
-          <el-option label="环境变量" value="ENV" />
+      <div
+        v-for="(pre, index) in form.preconditions"
+        :key="index"
+        class="precondition-item">
+        <el-select
+          v-model="pre.type"
+          placeholder="前置条件类型"
+          size="small">
+          <el-option
+            label="登录获取Token"
+            value="LOGIN" />
+          <el-option
+            label="环境变量"
+            value="ENV" />
         </el-select>
-        <el-input v-model="pre.value" placeholder="值" size="small" class="pre-value" />
-        <el-button type="danger" link size="small" @click="removePrecondition(index)">删除</el-button>
-        <el-button type="primary" link size="small" @click="addPrecondition">
+        <el-input
+          v-model="pre.value"
+          placeholder="值"
+          size="small"
+          class="pre-value" />
+        <el-button
+          type="danger"
+          link
+          size="small"
+          @click="removePrecondition(index)">
+          删除
+        </el-button>
+        <el-button
+          type="primary"
+          link
+          size="small"
+          @click="addPrecondition">
           <el-icon><plus /></el-icon>
         </el-button>
       </div>
@@ -63,30 +107,61 @@
       <el-col :span="6">
         <el-form-item label="Method">
           <el-select v-model="apiStep.method">
-            <el-option label="GET" value="GET" />
-            <el-option label="POST" value="POST" />
-            <el-option label="PUT" value="PUT" />
-            <el-option label="DELETE" value="DELETE" />
-            <el-option label="PATCH" value="PATCH" />
+            <el-option
+              label="GET"
+              value="GET" />
+            <el-option
+              label="POST"
+              value="POST" />
+            <el-option
+              label="PUT"
+              value="PUT" />
+            <el-option
+              label="DELETE"
+              value="DELETE" />
+            <el-option
+              label="PATCH"
+              value="PATCH" />
           </el-select>
         </el-form-item>
       </el-col>
       <el-col :span="18">
         <el-form-item label="Path">
-          <el-input v-model="apiStep.path" placeholder="/api/path" />
+          <el-input
+            v-model="apiStep.path"
+            placeholder="/api/path" />
         </el-form-item>
       </el-col>
     </el-row>
 
     <el-form-item label="Headers">
       <div class="key-value-editor">
-        <div v-for="(header, index) in apiStep.headers" :key="index" class="kv-item">
-          <el-input v-model="header.key" placeholder="Key" size="small" style="width: 150px" />
-          <el-input v-model="header.value" placeholder="Value" size="small" class="flex-fill" />
-          <el-button type="danger" link size="small" @click="removeHeader(index)">
+        <div
+          v-for="(header, index) in apiStep.headers"
+          :key="index"
+          class="kv-item">
+          <el-input
+            v-model="header.key"
+            placeholder="Key"
+            size="small"
+            style="width: 150px" />
+          <el-input
+            v-model="header.value"
+            placeholder="Value"
+            size="small"
+            class="flex-fill" />
+          <el-button
+            type="danger"
+            link
+            size="small"
+            @click="removeHeader(index)">
             <el-icon><delete /></el-icon>
           </el-button>
-          <el-button type="primary" link size="small" @click="addHeader">
+          <el-button
+            type="primary"
+            link
+            size="small"
+            @click="addHeader">
             <el-icon><plus /></el-icon>
           </el-button>
         </div>

@@ -1,42 +1,85 @@
 <template>
   <div class="code-preview-container">
-    <div class="preview-header" v-if="showHeader">
+    <div
+      v-if="showHeader"
+      class="preview-header">
       <div class="file-info">
         <el-icon><Document /></el-icon>
         <span class="file-name">{{ fileName || '代码预览' }}</span>
-        <el-tag v-if="lineCount > 0" size="small" type="info">{{ lineCount }} 行</el-tag>
-        <el-tag size="small" type="warning">{{ language.toUpperCase() }}</el-tag>
+        <el-tag
+          v-if="lineCount > 0"
+          size="small"
+          type="info">
+          {{ lineCount }} 行
+        </el-tag>
+        <el-tag
+          size="small"
+          type="warning">
+          {{ language.toUpperCase() }}
+        </el-tag>
       </div>
       <div class="preview-actions">
         <el-button-group size="small">
-          <el-tooltip content="搜索" placement="top">
-            <el-button :icon="Search" @click="toggleSearch" />
+          <el-tooltip
+            content="搜索"
+            placement="top">
+            <el-button
+              :icon="Search"
+              @click="toggleSearch" />
           </el-tooltip>
-          <el-tooltip content="跳转到行" placement="top">
-            <el-button :icon="Position" @click="jumpToLine" />
+          <el-tooltip
+            content="跳转到行"
+            placement="top">
+            <el-button
+              :icon="Position"
+              @click="jumpToLine" />
           </el-tooltip>
-          <el-tooltip content="复制" placement="top">
-            <el-button :icon="CopyDocument" @click="copyCode" />
+          <el-tooltip
+            content="复制"
+            placement="top">
+            <el-button
+              :icon="CopyDocument"
+              @click="copyCode" />
           </el-tooltip>
-          <el-tooltip content="下载" placement="top">
-            <el-button :icon="Download" @click="downloadCode" />
+          <el-tooltip
+            content="下载"
+            placement="top">
+            <el-button
+              :icon="Download"
+              @click="downloadCode" />
           </el-tooltip>
-          <el-tooltip content="全屏" placement="top">
-            <el-button :icon="FullScreen" @click="toggleFullscreen" />
+          <el-tooltip
+            content="全屏"
+            placement="top">
+            <el-button
+              :icon="FullScreen"
+              @click="toggleFullscreen" />
           </el-tooltip>
         </el-button-group>
         <el-button-group size="small">
-          <el-tooltip content="自动换行" placement="top">
-            <el-button :icon="Sort" :type="lineWrapping ? 'primary' : ''" @click="lineWrapping = !lineWrapping" />
+          <el-tooltip
+            content="自动换行"
+            placement="top">
+            <el-button
+              :icon="Sort"
+              :type="lineWrapping ? 'primary' : ''"
+              @click="lineWrapping = !lineWrapping" />
           </el-tooltip>
-          <el-tooltip content="显示行号" placement="top">
-            <el-button :icon="List" :type="showLineNumbers ? 'primary' : ''" @click="showLineNumbers = !showLineNumbers" />
+          <el-tooltip
+            content="显示行号"
+            placement="top">
+            <el-button
+              :icon="List"
+              :type="showLineNumbers ? 'primary' : ''"
+              @click="showLineNumbers = !showLineNumbers" />
           </el-tooltip>
         </el-button-group>
       </div>
     </div>
 
-    <div class="search-bar" v-if="showSearchBar">
+    <div
+      v-if="showSearchBar"
+      class="search-bar">
       <el-input
         v-model="searchText"
         placeholder="搜索..."
@@ -47,39 +90,76 @@
         @keyup.enter="findNext"
       >
         <template #append>
-          <el-button size="small" @click="findPrevious" :disabled="matches.length === 0">
+          <el-button
+            size="small"
+            :disabled="matches.length === 0"
+            @click="findPrevious">
             <el-icon><ArrowUp /></el-icon>
           </el-button>
-          <el-button size="small" @click="findNext" :disabled="matches.length === 0">
+          <el-button
+            size="small"
+            :disabled="matches.length === 0"
+            @click="findNext">
             <el-icon><ArrowDown /></el-icon>
           </el-button>
         </template>
       </el-input>
-      <span class="search-stats" v-if="matches.length > 0">
+      <span
+        v-if="matches.length > 0"
+        class="search-stats">
         {{ currentMatchIndex + 1 }} / {{ matches.length }}
       </span>
     </div>
 
-    <div class="code-wrapper" ref="codeWrapper">
-      <div v-if="loading" class="loading-overlay">
-        <el-skeleton :rows="15" animated />
+    <div
+      ref="codeWrapper"
+      class="code-wrapper">
+      <div
+        v-if="loading"
+        class="loading-overlay">
+        <el-skeleton
+          :rows="15"
+          animated />
       </div>
-      <div v-else-if="error" class="error-state">
-        <el-empty description="加载失败" :image-size="60">
-          <el-button type="primary" size="small" @click="$emit('retry')">重试</el-button>
+      <div
+        v-else-if="error"
+        class="error-state">
+        <el-empty
+          description="加载失败"
+          :image-size="60">
+          <el-button
+            type="primary"
+            size="small"
+            @click="$emit('retry')">
+            重试
+          </el-button>
         </el-empty>
       </div>
-      <div v-else class="code-content" :class="{ 'line-numbers-hidden': !showLineNumbers }">
-        <pre class="code-pre" :class="{ 'wrap': lineWrapping }">
-          <code :class="`language-${language}`" v-html="highlightedCode" ref="codeRef"></code>
+      <div
+        v-else
+        class="code-content"
+        :class="{ 'line-numbers-hidden': !showLineNumbers }">
+        <pre
+          class="code-pre"
+          :class="{ 'wrap': lineWrapping }">
+          <code
+ref="codeRef"
+:class="`language-${language}`"
+v-html="highlightedCode" />
         </pre>
       </div>
     </div>
 
-    <div class="preview-footer" v-if="showFooter">
+    <div
+      v-if="showFooter"
+      class="preview-footer">
       <div class="footer-left">
-        <span class="encoding" v-if="encoding">{{ encoding }}</span>
-        <span class="size" v-if="fileSize">{{ formatFileSize(fileSize) }}</span>
+        <span
+          v-if="encoding"
+          class="encoding">{{ encoding }}</span>
+        <span
+          v-if="fileSize"
+          class="size">{{ formatFileSize(fileSize) }}</span>
       </div>
       <div class="footer-right">
         <span v-if="currentLine > 0">行 {{ currentLine }}, 列 {{ currentColumn }}</span>

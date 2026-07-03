@@ -4,7 +4,8 @@ import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
-import io.github.legacygraph.service.GraphValidatorService;
+import io.github.legacygraph.service.graph.GraphValidatorService;
+import io.github.legacygraph.service.test.TestResultUpdateService;
 import io.github.legacygraph.test.ApiTestExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +33,7 @@ public class TestExecutionScheduler {
     private final TestResultRepository testResultRepository;
     private final ApiTestExecutor apiTestExecutor;
     private final GraphValidatorService graphValidatorService;
-    private final io.github.legacygraph.service.TestResultUpdateService testResultUpdateService;
+    private final TestResultUpdateService testResultUpdateService;
 
     // 线程池配置 - 控制最大并发数
     private final ExecutorService executorService;
@@ -55,7 +56,7 @@ public class TestExecutionScheduler {
             TestResultRepository testResultRepository,
             ApiTestExecutor apiTestExecutor,
             GraphValidatorService graphValidatorService,
-            io.github.legacygraph.service.TestResultUpdateService testResultUpdateService) {
+            io.github.legacygraph.service.test.TestResultUpdateService testResultUpdateService) {
         this.testCaseRepository = testCaseRepository;
         this.testResultRepository = testResultRepository;
         this.apiTestExecutor = apiTestExecutor;

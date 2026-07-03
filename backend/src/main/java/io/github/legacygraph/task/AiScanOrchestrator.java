@@ -9,6 +9,7 @@ import io.github.legacygraph.agent.TestCaseAgent;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.common.ScanStep;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.FactExtractionResult;
@@ -29,12 +30,15 @@ import io.github.legacygraph.repository.AiScanJobRepository;
 import io.github.legacygraph.repository.ReviewRecordRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
-import io.github.legacygraph.service.DocumentContentService;
-import io.github.legacygraph.service.GapFinderService;
-import io.github.legacygraph.service.KnowledgeClaimService;
-import io.github.legacygraph.service.VectorizationService;
+import io.github.legacygraph.service.scan.DocumentContentService;
+import io.github.legacygraph.service.graph.GapFinderService;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
+import io.github.legacygraph.service.qa.VectorizationService;
 import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PreDestroy;
@@ -100,6 +104,12 @@ public class AiScanOrchestrator {
     /** 文档/代码向量化服务 — 将文档和代码内容嵌入到 pgvector 供语义检索 */
     private final VectorizationService vectorizationService;
 
+    /** P3-2: Prometheus 业务指标 */
+    private final Timer scanDurationTimer;
+    private final Counter agentCallCounter;
+    private final Counter graphNodeCounter;
+    private final Counter graphEdgeCounter;
+
     /** 测试生成的高价值节点上限，避免编排耗时过长 */
     private static final int MAX_TEST_GEN_NODES = 20;
     /** 审核准备节点上限 */
@@ -152,7 +162,11 @@ public class AiScanOrchestrator {
                               KnowledgeClaimService knowledgeClaimService,
                               GapFinderService gapFinderService,
                               ScanUnderstandingEnhancer scanUnderstandingEnhancer,
-                              VectorizationService vectorizationService) {
+                              VectorizationService vectorizationService,
+                              @Qualifier("scanDurationTimer") Timer scanDurationTimer,
+                              @Qualifier("agentCallCounter") Counter agentCallCounter,
+                              @Qualifier("graphNodeCounter") Counter graphNodeCounter,
+                              @Qualifier("graphEdgeCounter") Counter graphEdgeCounter) {
         this.scanTaskRepository = scanTaskRepository;
         this.scanTaskRecorder = scanTaskRecorder;
         this.aiScanJobRepository = aiScanJobRepository;
@@ -171,6 +185,10 @@ public class AiScanOrchestrator {
         this.gapFinderService = gapFinderService;
         this.scanUnderstandingEnhancer = scanUnderstandingEnhancer;
         this.vectorizationService = vectorizationService;
+        this.scanDurationTimer = scanDurationTimer;
+        this.agentCallCounter = agentCallCounter;
+        this.graphNodeCounter = graphNodeCounter;
+        this.graphEdgeCounter = graphEdgeCounter;
     }
 
     /**
@@ -206,9 +224,10 @@ public class AiScanOrchestrator {
      * 执行扫描后 AI 编排。未启用 AI 时直接返回。
      *
      * @param isCancelled 取消检查函数，每个子阶段前调用；为 null 时不检查
+     * @param jobId 当前任务 ID，用于更新状态机步骤；可为 null（向后兼容）
      */
     public void orchestrate(String projectId, String versionId, AiScanConfig config,
-                            BooleanSupplier isCancelled) {
+                            BooleanSupplier isCancelled, String jobId) {
         if (config == null || !config.isEnableAi()) {
             log.info("AI orchestration skipped (enableAi=false): versionId={}", versionId);
             ScanTask skipTask = createTask(projectId, versionId, "AI_ORCHESTRATION", "AI 编排");
@@ -230,31 +249,73 @@ public class AiScanOrchestrator {
         log.info("Starting AI orchestration: projectId={}, versionId={}, config={}",
                 projectId, versionId, config);
 
+        // 状态机：INIT → PARSE_FILES (doc extract)
+        updateStep(jobId, ScanStep.INIT);
         runDocExtract(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after doc extract: versionId={}", versionId); return; }
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after doc extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
+        // PARSE_FILES → EXTRACT_FACTS (code extract)
+        updateStep(jobId, ScanStep.PARSE_FILES);
         runCodeExtract(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after code extract: versionId={}", versionId); return; }
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after code extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
+        // EXTRACT_FACTS → BUILD_GRAPH (feature mapping)
+        updateStep(jobId, ScanStep.EXTRACT_FACTS);
         runFeatureCodeMapping(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature-code mapping: versionId={}", versionId); return; }
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature-code mapping: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
+        // BUILD_GRAPH → MERGE_ENTITIES
+        updateStep(jobId, ScanStep.BUILD_GRAPH);
         runFeatureMapping(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature mapping: versionId={}", versionId); return; }
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature mapping: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
+        // MERGE_ENTITIES → WRITE_INTENT (test generate)
         if (config.isAutoGenerateTestCase()) {
+            updateStep(jobId, ScanStep.MERGE_ENTITIES);
             runTestGenerate(projectId, versionId);
-            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after test generate: versionId={}", versionId); return; }
+            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after test generate: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
         }
+
+        // WRITE_INTENT → ENHANCE (review prepare)
+        updateStep(jobId, ScanStep.WRITE_INTENT);
         runReviewPrepare(projectId, versionId, config.getMinConfidence());
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after review prepare: versionId={}", versionId); return; }
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after review prepare: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
+        // ENHANCE → INDEX (knowledge gap + understanding)
+        updateStep(jobId, ScanStep.ENHANCE);
         runKnowledgeGapScan(projectId, versionId);
-
-        // 扫描后代码理解增强（try-catch 包裹，增强失败不影响基础扫描状态）
         runScanUnderstandingEnhancement(projectId, versionId);
 
+        // INDEX → COMPLETE
+        updateStep(jobId, ScanStep.INDEX);
+        updateStep(jobId, ScanStep.COMPLETE);
+
         log.info("AI orchestration completed: versionId={}", versionId);
+    }
+
+    /**
+     * 向后兼容的旧签名
+     */
+    public void orchestrate(String projectId, String versionId, AiScanConfig config,
+                            BooleanSupplier isCancelled) {
+        orchestrate(projectId, versionId, config, isCancelled, null);
+    }
+
+    /**
+     * 更新任务状态机步骤
+     */
+    private void updateStep(String jobId, ScanStep step) {
+        if (jobId == null) return;
+        try {
+            AiScanJob update = new AiScanJob();
+            update.setId(jobId);
+            update.setCurrentStep(step.name());
+            update.setUpdatedAt(LocalDateTime.now());
+            aiScanJobRepository.updateById(update);
+            log.debug("Job {} step updated to {}", jobId, step.name());
+        } catch (Exception e) {
+            log.warn("Failed to update job step: jobId={}, step={}, error={}", jobId, step.name(), e.getMessage());
+        }
     }
 
     // ==================== AI_DOC_EXTRACT ====================
@@ -287,6 +348,7 @@ public class AiScanOrchestrator {
                     CompletableFuture.runAsync(() ->
                             vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content));
                     try {
+                        agentCallCounter.increment();
                         DocUnderstandingAgent.BusinessFactExtraction extraction =
                                 docUnderstandingAgent.extractBusinessFacts(projectId,
                                         truncate(content, DOC_CONTENT_LIMIT), doc.getFilePath());
@@ -590,7 +652,13 @@ public class AiScanOrchestrator {
             return;
         }
         try {
+            int beforeNodes = countGraphNodes(projectId, versionId);
+            int beforeEdges = countGraphEdges(projectId, versionId);
             businessGraphBuilder.buildBusinessGraph(projectId, versionId, extraction, doc.getFilePath());
+            int afterNodes = countGraphNodes(projectId, versionId);
+            int afterEdges = countGraphEdges(projectId, versionId);
+            graphNodeCounter.increment(afterNodes - beforeNodes);
+            graphEdgeCounter.increment(afterEdges - beforeEdges);
         } catch (Exception e) {
             log.warn("Business graph build failed for doc {}: {}", doc.getId(), e.getMessage());
         }
@@ -1159,5 +1227,29 @@ public class AiScanOrchestrator {
                 projectId, versionId, symbols.size(),
                 serviceNodes.size(), controllerNodes.size(), methodNodes.size());
         return symbols;
+    }
+
+    /**
+     * 统计指定版本的图谱节点数（用于 Prometheus 指标计算差值）
+     */
+    private int countGraphNodes(String projectId, String versionId) {
+        try {
+            return neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, Integer.MAX_VALUE).size();
+        } catch (Exception e) {
+            log.debug("countGraphNodes failed: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * 统计指定版本的图谱边数（用于 Prometheus 指标计算差值）
+     */
+    private int countGraphEdges(String projectId, String versionId) {
+        try {
+            return neo4jGraphDao.queryEdges(projectId, versionId, null, null, Integer.MAX_VALUE).size();
+        } catch (Exception e) {
+            log.debug("countGraphEdges failed: {}", e.getMessage());
+            return 0;
+        }
     }
 }

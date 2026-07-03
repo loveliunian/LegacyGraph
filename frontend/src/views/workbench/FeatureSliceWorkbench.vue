@@ -1,54 +1,115 @@
 <template>
   <div class="slice-workbench">
     <div class="toolbar">
-      <el-select v-model="selectedSlice" placeholder="选择功能切片" clearable style="width: 280px" @change="loadSliceDetail">
-        <el-option v-for="s in slices" :key="s.sliceId || s.id" :label="s.name || s.featureName" :value="s.sliceId || s.id" />
+      <el-select
+        v-model="selectedSlice"
+        placeholder="选择功能切片"
+        clearable
+        style="width: 280px"
+        @change="loadSliceDetail">
+        <el-option
+          v-for="s in slices"
+          :key="s.sliceId || s.id"
+          :label="s.name || s.featureName"
+          :value="s.sliceId || s.id" />
       </el-select>
-      <el-button :loading="loading" @click="refreshSlices">
+      <el-button
+        :loading="loading"
+        @click="refreshSlices">
         <el-icon><Refresh /></el-icon> 刷新
       </el-button>
     </div>
 
     <!-- 未选择切片时显示概览 -->
-    <div v-if="!selectedSlice" class="overview">
-      <el-empty v-if="slices.length === 0" description="暂无功能切片数据" />
-      <el-table v-else :data="slices" stripe size="small" @row-click="selectSlice">
-        <el-table-column prop="name" label="切片名称" min-width="180" />
-        <el-table-column prop="featureName" label="功能" width="120" />
-        <el-table-column label="覆盖状态" width="100">
+    <div
+      v-if="!selectedSlice"
+      class="overview">
+      <el-empty
+        v-if="slices.length === 0"
+        description="暂无功能切片数据" />
+      <el-table
+        v-else
+        :data="slices"
+        stripe
+        size="small"
+        @row-click="selectSlice">
+        <el-table-column
+          prop="name"
+          label="切片名称"
+          min-width="180" />
+        <el-table-column
+          prop="featureName"
+          label="功能"
+          width="120" />
+        <el-table-column
+          label="覆盖状态"
+          width="100">
           <template #default="{ row }">
-            <el-tag :type="coverageTagType(row.coverageStatus)" size="small">
+            <el-tag
+              :type="coverageTagType(row.coverageStatus)"
+              size="small">
               {{ coverageLabel(row.coverageStatus) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="风险" width="80">
+        <el-table-column
+          label="风险"
+          width="80">
           <template #default="{ row }">
-            <el-tag :type="riskTagType(row.riskLevel)" size="small">{{ row.riskLevel }}</el-tag>
+            <el-tag
+              :type="riskTagType(row.riskLevel)"
+              size="small">
+              {{ row.riskLevel }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="置信度" width="90">
+        <el-table-column
+          label="置信度"
+          width="90">
           <template #default="{ row }">{{ ((row.confidence ?? 0) * 100).toFixed(0) }}%</template>
         </el-table-column>
-        <el-table-column label="证据来源" min-width="120">
+        <el-table-column
+          label="证据来源"
+          min-width="120">
           <template #default="{ row }">{{ (row.evidenceSources || []).join(', ') }}</template>
         </el-table-column>
       </el-table>
     </div>
 
     <!-- 选中切片后显示详情 -->
-    <div v-if="selectedSlice && sliceDetail" class="detail">
-      <el-alert :title="sliceDetail.name" :description="sliceDetail.featureName" type="info" :closable="false" />
+    <div
+      v-if="selectedSlice && sliceDetail"
+      class="detail">
+      <el-alert
+        :title="sliceDetail.name"
+        :description="sliceDetail.featureName"
+        type="info"
+        :closable="false" />
       <div class="path-chain">
-        <div v-for="(step, idx) in pathSteps" :key="idx" class="path-step">
+        <div
+          v-for="(step, idx) in pathSteps"
+          :key="idx"
+          class="path-step">
           <el-card shadow="hover">
             <template #header>
               <span class="step-type">{{ step.label }}</span>
             </template>
-            <el-tag v-for="id in step.ids" :key="id" size="small" class="step-tag">{{ id }}</el-tag>
-            <span v-if="(step.ids || []).length === 0" class="empty-hint">—</span>
+            <el-tag
+              v-for="id in step.ids"
+              :key="id"
+              size="small"
+              class="step-tag">
+              {{ id }}
+            </el-tag>
+            <span
+              v-if="(step.ids || []).length === 0"
+              class="empty-hint">—</span>
           </el-card>
-          <div v-if="idx < pathSteps.length - 1" class="arrow">↓</div>
+          <div
+            v-if="idx < pathSteps.length - 1"
+            class="arrow">
+            ↓
+          </div>
         </div>
       </div>
     </div>

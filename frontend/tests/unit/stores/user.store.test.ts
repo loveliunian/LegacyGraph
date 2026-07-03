@@ -1,50 +1,51 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useUserStore } from '@/stores/user'
 
-// Mock localStorage
-const localStorageMock = (() => {
-  let store: Record<string, string> = {}
-  return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => { store[key] = value },
-    removeItem: (key: string) => delete store[key],
-    clear: () => { store = {} }
-  }
-})()
-
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
-})
-
-// Mock axios
-vi.mock('axios', () => ({
-  default: {
-    get: vi.fn(),
-    post: vi.fn()
+// Mock @/api (authApi)
+vi.mock('@/api', () => ({
+  authApi: {
+    login: vi.fn(() => Promise.resolve({
+      accessToken: 'mock-access',
+      refreshToken: 'mock-refresh',
+      user: { username: 'admin', permissions: ['read'], roles: ['admin'] }
+    })),
+    logout: vi.fn(() => Promise.resolve()),
+    getCurrentUser: vi.fn(() => Promise.resolve({ username: 'admin', permissions: ['read'], roles: ['admin'] }))
   }
 }))
+
+// Mock @/utils/dict
+vi.mock('@/utils/dict', () => ({
+  loadAllDicts: vi.fn(() => Promise.resolve()),
+  clearDictCache: vi.fn()
+}))
+
+// Mock pinia-plugin-persistedstate
+vi.mock('pinia-plugin-persistedstate', () => ({
+  default: () => () => {}
+}))
+
+import { useUserStore } from '@/stores/user'
 
 describe('User Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    localStorageMock.clear()
   })
 
   it('should initialize with default values', () => {
     const store = useUserStore()
-    expect(store.token).toBe('')
-    expect(store.user).toBeNull()
+    expect(store.accessToken).toBe('')
+    expect(store.userInfo).toBeNull()
     expect(store.permissions).toEqual([])
   })
 
   it('should clear auth correctly', () => {
     const store = useUserStore()
     store.setTokens('test-token', 'refresh-token')
-    expect(store.token).toBe('test-token')
+    expect(store.accessToken).toBe('test-token')
     store.clearAuth()
-    expect(store.token).toBe('')
-    expect(store.user).toBeNull()
+    expect(store.accessToken).toBe('')
+    expect(store.userInfo).toBeNull()
     expect(store.permissions).toEqual([])
   })
 

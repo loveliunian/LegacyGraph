@@ -4,12 +4,25 @@
       <h3>系统管理</h3>
     </div>
 
-    <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="system-tabs">
-      <el-tab-pane label="用户管理" name="users" />
-      <el-tab-pane label="字典管理" name="dictionaries" />
-      <el-tab-pane label="系统配置" name="settings" />
-      <el-tab-pane label="LLM 提供商" name="llm" />
-      <el-tab-pane label="提示词管理" name="prompts" />
+    <el-tabs
+      v-model="activeTab"
+      class="system-tabs"
+      @tab-change="handleTabChange">
+      <el-tab-pane
+        label="用户管理"
+        name="users" />
+      <el-tab-pane
+        label="字典管理"
+        name="dictionaries" />
+      <el-tab-pane
+        label="系统配置"
+        name="settings" />
+      <el-tab-pane
+        label="LLM 提供商"
+        name="llm" />
+      <el-tab-pane
+        label="提示词管理"
+        name="prompts" />
     </el-tabs>
 
     <div class="system-content">

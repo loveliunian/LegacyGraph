@@ -2,23 +2,37 @@
   <div class="scan-version-list">
     <div class="page-header">
       <h3>{{ t('menu.scanVersions') }}</h3>
-      <el-button type="primary" @click="goToCreate">
+      <el-button
+        type="primary"
+        @click="goToCreate">
         <el-icon><Plus /></el-icon>
         新建扫描
       </el-button>
     </div>
 
-    <el-table :data="versionList" v-loading="loading && !hasLoadedOnce" border stripe>
+    <el-table
+      v-loading="loading && !hasLoadedOnce"
+      :data="versionList"
+      border
+      stripe>
       <!-- 版本号 + 版本名称合并为一列 -->
-      <el-table-column label="版本信息" min-width="200">
+      <el-table-column
+        label="版本信息"
+        min-width="200">
         <template #default="{ row }">
           <div class="version-info">
-            <span class="version-no" :title="row.versionNumber">{{ truncateText(row.versionNumber, 20) }}</span>
-            <span class="version-name" :title="row.versionName">{{ truncateText(row.versionName, 24) }}</span>
+            <span
+              class="version-no"
+              :title="row.versionNumber">{{ truncateText(row.versionNumber, 20) }}</span>
+            <span
+              class="version-name"
+              :title="row.versionName">{{ truncateText(row.versionName, 24) }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="扫描类型" width="130">
+      <el-table-column
+        label="扫描类型"
+        width="130">
         <template #default="{ row }">
           <div class="scan-types">
             <el-tag
@@ -27,18 +41,29 @@
               size="small"
               type="primary"
               class="scan-type-tag"
-            >{{ dictLabel('scan_type', t) }}</el-tag>
-            <span v-if="parseScanTypes(row.scanType).length === 0" class="text-gray">-</span>
+            >
+              {{ dictLabel('scan_type', t) }}
+            </el-tag>
+            <span
+              v-if="parseScanTypes(row.scanType).length === 0"
+              class="text-gray">-</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="80" align="center">
+      <el-table-column
+        label="状态"
+        width="80"
+        align="center">
         <template #default="{ row }">
-          <span class="status-dot" :class="'status-' + row.status?.toLowerCase()" />
+          <span
+            class="status-dot"
+            :class="'status-' + row.status?.toLowerCase()" />
           <span class="status-text">{{ getStatusText(row.status) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="进度" width="170">
+      <el-table-column
+        label="进度"
+        width="170">
         <template #default="{ row }">
           <div class="progress-wrapper">
             <el-progress
@@ -46,64 +71,143 @@
               :status="row.status === 'FAILED' ? 'exception' : (row.progress === 100 ? 'success' : undefined)"
               :stroke-width="12"
             />
-            <span v-if="row.taskCount > 0" class="progress-text">
+            <span
+              v-if="row.taskCount > 0"
+              class="progress-text">
               {{ row.completedTaskCount }}/{{ row.taskCount }} 任务
             </span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="当前阶段" width="110">
+      <el-table-column
+        label="当前阶段"
+        width="110">
         <template #default="{ row }">
-          <div class="stage-cell" v-if="row.stage && row.stage !== '-'">
-            <span class="stage-indicator" :class="{ 'is-active': row.status === 'RUNNING' }" />
+          <div
+            v-if="row.stage && row.stage !== '-'"
+            class="stage-cell">
+            <span
+              class="stage-indicator"
+              :class="{ 'is-active': row.status === 'RUNNING' }" />
             <span class="stage-label">{{ getStageText(row.stage) }}</span>
           </div>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="图谱统计" width="110">
+      <el-table-column
+        label="图谱统计"
+        width="110">
         <template #default="{ row }">
-          <div class="graph-stats" v-if="row.nodeCount || row.edgeCount || row.factCount">
-            <span class="stat-line" v-if="row.nodeCount">
+          <div
+            v-if="row.nodeCount || row.edgeCount || row.factCount"
+            class="graph-stats">
+            <span
+              v-if="row.nodeCount"
+              class="stat-line">
               <em class="stat-num">{{ row.nodeCount }}</em> 节点
             </span>
-            <span class="stat-line" v-if="row.edgeCount">
+            <span
+              v-if="row.edgeCount"
+              class="stat-line">
               <em class="stat-num">{{ row.edgeCount }}</em> 关系
             </span>
-            <span class="stat-line" v-if="row.factCount">
+            <span
+              v-if="row.factCount"
+              class="stat-line">
               <em class="stat-num">{{ row.factCount }}</em> 事实
             </span>
           </div>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="耗时" width="90" align="center">
+      <el-table-column
+        label="耗时"
+        width="90"
+        align="center">
         <template #default="{ row }">
-          <span v-if="row.duration" class="duration-text">{{ formatDuration(row.duration) }}</span>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-if="row.duration"
+            class="duration-text">{{ formatDuration(row.duration) }}</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" width="160">
+      <el-table-column
+        label="创建时间"
+        width="160">
         <template #default="{ row }">
-          <span v-if="row.createdAt" class="time-text">{{ formatTime(row.createdAt) }}</span>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-if="row.createdAt"
+            class="time-text">{{ formatTime(row.createdAt) }}</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="240" fixed="right">
+      <el-table-column
+        label="操作"
+        width="240"
+        fixed="right">
         <template #default="{ row }">
           <div class="action-buttons">
-            <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
-            <el-button type="primary" link size="small" @click="compareWithPrevious(row)">对比</el-button>
-            <el-button v-if="row.status === 'RUNNING'" type="warning" link size="small" @click="pauseScan(row)">暂停</el-button>
-            <el-button v-if="row.status === 'PAUSED'" type="success" link size="small" @click="resumeScan(row)">恢复</el-button>
-            <el-button v-if="row.status === 'RUNNING'" type="danger" link size="small" @click="stopScan(row)">停止</el-button>
-            <el-button type="danger" link size="small" @click="deleteVersion(row)">删除</el-button>
+            <el-button
+              type="primary"
+              link
+              size="small"
+              @click="viewDetail(row)">
+              详情
+            </el-button>
+            <el-button
+              type="primary"
+              link
+              size="small"
+              @click="compareWithPrevious(row)">
+              对比
+            </el-button>
+            <el-button
+              v-if="row.status === 'RUNNING'"
+              type="warning"
+              link
+              size="small"
+              @click="pauseScan(row)">
+              暂停
+            </el-button>
+            <el-button
+              v-if="row.status === 'PAUSED'"
+              type="success"
+              link
+              size="small"
+              @click="resumeScan(row)">
+              恢复
+            </el-button>
+            <el-button
+              v-if="row.status === 'RUNNING'"
+              type="danger"
+              link
+              size="small"
+              @click="stopScan(row)">
+              停止
+            </el-button>
+            <el-button
+              type="danger"
+              link
+              size="small"
+              @click="deleteVersion(row)">
+              删除
+            </el-button>
           </div>
         </template>
       </el-table-column>
     </el-table>
 
-    <div class="pagination-wrapper" v-if="total > 0">
+    <div
+      v-if="total > 0"
+      class="pagination-wrapper">
       <el-pagination
         v-model:current-page="pageNum"
         v-model:page-size="pageSize"
@@ -115,23 +219,44 @@
       />
     </div>
 
-    <el-empty v-if="versionList.length === 0 && !loading" description="暂无扫描版本" />
+    <el-empty
+      v-if="versionList.length === 0 && !loading"
+      description="暂无扫描版本" />
 
     <!-- 版本详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="版本详情" width="720px" append-to-body @opened="startDetailPolling" @closed="stopDetailPolling">
+    <el-dialog
+      v-model="detailDialogVisible"
+      title="版本详情"
+      width="720px"
+      append-to-body
+      @opened="startDetailPolling"
+      @closed="stopDetailPolling">
       <template v-if="currentVersion">
         <!-- 基本信息 -->
-        <el-descriptions :column="2" border size="small" style="margin-bottom: 16px;">
+        <el-descriptions
+          :column="2"
+          border
+          size="small"
+          style="margin-bottom: 16px;">
           <el-descriptions-item label="版本号">{{ currentVersion.versionNumber }}</el-descriptions-item>
           <el-descriptions-item label="版本名称">{{ currentVersion.versionName }}</el-descriptions-item>
           <el-descriptions-item label="扫描类型">
-            <el-tag v-for="t in parseScanTypes(currentVersion.scanType)" :key="t" size="small" type="primary" style="margin-right: 4px;">
+            <el-tag
+              v-for="t in parseScanTypes(currentVersion.scanType)"
+              :key="t"
+              size="small"
+              type="primary"
+              style="margin-right: 4px;">
               {{ dictLabel('scan_type', t) }}
             </el-tag>
             <span v-if="parseScanTypes(currentVersion.scanType).length === 0">-</span>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag size="small" :type="getStatusType(currentVersion.status)">{{ getStatusText(currentVersion.status) }}</el-tag>
+            <el-tag
+              size="small"
+              :type="getStatusType(currentVersion.status)">
+              {{ getStatusText(currentVersion.status) }}
+            </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="图谱节点">{{ currentVersion.nodeCount || 0 }}</el-descriptions-item>
           <el-descriptions-item label="图谱关系">{{ currentVersion.edgeCount || 0 }}</el-descriptions-item>
@@ -143,7 +268,9 @@
         <div class="scan-phases">
           <div class="phases-header">
             <span class="phases-title">扫描环节</span>
-            <span v-if="detailProgress" class="phases-eta">
+            <span
+              v-if="detailProgress"
+              class="phases-eta">
               整体进度 {{ detailProgress.progress || 0 }}%
               <template v-if="detailProgress.estimatedSecondsRemaining && detailProgress.estimatedSecondsRemaining > 0">
                 · 预计剩余 {{ formatDuration(detailProgress.estimatedSecondsRemaining) }}
@@ -166,11 +293,29 @@
             >
               <!-- 阶段序号+状态图标 -->
               <div class="phase-icon">
-                <el-icon v-if="phase.status === 'SUCCESS'" class="icon-success"><CircleCheckFilled /></el-icon>
-                <el-icon v-else-if="phase.status === 'WARNING'" class="icon-warning"><WarningFilled /></el-icon>
-                <el-icon v-else-if="phase.status === 'FAILED'" class="icon-fail"><CircleCloseFilled /></el-icon>
-                <el-icon v-else-if="phase.status === 'RUNNING'" class="icon-running"><Loading /></el-icon>
-                <span v-else class="phase-num">{{ idx + 1 }}</span>
+                <el-icon
+                  v-if="phase.status === 'SUCCESS'"
+                  class="icon-success">
+                  <CircleCheckFilled />
+                </el-icon>
+                <el-icon
+                  v-else-if="phase.status === 'WARNING'"
+                  class="icon-warning">
+                  <WarningFilled />
+                </el-icon>
+                <el-icon
+                  v-else-if="phase.status === 'FAILED'"
+                  class="icon-fail">
+                  <CircleCloseFilled />
+                </el-icon>
+                <el-icon
+                  v-else-if="phase.status === 'RUNNING'"
+                  class="icon-running">
+                  <Loading />
+                </el-icon>
+                <span
+                  v-else
+                  class="phase-num">{{ idx + 1 }}</span>
               </div>
               <!-- 阶段信息 -->
               <div class="phase-body">
@@ -179,7 +324,9 @@
                   <span class="phase-status-text">{{ dictLabel('scan_status', phase.status) }}</span>
                 </div>
                 <!-- 进度条（RUNNING/SUCCESS/WARNING 阶段显示） -->
-                <div v-if="phase.totalItems && phase.totalItems > 0 && (phase.status === 'RUNNING' || phase.status === 'SUCCESS' || phase.status === 'WARNING')" class="phase-progress-row">
+                <div
+                  v-if="phase.totalItems && phase.totalItems > 0 && (phase.status === 'RUNNING' || phase.status === 'SUCCESS' || phase.status === 'WARNING')"
+                  class="phase-progress-row">
                   <el-progress
                     :percentage="phase.totalItems > 0 ? Math.round((phase.processedItems || 0) * 100 / phase.totalItems) : 0"
                     :stroke-width="6"
@@ -189,17 +336,23 @@
                   <span class="phase-counts">{{ phase.processedItems || 0 }} / {{ phase.totalItems }} 项</span>
                 </div>
                 <!-- 当前处理项名称 -->
-                <div v-if="phase.currentItem && phase.status === 'RUNNING'" class="phase-current-item">
+                <div
+                  v-if="phase.currentItem && phase.status === 'RUNNING'"
+                  class="phase-current-item">
                   <el-icon><Document /></el-icon>
                   {{ phase.currentItem }}
                 </div>
-                <div v-if="phase.startedAt || phase.finishedAt" class="phase-time-row">
+                <div
+                  v-if="phase.startedAt || phase.finishedAt"
+                  class="phase-time-row">
                   <span>开始 {{ formatTime(phase.startedAt) }}</span>
                   <span>结束 {{ formatTime(phase.finishedAt) }}</span>
                   <span>耗时 {{ formatPhaseDuration(phase.startedAt, phase.finishedAt) }}</span>
                 </div>
                 <!-- 预估剩余时间 -->
-                <div v-if="phase.estimatedSecondsRemaining && phase.estimatedSecondsRemaining > 0 && phase.status === 'RUNNING'" class="phase-eta">
+                <div
+                  v-if="phase.estimatedSecondsRemaining && phase.estimatedSecondsRemaining > 0 && phase.status === 'RUNNING'"
+                  class="phase-eta">
                   预计剩余 {{ formatDuration(phase.estimatedSecondsRemaining) }}
                 </div>
               </div>
@@ -209,7 +362,11 @@
       </template>
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="goToGraph(currentVersion)">查看图谱</el-button>
+        <el-button
+          type="primary"
+          @click="goToGraph(currentVersion)">
+          查看图谱
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -280,7 +437,9 @@ const parseScanTypes = (scanType: string): string[] => {
     if (parsed.scanTypes && Array.isArray(parsed.scanTypes)) {
       return parsed.scanTypes
     }
-  } catch {}
+  } catch {
+    // ignore non-JSON scanType and parse it below
+  }
   // 非 JSON 格式：可能是逗号分隔或单个值
   if (scanType.includes(',')) {
     return scanType.split(',').map(t => t.trim()).filter(Boolean)

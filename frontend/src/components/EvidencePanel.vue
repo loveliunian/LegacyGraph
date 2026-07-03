@@ -1,41 +1,59 @@
 <template>
   <div class="evidence-panel">
     <el-tabs v-model="activeTab">
-      <el-tab-pane label="代码证据" name="code">
+      <el-tab-pane
+        label="代码证据"
+        name="code">
         <el-timeline>
           <el-timeline-item
             v-for="item in codeEvidence"
             :key="item.id"
             :timestamp="formatTime(item.createdAt)"
           >
-            <el-card shadow="hover" class="evidence-card">
+            <el-card
+              shadow="hover"
+              class="evidence-card">
               <template #header>
                 <div class="card-header">
                   <span>{{ item.sourceName }}</span>
                   <el-tag size="small">{{ item.evidenceType }}</el-tag>
                 </div>
               </template>
-              <div v-if="item.location" class="location">
+              <div
+                v-if="item.location"
+                class="location">
                 位置: {{ item.location }}
               </div>
               <div class="content">{{ item.content || item.summary }}</div>
               <div class="actions">
-                <el-button type="primary" link size="small" @click="viewCode(item)">查看源码</el-button>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="viewCode(item)">
+                  查看源码
+                </el-button>
               </div>
             </el-card>
           </el-timeline-item>
         </el-timeline>
-        <el-empty v-if="codeEvidence.length === 0" description="暂无代码证据" />
+        <el-empty
+          v-if="codeEvidence.length === 0"
+          description="暂无代码证据" />
       </el-tab-pane>
 
-      <el-tab-pane label="文档证据" name="doc">
+      <el-tab-pane
+        label="文档证据"
+        name="doc">
         <el-timeline>
           <el-timeline-item
             v-for="item in docEvidence"
             :key="item.id"
             :timestamp="formatTime(item.createdAt)"
           >
-            <el-card shadow="hover" class="evidence-card">
+            <el-card
+              shadow="hover"
+              class="evidence-card">
               <template #header>
                 <div class="card-header">
                   <span>{{ item.sourceName }}</span>
@@ -44,22 +62,34 @@
               </template>
               <div class="content">{{ item.summary }}</div>
               <div class="actions">
-                <el-button type="primary" link size="small" @click="viewDoc(item)">查看文档</el-button>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="viewDoc(item)">
+                  查看文档
+                </el-button>
               </div>
             </el-card>
           </el-timeline-item>
         </el-timeline>
-        <el-empty v-if="docEvidence.length === 0" description="暂无文档证据" />
+        <el-empty
+          v-if="docEvidence.length === 0"
+          description="暂无文档证据" />
       </el-tab-pane>
 
-      <el-tab-pane label="数据库证据" name="db">
+      <el-tab-pane
+        label="数据库证据"
+        name="db">
         <el-timeline>
           <el-timeline-item
             v-for="item in dbEvidence"
             :key="item.id"
             :timestamp="formatTime(item.createdAt)"
           >
-            <el-card shadow="hover" class="evidence-card">
+            <el-card
+              shadow="hover"
+              class="evidence-card">
               <template #header>
                 <div class="card-header">
                   <span>{{ item.sourceName }}</span>
@@ -68,36 +98,60 @@
               </template>
               <div class="content">{{ item.summary }}</div>
               <div class="actions">
-                <el-button type="primary" link size="small" @click="viewDb(item)">查看表结构</el-button>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="viewDb(item)">
+                  查看表结构
+                </el-button>
               </div>
             </el-card>
           </el-timeline-item>
         </el-timeline>
-        <el-empty v-if="dbEvidence.length === 0" description="暂无数据库证据" />
+        <el-empty
+          v-if="dbEvidence.length === 0"
+          description="暂无数据库证据" />
       </el-tab-pane>
 
-      <el-tab-pane label="测试证据" name="test">
+      <el-tab-pane
+        label="测试证据"
+        name="test">
         <el-timeline>
           <el-timeline-item
             v-for="item in testEvidence"
             :key="item.id"
             :timestamp="formatTime(item.createdAt)"
           >
-            <el-card shadow="hover" class="evidence-card">
+            <el-card
+              shadow="hover"
+              class="evidence-card">
               <template #header>
                 <div class="card-header">
                   <span>{{ item.sourceName }}</span>
-                  <el-tag size="small" type="success">{{ item.evidenceType }}</el-tag>
+                  <el-tag
+                    size="small"
+                    type="success">
+                    {{ item.evidenceType }}
+                  </el-tag>
                 </div>
               </template>
               <div class="content">{{ item.summary }}</div>
               <div class="actions">
-                <el-button type="primary" link size="small" @click="viewTest(item)">查看测试结果</el-button>
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="viewTest(item)">
+                  查看测试结果
+                </el-button>
               </div>
             </el-card>
           </el-timeline-item>
         </el-timeline>
-        <el-empty v-if="testEvidence.length === 0" description="暂无测试证据" />
+        <el-empty
+          v-if="testEvidence.length === 0"
+          description="暂无测试证据" />
       </el-tab-pane>
     </el-tabs>
   </div>

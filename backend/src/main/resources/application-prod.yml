@@ -1,0 +1,54 @@
+# 生产环境配置 — 全部通过环境变量注入，禁止硬编码
+spring:
+  datasource:
+    url: ${POSTGRES_URL:?POSTGRES_URL must be set}
+    username: ${POSTGRES_USERNAME:?POSTGRES_USERNAME must be set}
+    password: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:?REDIS_HOST must be set}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:11}
+
+  neo4j:
+    uri: ${NEO4J_URI:?NEO4J_URI must be set}
+    authentication:
+      username: ${NEO4J_USERNAME:?NEO4J_USERNAME must be set}
+      password: ${NEO4J_PASSWORD:?NEO4J_PASSWORD must be set}
+
+  ai:
+    openai:
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.deepseek.com/v1}
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:?MINIO_ENDPOINT must be set}
+  access-key: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set}
+  secret-key: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set}
+
+jwt:
+  secret: ${JWT_SECRET:?JWT_SECRET must be set}
+
+# 生产环境关闭 Swagger
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Actuator 仅暴露 health 和 prometheus（需认证）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    io.github.legacygraph: warn
+    org.springframework.security: warn

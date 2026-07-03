@@ -249,6 +249,12 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Micrometer Prometheus registry -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Netty macOS DNS resolver (Apple Silicon) -->
         <dependency>
             <groupId>io.netty</groupId>

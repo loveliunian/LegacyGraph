@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.service.test.PatchPlanValidator;
 
 class PatchPlanValidatorTest {
 

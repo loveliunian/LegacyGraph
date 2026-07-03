@@ -47,4 +47,10 @@ export const changeTaskApi = {
   runValidation: (id: string, data: { gateTypes?: string[]; caseIds?: string[]; workingDir?: string; environment?: string }) => {
     return post(`/change-tasks/${id}/run-validation`, data)
   },
+
+  /**
+   * 创建 PR 草案。后端会在门禁未通过时拒绝。
+   * @param id 变更任务 ID
+   */
+  createPr: (id: string) => post(`/change-tasks/${id}/create-pr`),
 }

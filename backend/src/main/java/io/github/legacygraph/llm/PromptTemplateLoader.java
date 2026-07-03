@@ -1,7 +1,7 @@
 package io.github.legacygraph.llm;
 
 import io.github.legacygraph.entity.PromptTemplate;
-import io.github.legacygraph.service.PromptTemplateService;
+import io.github.legacygraph.service.system.PromptTemplateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

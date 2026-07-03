@@ -2,7 +2,7 @@ package io.github.legacygraph.controller;
 
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ReviewConfirmRequest;
-import io.github.legacygraph.service.GraphValidatorService;
+import io.github.legacygraph.service.graph.GraphValidatorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;

@@ -21,21 +21,36 @@
           </div>
         </div>
       </template>
-      <el-form :inline="true" :model="query" class="demo-form-inline">
+      <el-form
+        :inline="true"
+        :model="query"
+        class="demo-form-inline">
         <el-form-item label="版本ID">
-          <el-input v-model="query.versionId" placeholder="扫描版本ID" style="width: 200px" />
+          <el-input
+            v-model="query.versionId"
+            placeholder="扫描版本ID"
+            style="width: 200px" />
         </el-form-item>
         <el-form-item label="方法">
-          <el-input v-model="query.method" placeholder="例如: TicketController.dispatch" style="width: 300px" />
+          <el-input
+            v-model="query.method"
+            placeholder="例如: TicketController.dispatch"
+            style="width: 300px" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="queryGraph">查询</el-button>
+          <el-button
+            type="primary"
+            @click="queryGraph">
+            查询
+          </el-button>
           <el-button @click="loadExample">加载示例</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-card v-if="graphData" class="mt-4">
+    <el-card
+      v-if="graphData"
+      class="mt-4">
       <div class="graph-container">
         <VueFlow
           :nodes="nodes"
@@ -58,22 +73,41 @@
       </div>
     </el-card>
 
-    <el-card v-if="resultList && resultList.length > 0" class="mt-4">
+    <el-card
+      v-if="resultList && resultList.length > 0"
+      class="mt-4">
       <template #header>
         <span>节点列表</span>
       </template>
-      <el-table :data="resultList" border>
-        <el-table-column prop="labels" label="类型" width="120" />
-        <el-table-column prop="properties.nodeName" label="名称" width="180" />
-        <el-table-column prop="properties.displayName" label="显示名称" width="180" />
-        <el-table-column prop="properties.confidence" label="置信度" width="100">
+      <el-table
+        :data="resultList"
+        border>
+        <el-table-column
+          prop="labels"
+          label="类型"
+          width="120" />
+        <el-table-column
+          prop="properties.nodeName"
+          label="名称"
+          width="180" />
+        <el-table-column
+          prop="properties.displayName"
+          label="显示名称"
+          width="180" />
+        <el-table-column
+          prop="properties.confidence"
+          label="置信度"
+          width="100">
           <template #default="{row}">
             <el-tag :type="row.properties.confidence >= 0.8 ? 'success' : 'warning'">
               {{ (row.properties.confidence * 100).toFixed(0) }}%
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="properties.status" label="状态" width="100" />
+        <el-table-column
+          prop="properties.status"
+          label="状态"
+          width="100" />
       </el-table>
     </el-card>
   </div>
@@ -125,7 +159,8 @@ const resultList = ref<any[]>([])
 async function loadVersions() {
   const pid = projectId.value
   if (!pid) return
-  versions.value = await loadScanVersions(pid)
+  const result = await loadScanVersions(pid)
+  versions.value = result || []
 }
 
 const loadExample = async () => {
@@ -154,7 +189,7 @@ const queryGraph = async () => {
     return
   }
   try {
-    const data = await graphApi.getApiChain(projectId.value, query.versionId, query.method) as any
+    const data = await graphApi.getApiChain(projectId.value, query.versionId, query.method)
     graphData.value = data
     processGraphData(data)
   } catch (e) {

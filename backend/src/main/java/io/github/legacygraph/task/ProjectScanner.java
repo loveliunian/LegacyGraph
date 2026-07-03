@@ -27,7 +27,8 @@ import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
-import io.github.legacygraph.service.DatabaseMetadataScanService;
+import io.github.legacygraph.service.graph.GraphCacheInvalidator;
+import io.github.legacygraph.service.scan.DatabaseMetadataScanService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -85,7 +86,7 @@ public class ProjectScanner {
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator;
+    private io.github.legacygraph.service.graph.GraphCacheInvalidator graphCacheInvalidator;
 
     /** 扫描后 AI 编排默认开关（legacy-graph.ai.*），scanScope 未显式指定时生效 */
     @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.enable-default:true}")
@@ -406,17 +407,29 @@ public class ProjectScanner {
 
                 // LLM 语义增强：异步执行，不阻塞扫描主流程
                 if (totalTables > 0) {
+                    // 标记 AI 增强为 PENDING
+                    updateScanVersionAiStatus(versionId, "PENDING");
                     CompletableFuture.runAsync(() -> {
                         try {
+                            updateScanVersionAiStatus(versionId, "RUNNING");
                             String schemaText = graphBuilder.buildDbSchemaSummary(projectId, versionId);
                             if (schemaText != null && !schemaText.isBlank()) {
                                 enrichDbGraphWithLLM(projectId, versionId, schemaText);
+                                updateScanVersionAiStatus(versionId, "COMPLETED");
+                                log.info("DB schema LLM enrichment completed: versionId={}", versionId);
+                            } else {
+                                updateScanVersionAiStatus(versionId, "SKIPPED");
+                                log.info("DB schema LLM enrichment skipped (empty schema): versionId={}", versionId);
                             }
                         } catch (Exception e) {
-                            log.warn("DB schema LLM enrichment failed (non-blocking): {}", e.getMessage());
+                            updateScanVersionAiStatus(versionId, "FAILED");
+                            log.warn("DB schema LLM enrichment failed (non-blocking): versionId={}, error={}", versionId, e.getMessage());
                         }
                     });
                     log.info("DB schema LLM enrichment dispatched asynchronously: versionId={}", versionId);
+                } else {
+                    updateScanVersionAiStatus(versionId, "SKIPPED");
+                    log.info("DB schema LLM enrichment skipped (no tables): versionId={}", versionId);
                 }
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=no READY database connections found for project",
@@ -1564,6 +1577,21 @@ public class ProjectScanner {
             }
         } catch (Exception e) {
             log.warn("LLM DB schema analysis failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 更新 ScanVersion 的 AI 增强状态字段。
+     */
+    private void updateScanVersionAiStatus(String versionId, String status) {
+        try {
+            ScanVersion version = scanVersionRepository.getById(versionId);
+            if (version != null) {
+                version.setAiEnrichmentStatus(status);
+                scanVersionRepository.updateById(version);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to update AI enrichment status for versionId={}: {}", versionId, e.getMessage());
         }
     }
 }

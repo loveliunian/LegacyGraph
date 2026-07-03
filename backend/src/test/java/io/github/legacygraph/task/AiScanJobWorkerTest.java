@@ -28,7 +28,11 @@ class AiScanJobWorkerTest {
         AiScanJobRepository aiScanJobRepository = mock(AiScanJobRepository.class);
         AiScanOrchestrator aiScanOrchestrator = mock(AiScanOrchestrator.class);
         ObjectMapper objectMapper = new ObjectMapper();
-        AiScanJobWorker worker = new AiScanJobWorker(aiScanJobRepository, aiScanOrchestrator, objectMapper);
+        ProjectScanner projectScanner = mock(ProjectScanner.class);
+        io.github.legacygraph.repository.ScanVersionRepository scanVersionRepository = 
+            mock(io.github.legacygraph.repository.ScanVersionRepository.class);
+        AiScanJobWorker worker = new AiScanJobWorker(aiScanJobRepository, aiScanOrchestrator, 
+            objectMapper, projectScanner, scanVersionRepository);
 
         AiScanConfig config = new AiScanConfig();
         config.setEnableAi(true);
@@ -60,6 +64,7 @@ class AiScanJobWorkerTest {
                 org.mockito.Mockito.eq("project-1"),
                 org.mockito.Mockito.eq("version-1"),
                 org.mockito.Mockito.argThat(AiScanConfig::isEnableAi),
+                any(),
                 any());
     }
 }

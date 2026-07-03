@@ -39,11 +39,13 @@ public class SecurityConfig {
                                 "/lg/auth/me",
                                 "/lg/auth/logout",
                                 "/lg/projects/*/sources/documents/*/download",
+                                "/qa/ask/stream",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
-                                "/swagger-ui.html",
-                                "/actuator/**"
+                                "/swagger-ui.html"
                         ).permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/actuator/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.access.intercept.AuthorizationFilter.class);

@@ -1,0 +1,100 @@
+{
+  "annotations": { "list": [] },
+  "description": "LegacyGraph 系统监控仪表盘",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "JVM 堆内存",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\"}", "legendFormat": "{{id}}" }
+      ]
+    },
+    {
+      "title": "HTTP 请求 QPS",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "rate(http_server_requests_seconds_count[1m])", "legendFormat": "{{uri}} {{status}}" }
+      ]
+    },
+    {
+      "title": "扫描耗时 (P95)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, rate(legacygraph_scan_duration_seconds_bucket[5m]))", "legendFormat": "P95" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "Agent 调用次数",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        { "expr": "legacygraph_agent_calls_total", "legendFormat": "总计" }
+      ]
+    },
+    {
+      "title": "图谱节点总数",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "legacygraph_graph_nodes_total", "legendFormat": "节点" }
+      ]
+    },
+    {
+      "title": "图谱边总数",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "targets": [
+        { "expr": "legacygraph_graph_edges_total", "legendFormat": "边" }
+      ]
+    },
+    {
+      "title": "Neo4j 连接池",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "neo4j_driver_connections_in_use", "legendFormat": "活跃连接" }
+      ]
+    },
+    {
+      "title": "HTTP 响应时间分布",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "rate(http_server_requests_seconds_bucket[5m])", "legendFormat": "{{le}}" }
+      ]
+    },
+    {
+      "title": "GC 暂停时间",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "rate(jvm_gc_pause_seconds_sum[1m])", "legendFormat": "{{action}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "线程数",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        { "expr": "jvm_threads_live_threads", "legendFormat": "活跃" },
+        { "expr": "jvm_threads_daemon_threads", "legendFormat": "守护" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["legacygraph", "java", "spring-boot"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "LegacyGraph Dashboard",
+  "uid": "legacygraph-main"
+}

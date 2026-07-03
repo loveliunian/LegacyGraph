@@ -1,6 +1,8 @@
 <template>
   <div class="login-container">
-    <el-card class="login-card" shadow="hover">
+    <el-card
+      class="login-card"
+      shadow="hover">
       <div class="login-header">
         <h1>LegacyGraph</h1>
         <p>AI 图谱理解平台</p>

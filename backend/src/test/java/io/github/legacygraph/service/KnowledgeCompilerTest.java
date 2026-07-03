@@ -1,5 +1,7 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.service.graph.KnowledgeCompiler;
+
 import io.github.legacygraph.dto.claim.CompileOptions;
 import io.github.legacygraph.dto.claim.CompiledGraphProjection;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;

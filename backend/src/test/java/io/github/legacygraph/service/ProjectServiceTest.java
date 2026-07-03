@@ -22,6 +22,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.service.graph.GraphCacheInvalidator;
+import io.github.legacygraph.service.scan.ProjectService;
+import io.github.legacygraph.repository.TestCaseRepository;
+import io.github.legacygraph.repository.TestResultRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectServiceTest {

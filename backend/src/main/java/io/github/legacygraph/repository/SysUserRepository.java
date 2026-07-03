@@ -12,7 +12,7 @@ public interface SysUserRepository extends LegacyBaseMapper<SysUser> {
     /**
      * 自定义更新方法，处理 UUID 类型转换问题
      */
-    @Update("UPDATE sys_user SET username = #{user.username}, password = #{user.password}, " +
+    @Update("UPDATE lg_sys_user SET username = #{user.username}, password = #{user.password}, " +
             "nickname = #{user.nickname}, email = #{user.email}, phone = #{user.phone}, " +
             "avatar = #{user.avatar}, roles = #{user.roles}, permissions = #{user.permissions}, " +
             "status = #{user.status}, last_login_at = #{user.lastLoginAt}, " +

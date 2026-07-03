@@ -17,18 +17,22 @@
             :class="{ active: themeStore.theme === option.value }"
             @click="themeStore.setTheme(option.value as ThemeMode)"
           >
-            <div class="mode-preview" :class="option.value">
-              <div class="preview-header"></div>
+            <div
+              class="mode-preview"
+              :class="option.value">
+              <div class="preview-header" />
               <div class="preview-body">
-                <div class="preview-sidebar"></div>
+                <div class="preview-sidebar" />
                 <div class="preview-content">
-                  <div class="preview-card"></div>
-                  <div class="preview-card"></div>
+                  <div class="preview-card" />
+                  <div class="preview-card" />
                 </div>
               </div>
             </div>
             <span class="mode-label">{{ option.label }}</span>
-            <el-icon v-if="themeStore.theme === option.value" class="check-icon">
+            <el-icon
+              v-if="themeStore.theme === option.value"
+              class="check-icon">
               <Check />
             </el-icon>
           </div>
@@ -40,7 +44,10 @@
       <div class="settings-section">
         <h4 class="section-title">主题色配置</h4>
         <div class="color-picker-row">
-          <div class="color-item" v-for="color in colorOptions" :key="color.key">
+          <div
+            v-for="color in colorOptions"
+            :key="color.key"
+            class="color-item">
             <span class="color-label">{{ color.label }}</span>
             <el-color-picker
               v-model="color.value"
@@ -67,14 +74,18 @@
                   :key="key"
                   class="preset-color"
                   :style="{ background: color }"
-                ></div>
+                />
               </div>
               <span class="preset-name">{{ preset.name }}</span>
             </div>
           </div>
         </div>
 
-        <el-button type="primary" plain @click="resetColors" style="margin-top: 20px">
+        <el-button
+          type="primary"
+          plain
+          style="margin-top: 20px"
+          @click="resetColors">
           恢复默认配色
         </el-button>
       </div>
@@ -105,19 +116,47 @@
             </el-col>
           </el-row>
 
-          <el-row :gutter="20" style="margin-top: 20px">
+          <el-row
+            :gutter="20"
+            style="margin-top: 20px">
             <el-col :span="12">
-              <el-progress :percentage="80" color="#409eff" />
-              <el-progress :percentage="100" status="success" color="#67c23a" />
-              <el-progress :percentage="70" status="warning" color="#e6a23c" />
-              <el-progress :percentage="50" status="exception" color="#f56c6c" />
+              <el-progress
+                :percentage="80"
+                color="#409eff" />
+              <el-progress
+                :percentage="100"
+                status="success"
+                color="#67c23a" />
+              <el-progress
+                :percentage="70"
+                status="warning"
+                color="#e6a23c" />
+              <el-progress
+                :percentage="50"
+                status="exception"
+                color="#f56c6c" />
             </el-col>
             <el-col :span="12">
               <div class="preview-item">
-                <el-alert title="成功提示" type="success" :closable="false" />
-                <el-alert title="信息提示" type="info" :closable="false" style="margin-top: 10px" />
-                <el-alert title="警告提示" type="warning" :closable="false" style="margin-top: 10px" />
-                <el-alert title="错误提示" type="error" :closable="false" style="margin-top: 10px" />
+                <el-alert
+                  title="成功提示"
+                  type="success"
+                  :closable="false" />
+                <el-alert
+                  title="信息提示"
+                  type="info"
+                  :closable="false"
+                  style="margin-top: 10px" />
+                <el-alert
+                  title="警告提示"
+                  type="warning"
+                  :closable="false"
+                  style="margin-top: 10px" />
+                <el-alert
+                  title="错误提示"
+                  type="error"
+                  :closable="false"
+                  style="margin-top: 10px" />
               </div>
             </el-col>
           </el-row>

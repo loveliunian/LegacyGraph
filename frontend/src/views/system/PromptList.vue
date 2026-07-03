@@ -3,7 +3,9 @@
     <div class="page-header">
       <h3>提示词模板管理</h3>
       <div class="header-actions">
-        <el-button type="primary" @click="openCreate">
+        <el-button
+          type="primary"
+          @click="openCreate">
           <el-icon><Plus /></el-icon> 新增模板
         </el-button>
         <el-button @click="refreshCache">
@@ -22,51 +24,127 @@
         @clear="loadData"
         @keyup.enter="loadData"
       />
-      <el-select v-model="filterScene" placeholder="场景" clearable style="width: 150px" @change="loadData">
-        <el-option label="全部场景" value="" />
-        <el-option label="code" value="code" />
-        <el-option label="doc" value="doc" />
-        <el-option label="merge" value="merge" />
-        <el-option label="test" value="test" />
-        <el-option label="review" value="review" />
+      <el-select
+        v-model="filterScene"
+        placeholder="场景"
+        clearable
+        style="width: 150px"
+        @change="loadData">
+        <el-option
+          label="全部场景"
+          value="" />
+        <el-option
+          label="code"
+          value="code" />
+        <el-option
+          label="doc"
+          value="doc" />
+        <el-option
+          label="merge"
+          value="merge" />
+        <el-option
+          label="test"
+          value="test" />
+        <el-option
+          label="review"
+          value="review" />
       </el-select>
-      <el-select v-model="filterStatus" placeholder="状态" clearable style="width: 120px" @change="loadData">
-        <el-option label="全部" value="" />
-        <el-option label="启用" value="active" />
-        <el-option label="停用" value="inactive" />
+      <el-select
+        v-model="filterStatus"
+        placeholder="状态"
+        clearable
+        style="width: 120px"
+        @change="loadData">
+        <el-option
+          label="全部"
+          value="" />
+        <el-option
+          label="启用"
+          value="active" />
+        <el-option
+          label="停用"
+          value="inactive" />
       </el-select>
-      <el-button type="primary" @click="loadData">查询</el-button>
+      <el-button
+        type="primary"
+        @click="loadData">
+        查询
+      </el-button>
     </div>
 
     <!-- 表格 -->
-    <el-table :data="tableData" v-loading="loading" stripe>
-      <el-table-column prop="templateCode" label="模板编码" min-width="160" />
-      <el-table-column prop="version" label="版本" width="80" />
-      <el-table-column prop="scene" label="场景" width="80">
+    <el-table
+      v-loading="loading"
+      :data="tableData"
+      stripe>
+      <el-table-column
+        prop="templateCode"
+        label="模板编码"
+        min-width="160" />
+      <el-table-column
+        prop="version"
+        label="版本"
+        width="80" />
+      <el-table-column
+        prop="scene"
+        label="场景"
+        width="80">
         <template #default="{ row }">
-          <el-tag size="small" type="info">{{ row.scene || '-' }}</el-tag>
+          <el-tag
+            size="small"
+            type="info">
+            {{ row.scene || '-' }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="内容预览" min-width="300">
+      <el-table-column
+        label="内容预览"
+        min-width="300">
         <template #default="{ row }">
           <span class="preview-text">{{ getPreview(row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="80">
+      <el-table-column
+        label="状态"
+        width="80">
         <template #default="{ row }">
-          <el-tag :type="row.isActive ? 'success' : 'info'" size="small">
+          <el-tag
+            :type="row.isActive ? 'success' : 'info'"
+            size="small">
             {{ row.isActive ? '启用' : '停用' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="创建时间" width="170" />
-      <el-table-column label="操作" width="240" fixed="right">
+      <el-table-column
+        prop="createdAt"
+        label="创建时间"
+        width="170" />
+      <el-table-column
+        label="操作"
+        width="240"
+        fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button link :type="row.isActive ? 'warning' : 'success'" size="small" @click="toggleActive(row)">
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="openEdit(row)">
+            编辑
+          </el-button>
+          <el-button
+            link
+            :type="row.isActive ? 'warning' : 'success'"
+            size="small"
+            @click="toggleActive(row)">
             {{ row.isActive ? '停用' : '启用' }}
           </el-button>
-          <el-button link type="danger" size="small" @click="doDelete(row)">删除</el-button>
+          <el-button
+            link
+            type="danger"
+            size="small"
+            @click="doDelete(row)">
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -78,9 +156,9 @@
       :total="total"
       :page-sizes="[10, 20, 50]"
       layout="total, sizes, prev, pager, next"
+      style="margin-top: 16px; justify-content: flex-end"
       @size-change="loadData"
       @current-change="loadData"
-      style="margin-top: 16px; justify-content: flex-end"
     />
 
     <!-- 编辑对话框 -->
@@ -90,21 +168,45 @@
       width="800px"
       destroy-on-close
     >
-      <el-form :model="form" label-width="100px" :rules="rules" ref="formRef">
+      <el-form
+        ref="formRef"
+        :model="form"
+        label-width="100px"
+        :rules="rules">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="模板编码" prop="templateCode">
-              <el-input v-model="form.templateCode" :disabled="isEditing" placeholder="如 sql-advisor" />
+            <el-form-item
+              label="模板编码"
+              prop="templateCode">
+              <el-input
+                v-model="form.templateCode"
+                :disabled="isEditing"
+                placeholder="如 sql-advisor" />
             </el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="场景" prop="scene">
-              <el-select v-model="form.scene" placeholder="选择场景" clearable>
-                <el-option label="code" value="code" />
-                <el-option label="doc" value="doc" />
-                <el-option label="merge" value="merge" />
-                <el-option label="test" value="test" />
-                <el-option label="review" value="review" />
+            <el-form-item
+              label="场景"
+              prop="scene">
+              <el-select
+                v-model="form.scene"
+                placeholder="选择场景"
+                clearable>
+                <el-option
+                  label="code"
+                  value="code" />
+                <el-option
+                  label="doc"
+                  value="doc" />
+                <el-option
+                  label="merge"
+                  value="merge" />
+                <el-option
+                  label="test"
+                  value="test" />
+                <el-option
+                  label="review"
+                  value="review" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -115,21 +217,40 @@
           </el-col>
         </el-row>
         <el-form-item label="系统角色提示词">
-          <el-input v-model="form.systemPrompt" type="textarea" :rows="4" placeholder="定义 LLM 的系统角色和背景" />
+          <el-input
+            v-model="form.systemPrompt"
+            type="textarea"
+            :rows="4"
+            placeholder="定义 LLM 的系统角色和背景" />
         </el-form-item>
         <el-form-item label="领域知识提示词">
-          <el-input v-model="form.domainPrompt" type="textarea" :rows="4" placeholder="注入领域知识、术语解释等" />
+          <el-input
+            v-model="form.domainPrompt"
+            type="textarea"
+            :rows="4"
+            placeholder="注入领域知识、术语解释等" />
         </el-form-item>
         <el-form-item label="任务指令提示词">
-          <el-input v-model="form.taskPrompt" type="textarea" :rows="6" placeholder="具体的任务指令和约束条件" />
+          <el-input
+            v-model="form.taskPrompt"
+            type="textarea"
+            :rows="6"
+            placeholder="具体的任务指令和约束条件" />
         </el-form-item>
         <el-form-item label="输出格式 Schema">
-          <el-input v-model="form.outputSchema" type="textarea" :rows="4" placeholder="JSON Schema，指导 LLM 输出格式" />
+          <el-input
+            v-model="form.outputSchema"
+            type="textarea"
+            :rows="4"
+            placeholder="JSON Schema，指导 LLM 输出格式" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="doSave" :loading="saving">
+        <el-button
+          type="primary"
+          :loading="saving"
+          @click="doSave">
           {{ isEditing ? '保存为新版本' : '创建' }}
         </el-button>
       </template>

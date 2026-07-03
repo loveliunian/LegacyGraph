@@ -16,6 +16,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.change.ImpactSubgraphService;
 
 @ExtendWith(MockitoExtension.class)
 class ImpactSubgraphServiceTest {

@@ -1,4 +1,4 @@
-import { post } from '@/utils/request'
+import { get, post } from '@/utils/request'
 
 /**
  * Agent API
@@ -39,4 +39,9 @@ export const agentApi = {
 
   /** PR 描述生成 */
   prDescribe: (data: any) => post('/agents/pr/describe', data),
+
+  /** 获取 Agent 运行历史 */
+  getRunHistory: (projectId: string, params: { agentType?: string; status?: string; limit?: number } = {}) => {
+    return get<{ list: any[] }>('/agents/runs/history', { projectId, ...params })
+  },
 }

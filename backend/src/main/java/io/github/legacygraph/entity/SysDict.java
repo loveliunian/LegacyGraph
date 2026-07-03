@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * 字典类型实体
  */
 @Data
-@TableName("sys_dict")
+@TableName("lg_sys_dict")
 public class SysDict {
 
     @TableId(type = IdType.ASSIGN_UUID)

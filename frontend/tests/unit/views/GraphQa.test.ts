@@ -9,6 +9,17 @@ vi.mock('@/utils/request', () => ({
   post: vi.fn(() => Promise.resolve({}))
 }))
 
+const elementStubs = {
+  'el-container': { template: '<div><slot /></div>' },
+  'el-aside': { template: '<aside><slot /></aside>' },
+  'el-main': { template: '<main><slot /></main>' },
+  'el-card': { template: '<section><slot name="header" /><slot /></section>' },
+  'el-button': { template: '<button><slot /></button>' },
+  'el-input': { template: '<input />' },
+  'el-tag': { template: '<span><slot /></span>' },
+  'el-icon': { template: '<i><slot /></i>' },
+}
+
 describe('GraphQa 页面', () => {
   let router: any
   let pinia: any
@@ -26,7 +37,7 @@ describe('GraphQa 页面', () => {
     const wrapper = mount(GraphQa, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-card', 'el-button', 'el-input', 'el-tag', 'el-icon']
+        stubs: elementStubs
       }
     })
     expect(wrapper.find('.graph-qa-page').exists()).toBe(true)
@@ -36,7 +47,7 @@ describe('GraphQa 页面', () => {
     const wrapper = mount(GraphQa, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-button', 'el-input', 'el-tag', 'el-icon']
+        stubs: elementStubs
       }
     })
     expect(wrapper.find('.card-header').exists()).toBe(true)
@@ -46,7 +57,7 @@ describe('GraphQa 页面', () => {
     const wrapper = mount(GraphQa, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-button', 'el-input', 'el-tag', 'el-icon']
+        stubs: elementStubs
       }
     })
     expect(wrapper.find('.chat-container').exists()).toBe(true)

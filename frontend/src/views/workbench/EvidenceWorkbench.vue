@@ -5,20 +5,34 @@
       <p class="desc">处理差异和风险：切片路径、漂移队列、证据审核</p>
     </div>
 
-    <el-tabs v-model="activeTab" type="border-card">
+    <el-tabs
+      v-model="activeTab"
+      type="border-card">
       <!-- Feature Slice 视图 -->
-      <el-tab-pane label="功能切片" name="slice">
-        <FeatureSliceWorkbench :project-id="projectId" :version-id="currentVersion" />
+      <el-tab-pane
+        label="功能切片"
+        name="slice">
+        <FeatureSliceWorkbench
+          :project-id="projectId"
+          :version-id="currentVersion" />
       </el-tab-pane>
 
       <!-- 漂移队列 -->
-      <el-tab-pane label="漂移队列" name="drift">
-        <DriftQueue :project-id="projectId" :version-id="currentVersion" />
+      <el-tab-pane
+        label="漂移队列"
+        name="drift">
+        <DriftQueue
+          :project-id="projectId"
+          :version-id="currentVersion" />
       </el-tab-pane>
 
       <!-- 图谱质量 -->
-      <el-tab-pane label="图谱质量" name="quality">
-        <QualityPanel :project-id="projectId" :version-id="currentVersion" />
+      <el-tab-pane
+        label="图谱质量"
+        name="quality">
+        <QualityPanel
+          :project-id="projectId"
+          :version-id="currentVersion" />
       </el-tab-pane>
     </el-tabs>
   </div>

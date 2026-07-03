@@ -3,7 +3,7 @@ package io.github.legacygraph.controller;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.entity.PromptTemplate;
-import io.github.legacygraph.service.PromptTemplateService;
+import io.github.legacygraph.service.system.PromptTemplateService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;

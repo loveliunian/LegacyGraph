@@ -30,6 +30,10 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.graph.GapFinderService;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
+import io.github.legacygraph.service.report.ReportExportService;
+import io.github.legacygraph.service.report.ReportingService;
 
 @ExtendWith(MockitoExtension.class)
 class ReportingServiceTest {

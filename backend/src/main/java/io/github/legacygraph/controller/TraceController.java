@@ -4,7 +4,7 @@ import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.trace.TraceIngestRequest;
 import io.github.legacygraph.dto.trace.TraceTopology;
 import io.github.legacygraph.entity.RuntimeTrace;
-import io.github.legacygraph.service.TraceIngestionService;
+import io.github.legacygraph.service.scan.TraceIngestionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;

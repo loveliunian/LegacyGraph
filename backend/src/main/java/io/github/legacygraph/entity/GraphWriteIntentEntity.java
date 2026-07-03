@@ -44,4 +44,19 @@ public class GraphWriteIntentEntity {
     private LocalDateTime updatedAt;
 
     private LocalDateTime finishedAt;
+
+    /** 并发锁 workerId（防止多实例同时处理同一条意图） */
+    private String runningLock;
+
+    /** 并发锁获取时间 */
+    private LocalDateTime runningLockAt;
+
+    /** 死信标记：超过最大重试次数仍失败的意图 */
+    private Boolean deadLetter;
+
+    /** 死信原因 */
+    private String deadLetterReason;
+
+    /** 优先级：值越大越优先处理 */
+    private Integer priority;
 }

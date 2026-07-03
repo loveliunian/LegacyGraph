@@ -1,7 +1,10 @@
 <template>
   <div class="drift-queue">
     <div class="filter-bar">
-      <el-radio-group v-model="driftFilter" size="small" @change="loadDrift">
+      <el-radio-group
+        v-model="driftFilter"
+        size="small"
+        @change="loadDrift">
         <el-radio-button value="all">全部</el-radio-button>
         <el-radio-button value="static_only">仅静态</el-radio-button>
         <el-radio-button value="dynamic_only">仅运行时</el-radio-button>
@@ -11,34 +14,70 @@
       </el-radio-group>
     </div>
 
-    <el-table :data="driftItems" v-loading="loading" stripe size="small" empty-text="暂无漂移项 — 图谱与实际一致">
-      <el-table-column label="类型" width="120">
+    <el-table
+      v-loading="loading"
+      :data="driftItems"
+      stripe
+      size="small"
+      empty-text="暂无漂移项 — 图谱与实际一致">
+      <el-table-column
+        label="类型"
+        width="120">
         <template #default="{ row }">
-          <el-tag :type="driftTypeTag(row.driftType)" size="small">{{ driftTypeLabel(row.driftType) }}</el-tag>
+          <el-tag
+            :type="driftTypeTag(row.driftType)"
+            size="small">
+            {{ driftTypeLabel(row.driftType) }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="elementName" label="元素" min-width="200" />
-      <el-table-column label="描述" min-width="200">
+      <el-table-column
+        prop="elementName"
+        label="元素"
+        min-width="200" />
+      <el-table-column
+        label="描述"
+        min-width="200">
         <template #default="{ row }">{{ row.description || row.elementName }}</template>
       </el-table-column>
-      <el-table-column label="严重度" width="90">
+      <el-table-column
+        label="严重度"
+        width="90">
         <template #default="{ row }">
-          <el-tag :type="severityTag(row.severity)" size="small">{{ row.severity || 'MEDIUM' }}</el-tag>
+          <el-tag
+            :type="severityTag(row.severity)"
+            size="small">
+            {{ row.severity || 'MEDIUM' }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="创建时间" width="160">
+      <el-table-column
+        label="创建时间"
+        width="160">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="120">
+      <el-table-column
+        label="操作"
+        width="120">
         <template #default="{ row }">
-          <el-button size="small" type="primary" link @click="createReview(row)">创建审核</el-button>
+          <el-button
+            size="small"
+            type="primary"
+            link
+            @click="createReview(row)">
+            创建审核
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <!-- 统计摘要 -->
-    <div class="drift-summary" v-if="driftSummary">
-      <el-alert type="info" :closable="false">
+    <div
+      v-if="driftSummary"
+      class="drift-summary">
+      <el-alert
+        type="info"
+        :closable="false">
         <template #title>
           漂移统计：仅静态 {{ driftSummary.staticOnly || 0 }} ·
           仅运行时 {{ driftSummary.dynamicOnly || 0 }} ·

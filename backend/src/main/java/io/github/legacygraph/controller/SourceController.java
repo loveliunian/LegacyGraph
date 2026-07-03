@@ -15,7 +15,9 @@ import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.DocChunkRepository;
-import io.github.legacygraph.service.ScanVersionService;
+import io.github.legacygraph.service.graph.GraphCacheInvalidator;
+import io.github.legacygraph.service.scan.ScanVersionService;
+import io.github.legacygraph.service.scan.SourceService;
 import io.github.legacygraph.task.ProjectScanner;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -70,8 +72,8 @@ public class SourceController {
     private final DocChunkRepository docChunkRepository;
     private final ScanVersionService scanVersionService;
     private final ProjectScanner projectScanner;
-    private final io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator;
-    private final io.github.legacygraph.service.SourceService sourceService;
+    private final GraphCacheInvalidator graphCacheInvalidator;
+    private final SourceService sourceService;
 
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -95,8 +97,8 @@ public class SourceController {
                             DocChunkRepository docChunkRepository,
                             ScanVersionService scanVersionService,
                             ProjectScanner projectScanner,
-                            io.github.legacygraph.service.GraphCacheInvalidator graphCacheInvalidator,
-                            io.github.legacygraph.service.SourceService sourceService) {
+                            GraphCacheInvalidator graphCacheInvalidator,
+                            SourceService sourceService) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;

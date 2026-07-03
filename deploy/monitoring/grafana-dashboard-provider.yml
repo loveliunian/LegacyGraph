@@ -1,0 +1,15 @@
+# Grafana Dashboard for LegacyGraph
+# 导入方式：Grafana → Import → 粘贴 JSON 或上传文件
+# 数据源：Prometheus（需先配置 Prometheus 数据源）
+
+apiVersion: 1
+providers:
+  - name: 'LegacyGraph'
+    orgId: 1
+    folder: 'LegacyGraph'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

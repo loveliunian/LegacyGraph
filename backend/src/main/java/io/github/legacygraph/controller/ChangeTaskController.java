@@ -6,7 +6,7 @@ import io.github.legacygraph.dto.graph.PatchPlan;
 import io.github.legacygraph.entity.ChangeTask;
 import io.github.legacygraph.entity.PrTask;
 import io.github.legacygraph.entity.ValidationGate;
-import io.github.legacygraph.service.ChangeTaskService;
+import io.github.legacygraph.service.change.ChangeTaskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;

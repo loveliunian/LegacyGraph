@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.springframework.cache.CacheManager;
+import io.github.legacygraph.service.scan.ProjectOverviewService;
 
 /**
  * 项目概览服务集成测试（使用 H2 数据库）。

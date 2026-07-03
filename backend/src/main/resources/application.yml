@@ -5,14 +5,16 @@ server:
     engine: jetty
 
 spring:
+  profiles:
+    active: dev
   application:
     name: legacy-graph-api
 
-  # 数据源配置
+  # 数据源配置（生产环境必须通过环境变量注入）
   datasource:
-    url: ${POSTGRES_URL:jdbc:postgresql://118.145.225.100:5432/legacy_graph}
-    username: ${POSTGRES_USERNAME:mumuai}
-    password: ${POSTGRES_PASSWORD:Liucl157}
+    url: ${POSTGRES_URL:}
+    username: ${POSTGRES_USERNAME:}
+    password: ${POSTGRES_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       minimum-idle: 5
@@ -32,15 +34,16 @@ spring:
     locations: classpath:db/migration
     clean-disabled: true
     validate-on-migrate: true
+    out-of-order: true
     placeholder-replacement: false
 
   # Redis 配置
   data:
     redis:
-      host: ${REDIS_HOST:47.95.208.205}
+      host: ${REDIS_HOST:}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:Liucl157}
-      database: 11
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:11}
       lettuce:
         pool:
           max-active: 8
@@ -62,16 +65,16 @@ spring:
 
   # Neo4j 配置
   neo4j:
-    uri: ${NEO4J_URI:bolt://118.145.225.100:7687}
+    uri: ${NEO4J_URI:}
     authentication:
-      username: ${NEO4J_USERNAME:neo4j}
-      password: ${NEO4J_PASSWORD:Liucl157}
+      username: ${NEO4J_USERNAME:}
+      password: ${NEO4J_PASSWORD:}
 
   # Spring AI OpenAI 配置（兼容 DeepSeek）
   # api-key 从数据库 lg_llm_provider 表读取，此处仅做占位
   ai:
     openai:
-      api-key: ${DEEPSEEK_API_KEY:your-deepseek-api-key}
+      api-key: ${DEEPSEEK_API_KEY:}
       base-url: https://api.deepseek.com/v1
       chat:
         options:
@@ -101,14 +104,14 @@ mybatis-plus:
 
 # MinIO 配置
 minio:
-  endpoint: ${MINIO_ENDPOINT:http://47.95.208.205:9000}
-  access-key: ${MINIO_ACCESS_KEY:admin}
-  secret-key: ${MINIO_SECRET_KEY:Liucl@157}
+  endpoint: ${MINIO_ENDPOINT:}
+  access-key: ${MINIO_ACCESS_KEY:}
+  secret-key: ${MINIO_SECRET_KEY:}
   bucket-name: legacy-graph
 
 # JWT 配置
 jwt:
-  secret: legacy-graph-secret-key-for-jwt-token-authentication-2026
+  secret: ${JWT_SECRET:}
   expiration: 86400000
 
 # 日志配置
@@ -116,6 +119,25 @@ logging:
   level:
     io.github.legacygraph: info
     org.springframework.security: warn
+
+# Actuator 端点收口
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  health:
+    defaults:
+      enabled: true
+    neo4j:
+      enabled: true
+    redis:
+      enabled: true
+    db:
+      enabled: true
 
 # OpenAPI/Swagger 配置
 springdoc:

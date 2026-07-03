@@ -1,0 +1,196 @@
+package io.github.legacygraph.service.scan;
+
+import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.entity.DbConnection;
+import io.github.legacygraph.extractors.DatabaseConstraintExtractor;
+import io.github.legacygraph.extractors.DatabaseMetadataExtractor;
+import io.github.legacygraph.extractors.DatabaseMetadataExtractor.TableMetadata;
+import io.github.legacygraph.repository.DbConnectionRepository;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import javax.sql.DataSource;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+public class DatabaseMetadataScanService {
+
+    private final GraphBuilder graphBuilder;
+    private final DatabaseConstraintExtractor databaseConstraintExtractor;
+    private final DbConnectionRepository dbConnectionRepository;
+
+    public DatabaseMetadataScanService(GraphBuilder graphBuilder) {
+        this(graphBuilder, new DatabaseConstraintExtractor(), null);
+    }
+
+    public DatabaseMetadataScanService(GraphBuilder graphBuilder,
+                                       DatabaseConstraintExtractor databaseConstraintExtractor) {
+        this(graphBuilder, databaseConstraintExtractor, null);
+    }
+
+    @Autowired
+    public DatabaseMetadataScanService(GraphBuilder graphBuilder,
+                                       DatabaseConstraintExtractor databaseConstraintExtractor,
+                                       DbConnectionRepository dbConnectionRepository) {
+        this.graphBuilder = graphBuilder;
+        this.databaseConstraintExtractor = databaseConstraintExtractor;
+        this.dbConnectionRepository = dbConnectionRepository;
+    }
+
+    public int scan(String projectId, String versionId, DataSource dataSource, String schema, String dbType) {
+        return scan(projectId, versionId, dataSource, schema, dbType,
+                Collections.emptyList(), Collections.emptyList(), null);
+    }
+
+    public int scan(String projectId, String versionId, DataSource dataSource, DbConnection connection) {
+        if (connection == null) {
+            return scan(projectId, versionId, dataSource, null, null);
+        }
+        return scan(projectId, versionId, dataSource,
+                connection.getSchemaName(),
+                connection.getDbType(),
+                parsePatterns(connection.getIncludeTables()),
+                parsePatterns(connection.getExcludeTables()),
+                connection);
+    }
+
+    private int scan(String projectId, String versionId, DataSource dataSource,
+                     String schema, String dbType,
+                     List<String> includeTables,
+                     List<String> excludeTables,
+                     DbConnection connection) {
+        String effectiveSchema = (schema != null && !schema.isBlank()) ? schema : "public";
+        boolean isMySql = "mysql".equalsIgnoreCase(dbType) || "mariadb".equalsIgnoreCase(dbType);
+        log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=extracting schema {} (raw: {}, dbType: {}, isMySql: {})",
+                projectId, versionId, effectiveSchema, schema, dbType, isMySql);
+        DatabaseMetadataExtractor extractor = new DatabaseMetadataExtractor();
+        try {
+            var tables = extractor.extractFromSchema(dataSource, effectiveSchema, isMySql);
+            var filteredTables = tables.stream()
+                    .filter(table -> shouldScanTable(table.getTableName(), includeTables, excludeTables))
+                    .toList();
+            String fingerprint = computeSchemaFingerprint(filteredTables);
+            if (connection != null && fingerprint.equals(connection.getSchemaFingerprint())) {
+                updateConnectionScanSnapshot(connection, filteredTables.size(), fingerprint);
+                log.info("DB schema unchanged, but still rebuilding graph for consistency: connectionId={}, schema={}, tables={}",
+                        connection.getId(), effectiveSchema, filteredTables.size());
+                // 即使 fingerprint 相同也重建图谱，确保数据一致性
+            } else {
+                log.info("DB schema changed or first scan, rebuilding graph: connectionId={}, schema={}, tables={}",
+                        connection != null ? connection.getId() : "null", effectiveSchema, filteredTables.size());
+            }
+            
+            graphBuilder.buildDatabaseGraph(projectId, versionId, filteredTables);
+            buildConstraintGraph(projectId, versionId, dataSource, effectiveSchema, isMySql,
+                    includeTables, excludeTables);
+            updateConnectionScanSnapshot(connection, filteredTables.size(), fingerprint);
+            log.info("Extracted {} tables from database schema {} ({} filtered out)",
+                    filteredTables.size(), effectiveSchema, tables.size() - filteredTables.size());
+            return filteredTables.size();
+        } catch (Exception e) {
+            log.error("Failed to extract database metadata for schema {}", effectiveSchema, e);
+            return 0;
+        }
+    }
+
+    private void buildConstraintGraph(String projectId, String versionId, DataSource dataSource,
+                                      String effectiveSchema, boolean isMySql) {
+        buildConstraintGraph(projectId, versionId, dataSource, effectiveSchema, isMySql,
+                Collections.emptyList(), Collections.emptyList());
+    }
+
+    private void buildConstraintGraph(String projectId, String versionId, DataSource dataSource,
+                                      String effectiveSchema, boolean isMySql,
+                                      List<String> includeTables,
+                                      List<String> excludeTables) {
+        try {
+            String catalog = isMySql ? effectiveSchema : null;
+            String schemaPattern = isMySql ? null : effectiveSchema;
+            var foreignKeys = databaseConstraintExtractor.extractForeignKeys(dataSource, catalog, schemaPattern)
+                    .stream()
+                    .filter(fk -> shouldScanTable(fk.getFkTableName(), includeTables, excludeTables)
+                            && shouldScanTable(fk.getPkTableName(), includeTables, excludeTables))
+                    .toList();
+            var indexes = databaseConstraintExtractor.extractIndexes(dataSource, catalog, schemaPattern)
+                    .stream()
+                    .filter(index -> shouldScanTable(index.getTableName(), includeTables, excludeTables))
+                    .toList();
+            graphBuilder.buildDatabaseConstraintGraph(projectId, versionId, effectiveSchema, foreignKeys, indexes);
+            log.info("Extracted {} foreign keys and {} index entries from database schema {}",
+                    foreignKeys.size(), indexes.size(), effectiveSchema);
+        } catch (Exception e) {
+            log.warn("Failed to extract database constraints for schema {}: {}", effectiveSchema, e.getMessage());
+        }
+    }
+
+    /**
+     * 计算 schema fingerprint：表名 + 列名 + 数据类型 + 可空性 的 SHA-256。
+     */
+    public static String computeSchemaFingerprint(List<TableMetadata> tables) {
+        if (tables == null || tables.isEmpty()) {
+            return "";
+        }
+        String payload = tables.stream()
+                .sorted(Comparator.comparing(TableMetadata::getTableName))
+                .map(table -> table.getTableName() + ":" + table.getColumns().stream()
+                        .sorted(Comparator.comparing(col -> col.getColumnName() != null ? col.getColumnName() : ""))
+                        .map(col -> (col.getColumnName() != null ? col.getColumnName() : "") + ":"
+                                + (col.getDataType() != null ? col.getDataType() : "") + ":"
+                                + (Boolean.TRUE.equals(col.getNullable()) ? "Y" : "N"))
+                        .collect(Collectors.joining(",")))
+                .collect(Collectors.joining("|"));
+        return DigestUtils.sha256Hex(payload);
+    }
+
+    /**
+     * 判断是否应扫描指定表（include/exclude 过滤）。
+     */
+    public static boolean shouldScanTable(String tableName, List<String> includes, List<String> excludes) {
+        boolean included = includes == null || includes.isEmpty()
+                || includes.stream().anyMatch(pattern -> wildcardMatch(pattern, tableName));
+        boolean excluded = excludes != null
+                && excludes.stream().anyMatch(pattern -> wildcardMatch(pattern, tableName));
+        return included && !excluded;
+    }
+
+    private static boolean wildcardMatch(String pattern, String text) {
+        if (text == null) return false;
+        if ("*".equals(pattern)) return true;
+        String regex = pattern
+                .replace(".", "\\.")
+                .replace("*", ".*")
+                .replace("?", ".");
+        return text.matches(regex);
+    }
+
+    private static List<String> parsePatterns(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(pattern -> !pattern.isBlank())
+                .toList();
+    }
+
+    private void updateConnectionScanSnapshot(DbConnection connection, int tableCount, String fingerprint) {
+        if (connection == null || dbConnectionRepository == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        connection.setTableCount(tableCount);
+        connection.setLastScanTime(now);
+        connection.setSchemaFingerprint(fingerprint);
+        connection.setSchemaFingerprintUpdatedAt(now);
+        connection.setUpdatedAt(now);
+        dbConnectionRepository.updateById(connection);
+    }
+}

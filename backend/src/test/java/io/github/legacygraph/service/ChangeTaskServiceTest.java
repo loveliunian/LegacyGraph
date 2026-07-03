@@ -22,6 +22,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.change.ChangeTaskService;
+import io.github.legacygraph.service.change.ImpactSubgraphService;
+import io.github.legacygraph.service.test.PatchPlanValidator;
+import io.github.legacygraph.service.change.PrOrchestrator;
+import io.github.legacygraph.service.test.ValidationGateRunner;
 
 @ExtendWith(MockitoExtension.class)
 class ChangeTaskServiceTest {

@@ -10,7 +10,7 @@
       :max-zoom="4"
       :default-edge-options="{ type: 'smoothstep', animated: false }"
       :node-types="nodeTypes"
-      :onlyRenderVisibleElements="nodes.length > 100"
+      :only-render-visible-elements="nodes.length > 100"
       class="vue-flow-container"
       @node-click="(e: any) => handleNodeClick(e)"
       @edge-click="(e: any) => handleEdgeClick(e)"
@@ -25,39 +25,76 @@
         <span>关系图谱</span>
       </div>
       <div class="panel-stats">
-        <el-tag size="small" type="info">总节点: {{ totalNodesCount }}</el-tag>
-        <el-tag size="small" type="info">显示节点: {{ visibleNodes.length }}</el-tag>
-        <el-tag size="small" type="success">总关系: {{ totalEdgesCount }}</el-tag>
-        <el-tag size="small" type="success">显示关系: {{ visibleEdges.length }}</el-tag>
+        <el-tag
+          size="small"
+          type="info">
+          总节点: {{ totalNodesCount }}
+        </el-tag>
+        <el-tag
+          size="small"
+          type="info">
+          显示节点: {{ visibleNodes.length }}
+        </el-tag>
+        <el-tag
+          size="small"
+          type="success">
+          总关系: {{ totalEdgesCount }}
+        </el-tag>
+        <el-tag
+          size="small"
+          type="success">
+          显示关系: {{ visibleEdges.length }}
+        </el-tag>
       </div>
-      <div v-if="isAggregating" class="aggregation-info">
-        <el-tag size="small" type="warning">已聚合 {{ aggregatedGroupCount }} 组</el-tag>
+      <div
+        v-if="isAggregating"
+        class="aggregation-info">
+        <el-tag
+          size="small"
+          type="warning">
+          已聚合 {{ aggregatedGroupCount }} 组
+        </el-tag>
       </div>
     </div>
     
     <div class="graph-panel graph-panel-right">
       <el-space wrap>
-        <el-button size="small" @click="fitView">
+        <el-button
+          size="small"
+          @click="fitView">
           <el-icon><ZoomOut /></el-icon>
           适应视图
         </el-button>
-        <el-button size="small" @click="centerView">
+        <el-button
+          size="small"
+          @click="centerView">
           <el-icon><FullScreen /></el-icon>
           居中
         </el-button>
-        <el-button size="small" @click="toggleLayout" :loading="isLayouting">
+        <el-button
+          size="small"
+          :loading="isLayouting"
+          @click="toggleLayout">
           <el-icon><Grid /></el-icon>
           {{ currentLayout }}布局
         </el-button>
-        <el-button size="small" @click="exportGraph">
+        <el-button
+          size="small"
+          @click="exportGraph">
           <el-icon><Download /></el-icon>
           导出
         </el-button>
       </el-space>
     </div>
 
-    <div v-if="isLayouting" class="loading-overlay">
-      <el-icon class="is-loading loading-icon" :size="48"><Loading /></el-icon>
+    <div
+      v-if="isLayouting"
+      class="loading-overlay">
+      <el-icon
+        class="is-loading loading-icon"
+        :size="48">
+        <Loading />
+      </el-icon>
       <div class="loading-text">正在计算布局... ({{ nodes.length }} 个节点)</div>
     </div>
   </div>
@@ -381,6 +418,7 @@ function applyLayoutSync(layout: string) {
       })
       break
     case '网格':
+    {
       const cols = Math.ceil(Math.sqrt(nodeCount))
       visibleNodes.value.forEach((node, index) => {
         node.position = {
@@ -389,6 +427,7 @@ function applyLayoutSync(layout: string) {
         }
       })
       break
+    }
     case '分层':
       visibleNodes.value.forEach((node, index) => {
         node.position = {

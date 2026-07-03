@@ -2,10 +2,20 @@
   <div class="execution-log">
     <div class="header">
       <span>执行日志</span>
-      <el-button link size="small" @click="clear">清空</el-button>
+      <el-button
+        link
+        size="small"
+        @click="clear">
+        清空
+      </el-button>
     </div>
-    <div ref="logContainer" class="log-container" v-html="formattedLog"></div>
-    <div v-if="!log" class="empty">
+    <div
+      ref="logContainer"
+      class="log-container"
+      v-html="formattedLog" />
+    <div
+      v-if="!log"
+      class="empty">
       暂无日志
     </div>
   </div>

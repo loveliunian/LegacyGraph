@@ -42,6 +42,9 @@ public class FlywayConfig {
     @Value("${spring.flyway.validate-on-migrate:true}")
     private boolean validateOnMigrate;
 
+    @Value("${spring.flyway.out-of-order:false}")
+    private boolean outOfOrder;
+
     @Bean
     public Flyway flyway(DataSource dataSource) {
         Flyway flyway = Flyway.configure()
@@ -52,6 +55,7 @@ public class FlywayConfig {
                 .baselineVersion(baselineVersion)
                 .cleanDisabled(cleanDisabled)
                 .validateOnMigrate(validateOnMigrate)
+                .outOfOrder(outOfOrder)
                 .placeholderReplacement(false)
                 .load();
 

@@ -3,21 +3,31 @@
     <div class="page-header">
       <h3>验证报告</h3>
       <div class="header-actions">
-        <el-select v-model="selectedVersion" placeholder="选择图谱版本" size="small" style="width: 220px;">
+        <el-select
+          v-model="selectedVersion"
+          placeholder="选择图谱版本"
+          size="small"
+          style="width: 220px;">
           <el-option
-            v-for="v in versions" :key="v.id"
+            v-for="v in versions"
+            :key="v.id"
             :label="(v.versionNumber || v.versionName || '') + ' - ' + (v.nodeCount || 0) + '节点'"
             :value="v.id"
           />
         </el-select>
-        <el-button type="primary" size="small" @click="exportReport">
+        <el-button
+          type="primary"
+          size="small"
+          @click="exportReport">
           <el-icon><Download /></el-icon>
           导出报告
         </el-button>
       </div>
     </div>
 
-    <el-row :gutter="16" class="stats-row">
+    <el-row
+      :gutter="16"
+      class="stats-row">
       <el-col :span="6">
         <el-card class="stat-card">
           <div class="stat-content">
@@ -72,7 +82,9 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" class="content-row">
+    <el-row
+      :gutter="16"
+      class="content-row">
       <el-col :span="12">
         <el-card class="section-card">
           <template #header>
@@ -81,8 +93,13 @@
           <div class="chart-placeholder">
             <div class="chart-content">
               <div class="pie-chart">
-                <div class="pie-item" v-for="item in nodeTypeDistribution" :key="item.type">
-                  <div class="pie-color" :style="{ backgroundColor: item.color }"></div>
+                <div
+                  v-for="item in nodeTypeDistribution"
+                  :key="item.type"
+                  class="pie-item">
+                  <div
+                    class="pie-color"
+                    :style="{ backgroundColor: item.color }" />
                   <span class="pie-label">{{ item.label }}</span>
                   <span class="pie-value">{{ item.count }} ({{ item.percentage }}%)</span>
                 </div>
@@ -99,10 +116,15 @@
           </template>
           <div class="chart-placeholder">
             <div class="confidence-chart">
-              <div class="confidence-item" v-for="item in confidenceDistribution" :key="item.range">
+              <div
+                v-for="item in confidenceDistribution"
+                :key="item.range"
+                class="confidence-item">
                 <div class="confidence-label">{{ item.range }}</div>
                 <div class="confidence-bar">
-                  <div class="confidence-fill" :style="{ width: item.percentage + '%', backgroundColor: item.color }"></div>
+                  <div
+                    class="confidence-fill"
+                    :style="{ width: item.percentage + '%', backgroundColor: item.color }" />
                 </div>
                 <div class="confidence-value">{{ item.count }}个</div>
               </div>
@@ -112,7 +134,9 @@
       </el-col>
     </el-row>
 
-    <el-row :gutter="16" class="content-row">
+    <el-row
+      :gutter="16"
+      class="content-row">
       <el-col :span="16">
         <el-card class="section-card">
           <template #header>
@@ -122,16 +146,23 @@
             </div>
           </template>
           <div class="risk-list">
-            <div class="risk-item" v-for="risk in risks" :key="risk.id">
+            <div
+              v-for="risk in risks"
+              :key="risk.id"
+              class="risk-item">
               <div class="risk-header">
-                <el-tag :type="risk.severity === 'HIGH' ? 'danger' : risk.severity === 'MEDIUM' ? 'warning' : 'info'" size="small">
+                <el-tag
+                  :type="risk.severity === 'HIGH' ? 'danger' : risk.severity === 'MEDIUM' ? 'warning' : 'info'"
+                  size="small">
                   {{ risk.severity === 'HIGH' ? '高风险' : risk.severity === 'MEDIUM' ? '中风险' : '低风险' }}
                 </el-tag>
                 <span class="risk-type">{{ getRiskTypeText(risk.riskType) }}</span>
               </div>
               <div class="risk-name">{{ risk.riskName }}</div>
               <div class="risk-desc">{{ risk.description }}</div>
-              <div class="risk-suggestion" v-if="risk.suggestion">
+              <div
+                v-if="risk.suggestion"
+                class="risk-suggestion">
                 <el-icon><Opportunity /></el-icon>
                 <span>建议: {{ risk.suggestion }}</span>
               </div>
@@ -153,35 +184,49 @@
             <div class="coverage-item">
               <div class="coverage-label">API接口覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="coverageData.apiCoverage" :stroke-width="20" :status="coverageData.apiCoverage >= 70 ? 'success' : coverageData.apiCoverage >= 40 ? 'warning' : 'exception'" />
+                <el-progress
+                  :percentage="coverageData.apiCoverage"
+                  :stroke-width="20"
+                  :status="coverageData.apiCoverage >= 70 ? 'success' : coverageData.apiCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
               <div class="coverage-value">{{ coverageData.apiCoverage }}%</div>
             </div>
             <div class="coverage-item">
               <div class="coverage-label">业务流程覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="coverageData.processCoverage" :stroke-width="20" :status="coverageData.processCoverage >= 70 ? 'success' : coverageData.processCoverage >= 40 ? 'warning' : 'exception'" />
+                <el-progress
+                  :percentage="coverageData.processCoverage"
+                  :stroke-width="20"
+                  :status="coverageData.processCoverage >= 70 ? 'success' : coverageData.processCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
               <div class="coverage-value">{{ coverageData.processCoverage }}%</div>
             </div>
             <div class="coverage-item">
               <div class="coverage-label">数据库表覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="coverageData.tableCoverage" :stroke-width="20" :status="coverageData.tableCoverage >= 70 ? 'success' : coverageData.tableCoverage >= 40 ? 'warning' : 'exception'" />
+                <el-progress
+                  :percentage="coverageData.tableCoverage"
+                  :stroke-width="20"
+                  :status="coverageData.tableCoverage >= 70 ? 'success' : coverageData.tableCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
               <div class="coverage-value">{{ coverageData.tableCoverage }}%</div>
             </div>
             <div class="coverage-item">
               <div class="coverage-label">代码行覆盖率</div>
               <div class="coverage-bar">
-                <el-progress :percentage="coverageData.lineCoverage" :stroke-width="20" :status="coverageData.lineCoverage >= 70 ? 'success' : coverageData.lineCoverage >= 40 ? 'warning' : 'exception'" />
+                <el-progress
+                  :percentage="coverageData.lineCoverage"
+                  :stroke-width="20"
+                  :status="coverageData.lineCoverage >= 70 ? 'success' : coverageData.lineCoverage >= 40 ? 'warning' : 'exception'" />
               </div>
               <div class="coverage-value">{{ coverageData.lineCoverage }}%</div>
             </div>
           </div>
         </el-card>
 
-        <el-card class="section-card" style="margin-top: 16px;">
+        <el-card
+          class="section-card"
+          style="margin-top: 16px;">
           <template #header>
             <span>关键指标摘要</span>
           </template>
@@ -212,23 +257,42 @@
         <span>AI 分析建议</span>
       </template>
       <div class="ai-suggestions">
-        <div v-if="aiInsightSummary" class="insight-summary">{{ aiInsightSummary }}</div>
-        <div class="suggestion-item" v-for="action in aiActions" :key="action.title + action.actionType">
+        <div
+          v-if="aiInsightSummary"
+          class="insight-summary">
+          {{ aiInsightSummary }}
+        </div>
+        <div
+          v-for="action in aiActions"
+          :key="action.title + action.actionType"
+          class="suggestion-item">
           <el-icon><Star /></el-icon>
           <div class="suggestion-content">
             <div class="suggestion-title">
               {{ action.title }}
-              <el-tag size="small" :type="action.priority === 'HIGH' ? 'danger' : action.priority === 'MEDIUM' ? 'warning' : 'info'">
+              <el-tag
+                size="small"
+                :type="action.priority === 'HIGH' ? 'danger' : action.priority === 'MEDIUM' ? 'warning' : 'info'">
                 {{ action.priority || 'MEDIUM' }}
               </el-tag>
             </div>
             <div class="suggestion-desc">{{ action.rationale || action.expectedBenefit || action.source }}</div>
-            <div v-if="action.targets?.length" class="suggestion-targets">
-              <el-tag v-for="target in action.targets.slice(0, 4)" :key="target" size="small" effect="plain">{{ target }}</el-tag>
+            <div
+              v-if="action.targets?.length"
+              class="suggestion-targets">
+              <el-tag
+                v-for="target in action.targets.slice(0, 4)"
+                :key="target"
+                size="small"
+                effect="plain">
+                {{ target }}
+              </el-tag>
             </div>
           </div>
         </div>
-        <div v-if="!aiActions.length" class="empty-suggestions">
+        <div
+          v-if="!aiActions.length"
+          class="empty-suggestions">
           当前版本暂无 AI 行动建议
         </div>
       </div>

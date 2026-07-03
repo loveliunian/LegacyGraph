@@ -8,36 +8,59 @@
           <template #header>
             <div class="card-header">
               <span>项目总体统计</span>
-              <el-tag v-if="loadingDashboard" type="info" size="small">加载中...</el-tag>
+              <el-tag
+                v-if="loadingDashboard"
+                type="info"
+                size="small">
+                加载中...
+              </el-tag>
             </div>
           </template>
           <el-row :gutter="10">
             <el-col :span="6">
               <div class="stat-item">
-                <div class="stat-number" style="color: #409eff;">{{ stats.totalNodes }}</div>
+                <div
+                  class="stat-number"
+                  style="color: #409eff;">
+                  {{ stats.totalNodes }}
+                </div>
                 <div class="stat-label">图谱节点</div>
               </div>
             </el-col>
             <el-col :span="6">
               <div class="stat-item">
-                <div class="stat-number" style="color: #67c23a;">{{ stats.confirmedNodes }}</div>
+                <div
+                  class="stat-number"
+                  style="color: #67c23a;">
+                  {{ stats.confirmedNodes }}
+                </div>
                 <div class="stat-label">已确认</div>
               </div>
             </el-col>
             <el-col :span="6">
               <div class="stat-item">
-                <div class="stat-number" style="color: #e6a23c;">{{ stats.totalEdges }}</div>
+                <div
+                  class="stat-number"
+                  style="color: #e6a23c;">
+                  {{ stats.totalEdges }}
+                </div>
                 <div class="stat-label">关系连接</div>
               </div>
             </el-col>
             <el-col :span="6">
               <div class="stat-item">
-                <div class="stat-number" style="color: #67c23a;">{{ stats.confirmedEdges }}</div>
+                <div
+                  class="stat-number"
+                  style="color: #67c23a;">
+                  {{ stats.confirmedEdges }}
+                </div>
                 <div class="stat-label">已确认</div>
               </div>
             </el-col>
           </el-row>
-          <el-row :gutter="10" class="mt-4">
+          <el-row
+            :gutter="10"
+            class="mt-4">
             <el-col :span="8">
               <div class="stat-item-secondary">
                 <div class="stat-label">平均置信度</div>
@@ -87,9 +110,16 @@
               <span>节点类型分布</span>
             </div>
           </template>
-          <div v-if="nodeTypeStats.length > 0" class="type-distribution">
-            <div v-for="stat in nodeTypeStats" :key="stat.type" class="type-row">
-              <div class="type-icon" :style="{ backgroundColor: stat.color + '20', color: stat.color }">
+          <div
+            v-if="nodeTypeStats.length > 0"
+            class="type-distribution">
+            <div
+              v-for="stat in nodeTypeStats"
+              :key="stat.type"
+              class="type-row">
+              <div
+                class="type-icon"
+                :style="{ backgroundColor: stat.color + '20', color: stat.color }">
                 <el-icon :size="16"><Folder /></el-icon>
               </div>
               <div class="type-name">{{ stat.displayName || stat.nodeType }}</div>
@@ -102,17 +132,25 @@
               </div>
               <div class="type-stats">
                 <span class="type-count">{{ stat.confirmed }}/{{ stat.total }}</span>
-                <span class="type-conf" v-if="stat.averageConfidence">
+                <span
+                  v-if="stat.averageConfidence"
+                  class="type-conf">
                   置信度 {{ (stat.averageConfidence * 100).toFixed(0) }}%
                 </span>
               </div>
             </div>
           </div>
-          <div v-else class="empty-chart">暂无节点类型分布数据</div>
+          <div
+            v-else
+            class="empty-chart">
+            暂无节点类型分布数据
+          </div>
         </el-card>
 
         <!-- 置信度分布 + 数据源状态 -->
-        <el-row :gutter="20" class="mt-4">
+        <el-row
+          :gutter="20"
+          class="mt-4">
           <el-col :span="14">
             <el-card class="trend-card">
               <template #header>
@@ -120,7 +158,9 @@
                   <span>置信度分布</span>
                 </div>
               </template>
-              <div v-if="confidenceDistribution.some(b => b.count > 0)" class="chart-container">
+              <div
+                v-if="confidenceDistribution.some(b => b.count > 0)"
+                class="chart-container">
                 <div
                   v-for="(bin, index) in confidenceDistribution"
                   :key="index"
@@ -136,7 +176,11 @@
                   <div class="label">{{ (bin.lower * 100).toFixed(0) }}-{{ (bin.upper * 100).toFixed(0) }}</div>
                 </div>
               </div>
-              <div v-else class="empty-chart">暂无置信度分布数据</div>
+              <div
+                v-else
+                class="empty-chart">
+                暂无置信度分布数据
+              </div>
             </el-card>
           </el-col>
           <el-col :span="10">
@@ -146,7 +190,9 @@
                   <span>数据源状态</span>
                 </div>
               </template>
-              <div v-if="sourceStats.repos > 0 || sourceStats.databases > 0 || sourceStats.documents > 0" class="source-grid">
+              <div
+                v-if="sourceStats.repos > 0 || sourceStats.databases > 0 || sourceStats.documents > 0"
+                class="source-grid">
                 <div class="source-item">
                   <div class="source-icon code">
                     <el-icon><FolderOpened /></el-icon>
@@ -175,7 +221,11 @@
                   </div>
                 </div>
               </div>
-              <div v-else class="empty-chart">暂无数据源</div>
+              <div
+                v-else
+                class="empty-chart">
+                暂无数据源
+              </div>
             </el-card>
           </el-col>
         </el-row>
@@ -190,7 +240,9 @@
               <span>当前项目</span>
             </div>
           </template>
-          <div v-if="currentProject" class="project-info">
+          <div
+            v-if="currentProject"
+            class="project-info">
             <p><strong>名称：</strong>{{ currentProject.projectName || '-' }}</p>
             <p><strong>编码：</strong>{{ currentProject.projectCode || '-' }}</p>
             <p><strong>负责人：</strong>{{ currentProject.owner || '-' }}</p>
@@ -204,11 +256,22 @@
               <span>迁移就绪度</span>
             </el-progress>
           </div>
-          <div v-else class="empty-state">
-            <el-empty description="请先选择项目" :image-size="80" />
+          <div
+            v-else
+            class="empty-state">
+            <el-empty
+              description="请先选择项目"
+              :image-size="80" />
           </div>
-          <div class="mt-4" v-if="currentProject">
-            <el-button type="primary" @click="goToProjectDetail" class="full-width">进入项目详情</el-button>
+          <div
+            v-if="currentProject"
+            class="mt-4">
+            <el-button
+              type="primary"
+              class="full-width"
+              @click="goToProjectDetail">
+              进入项目详情
+            </el-button>
           </div>
         </el-card>
 
@@ -217,25 +280,50 @@
           <template #header>
             <div class="card-header">
               <span>待审核</span>
-              <el-tag v-if="pendingItems.length > 0" type="warning" size="small">{{ pendingItems.length }}</el-tag>
+              <el-tag
+                v-if="pendingItems.length > 0"
+                type="warning"
+                size="small">
+                {{ pendingItems.length }}
+              </el-tag>
             </div>
           </template>
-          <div v-if="pendingItems.length > 0" class="pending-list">
-            <div v-for="item in pendingItems.slice(0, 5)" :key="item.id" class="pending-item">
-              <el-icon :size="10" :color="getConfidenceColor(item.confidence || 0)"><CircleCheck /></el-icon>
+          <div
+            v-if="pendingItems.length > 0"
+            class="pending-list">
+            <div
+              v-for="item in pendingItems.slice(0, 5)"
+              :key="item.id"
+              class="pending-item">
+              <el-icon
+                :size="10"
+                :color="getConfidenceColor(item.confidence || 0)">
+                <CircleCheck />
+              </el-icon>
               <span class="node-name">{{ item.nodeName || item.affectedNodeName || '未知节点' }}</span>
-              <span class="confidence" :class="getConfidenceClass(item.confidence || 0)">
+              <span
+                class="confidence"
+                :class="getConfidenceClass(item.confidence || 0)">
                 {{ ((item.confidence || 0) * 100).toFixed(0) }}%
               </span>
             </div>
-            <div class="more" v-if="pendingItems.length > 5">
+            <div
+              v-if="pendingItems.length > 5"
+              class="more">
               还有 {{ pendingItems.length - 5 }} 项待审核...
             </div>
           </div>
-          <div v-else class="empty-state">
+          <div
+            v-else
+            class="empty-state">
             暂无待审核项
           </div>
-          <el-button v-if="pendingItems.length > 0" type="primary" link class="mt-2" @click="goToReview">
+          <el-button
+            v-if="pendingItems.length > 0"
+            type="primary"
+            link
+            class="mt-2"
+            @click="goToReview">
             去审核 →
           </el-button>
         </el-card>
@@ -248,16 +336,32 @@
             </div>
           </template>
           <div class="actions-grid">
-            <el-button type="primary" plain @click="quickStartScan" :disabled="!currentProject">
+            <el-button
+              type="primary"
+              plain
+              :disabled="!currentProject"
+              @click="quickStartScan">
               <el-icon><Search /></el-icon> 新扫描
             </el-button>
-            <el-button type="primary" plain @click="quickGenerateReport" :disabled="!currentProject">
+            <el-button
+              type="primary"
+              plain
+              :disabled="!currentProject"
+              @click="quickGenerateReport">
               <el-icon><Download /></el-icon> 迁移报告
             </el-button>
-            <el-button type="primary" plain @click="quickFindMergeCandidates" :disabled="!currentProject">
+            <el-button
+              type="primary"
+              plain
+              :disabled="!currentProject"
+              @click="quickFindMergeCandidates">
               <el-icon><Link /></el-icon> 合并节点
             </el-button>
-            <el-button type="primary" plain @click="quickRunTests" :disabled="!currentProject">
+            <el-button
+              type="primary"
+              plain
+              :disabled="!currentProject"
+              @click="quickRunTests">
               <el-icon><CircleCheck /></el-icon> 执行测试
             </el-button>
           </div>
@@ -266,20 +370,27 @@
     </el-row>
 
     <!-- 迁移就绪度评估 -->
-    <el-row :gutter="20" class="mt-4" v-if="migrationReport">
+    <el-row
+      v-if="migrationReport"
+      :gutter="20"
+      class="mt-4">
       <el-col :span="24">
         <el-card>
           <template #header>
             <div class="card-header">
               <span>迁移就绪度评估</span>
-              <el-button size="small" @click="refreshMigrationReport">
+              <el-button
+                size="small"
+                @click="refreshMigrationReport">
                 <el-icon><Refresh /></el-icon> 刷新
               </el-button>
             </div>
           </template>
           <div class="migration-ready">
             <div class="overall-score">
-              <div class="score-circle" :class="getScoreClass(migrationReport.overallScore)">
+              <div
+                class="score-circle"
+                :class="getScoreClass(migrationReport.overallScore)">
                 <span class="score-value">{{ migrationReport.overallScore.toFixed(1) }}</span>
                 <span class="score-label">/ 100</span>
               </div>
@@ -313,7 +424,9 @@
                 />
               </div>
             </div>
-            <div class="risk-section" v-if="migrationReport.riskItems && migrationReport.riskItems.length > 0">
+            <div
+              v-if="migrationReport.riskItems && migrationReport.riskItems.length > 0"
+              class="risk-section">
               <div class="risk-header">
                 <el-icon color="#f56c6c"><WarningFilled /></el-icon>
                 <span>发现 {{ migrationReport.riskItems.length }} 个风险项</span>
@@ -328,17 +441,25 @@
                 >
                   {{ risk.riskType === 'LOW_CONFIDENCE' ? '低置信度' : risk.riskType === 'DISCONNECTED' ? '孤立节点' : risk.riskType }}: {{ risk.affectedNodeName }}
                 </el-tag>
-                <div v-if="migrationReport.riskItems.length > 5" class="mt-2 risk-more">
+                <div
+                  v-if="migrationReport.riskItems.length > 5"
+                  class="mt-2 risk-more">
                   ... 还有 {{ migrationReport.riskItems.length - 5 }} 个风险
                 </div>
               </div>
             </div>
           </div>
           <el-divider v-if="migrationReport.recommendations && migrationReport.recommendations.length > 0" />
-          <div v-if="migrationReport.recommendations && migrationReport.recommendations.length > 0" class="recommendations">
+          <div
+            v-if="migrationReport.recommendations && migrationReport.recommendations.length > 0"
+            class="recommendations">
             <h4><el-icon><Opportunity /></el-icon> 建议</h4>
             <ul>
-              <li v-for="(rec, index) in migrationReport.recommendations" :key="index">{{ rec }}</li>
+              <li
+                v-for="(rec, index) in migrationReport.recommendations"
+                :key="index">
+                {{ rec }}
+              </li>
             </ul>
           </div>
         </el-card>

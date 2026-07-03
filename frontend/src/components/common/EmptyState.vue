@@ -2,7 +2,9 @@
   <div class="empty-state">
     <div class="empty-state__image">
       <slot name="image">
-        <el-icon :size="80" color="#c0c4cc">
+        <el-icon
+          :size="80"
+          color="#c0c4cc">
           <document />
         </el-icon>
       </slot>
@@ -12,9 +14,14 @@
         <p>{{ description }}</p>
       </slot>
     </div>
-    <div class="empty-state__actions" v-if="$slots.actions || actions">
+    <div
+      v-if="$slots.actions || actions"
+      class="empty-state__actions">
       <slot name="actions">
-        <el-button v-for="action in actions" :key="action.text" @click="action.onClick">
+        <el-button
+          v-for="action in actions"
+          :key="action.text"
+          @click="action.onClick">
           {{ action.text }}
         </el-button>
       </slot>

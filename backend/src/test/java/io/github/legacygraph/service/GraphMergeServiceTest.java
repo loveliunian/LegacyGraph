@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.service.graph.GraphMergeService;
 
 class GraphMergeServiceTest {
 
@@ -74,7 +75,7 @@ class GraphMergeServiceTest {
         private GraphNode updatedNode;
 
         private FakeNeo4jGraphDao() {
-            super(null);
+            super(null, null, null, null, null);
         }
 
         @Override

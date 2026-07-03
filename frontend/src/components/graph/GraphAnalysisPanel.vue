@@ -6,22 +6,42 @@
         图谱分析
       </span>
       <el-button-group size="small">
-        <el-tooltip content="展开全部" placement="top">
-          <el-button :icon="FullScreen" @click="expandAll" />
+        <el-tooltip
+          content="展开全部"
+          placement="top">
+          <el-button
+            :icon="FullScreen"
+            @click="expandAll" />
         </el-tooltip>
-        <el-tooltip content="收起全部" placement="top">
-          <el-button :icon="ScaleToOriginal" @click="collapseAll" />
+        <el-tooltip
+          content="收起全部"
+          placement="top">
+          <el-button
+            :icon="ScaleToOriginal"
+            @click="collapseAll" />
         </el-tooltip>
       </el-button-group>
     </div>
 
     <div class="analysis-tabs">
-      <el-tabs v-model="activeTab" type="card" size="small">
-        <el-tab-pane label="路径分析" name="path">
+      <el-tabs
+        v-model="activeTab"
+        type="card"
+        size="small">
+        <el-tab-pane
+          label="路径分析"
+          name="path">
           <div class="path-analysis">
-            <el-form :model="pathForm" size="small" class="path-form">
+            <el-form
+              :model="pathForm"
+              size="small"
+              class="path-form">
               <el-form-item label="起点节点">
-                <el-select v-model="pathForm.startNode" placeholder="选择起点" filterable clearable>
+                <el-select
+                  v-model="pathForm.startNode"
+                  placeholder="选择起点"
+                  filterable
+                  clearable>
                   <el-option
                     v-for="node in nodes"
                     :key="node.id"
@@ -31,7 +51,11 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="目标节点">
-                <el-select v-model="pathForm.endNode" placeholder="选择终点" filterable clearable>
+                <el-select
+                  v-model="pathForm.endNode"
+                  placeholder="选择终点"
+                  filterable
+                  clearable>
                   <el-option
                     v-for="node in nodes"
                     :key="node.id"
@@ -41,24 +65,40 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="算法">
-                <el-radio-group v-model="pathForm.algorithm" size="small">
+                <el-radio-group
+                  v-model="pathForm.algorithm"
+                  size="small">
                   <el-radio-button value="shortest">最短路径</el-radio-button>
                   <el-radio-button value="all">所有路径</el-radio-button>
                 </el-radio-group>
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" size="small" @click="analyzePath" :loading="pathLoading">
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="pathLoading"
+                  @click="analyzePath">
                   <el-icon><Search /></el-icon>
                   分析路径
                 </el-button>
-                <el-button size="small" @click="clearPathAnalysis">清除</el-button>
+                <el-button
+                  size="small"
+                  @click="clearPathAnalysis">
+                  清除
+                </el-button>
               </el-form-item>
             </el-form>
 
-            <div class="path-results" v-if="pathResults.length > 0">
+            <div
+              v-if="pathResults.length > 0"
+              class="path-results">
               <div class="results-header">
                 <span>找到 {{ pathResults.length }} 条路径</span>
-                <el-tag size="small" type="info">{{ totalPathHops }} 跳</el-tag>
+                <el-tag
+                  size="small"
+                  type="info">
+                  {{ totalPathHops }} 跳
+                </el-tag>
               </div>
               <div class="path-list">
                 <div
@@ -70,11 +110,18 @@
                 >
                   <div class="path-index">路径 {{ index + 1 }}</div>
                   <div class="path-nodes">
-                    <template v-for="(nodeId, nodeIndex) in path" :key="nodeId">
-                      <el-tag size="small" type="primary" effect="dark">
+                    <template
+                      v-for="(nodeId, nodeIndex) in path"
+                      :key="nodeId">
+                      <el-tag
+                        size="small"
+                        type="primary"
+                        effect="dark">
                         {{ getNodeLabel(nodeId) }}
                       </el-tag>
-                      <el-icon v-if="nodeIndex < path.length - 1" class="path-arrow">
+                      <el-icon
+                        v-if="nodeIndex < path.length - 1"
+                        class="path-arrow">
                         <ArrowRight />
                       </el-icon>
                     </template>
@@ -85,11 +132,20 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="影响分析" name="impact">
+        <el-tab-pane
+          label="影响分析"
+          name="impact">
           <div class="impact-analysis">
-            <el-form :model="impactForm" size="small" class="impact-form">
+            <el-form
+              :model="impactForm"
+              size="small"
+              class="impact-form">
               <el-form-item label="分析节点">
-                <el-select v-model="impactForm.nodeId" placeholder="选择节点" filterable clearable>
+                <el-select
+                  v-model="impactForm.nodeId"
+                  placeholder="选择节点"
+                  filterable
+                  clearable>
                   <el-option
                     v-for="node in nodes"
                     :key="node.id"
@@ -99,25 +155,42 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="分析方向">
-                <el-radio-group v-model="impactForm.direction" size="small">
+                <el-radio-group
+                  v-model="impactForm.direction"
+                  size="small">
                   <el-radio-button value="downstream">下游影响</el-radio-button>
                   <el-radio-button value="upstream">上游影响</el-radio-button>
                   <el-radio-button value="both">双向分析</el-radio-button>
                 </el-radio-group>
               </el-form-item>
               <el-form-item label="最大深度">
-                <el-slider v-model="impactForm.maxDepth" :min="1" :max="10" show-input size="small" />
+                <el-slider
+                  v-model="impactForm.maxDepth"
+                  :min="1"
+                  :max="10"
+                  show-input
+                  size="small" />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" size="small" @click="analyzeImpact" :loading="impactLoading">
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="impactLoading"
+                  @click="analyzeImpact">
                   <el-icon><TrendCharts /></el-icon>
                   开始分析
                 </el-button>
-                <el-button size="small" @click="clearImpactAnalysis">清除</el-button>
+                <el-button
+                  size="small"
+                  @click="clearImpactAnalysis">
+                  清除
+                </el-button>
               </el-form-item>
             </el-form>
 
-            <div class="impact-results" v-if="impactResults.length > 0">
+            <div
+              v-if="impactResults.length > 0"
+              class="impact-results">
               <div class="results-header">
                 <span>影响 {{ impactResults.length }} 个节点</span>
                 <el-progress
@@ -153,10 +226,14 @@
                 >
                   <template #default="{ data }">
                     <span class="tree-node">
-                      <el-tag size="small" :type="data.type === 'target' ? 'danger' : 'info'">
+                      <el-tag
+                        size="small"
+                        :type="data.type === 'target' ? 'danger' : 'info'">
                         {{ data.label }}
                       </el-tag>
-                      <span class="depth-tag" v-if="data.depth > 0">第 {{ data.depth }} 层</span>
+                      <span
+                        v-if="data.depth > 0"
+                        class="depth-tag">第 {{ data.depth }} 层</span>
                     </span>
                   </template>
                 </el-tree>
@@ -165,11 +242,20 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="邻居展开" name="neighbors">
+        <el-tab-pane
+          label="邻居展开"
+          name="neighbors">
           <div class="neighbors-analysis">
-            <el-form :model="neighborForm" size="small" class="neighbor-form">
+            <el-form
+              :model="neighborForm"
+              size="small"
+              class="neighbor-form">
               <el-form-item label="中心节点">
-                <el-select v-model="neighborForm.nodeId" placeholder="选择节点" filterable clearable>
+                <el-select
+                  v-model="neighborForm.nodeId"
+                  placeholder="选择节点"
+                  filterable
+                  clearable>
                   <el-option
                     v-for="node in nodes"
                     :key="node.id"
@@ -179,21 +265,40 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="展开层级">
-                <el-slider v-model="neighborForm.maxLevel" :min="1" :max="5" show-input size="small" />
+                <el-slider
+                  v-model="neighborForm.maxLevel"
+                  :min="1"
+                  :max="5"
+                  show-input
+                  size="small" />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" size="small" @click="expandNeighbors" :loading="neighborLoading">
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="neighborLoading"
+                  @click="expandNeighbors">
                   <el-icon><Expand /></el-icon>
                   展开邻居
                 </el-button>
-                <el-button size="small" @click="collapseNeighbors">收起</el-button>
+                <el-button
+                  size="small"
+                  @click="collapseNeighbors">
+                  收起
+                </el-button>
               </el-form-item>
             </el-form>
 
-            <div class="neighbor-results" v-if="expandedNeighbors.length > 0">
+            <div
+              v-if="expandedNeighbors.length > 0"
+              class="neighbor-results">
               <div class="results-header">
                 <span>已展开 {{ expandedNeighbors.length }} 个节点</span>
-                <el-button size="small" type="primary" link @click="focusOnNeighbors">
+                <el-button
+                  size="small"
+                  type="primary"
+                  link
+                  @click="focusOnNeighbors">
                   聚焦展示
                 </el-button>
               </div>
@@ -205,13 +310,19 @@
                   class="neighbor-item"
                   @click="focusOnNode(neighbor.id)"
                 >
-                  <el-avatar :size="24" :style="{ backgroundColor: getNodeColor(neighbor.confidence) }">
+                  <el-avatar
+                    :size="24"
+                    :style="{ backgroundColor: getNodeColor(neighbor.confidence) }">
                     {{ neighbor.label.charAt(0) }}
                   </el-avatar>
                   <div class="neighbor-info">
                     <div class="neighbor-name">{{ neighbor.label }}</div>
                     <div class="neighbor-meta">
-                      <el-tag size="small" type="info">{{ neighbor.type }}</el-tag>
+                      <el-tag
+                        size="small"
+                        type="info">
+                        {{ neighbor.type }}
+                      </el-tag>
                       <span class="level-tag">第 {{ neighbor.level }} 层</span>
                     </div>
                   </div>
@@ -224,29 +335,51 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="聚合视图" name="aggregate">
+        <el-tab-pane
+          label="聚合视图"
+          name="aggregate">
           <div class="aggregate-view">
-            <el-form :model="aggregateForm" size="small" class="aggregate-form">
+            <el-form
+              :model="aggregateForm"
+              size="small"
+              class="aggregate-form">
               <el-form-item label="聚合方式">
-                <el-radio-group v-model="aggregateForm.by" size="small">
+                <el-radio-group
+                  v-model="aggregateForm.by"
+                  size="small">
                   <el-radio-button value="type">按类型</el-radio-button>
                   <el-radio-button value="confidence">按置信度</el-radio-button>
                   <el-radio-button value="module">按模块</el-radio-button>
                 </el-radio-group>
               </el-form-item>
               <el-form-item label="最小节点数">
-                <el-slider v-model="aggregateForm.minCount" :min="1" :max="20" show-input size="small" />
+                <el-slider
+                  v-model="aggregateForm.minCount"
+                  :min="1"
+                  :max="20"
+                  show-input
+                  size="small" />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" size="small" @click="computeAggregates" :loading="aggregateLoading">
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="aggregateLoading"
+                  @click="computeAggregates">
                   <el-icon><Grid /></el-icon>
                   聚合节点
                 </el-button>
-                <el-button size="small" @click="resetAggregates">重置</el-button>
+                <el-button
+                  size="small"
+                  @click="resetAggregates">
+                  重置
+                </el-button>
               </el-form-item>
             </el-form>
 
-            <div class="aggregate-results" v-if="aggregateGroups.length > 0">
+            <div
+              v-if="aggregateGroups.length > 0"
+              class="aggregate-results">
               <div class="results-header">
                 <span>已聚合为 {{ aggregateGroups.length }} 个组</span>
                 <span>包含 {{ totalAggregatedNodes }} 个原始节点</span>
@@ -260,10 +393,14 @@
                   @click="toggleAggregateGroup(group)"
                 >
                   <div class="aggregate-header">
-                    <el-icon class="expand-icon" :class="{ expanded: group.expanded }">
+                    <el-icon
+                      class="expand-icon"
+                      :class="{ expanded: group.expanded }">
                       <ArrowDown />
                     </el-icon>
-                    <div class="aggregate-icon" :style="{ backgroundColor: group.color + '20', color: group.color }">
+                    <div
+                      class="aggregate-icon"
+                      :style="{ backgroundColor: group.color + '20', color: group.color }">
                       <el-icon><FolderOpened /></el-icon>
                     </div>
                     <div class="aggregate-info">
@@ -271,7 +408,9 @@
                       <div class="aggregate-count">{{ group.nodes.length }} 个节点</div>
                     </div>
                   </div>
-                  <div class="aggregate-children" v-show="group.expanded">
+                  <div
+                    v-show="group.expanded"
+                    class="aggregate-children">
                     <div
                       v-for="node in group.nodes"
                       :key="node.id"
@@ -658,9 +797,11 @@ function computeAggregates() {
           key = node.data?.type || 'unknown'
           break
         case 'confidence':
+        {
           const conf = node.data?.confidence || 0.5
           key = conf >= 0.9 ? 'high' : conf >= 0.7 ? 'medium' : conf >= 0.5 ? 'low' : 'very-low'
           break
+        }
         case 'module':
           key = node.data?.module || 'default'
           break

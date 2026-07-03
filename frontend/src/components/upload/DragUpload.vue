@@ -1,5 +1,7 @@
 <template>
-  <div class="drag-upload-container" :class="{ 'drag-over': isDragOver, 'disabled': disabled }">
+  <div
+    class="drag-upload-container"
+    :class="{ 'drag-over': isDragOver, 'disabled': disabled }">
     <input
       ref="fileInputRef"
       type="file"
@@ -7,25 +9,56 @@
       :multiple="multiple"
       class="file-input"
       @change="handleFileInputChange"
-    />
+    >
 
-    <div class="upload-content" v-if="uploadedFiles.length === 0 && !uploading">
-      <el-icon class="upload-icon" :size="48"><UploadFilled /></el-icon>
+    <div
+      v-if="uploadedFiles.length === 0 && !uploading"
+      class="upload-content">
+      <el-icon
+        class="upload-icon"
+        :size="48">
+        <UploadFilled />
+      </el-icon>
       <div class="upload-text">
         <span class="primary-text">将文件拖到此处</span>
         <span class="secondary-text">
-          或 <el-button type="primary" link @click="openFileSelector">点击上传</el-button>
+          或 <el-button
+            type="primary"
+            link
+            @click="openFileSelector">点击上传</el-button>
         </span>
       </div>
-      <div class="upload-hint" v-if="showHint">
-        <el-tag size="small" type="info">支持格式: {{ hint }}</el-tag>
-        <el-tag size="small" type="info" v-if="maxSize > 0">单文件最大: {{ formatFileSize(maxSize) }}</el-tag>
-        <el-tag size="small" type="success" v-if="enableChunk">支持分片上传</el-tag>
+      <div
+        v-if="showHint"
+        class="upload-hint">
+        <el-tag
+          size="small"
+          type="info">
+          支持格式: {{ hint }}
+        </el-tag>
+        <el-tag
+          v-if="maxSize > 0"
+          size="small"
+          type="info">
+          单文件最大: {{ formatFileSize(maxSize) }}
+        </el-tag>
+        <el-tag
+          v-if="enableChunk"
+          size="small"
+          type="success">
+          支持分片上传
+        </el-tag>
       </div>
     </div>
 
-    <div class="uploading-content" v-else-if="uploading">
-      <el-icon class="uploading-icon" :size="32"><Loading /></el-icon>
+    <div
+      v-else-if="uploading"
+      class="uploading-content">
+      <el-icon
+        class="uploading-icon"
+        :size="32">
+        <Loading />
+      </el-icon>
       <div class="uploading-text">{{ uploadingText }}</div>
       <el-progress
         :percentage="uploadProgress"
@@ -33,42 +66,82 @@
         :stroke-width="8"
         style="width: 80%; margin: 16px auto"
       />
-      <div class="uploading-stats" v-if="currentFile">
+      <div
+        v-if="currentFile"
+        class="uploading-stats">
         <span class="filename">{{ currentFile.name }}</span>
         <span class="speed">{{ formatFileSize(currentSpeed) }}/s</span>
         <span class="remaining">预计剩余 {{ estimatedTime }}s</span>
       </div>
-      <el-button size="small" type="danger" plain @click="cancelUpload" v-if="uploadProgress < 100">
+      <el-button
+        v-if="uploadProgress < 100"
+        size="small"
+        type="danger"
+        plain
+        @click="cancelUpload">
         取消上传
       </el-button>
     </div>
 
-    <div class="file-list" v-else-if="uploadedFiles.length > 0">
-      <div class="file-item" v-for="(file, index) in uploadedFiles" :key="index">
+    <div
+      v-else-if="uploadedFiles.length > 0"
+      class="file-list">
+      <div
+        v-for="(file, index) in uploadedFiles"
+        :key="index"
+        class="file-item">
         <div class="file-info">
-          <el-icon class="file-icon" :size="24"><Document /></el-icon>
+          <el-icon
+            class="file-icon"
+            :size="24">
+            <Document />
+          </el-icon>
           <div class="file-details">
             <span class="file-name">{{ file.name }}</span>
             <span class="file-size">{{ formatFileSize(file.size) }}</span>
           </div>
         </div>
         <div class="file-actions">
-          <el-tooltip content="预览" placement="top">
-            <el-button :icon="View" size="small" circle @click="previewFile(file)" />
+          <el-tooltip
+            content="预览"
+            placement="top">
+            <el-button
+              :icon="View"
+              size="small"
+              circle
+              @click="previewFile(file)" />
           </el-tooltip>
-          <el-tooltip content="下载" placement="top">
-            <el-button :icon="Download" size="small" circle @click="downloadFile(file)" />
+          <el-tooltip
+            content="下载"
+            placement="top">
+            <el-button
+              :icon="Download"
+              size="small"
+              circle
+              @click="downloadFile(file)" />
           </el-tooltip>
-          <el-tooltip content="删除" placement="top">
-            <el-button :icon="Close" size="small" circle type="danger" @click="removeFile(index)" />
+          <el-tooltip
+            content="删除"
+            placement="top">
+            <el-button
+              :icon="Close"
+              size="small"
+              circle
+              type="danger"
+              @click="removeFile(index)" />
           </el-tooltip>
         </div>
       </div>
       <div class="list-actions">
-        <el-button size="small" @click="openFileSelector">
+        <el-button
+          size="small"
+          @click="openFileSelector">
           <el-icon><Plus /></el-icon> 添加文件
         </el-button>
-        <el-button size="small" type="primary" @click="submitUpload">
+        <el-button
+          size="small"
+          type="primary"
+          @click="submitUpload">
           <el-icon><Upload /></el-icon> 批量上传
         </el-button>
       </div>

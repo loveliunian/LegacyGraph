@@ -4,7 +4,7 @@ import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
-import io.github.legacygraph.service.GraphValidatorService;
+import io.github.legacygraph.service.graph.GraphValidatorService;
 import io.github.legacygraph.test.ApiTestExecutor;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -18,6 +18,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.test.TestResultUpdateService;
 
 /**
  * TestExecutionScheduler 单元测试。
@@ -40,7 +41,7 @@ class TestExecutionSchedulerTest {
     private GraphValidatorService graphValidatorService;
 
     @Mock
-    private io.github.legacygraph.service.TestResultUpdateService testResultUpdateService;
+    private io.github.legacygraph.service.test.TestResultUpdateService testResultUpdateService;
 
     @InjectMocks
     private TestExecutionScheduler scheduler;

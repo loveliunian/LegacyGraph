@@ -67,7 +67,7 @@ public class AiScanJobWorker {
                 // 检查 job 是否被取消
                 AiScanJob current = aiScanJobRepository.selectById(job.getId());
                 return current != null && "CANCELLED".equals(current.getStatus());
-            });
+            }, job.getId());
 
             job.setStatus("SUCCESS");
             log.info("AI scan job completed: jobId={}", job.getId());

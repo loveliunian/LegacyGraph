@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * 系统角色实体
  */
 @Data
-@TableName("sys_role")
+@TableName("lg_sys_role")
 public class SysRole {
 
     @TableId(type = IdType.ASSIGN_UUID)

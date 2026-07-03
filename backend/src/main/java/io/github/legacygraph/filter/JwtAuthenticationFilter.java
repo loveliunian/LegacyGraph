@@ -1,6 +1,6 @@
 package io.github.legacygraph.filter;
 
-import io.github.legacygraph.service.TokenBlacklistService;
+import io.github.legacygraph.service.system.TokenBlacklistService;
 import io.github.legacygraph.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -55,10 +55,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {
+        // 优先从 Authorization 头获取
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             String token = bearerToken.substring(7);
             return StringUtils.hasText(token) ? token : null;
+        }
+        // SSE 端点：从查询参数获取（EventSource API 不支持自定义请求头）
+        String tokenParam = request.getParameter("token");
+        if (StringUtils.hasText(tokenParam)) {
+            return tokenParam;
         }
         return null;
     }

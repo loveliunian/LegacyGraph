@@ -97,6 +97,22 @@ export interface ScanVersion {
   errorMessage: string
 }
 
+// 图谱差异项
+export interface DiffItem {
+  id: string
+  type: string
+  name: string
+  category: 'NODE' | 'EDGE'
+}
+
+// 图谱差异结果
+export interface DiffResult {
+  addedNodes: DiffItem[]
+  removedNodes: DiffItem[]
+  addedEdges: DiffItem[]
+  removedEdges: DiffItem[]
+}
+
 // 图谱节点
 export interface GraphNode {
   id: string
@@ -526,4 +542,49 @@ export interface ApiResponse<T> {
   message: string
   data: T
   traceId?: string
+}
+
+// 图谱视图响应
+export interface GraphViewResponse {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  nodeCount?: number
+  edgeCount?: number
+}
+
+// 调用链响应
+export interface ApiChainResponse {
+  paths: Array<{
+    nodes: GraphNode[]
+    edges: GraphEdge[]
+    relationships?: GraphEdge[]
+  }>
+}
+
+// Trace 拓扑
+export interface TraceTopology {
+  totalSpans: number
+  services: Array<{
+    name: string
+    spanCount: number
+    errorCount: number
+    avgDurationMs: number
+  }>
+  calls: Array<{
+    from: string
+    to: string
+    callCount: number
+    errorCount: number
+  }>
+}
+
+// Trace 记录
+export interface TraceRecord {
+  id: string
+  operationName: string
+  serviceName?: string
+  status: 'SUCCESS' | 'ERROR'
+  durationMs: number
+  startedAt?: string
+  createdAt?: string
 }

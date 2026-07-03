@@ -4,17 +4,28 @@
     :class="[`node-${nodeTypeClass}`, { 'node-selected': isSelected, 'node-pending': isPending }]"
     :style="{ borderColor: nodeColor }"
   >
-    <div class="node-header" :style="{ backgroundColor: nodeColor + '20' }">
-      <div class="node-icon" :style="{ color: nodeColor }">
+    <div
+      class="node-header"
+      :style="{ backgroundColor: nodeColor + '20' }">
+      <div
+        class="node-icon"
+        :style="{ color: nodeColor }">
         <el-icon :size="18">
           <component :is="nodeIcon" />
         </el-icon>
       </div>
-      <div class="node-title" :title="nodeLabel">{{ nodeLabel }}</div>
+      <div
+        class="node-title"
+        :title="nodeLabel">
+        {{ nodeLabel }}
+      </div>
     </div>
     <div class="node-body">
       <div class="node-type">
-        <el-tag size="small" :type="getTagType(nodeType)" effect="plain">
+        <el-tag
+          size="small"
+          :type="getTagType(nodeType)"
+          effect="plain">
           {{ getTypeLabel(nodeType) }}
         </el-tag>
       </div>
@@ -28,13 +39,25 @@
         />
         <span class="confidence-value">{{ (confidence * 100).toFixed(0) }}%</span>
       </div>
-      <div class="node-evidence" v-if="evidenceCount">
-        <el-icon size="12" color="#909399"><Document /></el-icon>
+      <div
+        v-if="evidenceCount"
+        class="node-evidence">
+        <el-icon
+          size="12"
+          color="#909399">
+          <Document />
+        </el-icon>
         <span>{{ evidenceCount }} 条证据</span>
       </div>
     </div>
-    <Handle type="source" :position="Position.Bottom" :style="{ background: nodeColor }" />
-    <Handle type="target" :position="Position.Top" :style="{ background: nodeColor }" />
+    <Handle
+      type="source"
+      :position="Position.Bottom"
+      :style="{ background: nodeColor }" />
+    <Handle
+      type="target"
+      :position="Position.Top"
+      :style="{ background: nodeColor }" />
   </div>
 </template>
 

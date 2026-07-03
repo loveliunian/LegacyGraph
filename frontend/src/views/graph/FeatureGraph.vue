@@ -2,7 +2,10 @@
   <div class="feature-graph">
     <div class="page-header">
       <h3>功能图谱</h3>
-      <el-button type="primary" size="small" @click="exportReport">
+      <el-button
+        type="primary"
+        size="small"
+        @click="exportReport">
         <el-icon><Download /></el-icon>
         导出功能清单
       </el-button>
@@ -22,7 +25,9 @@
               :class="{ active: selectedModule === module.id }"
               @click="selectModule(module.id)"
             >
-              <div class="module-icon" :style="{ backgroundColor: module.color }">
+              <div
+                class="module-icon"
+                :style="{ backgroundColor: module.color }">
                 <el-icon><Grid /></el-icon>
               </div>
               <div class="module-info">
@@ -58,42 +63,77 @@
           <template #header>
             <span>功能详情</span>
           </template>
-          <div v-if="!selectedNode" class="empty-state">
+          <div
+            v-if="!selectedNode"
+            class="empty-state">
             <el-empty description="点击功能节点查看详情" />
           </div>
-          <div v-else class="node-detail">
-            <el-descriptions :column="1" border size="small">
+          <div
+            v-else
+            class="node-detail">
+            <el-descriptions
+              :column="1"
+              border
+              size="small">
               <el-descriptions-item label="功能">{{ selectedNode.label }}</el-descriptions-item>
               <el-descriptions-item label="类型">{{ selectedNode.type }}</el-descriptions-item>
-              <el-descriptions-item label="页面" v-if="selectedNode.page">{{ selectedNode.page }}</el-descriptions-item>
-              <el-descriptions-item label="API" v-if="selectedNode.api">{{ selectedNode.api }}</el-descriptions-item>
+              <el-descriptions-item
+                v-if="selectedNode.page"
+                label="页面">
+                {{ selectedNode.page }}
+              </el-descriptions-item>
+              <el-descriptions-item
+                v-if="selectedNode.api"
+                label="API">
+                {{ selectedNode.api }}
+              </el-descriptions-item>
               <el-descriptions-item label="置信度">
                 <el-tag :type="selectedNode.confidence >= 0.85 ? 'success' : selectedNode.confidence >= 0.7 ? 'warning' : 'danger'">
                   {{ (selectedNode.confidence * 100).toFixed(1) }}%
                 </el-tag>
               </el-descriptions-item>
             </el-descriptions>
-            <div class="action-buttons" style="margin-top: 16px;">
-              <el-button type="primary" size="small" @click="generateTests">生成测试</el-button>
-              <el-button size="small" @click="viewEvidence">查看证据</el-button>
+            <div
+              class="action-buttons"
+              style="margin-top: 16px;">
+              <el-button
+                type="primary"
+                size="small"
+                @click="generateTests">
+                生成测试
+              </el-button>
+              <el-button
+                size="small"
+                @click="viewEvidence">
+                查看证据
+              </el-button>
             </div>
           </div>
         </el-card>
 
-        <el-card class="test-card" style="margin-top: 16px;" v-if="projectId && currentVersion">
+        <el-card
+          v-if="projectId && currentVersion"
+          class="test-card"
+          style="margin-top: 16px;">
           <template #header>
             <span>测试覆盖率</span>
           </template>
-          <div v-if="loading" style="text-align:center;padding:12px;">
+          <div
+            v-if="loading"
+            style="text-align:center;padding:12px;">
             <el-icon class="is-loading"><Refresh /></el-icon>
           </div>
           <template v-else>
             <div class="coverage-stats">
               <div class="coverage-item">
                 <span class="coverage-label">整体覆盖率</span>
-                <span class="coverage-value" :class="coverageLevel(coverageData.overall)">{{ coverageData.overall }}%</span>
+                <span
+                  class="coverage-value"
+                  :class="coverageLevel(coverageData.overall)">{{ coverageData.overall }}%</span>
               </div>
-              <el-progress :percentage="coverageData.overall" :status="coverageData.overall >= 60 ? 'success' : coverageData.overall >= 30 ? 'warning' : 'exception'" />
+              <el-progress
+                :percentage="coverageData.overall"
+                :status="coverageData.overall >= 60 ? 'success' : coverageData.overall >= 30 ? 'warning' : 'exception'" />
             </div>
             <div class="coverage-item">
               <span class="coverage-label">核心功能</span>
@@ -101,9 +141,15 @@
             </div>
             <div class="coverage-item">
               <span class="coverage-label">边缘场景</span>
-              <span class="coverage-value" :class="coverageData.edge >= 50 ? 'success' : 'danger'">{{ coverageData.edge }}%</span>
+              <span
+                class="coverage-value"
+                :class="coverageData.edge >= 50 ? 'success' : 'danger'">{{ coverageData.edge }}%</span>
             </div>
-            <el-button type="primary" size="small" style="width: 100%; margin-top: 16px;" @click="generateAllTests">
+            <el-button
+              type="primary"
+              size="small"
+              style="width: 100%; margin-top: 16px;"
+              @click="generateAllTests">
               生成补充测试用例
             </el-button>
           </template>
@@ -170,7 +216,8 @@ const coverageData = ref<{
 async function loadVersions() {
   const pid = projectId.value
   if (!pid) return
-  versions.value = await loadScanVersions(pid)
+  const result = await loadScanVersions(pid)
+  versions.value = result || []
 }
 
 async function loadGraph(module = '') {
@@ -180,7 +227,7 @@ async function loadGraph(module = '') {
   }
   loading.value = true
   try {
-    const data = await graphApi.getFeatureView(projectId.value, currentVersion.value, module) as any
+    const data = await graphApi.getFeatureView(projectId.value, currentVersion.value, module)
     const nodes = Array.isArray(data?.nodes) ? data.nodes : []
     const edges = Array.isArray(data?.edges) ? data.edges : []
 

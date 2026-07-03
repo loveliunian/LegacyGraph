@@ -1,9 +1,15 @@
 <template>
   <div class="search-form">
-    <el-form :inline="true" :model="form" class="search-form__form">
+    <el-form
+      :inline="true"
+      :model="form"
+      class="search-form__form">
       <slot />
       <el-form-item class="search-form__actions">
-        <el-button type="primary" @click="handleSearch" :loading="searching">
+        <el-button
+          type="primary"
+          :loading="searching"
+          @click="handleSearch">
           <template #icon>
             <Search v-if="!searching" />
             <Loading v-else />
@@ -49,17 +55,6 @@ function handleSearch() {
 }
 
 function handleReset() {
-  for (const key in props.model) {
-    if (typeof props.model[key] === 'string') {
-      props.model[key] = ''
-    } else if (Array.isArray(props.model[key])) {
-      props.model[key] = []
-    } else if (typeof props.model[key] === 'boolean') {
-      props.model[key] = false
-    } else {
-      props.model[key] = undefined
-    }
-  }
   emit('reset')
 }
 </script>

@@ -2,61 +2,129 @@
   <div class="database-list">
     <div class="page-header">
       <h3>数据库连接配置</h3>
-      <el-button type="primary" @click="showCreateDialog">
+      <el-button
+        type="primary"
+        @click="showCreateDialog">
         <el-icon><Plus /></el-icon>
         添加连接
       </el-button>
     </div>
 
-    <el-table :data="dbList" v-loading="loading" border stripe>
-      <el-table-column prop="connectionName" label="连接名称" width="180">
+    <el-table
+      v-loading="loading"
+      :data="dbList"
+      border
+      stripe>
+      <el-table-column
+        prop="connectionName"
+        label="连接名称"
+        width="180">
         <template #default="{ row }">
           <div class="db-name">
-        <el-icon><Coin /></el-icon>
+            <el-icon><Coin /></el-icon>
             <span>{{ row.connectionName }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="dbType" label="数据库类型" width="120">
+      <el-table-column
+        prop="dbType"
+        label="数据库类型"
+        width="120">
         <template #default="{ row }">
-          <el-tag size="small" type="primary">{{ row.dbType }}</el-tag>
+          <el-tag
+            size="small"
+            type="primary">
+            {{ row.dbType }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="地址" width="200">
+      <el-table-column
+        label="地址"
+        width="200">
         <template #default="{ row }">{{ row.host }}:{{ row.port }}</template>
       </el-table-column>
-      <el-table-column prop="databaseName" label="数据库名" width="150" />
-      <el-table-column prop="schemaName" label="Schema" width="120" />
-      <el-table-column prop="username" label="用户名" width="120" />
-      <el-table-column label="表数量" width="100">
+      <el-table-column
+        prop="databaseName"
+        label="数据库名"
+        width="150" />
+      <el-table-column
+        prop="schemaName"
+        label="Schema"
+        width="120" />
+      <el-table-column
+        prop="username"
+        label="用户名"
+        width="120" />
+      <el-table-column
+        label="表数量"
+        width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.tableCount" size="small" type="success">{{ row.tableCount }}</el-tag>
-          <span v-else class="text-gray">未扫描</span>
+          <el-tag
+            v-if="row.tableCount"
+            size="small"
+            type="success">
+            {{ row.tableCount }}
+          </el-tag>
+          <span
+            v-else
+            class="text-gray">未扫描</span>
         </template>
       </el-table-column>
-      <el-table-column label="最近扫描" width="180">
+      <el-table-column
+        label="最近扫描"
+        width="180">
         <template #default="{ row }">
           <span v-if="row.lastScanTime">{{ formatTime(row.lastScanTime) }}</span>
-          <span v-else class="text-gray">未扫描</span>
+          <span
+            v-else
+            class="text-gray">未扫描</span>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="100">
+      <el-table-column
+        prop="status"
+        label="状态"
+        width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="getStatusType(row.status)">
+          <el-tag
+            size="small"
+            :type="getStatusType(row.status)">
             {{ getStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column
+        label="操作"
+        width="220"
+        fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="testConnection(row)">测试连接</el-button>
-          <el-button type="success" link size="small" @click="scanSchema(row)">扫描表结构</el-button>
-          <el-button type="danger" link size="small" @click="deleteDb(row)">删除</el-button>
+          <el-button
+            type="primary"
+            link
+            size="small"
+            @click="testConnection(row)">
+            测试连接
+          </el-button>
+          <el-button
+            type="success"
+            link
+            size="small"
+            @click="scanSchema(row)">
+            扫描表结构
+          </el-button>
+          <el-button
+            type="danger"
+            link
+            size="small"
+            @click="deleteDb(row)">
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div class="pagination-wrapper" v-if="total > 0">
+    <div
+      v-if="total > 0"
+      class="pagination-wrapper">
       <el-pagination
         v-model:current-page="pageNum"
         v-model:page-size="pageSize"
@@ -68,49 +136,106 @@
       />
     </div>
 
-    <el-empty v-if="dbList.length === 0" description="暂无数据库配置" />
+    <el-empty
+      v-if="dbList.length === 0"
+      description="暂无数据库配置" />
 
-    <el-dialog v-model="createDialogVisible" title="添加数据库连接" width="600px">
-      <el-form :model="dbForm" label-width="120px">
-        <el-form-item label="连接名称" required>
-          <el-input v-model="dbForm.connectionName" placeholder="请输入连接名称" />
+    <el-dialog
+      v-model="createDialogVisible"
+      title="添加数据库连接"
+      width="600px">
+      <el-form
+        :model="dbForm"
+        label-width="120px">
+        <el-form-item
+          label="连接名称"
+          required>
+          <el-input
+            v-model="dbForm.connectionName"
+            placeholder="请输入连接名称" />
         </el-form-item>
-        <el-form-item label="数据库类型" required>
-          <el-select v-model="dbForm.dbType" placeholder="选择数据库类型">
-            <el-option label="PostgreSQL" value="POSTGRESQL" />
-            <el-option label="MySQL" value="MYSQL" />
-            <el-option label="Oracle" value="ORACLE" />
-            <el-option label="SQL Server" value="SQL_SERVER" />
+        <el-form-item
+          label="数据库类型"
+          required>
+          <el-select
+            v-model="dbForm.dbType"
+            placeholder="选择数据库类型">
+            <el-option
+              label="PostgreSQL"
+              value="POSTGRESQL" />
+            <el-option
+              label="MySQL"
+              value="MYSQL" />
+            <el-option
+              label="Oracle"
+              value="ORACLE" />
+            <el-option
+              label="SQL Server"
+              value="SQL_SERVER" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Host" required>
-          <el-input v-model="dbForm.host" placeholder="localhost / 127.0.0.1" />
+        <el-form-item
+          label="Host"
+          required>
+          <el-input
+            v-model="dbForm.host"
+            placeholder="localhost / 127.0.0.1" />
         </el-form-item>
-        <el-form-item label="Port" required>
-          <el-input-number v-model="dbForm.port" :min="1" :max="65535" />
+        <el-form-item
+          label="Port"
+          required>
+          <el-input-number
+            v-model="dbForm.port"
+            :min="1"
+            :max="65535" />
         </el-form-item>
-        <el-form-item label="数据库名" required>
-          <el-input v-model="dbForm.database" placeholder="postgres" />
+        <el-form-item
+          label="数据库名"
+          required>
+          <el-input
+            v-model="dbForm.database"
+            placeholder="postgres" />
         </el-form-item>
         <el-form-item label="Schema">
-          <el-input v-model="dbForm.schema" placeholder="public" />
+          <el-input
+            v-model="dbForm.schema"
+            placeholder="public" />
         </el-form-item>
-        <el-form-item label="用户名" required>
-          <el-input v-model="dbForm.username" placeholder="postgres" />
+        <el-form-item
+          label="用户名"
+          required>
+          <el-input
+            v-model="dbForm.username"
+            placeholder="postgres" />
         </el-form-item>
-        <el-form-item label="密码" required>
-          <el-input v-model="dbForm.password" type="password" placeholder="请输入密码" />
+        <el-form-item
+          label="密码"
+          required>
+          <el-input
+            v-model="dbForm.password"
+            type="password"
+            placeholder="请输入密码" />
         </el-form-item>
         <el-form-item label="包含表">
-          <el-input v-model="dbForm.includeTables" type="textarea" placeholder="%user%, %order%" />
+          <el-input
+            v-model="dbForm.includeTables"
+            type="textarea"
+            placeholder="%user%, %order%" />
         </el-form-item>
         <el-form-item label="排除表">
-          <el-input v-model="dbForm.excludeTables" type="textarea" placeholder="flyway_%" />
+          <el-input
+            v-model="dbForm.excludeTables"
+            type="textarea"
+            placeholder="flyway_%" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="createDb">保存</el-button>
+        <el-button
+          type="primary"
+          @click="createDb">
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </div>

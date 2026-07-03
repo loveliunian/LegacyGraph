@@ -6,7 +6,7 @@ import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.CreateProjectRequest;
 import io.github.legacygraph.entity.Project;
-import io.github.legacygraph.service.ProjectService;
+import io.github.legacygraph.service.scan.ProjectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;

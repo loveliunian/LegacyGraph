@@ -5,6 +5,7 @@ import org.springframework.retry.backoff.FixedBackOffPolicy;
 import org.springframework.retry.support.RetryTemplate;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.service.system.LlmProviderService;
 
 /**
  * LlmConfig 单元测试。

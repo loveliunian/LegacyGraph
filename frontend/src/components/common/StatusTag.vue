@@ -1,5 +1,7 @@
 <template>
-  <el-tag :type="getType(status)" size="small">
+  <el-tag
+    :type="getType(status)"
+    size="small">
     {{ getText(status) }}
   </el-tag>
 </template>

@@ -46,6 +46,9 @@ public class ScanVersion {
     /** 统计快照回写时间 */
     private LocalDateTime statsUpdatedAt;
 
+    /** AI 增强状态：PENDING/RUNNING/COMPLETED/FAILED/SKIPPED */
+    private String aiEnrichmentStatus;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

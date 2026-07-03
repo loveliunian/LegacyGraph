@@ -1,10 +1,10 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.service.test.TestCaseService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.builder.FeatureSliceBuilder;
 import io.github.legacygraph.builder.ScenarioDSLBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.repository.*;
 import io.github.legacygraph.test.ApiTestExecutor;
 import io.github.legacygraph.test.DbAssertionExecutor;
 import io.github.legacygraph.test.E2eTestExecutor;
@@ -14,6 +14,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.repository.TestCaseRepository;
+import io.github.legacygraph.repository.TestResultRepository;
+import io.github.legacygraph.service.test.TestResultUpdateService;
 
 @ExtendWith(MockitoExtension.class)
 class TestCaseServiceTest {

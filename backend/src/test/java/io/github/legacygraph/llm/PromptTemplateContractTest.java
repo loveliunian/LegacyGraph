@@ -12,6 +12,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.service.system.PromptTemplateService;
 
 /**
  * 模板契约测试 — Phase 0 关键交付物。
@@ -27,8 +28,8 @@ class PromptTemplateContractTest {
 
     private static PromptTemplateLoader newLoader() {
         // DB 中无模板时回退到 classpath 文件（契约测试针对生产 .txt 模板）
-        io.github.legacygraph.service.PromptTemplateService svc =
-                org.mockito.Mockito.mock(io.github.legacygraph.service.PromptTemplateService.class);
+        io.github.legacygraph.service.system.PromptTemplateService svc =
+                org.mockito.Mockito.mock(io.github.legacygraph.service.system.PromptTemplateService.class);
         org.mockito.Mockito.when(svc.getActiveByCode(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
         return new PromptTemplateLoader(svc);
     }

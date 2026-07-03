@@ -15,6 +15,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.graph.GraphPathReadModel;
 
 /**
  * GraphPathReadModel 测试：验证 BFS 遍历使用批量 findNodesByIds 替代逐条 findNodeById。

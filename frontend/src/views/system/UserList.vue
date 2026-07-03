@@ -4,21 +4,38 @@
       <template #header>
         <div class="card-header">
           <span>用户管理</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button
+            type="primary"
+            @click="handleCreate">
             <el-icon><plus /></el-icon>
             新增用户
           </el-button>
         </div>
       </template>
 
-      <SearchForm :model="filterParams" @search="loadData" @reset="resetFilter">
+      <SearchForm
+        :model="filterParams"
+        @search="loadData"
+        @reset="resetFilter">
         <el-form-item label="用户名">
-          <el-input v-model="filterParams.username" placeholder="请输入用户名" clearable style="width: 200px" />
+          <el-input
+            v-model="filterParams.username"
+            placeholder="请输入用户名"
+            clearable
+            style="width: 200px" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="filterParams.status" placeholder="全部" clearable style="width: 150px">
-            <el-option label="活跃" value="ACTIVE" />
-            <el-option label="禁用" value="INACTIVE" />
+          <el-select
+            v-model="filterParams.status"
+            placeholder="全部"
+            clearable
+            style="width: 150px">
+            <el-option
+              label="活跃"
+              value="ACTIVE" />
+            <el-option
+              label="禁用"
+              value="INACTIVE" />
           </el-select>
         </el-form-item>
       </SearchForm>
@@ -32,22 +49,55 @@
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
       >
-        <el-table-column prop="id" label="ID" width="180" />
-        <el-table-column prop="username" label="用户名" width="150" />
-        <el-table-column prop="nickname" label="昵称" width="150" />
-        <el-table-column prop="email" label="邮箱" width="200" />
-        <el-table-column prop="status" label="状态" width="100" align="center">
+        <el-table-column
+          prop="id"
+          label="ID"
+          width="180" />
+        <el-table-column
+          prop="username"
+          label="用户名"
+          width="150" />
+        <el-table-column
+          prop="nickname"
+          label="昵称"
+          width="150" />
+        <el-table-column
+          prop="email"
+          label="邮箱"
+          width="200" />
+        <el-table-column
+          prop="status"
+          label="状态"
+          width="100"
+          align="center">
           <template #default="{ row }">
             <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">
               {{ row.status === 'ACTIVE' ? '活跃' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="创建时间" width="180" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column
+          prop="createdAt"
+          label="创建时间"
+          width="180" />
+        <el-table-column
+          label="操作"
+          width="150"
+          fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button link size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button
+              link
+              size="small"
+              @click="handleEdit(row)">
+              编辑
+            </el-button>
+            <el-button
+              link
+              size="small"
+              type="danger"
+              @click="handleDelete(row)">
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </BaseTable>
@@ -58,29 +108,53 @@
         :title="isEdit ? '编辑用户' : '新增用户'"
         width="500px"
       >
-        <el-form :model="formData" label-width="80px">
-          <el-form-item label="用户名" required>
-            <el-input v-model="formData.username" placeholder="请输入用户名" />
+        <el-form
+          :model="formData"
+          label-width="80px">
+          <el-form-item
+            label="用户名"
+            required>
+            <el-input
+              v-model="formData.username"
+              placeholder="请输入用户名" />
           </el-form-item>
           <el-form-item label="昵称">
-            <el-input v-model="formData.nickname" placeholder="请输入昵称" />
+            <el-input
+              v-model="formData.nickname"
+              placeholder="请输入昵称" />
           </el-form-item>
           <el-form-item label="邮箱">
-            <el-input v-model="formData.email" placeholder="请输入邮箱" />
+            <el-input
+              v-model="formData.email"
+              placeholder="请输入邮箱" />
           </el-form-item>
-          <el-form-item label="密码" :required="!isEdit">
-            <el-input v-model="formData.password" type="password" placeholder="请输入密码" />
+          <el-form-item
+            label="密码"
+            :required="!isEdit">
+            <el-input
+              v-model="formData.password"
+              type="password"
+              placeholder="请输入密码" />
           </el-form-item>
           <el-form-item label="状态">
             <el-select v-model="formData.status">
-              <el-option label="活跃" value="ACTIVE" />
-              <el-option label="禁用" value="INACTIVE" />
+              <el-option
+                label="活跃"
+                value="ACTIVE" />
+              <el-option
+                label="禁用"
+                value="INACTIVE" />
             </el-select>
           </el-form-item>
         </el-form>
         <template #footer>
           <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="save" :loading="saving">保存</el-button>
+          <el-button
+            type="primary"
+            :loading="saving"
+            @click="save">
+            保存
+          </el-button>
         </template>
       </el-dialog>
     </el-card>

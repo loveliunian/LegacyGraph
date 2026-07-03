@@ -14,7 +14,14 @@ vi.mock('@vue-flow/core', () => ({
   },
   Controls: {
     template: '<div class="controls-mock"></div>'
-  }
+  },
+  useVueFlow: () => ({
+    fitView: vi.fn(),
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    setViewport: vi.fn(),
+    getViewport: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
+  })
 }))
 
 describe('UnifiedGraph View', () => {
@@ -43,7 +50,7 @@ describe('UnifiedGraph View', () => {
     const wrapper = mount(UnifiedGraph, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-card', 'el-button', 'el-select', 'el-option', 'el-slider', 'el-checkbox-group', 'el-checkbox', 'el-drawer']
+        stubs: ['el-select', 'el-option', 'el-slider', 'el-checkbox-group', 'el-checkbox', 'el-drawer']
       }
     })
     expect(wrapper.find('.unified-graph').exists()).toBe(true)
@@ -53,19 +60,19 @@ describe('UnifiedGraph View', () => {
     const wrapper = mount(UnifiedGraph, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-card', 'el-button', 'el-select', 'el-option', 'el-slider', 'el-checkbox-group', 'el-checkbox', 'el-drawer']
+        stubs: ['el-select', 'el-option', 'el-slider', 'el-checkbox-group', 'el-checkbox', 'el-drawer']
       }
     })
-    expect(wrapper.find('.graph-toolbar').exists()).toBe(true)
+    expect(wrapper.find('.header-actions').exists()).toBe(true)
   })
 
-  it('should have zoom controls', () => {
+  it('should have graph filter controls', () => {
     const wrapper = mount(UnifiedGraph, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-card', 'el-button', 'el-select', 'el-option', 'el-slider', 'el-checkbox-group', 'el-checkbox', 'el-drawer']
+        stubs: ['el-select', 'el-option', 'el-slider', 'el-checkbox-group', 'el-checkbox', 'el-drawer']
       }
     })
-    expect(wrapper.find('.el-button').exists()).toBe(true)
+    expect(wrapper.find('.filter-card').exists()).toBe(true)
   })
 })

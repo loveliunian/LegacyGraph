@@ -1,8 +1,16 @@
 <template>
-  <el-dropdown trigger="click" @command="handleCommand" @visible-change="onVisibleChange">
+  <el-dropdown
+    trigger="click"
+    @command="handleCommand"
+    @visible-change="onVisibleChange">
     <div class="notification-trigger">
-      <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
-        <el-button :icon="Bell" circle />
+      <el-badge
+        :value="unreadCount"
+        :hidden="unreadCount === 0"
+        class="notification-badge">
+        <el-button
+          :icon="Bell"
+          circle />
       </el-badge>
     </div>
 
@@ -11,10 +19,17 @@
         <div class="notification-header">
           <span class="header-title">通知中心</span>
           <div class="header-actions">
-            <el-button text size="small" @click.stop="markAllAsRead" v-if="unreadCount > 0">
+            <el-button
+              v-if="unreadCount > 0"
+              text
+              size="small"
+              @click.stop="markAllAsRead">
               全部已读
             </el-button>
-            <el-button text size="small" @click.stop="clearAll">
+            <el-button
+              text
+              size="small"
+              @click.stop="clearAll">
               清空
             </el-button>
           </div>
@@ -29,11 +44,16 @@
             @click="activeTab = tab.key"
           >
             {{ tab.label }}
-            <el-badge v-if="getUnreadByType(tab.key) > 0" :value="getUnreadByType(tab.key)" class="tab-badge" />
+            <el-badge
+              v-if="getUnreadByType(tab.key) > 0"
+              :value="getUnreadByType(tab.key)"
+              class="tab-badge" />
           </div>
         </div>
 
-        <div class="notification-list" v-if="filteredNotifications.length > 0">
+        <div
+          v-if="filteredNotifications.length > 0"
+          class="notification-list">
           <transition-group name="list">
             <div
               v-for="item in filteredNotifications"
@@ -42,7 +62,9 @@
               :class="{ unread: !item.isRead }"
               @click="handleItemClick(item)"
             >
-              <div class="item-icon" :class="item.type">
+              <div
+                class="item-icon"
+                :class="item.type">
                 <el-icon :size="20">
                   <component :is="getNotificationIcon(item.type)" />
                 </el-icon>
@@ -52,29 +74,38 @@
                 <div class="item-desc">{{ item.content }}</div>
                 <div class="item-meta">
                   <span class="item-time">{{ formatTime(item.timestamp) }}</span>
-                  <el-button
-                    v-if="item.actions"
-                    v-for="action in item.actions"
-                    :key="action.key"
-                    text
-                    size="small"
-                    type="primary"
-                    @click.stop="handleAction(item, action)"
-                  >
-                    {{ action.label }}
-                  </el-button>
+                  <template v-if="item.actions">
+                    <el-button
+                      v-for="action in item.actions"
+                      :key="action.key"
+                      text
+                      size="small"
+                      type="primary"
+                      @click.stop="handleAction(item, action)"
+                    >
+                      {{ action.label }}
+                    </el-button>
+                  </template>
                 </div>
               </div>
             </div>
           </transition-group>
         </div>
 
-        <div class="notification-empty" v-else>
-          <el-empty description="暂无通知" :image-size="80" />
+        <div
+          v-else
+          class="notification-empty">
+          <el-empty
+            description="暂无通知"
+            :image-size="80" />
         </div>
 
-        <div class="notification-footer" v-if="notifications.length > 5">
-          <router-link to="/notification/list" class="view-all-link">
+        <div
+          v-if="notifications.length > 5"
+          class="notification-footer">
+          <router-link
+            to="/notification/list"
+            class="view-all-link">
             查看全部通知
             <el-icon><ArrowRight /></el-icon>
           </router-link>

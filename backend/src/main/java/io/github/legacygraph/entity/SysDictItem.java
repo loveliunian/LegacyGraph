@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
  * 字典项实体
  */
 @Data
-@TableName("sys_dict_item")
+@TableName("lg_sys_dict_item")
 public class SysDictItem {
 
     @TableId(type = IdType.ASSIGN_UUID)

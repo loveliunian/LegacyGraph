@@ -25,9 +25,9 @@ import io.github.legacygraph.repository.AiScanJobRepository;
 import io.github.legacygraph.repository.ReviewRecordRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
-import io.github.legacygraph.service.GapFinderService;
-import io.github.legacygraph.service.KnowledgeClaimService;
-import io.github.legacygraph.service.VectorizationService;
+import io.github.legacygraph.service.graph.GapFinderService;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
+import io.github.legacygraph.service.qa.VectorizationService;
 import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,6 +70,10 @@ class AiScanOrchestratorTest {
     @Mock private GapFinderService gapFinderService;
     @Mock private ScanUnderstandingEnhancer scanUnderstandingEnhancer;
     @Mock private VectorizationService vectorizationService;
+    @Mock private io.micrometer.core.instrument.Timer scanDurationTimer;
+    @Mock private io.micrometer.core.instrument.Counter agentCallCounter;
+    @Mock private io.micrometer.core.instrument.Counter graphNodeCounter;
+    @Mock private io.micrometer.core.instrument.Counter graphEdgeCounter;
 
     private AiScanOrchestrator orchestrator;
 
@@ -82,7 +86,8 @@ class AiScanOrchestratorTest {
                 documentRepository, factRepository,
                 reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
                 featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper(),
-                knowledgeClaimService, gapFinderService, scanUnderstandingEnhancer, vectorizationService);
+                knowledgeClaimService, gapFinderService, scanUnderstandingEnhancer, vectorizationService,
+                scanDurationTimer, agentCallCounter, graphNodeCounter, graphEdgeCounter);
         lenient().when(gapFinderService.scanGaps(anyString(), anyString()))
                 .thenReturn(GapFinderService.GapScanResult.builder()
                         .created(0)

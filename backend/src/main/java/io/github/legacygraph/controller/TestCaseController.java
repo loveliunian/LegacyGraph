@@ -19,7 +19,7 @@ import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
 import io.github.legacygraph.repository.TestRunRepository;
-import io.github.legacygraph.service.GraphValidatorService;
+import io.github.legacygraph.service.graph.GraphValidatorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;

@@ -4,7 +4,9 @@
     <el-card class="header-card">
       <div class="header-row">
         <h2>代码理解报告</h2>
-        <el-button type="primary" @click="showCreateDialog = true">
+        <el-button
+          type="primary"
+          @click="showCreateDialog = true">
           <el-icon><Plus /></el-icon>
           新建报告
         </el-button>
@@ -12,36 +14,68 @@
     </el-card>
 
     <!-- 工具健康状态 -->
-    <el-card class="tool-health-card" v-loading="loadingHealth">
+    <el-card
+      v-loading="loadingHealth"
+      class="tool-health-card">
       <template #header>
         <span>工具健康状态</span>
-        <el-button size="small" @click="refreshHealth" style="float: right">
+        <el-button
+          size="small"
+          style="float: right"
+          @click="refreshHealth">
           刷新
         </el-button>
       </template>
-      <el-table :data="healthTools" stripe>
-        <el-table-column prop="toolName" label="工具名称" width="180" />
-        <el-table-column prop="toolKind" label="类型" width="100" />
-        <el-table-column label="状态" width="120">
+      <el-table
+        :data="healthTools"
+        stripe>
+        <el-table-column
+          prop="toolName"
+          label="工具名称"
+          width="180" />
+        <el-table-column
+          prop="toolKind"
+          label="类型"
+          width="100" />
+        <el-table-column
+          label="状态"
+          width="120">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="能力" min-width="200">
+        <el-table-column
+          label="能力"
+          min-width="200">
           <template #default="{ row }">
-            <el-tag v-for="cap in row.capabilities" :key="cap" size="small" style="margin: 2px">
+            <el-tag
+              v-for="cap in row.capabilities"
+              :key="cap"
+              size="small"
+              style="margin: 2px">
               {{ cap }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="indexFreshness" label="索引新鲜度" width="120" />
-        <el-table-column prop="message" label="消息" min-width="200" />
+        <el-table-column
+          prop="indexFreshness"
+          label="索引新鲜度"
+          width="120" />
+        <el-table-column
+          prop="message"
+          label="消息"
+          min-width="200" />
       </el-table>
     </el-card>
 
     <!-- 新建报告对话框 -->
-    <el-dialog v-model="showCreateDialog" title="新建代码理解报告" width="600px">
-      <el-form :model="reportForm" label-width="100px">
+    <el-dialog
+      v-model="showCreateDialog"
+      title="新建代码理解报告"
+      width="600px">
+      <el-form
+        :model="reportForm"
+        label-width="100px">
         <el-form-item label="问题">
           <el-input
             v-model="reportForm.question"
@@ -81,23 +115,32 @@
           />
         </el-form-item>
         <el-form-item label="版本">
-          <el-input v-model="reportForm.versionId" placeholder="可选，留空使用最新版本" />
+          <el-input
+            v-model="reportForm.versionId"
+            placeholder="可选，留空使用最新版本" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="createReport">
+        <el-button
+          type="primary"
+          :loading="creating"
+          @click="createReport">
           生成报告
         </el-button>
       </template>
     </el-dialog>
 
     <!-- 任务结果 -->
-    <el-card v-if="taskResult" class="task-result-card">
+    <el-card
+      v-if="taskResult"
+      class="task-result-card">
       <template #header>
         <span>任务结果</span>
       </template>
-      <el-descriptions :column="3" border>
+      <el-descriptions
+        :column="3"
+        border>
         <el-descriptions-item label="任务 ID">{{ taskResult.taskId }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="taskResult.status === 'SUCCESS' ? 'success' : 'warning'">
@@ -108,14 +151,18 @@
         <el-descriptions-item label="证据数量">{{ taskResult.evidenceCount }}</el-descriptions-item>
         <el-descriptions-item label="Claim 数量">{{ taskResult.claimCount }}</el-descriptions-item>
         <el-descriptions-item label="待确认数量">
-          <el-tag v-if="taskResult.pendingConfirmCount > 0" type="warning">
+          <el-tag
+            v-if="taskResult.pendingConfirmCount > 0"
+            type="warning">
             {{ taskResult.pendingConfirmCount }}
           </el-tag>
           <span v-else>0</span>
         </el-descriptions-item>
       </el-descriptions>
       <div style="margin-top: 16px">
-        <el-button type="success" @click="downloadReport">
+        <el-button
+          type="success"
+          @click="downloadReport">
           <el-icon><Download /></el-icon>
           下载 Markdown 报告
         </el-button>

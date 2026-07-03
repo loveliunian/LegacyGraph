@@ -11,8 +11,8 @@ import io.github.legacygraph.llm.PromptTemplateLoader;
 import io.github.legacygraph.llm.SecretScanService;
 import io.github.legacygraph.repository.AgentRunRepository;
 import io.github.legacygraph.repository.PromptRunRepository;
-import io.github.legacygraph.service.CacheService;
-import io.github.legacygraph.service.LlmProviderService;
+import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.service.system.LlmProviderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +27,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.system.PromptTemplateService;
 
 /**
  * LlmGateway Phase 0 加固行为测试。
@@ -50,8 +51,8 @@ class LlmGatewayTest {
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
         // 模板加载器：DB 无模板时回退到 classpath 文件
-        io.github.legacygraph.service.PromptTemplateService promptTemplateService =
-                org.mockito.Mockito.mock(io.github.legacygraph.service.PromptTemplateService.class);
+        io.github.legacygraph.service.system.PromptTemplateService promptTemplateService =
+                org.mockito.Mockito.mock(io.github.legacygraph.service.system.PromptTemplateService.class);
         org.mockito.Mockito.lenient().when(promptTemplateService.getActiveByCode(
                 org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
         PromptTemplateLoader templateLoader = new PromptTemplateLoader(promptTemplateService);

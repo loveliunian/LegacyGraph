@@ -11,7 +11,9 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -57,8 +59,19 @@ public class FactPersister {
         if (drafts == null || drafts.isEmpty()) {
             return;
         }
-        List<Fact> facts = new ArrayList<>(drafts.size());
+        // 按冲突键去重，避免同一批次中出现重复的 (project_id, version_id, fact_type, fact_key)
+        // 否则 PostgreSQL 会报: ON CONFLICT DO UPDATE command cannot affect row a second time
+        Map<String, FactDraft> deduped = new LinkedHashMap<>();
         for (FactDraft draft : drafts) {
+            String key = draft.getProjectId() + "|" + draft.getVersionId() + "|"
+                    + draft.getFactType() + "|" + draft.getFactKey();
+            deduped.put(key, draft);
+        }
+        if (deduped.size() < drafts.size()) {
+            log.info("Deduplicated facts: {} -> {}", drafts.size(), deduped.size());
+        }
+        List<Fact> facts = new ArrayList<>(deduped.size());
+        for (FactDraft draft : deduped.values()) {
             try {
                 Fact fact = new Fact();
                 fact.setId(UUID.randomUUID().toString());

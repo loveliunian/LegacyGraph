@@ -1,5 +1,7 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.service.report.ScanPerformanceReportService;
+
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.ScanTaskRepository;

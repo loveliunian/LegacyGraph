@@ -2,7 +2,10 @@
   <div class="business-graph">
     <div class="page-header">
       <h3>业务图谱</h3>
-      <el-button type="primary" size="small" @click="toggleAiView">
+      <el-button
+        type="primary"
+        size="small"
+        @click="toggleAiView">
         <el-icon><View /></el-icon>
         {{ showAiView ? '显示原始' : 'AI归纳视图' }}
       </el-button>
@@ -24,7 +27,11 @@
             <template #default="{ node, data }">
               <span class="custom-tree-node">
                 <span>{{ node.label }}</span>
-                <el-tag v-if="data.confidence" size="small" :type="data.confidence >= 0.8 ? 'success' : data.confidence >= 0.6 ? 'warning' : 'danger'" style="margin-left: 8px;">
+                <el-tag
+                  v-if="data.confidence"
+                  size="small"
+                  :type="data.confidence >= 0.8 ? 'success' : data.confidence >= 0.6 ? 'warning' : 'danger'"
+                  style="margin-left: 8px;">
                   {{ (data.confidence * 100).toFixed(0) }}%
                 </el-tag>
               </span>
@@ -55,11 +62,17 @@
           <template #header>
             <span>节点详情</span>
           </template>
-          <div v-if="!selectedNode" class="empty-state">
+          <div
+            v-if="!selectedNode"
+            class="empty-state">
             <el-empty description="点击节点查看详情" />
           </div>
-          <div v-else class="node-detail">
-            <el-descriptions :column="1" border>
+          <div
+            v-else
+            class="node-detail">
+            <el-descriptions
+              :column="1"
+              border>
               <el-descriptions-item label="节点ID">{{ selectedNode.id }}</el-descriptions-item>
               <el-descriptions-item label="名称">{{ selectedNode.label }}</el-descriptions-item>
               <el-descriptions-item label="类型">{{ selectedNode.type }}</el-descriptions-item>
@@ -68,24 +81,45 @@
                   {{ (selectedNode.confidence * 100).toFixed(1) }}%
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="描述" v-if="selectedNode.description">
+              <el-descriptions-item
+                v-if="selectedNode.description"
+                label="描述">
                 {{ selectedNode.description }}
               </el-descriptions-item>
             </el-descriptions>
-            <div v-if="selectedNode.evidence && selectedNode.evidence.length > 0" class="evidence-list">
+            <div
+              v-if="selectedNode.evidence && selectedNode.evidence.length > 0"
+              class="evidence-list">
               <div class="evidence-title">证据来源:</div>
-              <el-tag v-for="ev in selectedNode.evidence" :key="ev.sourceUri" size="small" class="evidence-tag">
+              <el-tag
+                v-for="ev in selectedNode.evidence"
+                :key="ev.sourceUri"
+                size="small"
+                class="evidence-tag">
                 {{ ev.sourceType }}: {{ ev.sourceUri.split('/').pop() }}
               </el-tag>
             </div>
-            <div class="action-buttons" style="margin-top: 16px;">
-              <el-button type="primary" size="small" @click="generateTestCases">生成测试用例</el-button>
-              <el-button size="small" @click="goToReview">进入审核</el-button>
+            <div
+              class="action-buttons"
+              style="margin-top: 16px;">
+              <el-button
+                type="primary"
+                size="small"
+                @click="generateTestCases">
+                生成测试用例
+              </el-button>
+              <el-button
+                size="small"
+                @click="goToReview">
+                进入审核
+              </el-button>
             </div>
           </div>
         </el-card>
 
-        <el-card class="ai-card" style="margin-top: 16px;">
+        <el-card
+          class="ai-card"
+          style="margin-top: 16px;">
           <template #header>
             <div class="card-header">
               <span><el-icon><MagicStick /></el-icon> AI 统计</span>
@@ -162,7 +196,8 @@ const graphStats = ref({
 async function loadVersions() {
   const pid = projectId.value
   if (!pid) return
-  versions.value = await loadScanVersions(pid)
+  const result = await loadScanVersions(pid)
+  versions.value = result || []
 }
 
 function buildDomainTree(rawNodes: any[]) {
@@ -219,7 +254,7 @@ async function loadGraph(domain = '') {
   if (!projectId.value || !currentVersion.value) return
   loading.value = true
   try {
-    const data = await graphApi.getBusinessView(projectId.value, currentVersion.value, domain) as any
+    const data = await graphApi.getBusinessView(projectId.value, currentVersion.value, domain)
     const nodes = Array.isArray(data?.nodes) ? data.nodes : []
     const edges = Array.isArray(data?.edges) ? data.edges : []
 

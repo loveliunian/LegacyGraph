@@ -2,14 +2,23 @@
   <div class="repo-list">
     <div class="page-header">
       <h3>代码仓库配置</h3>
-      <el-button type="primary" @click="showCreateDialog">
+      <el-button
+        type="primary"
+        @click="showCreateDialog">
         <el-icon><Plus /></el-icon>
         添加仓库
       </el-button>
     </div>
 
-    <el-table :data="repoList" v-loading="loading" border stripe>
-      <el-table-column prop="repoName" label="仓库名称" width="180">
+    <el-table
+      v-loading="loading"
+      :data="repoList"
+      border
+      stripe>
+      <el-table-column
+        prop="repoName"
+        label="仓库名称"
+        width="180">
         <template #default="{ row }">
           <div class="repo-name">
             <el-icon :class="row.repoType === 'BACKEND' ? 'backend' : row.repoType === 'FULLSTACK' ? 'fullstack' : 'frontend'">
@@ -19,45 +28,99 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="repoType" label="类型" width="100">
+      <el-table-column
+        prop="repoType"
+        label="类型"
+        width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.repoType === 'BACKEND' ? 'primary' : row.repoType === 'FRONTEND' ? 'success' : 'warning'">
+          <el-tag
+            size="small"
+            :type="row.repoType === 'BACKEND' ? 'primary' : row.repoType === 'FRONTEND' ? 'success' : 'warning'">
             {{ row.repoType === 'BACKEND' ? '后端' : row.repoType === 'FRONTEND' ? '前端' : '全栈' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="gitUrl" label="Git地址" show-overflow-tooltip />
-      <el-table-column prop="branchName" label="分支" width="120" />
-      <el-table-column label="最近拉取" width="180">
+      <el-table-column
+        prop="gitUrl"
+        label="Git地址"
+        show-overflow-tooltip />
+      <el-table-column
+        prop="branchName"
+        label="分支"
+        width="120" />
+      <el-table-column
+        label="最近拉取"
+        width="180">
         <template #default="{ row }">
           <span v-if="row.lastPullTime">{{ formatTime(row.lastPullTime) }}</span>
-          <span v-else class="text-gray">未拉取</span>
+          <span
+            v-else
+            class="text-gray">未拉取</span>
         </template>
       </el-table-column>
-      <el-table-column label="最近扫描" width="180">
+      <el-table-column
+        label="最近扫描"
+        width="180">
         <template #default="{ row }">
           <span v-if="row.lastScanTime">{{ formatTime(row.lastScanTime) }}</span>
-          <span v-else class="text-gray">未扫描</span>
+          <span
+            v-else
+            class="text-gray">未扫描</span>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="100">
+      <el-table-column
+        prop="status"
+        label="状态"
+        width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.status !== 'INIT'" size="small" :type="getStatusType(row.status)">
+          <el-tag
+            v-if="row.status !== 'INIT'"
+            size="small"
+            :type="getStatusType(row.status)">
             {{ getStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="240" fixed="right">
+      <el-table-column
+        label="操作"
+        width="240"
+        fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="pullRepo(row)">拉取</el-button>
-          <el-button type="success" link size="small" @click="scanRepo(row)">扫描</el-button>
-          <el-button type="warning" link size="small" @click="showEditDialog(row)">修改</el-button>
-          <el-button type="danger" link size="small" @click="deleteRepo(row)">删除</el-button>
+          <el-button
+            type="primary"
+            link
+            size="small"
+            @click="pullRepo(row)">
+            拉取
+          </el-button>
+          <el-button
+            type="success"
+            link
+            size="small"
+            @click="scanRepo(row)">
+            扫描
+          </el-button>
+          <el-button
+            type="warning"
+            link
+            size="small"
+            @click="showEditDialog(row)">
+            修改
+          </el-button>
+          <el-button
+            type="danger"
+            link
+            size="small"
+            @click="deleteRepo(row)">
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div class="pagination-wrapper" v-if="total > 0">
+    <div
+      v-if="total > 0"
+      class="pagination-wrapper">
       <el-pagination
         v-model:current-page="pageNum"
         v-model:page-size="pageSize"
@@ -69,65 +132,125 @@
       />
     </div>
 
-    <el-empty v-if="repoList.length === 0" description="暂无仓库配置" />
+    <el-empty
+      v-if="repoList.length === 0"
+      description="暂无仓库配置" />
 
     <!-- 新增/编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="editingId ? '修改代码仓库' : '添加代码仓库'" width="620px">
-      <el-form :model="repoForm" label-width="100px">
-        <el-form-item label="仓库名称" required>
-          <el-input v-model="repoForm.repoName" placeholder="请输入仓库名称" />
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '修改代码仓库' : '添加代码仓库'"
+      width="620px">
+      <el-form
+        :model="repoForm"
+        label-width="100px">
+        <el-form-item
+          label="仓库名称"
+          required>
+          <el-input
+            v-model="repoForm.repoName"
+            placeholder="请输入仓库名称" />
         </el-form-item>
-        <el-form-item label="仓库类型" required>
+        <el-form-item
+          label="仓库类型"
+          required>
           <el-radio-group v-model="repoForm.repoType">
             <el-radio label="BACKEND">后端</el-radio>
             <el-radio label="FRONTEND">前端</el-radio>
             <el-radio label="FULLSTACK">全栈</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="Git地址" required>
+        <el-form-item
+          label="Git地址"
+          required>
           <div style="display: flex; gap: 8px; width: 100%;">
-            <el-input v-model="repoForm.gitUrl" placeholder="https://github.com/xxx/xxx.git" style="flex: 1;" />
-            <el-button type="success" :loading="testingUrl" @click="testRepoUrl">测试连接</el-button>
+            <el-input
+              v-model="repoForm.gitUrl"
+              placeholder="https://github.com/xxx/xxx.git"
+              style="flex: 1;" />
+            <el-button
+              type="success"
+              :loading="testingUrl"
+              @click="testRepoUrl">
+              测试连接
+            </el-button>
           </div>
         </el-form-item>
-        <el-form-item label="分支" required>
-          <el-input v-model="repoForm.branch" placeholder="main / master" />
+        <el-form-item
+          label="分支"
+          required>
+          <el-input
+            v-model="repoForm.branch"
+            placeholder="main / master" />
         </el-form-item>
         <!-- 全栈项目：分别指定前后端子路径 -->
         <template v-if="repoForm.repoType === 'FULLSTACK'">
           <el-form-item label="后端路径">
-            <el-input v-model="repoForm.backendSubPath" placeholder="backend / server / src" />
+            <el-input
+              v-model="repoForm.backendSubPath"
+              placeholder="backend / server / src" />
           </el-form-item>
           <el-form-item label="前端路径">
-            <el-input v-model="repoForm.frontendSubPath" placeholder="frontend / web / client" />
+            <el-input
+              v-model="repoForm.frontendSubPath"
+              placeholder="frontend / web / client" />
           </el-form-item>
         </template>
-        <el-form-item label="认证方式" required>
+        <el-form-item
+          label="认证方式"
+          required>
           <el-radio-group v-model="repoForm.authType">
             <el-radio label="NONE">无需认证</el-radio>
             <el-radio label="TOKEN">Token</el-radio>
             <el-radio label="USER_PASSWORD">用户名密码</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="repoForm.authType === 'TOKEN'" label="Token" required>
-          <el-input v-model="repoForm.token" type="password" placeholder="请输入Token" />
+        <el-form-item
+          v-if="repoForm.authType === 'TOKEN'"
+          label="Token"
+          required>
+          <el-input
+            v-model="repoForm.token"
+            type="password"
+            placeholder="请输入Token" />
         </el-form-item>
-        <el-form-item v-if="repoForm.authType === 'USER_PASSWORD'" label="用户名" required>
-          <el-input v-model="repoForm.username" placeholder="请输入用户名" />
+        <el-form-item
+          v-if="repoForm.authType === 'USER_PASSWORD'"
+          label="用户名"
+          required>
+          <el-input
+            v-model="repoForm.username"
+            placeholder="请输入用户名" />
         </el-form-item>
-        <el-form-item v-if="repoForm.authType === 'USER_PASSWORD'" label="密码" required>
-          <el-input v-model="repoForm.password" type="password" placeholder="请输入密码" />
+        <el-form-item
+          v-if="repoForm.authType === 'USER_PASSWORD'"
+          label="密码"
+          required>
+          <el-input
+            v-model="repoForm.password"
+            type="password"
+            placeholder="请输入密码" />
         </el-form-item>
         <el-form-item label="包含路径">
-          <el-input v-model="repoForm.includePattern" type="textarea" placeholder="src/main/java/**" />
+          <el-input
+            v-model="repoForm.includePattern"
+            type="textarea"
+            placeholder="src/main/java/**" />
         </el-form-item>
         <el-form-item label="排除路径">
-          <el-input v-model="repoForm.excludePattern" type="textarea" placeholder="**/test/**,**/node_modules/**" />
+          <el-input
+            v-model="repoForm.excludePattern"
+            type="textarea"
+            placeholder="**/test/**,**/node_modules/**" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveRepo">保存</el-button>
+        <el-button
+          type="primary"
+          @click="saveRepo">
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </div>

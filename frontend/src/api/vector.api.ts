@@ -54,8 +54,8 @@ export const vectorApi = {
    * @param chunkType 过滤块类型，可选
    * @returns 相似的向量文档列表，按相似度降序排列
    */
-  semanticSearch: (projectId: string, query: string, topK: number = 10, chunkType?: string) => {
-    return post<VectorDocument[]>(`/lg/vector/projects/${projectId}/search?topK=${topK}&chunkType=${chunkType || ''}`, query)
+  semanticSearch: (projectId: string, versionId: string, query: string, topK: number = 10, chunkType?: string) => {
+    return post<VectorDocument[]>(`/lg/vector/projects/${projectId}/search?versionId=${versionId || ''}&topK=${topK}&chunkType=${chunkType || ''}`, query)
   },
 
   /**
@@ -66,7 +66,7 @@ export const vectorApi = {
    * @param threshold 相似度阈值，默认0.85
    * @returns 相似节点列表
    */
-  findSimilarNodes: (projectId: string, nodeName: string, threshold: number = 0.85) => {
-    return get<GraphNode[]>(`/lg/vector/projects/${projectId}/similar-nodes`, { nodeName, threshold })
+  findSimilarNodes: (projectId: string, versionId: string, nodeName: string, threshold: number = 0.85) => {
+    return get<GraphNode[]>(`/lg/vector/projects/${projectId}/similar-nodes`, { versionId, nodeName, threshold })
   }
 }

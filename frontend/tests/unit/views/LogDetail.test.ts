@@ -8,10 +8,15 @@ vi.mock('@/utils/request', () => ({
   get: vi.fn(() => Promise.resolve({}))
 }))
 
-vi.mock('@element-plus/icons-vue', () => ({
-  ArrowLeft: { template: '<i class="mock-icon"></i>' },
-  Download: { template: '<i class="mock-icon"></i>' }
-}))
+vi.mock('@element-plus/icons-vue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@element-plus/icons-vue')>()
+  return {
+    ...actual,
+    ArrowLeft: { template: '<i class="mock-icon"></i>' },
+    Download: { template: '<i class="mock-icon"></i>' },
+    Close: { template: '<i class="mock-icon"></i>' }
+  }
+})
 
 describe('LogDetail 页面', () => {
   let router: any
@@ -32,7 +37,7 @@ describe('LogDetail 页面', () => {
     const wrapper = mount(LogDetail, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-card', 'el-button', 'el-descriptions', 'el-descriptions-item', 'el-tag', 'el-avatar', 'el-divider']
+        stubs: ['el-descriptions', 'el-descriptions-item', 'el-tag', 'el-avatar', 'el-divider']
       }
     })
     expect(wrapper.find('.log-detail-page').exists()).toBe(true)
@@ -42,7 +47,7 @@ describe('LogDetail 页面', () => {
     const wrapper = mount(LogDetail, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-card', 'el-button', 'el-descriptions', 'el-descriptions-item', 'el-tag', 'el-avatar', 'el-divider']
+        stubs: ['el-descriptions', 'el-descriptions-item', 'el-tag', 'el-avatar', 'el-divider']
       }
     })
     expect(wrapper.find('.card-header').exists()).toBe(true)

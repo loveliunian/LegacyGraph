@@ -2,28 +2,51 @@
   <div class="scan-task-list">
     <div class="page-header">
       <h3>扫描任务</h3>
-      <el-button type="primary" @click="goToCreate">
+      <el-button
+        type="primary"
+        @click="goToCreate">
         <el-icon><Plus /></el-icon>
         新建扫描
       </el-button>
     </div>
 
-    <el-table :data="taskList" v-loading="loading" border stripe>
-      <el-table-column prop="taskName" label="任务名称" width="200" />
-      <el-table-column prop="taskType" label="任务类型" width="120">
+    <el-table
+      v-loading="loading"
+      :data="taskList"
+      border
+      stripe>
+      <el-table-column
+        prop="taskName"
+        label="任务名称"
+        width="200" />
+      <el-table-column
+        prop="taskType"
+        label="任务类型"
+        width="120">
         <template #default="{ row }">
           <el-tag size="small">{{ getTaskTypeText(row.taskType) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="100">
+      <el-table-column
+        prop="status"
+        label="状态"
+        width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="getStatusType(row.status)">
+          <el-tag
+            size="small"
+            :type="getStatusType(row.status)">
             {{ getStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="stage" label="当前阶段" width="150" />
-      <el-table-column prop="progress" label="进度" width="180">
+      <el-table-column
+        prop="stage"
+        label="当前阶段"
+        width="150" />
+      <el-table-column
+        prop="progress"
+        label="进度"
+        width="180">
         <template #default="{ row }">
           <div class="progress-wrapper">
             <el-progress
@@ -31,51 +54,124 @@
               :status="row.status === 'FAILED' ? 'exception' : (row.progress === 100 ? 'success' : undefined)"
               :stroke-width="16"
             />
-            <span v-if="row.taskCount > 0" class="progress-text">{{ row.completedTaskCount }}/{{ row.taskCount }}</span>
+            <span
+              v-if="row.taskCount > 0"
+              class="progress-text">{{ row.completedTaskCount }}/{{ row.taskCount }}</span>
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="factCount" label="事实数" width="100" align="center">
+      <el-table-column
+        prop="factCount"
+        label="事实数"
+        width="100"
+        align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.factCount" size="small" type="success">{{ row.factCount }}</el-tag>
-          <span v-else class="text-gray">-</span>
+          <el-tag
+            v-if="row.factCount"
+            size="small"
+            type="success">
+            {{ row.factCount }}
+          </el-tag>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="nodeCount" label="节点数" width="100" align="center">
+      <el-table-column
+        prop="nodeCount"
+        label="节点数"
+        width="100"
+        align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.nodeCount" size="small" type="primary">{{ row.nodeCount }}</el-tag>
-          <span v-else class="text-gray">-</span>
+          <el-tag
+            v-if="row.nodeCount"
+            size="small"
+            type="primary">
+            {{ row.nodeCount }}
+          </el-tag>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="edgeCount" label="关系数" width="100" align="center">
+      <el-table-column
+        prop="edgeCount"
+        label="关系数"
+        width="100"
+        align="center">
         <template #default="{ row }">
-          <el-tag v-if="row.edgeCount" size="small" type="warning">{{ row.edgeCount }}</el-tag>
-          <span v-else class="text-gray">-</span>
+          <el-tag
+            v-if="row.edgeCount"
+            size="small"
+            type="warning">
+            {{ row.edgeCount }}
+          </el-tag>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="startTime" label="开始时间" width="180">
+      <el-table-column
+        prop="startTime"
+        label="开始时间"
+        width="180">
         <template #default="{ row }">
           <span v-if="row.startTime">{{ formatTime(row.startTime) }}</span>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="duration" label="耗时" width="100">
+      <el-table-column
+        prop="duration"
+        label="耗时"
+        width="100">
         <template #default="{ row }">
           <span v-if="row.duration">{{ formatDuration(row.duration) }}</span>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="createdBy" label="创建人" width="120" />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column
+        prop="createdBy"
+        label="创建人"
+        width="120" />
+      <el-table-column
+        label="操作"
+        width="200"
+        fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="viewLogs(row)">查看日志</el-button>
-          <el-button v-if="row.status === 'RUNNING'" type="danger" link size="small" @click="stopTask(row)">停止</el-button>
-          <el-button v-if="row.status === 'FAILED'" type="warning" link size="small" @click="retryTask(row)">重试</el-button>
+          <el-button
+            type="primary"
+            link
+            size="small"
+            @click="viewLogs(row)">
+            查看日志
+          </el-button>
+          <el-button
+            v-if="row.status === 'RUNNING'"
+            type="danger"
+            link
+            size="small"
+            @click="stopTask(row)">
+            停止
+          </el-button>
+          <el-button
+            v-if="row.status === 'FAILED'"
+            type="warning"
+            link
+            size="small"
+            @click="retryTask(row)">
+            重试
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div class="pagination-wrapper" v-if="total > 0">
+    <div
+      v-if="total > 0"
+      class="pagination-wrapper">
       <el-pagination
         v-model:current-page="pageNum"
         v-model:page-size="pageSize"
@@ -87,16 +183,31 @@
       />
     </div>
 
-    <el-empty v-if="taskList.length === 0" description="暂无扫描任务" />
+    <el-empty
+      v-if="taskList.length === 0"
+      description="暂无扫描任务" />
 
-    <el-dialog v-model="logDialogVisible" title="任务日志" width="900px" append-to-body>
+    <el-dialog
+      v-model="logDialogVisible"
+      title="任务日志"
+      width="900px"
+      append-to-body>
       <div class="log-container">
-        <div v-for="(log, index) in logs" :key="index" class="log-item">
+        <div
+          v-for="(log, index) in logs"
+          :key="index"
+          class="log-item">
           <span class="log-time">{{ log.time }}</span>
-          <el-tag :type="log.type === 'ERROR' ? 'danger' : 'info'" size="small">{{ log.type }}</el-tag>
+          <el-tag
+            :type="log.type === 'ERROR' ? 'danger' : 'info'"
+            size="small">
+            {{ log.type }}
+          </el-tag>
           <span class="log-message">{{ log.message }}</span>
         </div>
-        <el-empty v-if="logs.length === 0" description="暂无日志" />
+        <el-empty
+          v-if="logs.length === 0"
+          description="暂无日志" />
       </div>
       <template #footer>
         <el-button @click="logDialogVisible = false">关闭</el-button>

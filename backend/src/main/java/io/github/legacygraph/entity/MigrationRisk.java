@@ -12,7 +12,7 @@ import java.util.List;
  * 迁移风险实体
  */
 @Data
-@TableName("migration_risk")
+@TableName("lg_migration_risk")
 public class MigrationRisk {
 
     @TableId(type = IdType.ASSIGN_UUID)

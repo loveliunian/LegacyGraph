@@ -21,6 +21,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.graph.FeatureSliceSynthesizer;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
 
 /**
  * FeatureSliceSynthesizer 单元测试。

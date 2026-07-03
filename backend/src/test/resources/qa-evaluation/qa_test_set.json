@@ -1,0 +1,66 @@
+{
+  "description": "LegacyGraph QA 评测集 - 用于评估问答系统质量",
+  "version": "1.0",
+  "test_cases": [
+    {
+      "id": "qa_001",
+      "category": "代码理解",
+      "question": "这个项目中 UserController 的主要功能是什么？",
+      "expected_keywords": ["用户", "控制器", "接口", "API"],
+      "expected_evidence_types": ["JAVA_FILE", "METHOD"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
+    },
+    {
+      "id": "qa_002",
+      "category": "架构分析",
+      "question": "数据库连接池是如何配置的？",
+      "expected_keywords": ["HikariCP", "连接池", "数据源", "配置"],
+      "expected_evidence_types": ["CONFIG_FILE", "JAVA_FILE"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
+    },
+    {
+      "id": "qa_003",
+      "category": "依赖关系",
+      "question": "OrderService 依赖了哪些其他服务？",
+      "expected_keywords": ["依赖", "注入", "Service", "调用"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
+    },
+    {
+      "id": "qa_004",
+      "category": "代码质量",
+      "question": "项目中有哪些潜在的安全风险？",
+      "expected_keywords": ["SQL注入", "XSS", "认证", "授权", "安全"],
+      "expected_evidence_types": ["KNOWLEDGE_CLAIM", "JAVA_FILE"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
+    },
+    {
+      "id": "qa_005",
+      "category": "性能优化",
+      "question": "如何优化这个系统的响应时间？",
+      "expected_keywords": ["缓存", "索引", "优化", "性能", "延迟"],
+      "expected_evidence_types": ["KNOWLEDGE_CLAIM", "CONFIG_FILE"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
+    }
+  ]
+}

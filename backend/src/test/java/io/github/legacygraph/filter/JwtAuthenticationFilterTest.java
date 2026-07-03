@@ -1,6 +1,6 @@
 package io.github.legacygraph.filter;
 
-import io.github.legacygraph.service.TokenBlacklistService;
+import io.github.legacygraph.service.system.TokenBlacklistService;
 import io.github.legacygraph.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;

@@ -12,6 +12,9 @@ export { agentApi } from './agent.api'
 export { qaApi } from './qa.api'
 export { changeTaskApi } from './change-task.api'
 export { auditApi } from './audit.api'
+export { notificationApi } from './notification.api'
+export { pluginApi, type PluginDescriptor } from './plugin.api'
+export { evidenceConflictApi, type EvidenceConflict } from './evidence-conflict.api'
 
 // 保留原有导出向后兼容
 import { get, post, del, put } from '@/utils/request'
@@ -284,6 +287,11 @@ export const graphApi = {
     return get(`/lg/projects/${projectId}/scan-versions`)
   },
 
+  /** 图谱版本差异对比 */
+  getGraphDiff: (projectId: string, versionA: string, versionB: string) => {
+    return get(`/lg/graph/diff`, { projectId, versionA, versionB })
+  },
+
   /** 创建审核任务 */
   createReview: (projectId: string, data: Record<string, any>) => {
     return post(`/lg/projects/${projectId}/reviews`, data)
@@ -491,4 +499,3 @@ export const validationApi = {
     return post('/lg/validation/confirm', data)
   }
 }
-

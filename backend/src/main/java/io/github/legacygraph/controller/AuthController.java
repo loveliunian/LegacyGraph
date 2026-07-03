@@ -7,6 +7,7 @@ import io.github.legacygraph.dto.LoginRequest;
 import io.github.legacygraph.dto.LoginResponse;
 import io.github.legacygraph.entity.SysUser;
 import io.github.legacygraph.repository.SysUserRepository;
+import io.github.legacygraph.service.system.TokenBlacklistService;
 import io.github.legacygraph.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -34,7 +35,7 @@ public class AuthController {
     private final SysUserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    private final io.github.legacygraph.service.TokenBlacklistService tokenBlacklistService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     /**
      * 构造函数注入
@@ -43,7 +44,7 @@ public class AuthController {
      * @param tokenBlacklistService JWT 登出黑名单服务
      */
     public AuthController(SysUserRepository userRepository, JwtUtil jwtUtil,
-                          io.github.legacygraph.service.TokenBlacklistService tokenBlacklistService) {
+                          TokenBlacklistService tokenBlacklistService) {
         this.userRepository = userRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.jwtUtil = jwtUtil;

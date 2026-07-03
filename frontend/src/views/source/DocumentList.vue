@@ -17,8 +17,15 @@
       </el-upload>
     </div>
 
-    <el-table :data="docList" v-loading="loading" border stripe>
-      <el-table-column prop="docName" label="文档名称" width="200">
+    <el-table
+      v-loading="loading"
+      :data="docList"
+      border
+      stripe>
+      <el-table-column
+        prop="docName"
+        label="文档名称"
+        width="200">
         <template #default="{ row }">
           <div class="doc-name">
             <el-icon :class="getDocIconClass(row.docType)">
@@ -28,46 +35,103 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="docType" label="类型" width="120">
+      <el-table-column
+        prop="docType"
+        label="类型"
+        width="120">
         <template #default="{ row }">
           <el-tag size="small">{{ getDocTypeText(row.docType) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="fileType" label="文件类型" width="100">
+      <el-table-column
+        prop="fileType"
+        label="文件类型"
+        width="100">
         <template #default="{ row }">
-          <el-tag size="small" type="info">{{ row.fileType }}</el-tag>
+          <el-tag
+            size="small"
+            type="info">
+            {{ row.fileType }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="fileSize" label="文件大小" width="100">
+      <el-table-column
+        prop="fileSize"
+        label="文件大小"
+        width="100">
         <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
       </el-table-column>
-      <el-table-column prop="uploader" label="上传人" width="120" />
-      <el-table-column prop="uploadedAt" label="上传时间" width="180">
+      <el-table-column
+        prop="uploader"
+        label="上传人"
+        width="120" />
+      <el-table-column
+        prop="uploadedAt"
+        label="上传时间"
+        width="180">
         <template #default="{ row }">{{ formatTime(row.uploadedAt) }}</template>
       </el-table-column>
-      <el-table-column prop="parseStatus" label="解析状态" width="100">
+      <el-table-column
+        prop="parseStatus"
+        label="解析状态"
+        width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="getParseStatusType(row.parseStatus)">
+          <el-tag
+            size="small"
+            :type="getParseStatusType(row.parseStatus)">
             {{ dictLabel('doc_parse_status', row.parseStatus) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="抽取事实" width="100">
+      <el-table-column
+        label="抽取事实"
+        width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.factCount" size="small" type="success">{{ row.factCount }}</el-tag>
-          <span v-else class="text-gray">-</span>
+          <el-tag
+            v-if="row.factCount"
+            size="small"
+            type="success">
+            {{ row.factCount }}
+          </el-tag>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column
+        label="操作"
+        width="200"
+        fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="preview(row)">预览</el-button>
-          <el-button type="success" link size="small" @click="parseDoc(row)" :disabled="row.parseStatus === 'PARSING'">解析</el-button>
-          <el-button type="danger" link size="small" @click="deleteDoc(row)">删除</el-button>
+          <el-button
+            type="primary"
+            link
+            size="small"
+            @click="preview(row)">
+            预览
+          </el-button>
+          <el-button
+            type="success"
+            link
+            size="small"
+            :disabled="row.parseStatus === 'PARSING'"
+            @click="parseDoc(row)">
+            解析
+          </el-button>
+          <el-button
+            type="danger"
+            link
+            size="small"
+            @click="deleteDoc(row)">
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div class="pagination-wrapper" v-if="total > 0">
+    <div
+      v-if="total > 0"
+      class="pagination-wrapper">
       <el-pagination
         v-model:current-page="pageNum"
         v-model:page-size="pageSize"
@@ -79,7 +143,9 @@
       />
     </div>
 
-    <el-empty v-if="docList.length === 0" description="暂无文档资料" />
+    <el-empty
+      v-if="docList.length === 0"
+      description="暂无文档资料" />
 
     <!-- Markdown 预览弹窗 -->
     <el-dialog
@@ -90,17 +156,33 @@
       destroy-on-close
       class="md-preview-dialog"
     >
-      <div v-if="previewLoading" class="preview-loading">
-        <el-skeleton :rows="10" animated />
+      <div
+        v-if="previewLoading"
+        class="preview-loading">
+        <el-skeleton
+          :rows="10"
+          animated />
       </div>
-      <div v-else-if="previewError" class="preview-error">
-        <el-result icon="error" title="加载失败" :sub-title="previewError">
+      <div
+        v-else-if="previewError"
+        class="preview-error">
+        <el-result
+          icon="error"
+          title="加载失败"
+          :sub-title="previewError">
           <template #extra>
-            <el-button type="primary" @click="retryPreview">重试</el-button>
+            <el-button
+              type="primary"
+              @click="retryPreview">
+              重试
+            </el-button>
           </template>
         </el-result>
       </div>
-      <div v-else class="markdown-body" v-html="previewHtml" />
+      <div
+        v-else
+        class="markdown-body"
+        v-html="previewHtml" />
     </el-dialog>
   </div>
 </template>

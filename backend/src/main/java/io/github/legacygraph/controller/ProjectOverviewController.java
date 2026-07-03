@@ -2,7 +2,7 @@ package io.github.legacygraph.controller;
 
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ProjectOverviewResponse;
-import io.github.legacygraph.service.ProjectOverviewService;
+import io.github.legacygraph.service.scan.ProjectOverviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;

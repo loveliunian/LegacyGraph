@@ -5,7 +5,9 @@
       <h1 class="error-title">{{ $t('common.notFound') }}</h1>
       <p class="error-desc">抱歉，您访问的页面不存在</p>
       <div class="error-actions">
-        <el-button type="primary" @click="goHome">
+        <el-button
+          type="primary"
+          @click="goHome">
           <el-icon><House /></el-icon>
           {{ $t('common.backToHome') }}
         </el-button>

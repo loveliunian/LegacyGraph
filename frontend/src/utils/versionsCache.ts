@@ -5,9 +5,17 @@
 import { get } from '@/utils/request'
 import type { Ref } from 'vue'
 
+export interface ScanVersion {
+  id: string
+  createdAt: string
+  nodeCount: number
+  edgeCount: number
+  [key: string]: unknown
+}
+
 const TTL = 5 * 60 * 1000 // 5 分钟
 
-let cachedVersions: any[] = []
+let cachedVersions: ScanVersion[] = []
 let cachedProjectId = ''
 let cacheTime = 0
 
@@ -18,8 +26,8 @@ let cacheTime = 0
  */
 export async function loadScanVersions(
   projectId: string,
-  versionsRef?: Ref<any[]>
-): Promise<any[]> {
+  versionsRef?: Ref<ScanVersion[]>
+): Promise<ScanVersion[]> {
   if (!projectId) return []
 
   // 同项目 + 未过期 → 直接用缓存
@@ -29,8 +37,9 @@ export async function loadScanVersions(
   }
 
   try {
-    const data: any = await get(`/lg/projects/${projectId}/scan-versions`)
-    cachedVersions = Array.isArray(data) ? data : (data.list || [])
+    const data: unknown = await get(`/lg/projects/${projectId}/scan-versions`)
+    const list = Array.isArray(data) ? data : (data as { list?: ScanVersion[] }).list || []
+    cachedVersions = list
     cachedProjectId = projectId
     cacheTime = Date.now()
     if (versionsRef) versionsRef.value = cachedVersions

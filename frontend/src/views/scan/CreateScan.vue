@@ -5,7 +5,10 @@
     </div>
 
     <el-card class="step-card">
-      <el-steps :active="currentStep" align-center finish-status="success">
+      <el-steps
+        :active="currentStep"
+        align-center
+        finish-status="success">
         <el-step title="选择扫描范围" />
         <el-step title="选择扫描类型" />
         <el-step title="配置扫描参数" />
@@ -14,53 +17,92 @@
 
       <div class="step-content">
         <!-- 步骤 1: 选择扫描范围 -->
-        <div v-if="currentStep === 0" class="step-panel">
+        <div
+          v-if="currentStep === 0"
+          class="step-panel">
           <div class="section-header">
             <h4>选择代码仓库</h4>
-            <el-button type="primary" link size="small" @click="toggleSelectAll('repo')">
+            <el-button
+              type="primary"
+              link
+              size="small"
+              @click="toggleSelectAll('repo')">
               {{ repoIdsAllSelected ? '取消全选' : '全选' }}
             </el-button>
           </div>
           <el-checkbox-group v-model="scanForm.repoIds">
             <div class="checkbox-group">
-              <el-checkbox v-for="repo in repoList" :key="repo.id" :label="repo.id">
+              <el-checkbox
+                v-for="repo in repoList"
+                :key="repo.id"
+                :label="repo.id">
                 <div class="checkbox-item">
                   <span class="item-name">{{ repo.repoName }}</span>
-                  <el-tag size="small" type="info">{{ repoTypeText(repo.repoType) }}</el-tag>
+                  <el-tag
+                    size="small"
+                    type="info">
+                    {{ repoTypeText(repo.repoType) }}
+                  </el-tag>
                 </div>
               </el-checkbox>
             </div>
           </el-checkbox-group>
 
-          <div class="section-header" style="margin-top: 24px;">
+          <div
+            class="section-header"
+            style="margin-top: 24px;">
             <h4>选择数据库</h4>
-            <el-button type="primary" link size="small" @click="toggleSelectAll('db')">
+            <el-button
+              type="primary"
+              link
+              size="small"
+              @click="toggleSelectAll('db')">
               {{ dbIdsAllSelected ? '取消全选' : '全选' }}
             </el-button>
           </div>
           <el-checkbox-group v-model="scanForm.dbIds">
             <div class="checkbox-group">
-              <el-checkbox v-for="db in dbList" :key="db.id" :label="db.id">
+              <el-checkbox
+                v-for="db in dbList"
+                :key="db.id"
+                :label="db.id">
                 <div class="checkbox-item">
                   <span class="item-name">{{ db.connectionName }}</span>
-                  <el-tag size="small" type="info">{{ db.dbType }}</el-tag>
+                  <el-tag
+                    size="small"
+                    type="info">
+                    {{ db.dbType }}
+                  </el-tag>
                 </div>
               </el-checkbox>
             </div>
           </el-checkbox-group>
 
-          <div class="section-header" style="margin-top: 24px;">
+          <div
+            class="section-header"
+            style="margin-top: 24px;">
             <h4>选择文档</h4>
-            <el-button type="primary" link size="small" @click="toggleSelectAll('doc')">
+            <el-button
+              type="primary"
+              link
+              size="small"
+              @click="toggleSelectAll('doc')">
               {{ docIdsAllSelected ? '取消全选' : '全选' }}
             </el-button>
           </div>
           <el-checkbox-group v-model="scanForm.docIds">
             <div class="checkbox-group">
-              <el-checkbox v-for="doc in docList" :key="doc.id" :label="doc.id">
+              <el-checkbox
+                v-for="doc in docList"
+                :key="doc.id"
+                :label="doc.id">
                 <div class="checkbox-item">
                   <span class="item-name">{{ doc.docName }}</span>
-                  <el-tag size="small" type="info">{{ doc.fileType }}</el-tag>
+                  <el-tag
+                    size="small"
+                    type="info">
+                    {{ doc.fileType }}
+                  </el-tag>
                 </div>
               </el-checkbox>
             </div>
@@ -68,7 +110,9 @@
         </div>
 
         <!-- 步骤 2: 选择扫描类型 -->
-        <div v-if="currentStep === 1" class="step-panel">
+        <div
+          v-if="currentStep === 1"
+          class="step-panel">
           <h4>选择扫描类型</h4>
           <el-checkbox-group v-model="scanForm.scanTypes">
             <el-row :gutter="20">
@@ -101,10 +145,17 @@
         </div>
 
         <!-- 步骤 3: 配置扫描参数 -->
-        <div v-if="currentStep === 2" class="step-panel">
-          <el-form :model="scanForm" label-width="160px" class="config-form">
+        <div
+          v-if="currentStep === 2"
+          class="step-panel">
+          <el-form
+            :model="scanForm"
+            label-width="160px"
+            class="config-form">
             <el-form-item label="任务名称">
-              <el-input v-model="scanForm.taskName" placeholder="例如: 2024-01-15 全量扫描" />
+              <el-input
+                v-model="scanForm.taskName"
+                placeholder="例如: 2024-01-15 全量扫描" />
             </el-form-item>
             <el-form-item label="是否增量扫描">
               <el-switch v-model="scanForm.incremental" />
@@ -115,7 +166,11 @@
               <span class="form-tip">使用 AI 对文档和代码进行语义分析，生成业务节点</span>
             </el-form-item>
             <el-form-item label="最低置信度阈值">
-              <el-slider v-model="scanForm.minConfidence" :min="0" :max="1" :step="0.05" />
+              <el-slider
+                v-model="scanForm.minConfidence"
+                :min="0"
+                :max="1"
+                :step="0.05" />
               <span class="form-tip">低于该置信度的推断结果将进入审核队列</span>
             </el-form-item>
             <el-form-item label="覆盖已有图谱">
@@ -130,46 +185,79 @@
         </div>
 
         <!-- 步骤 4: 确认并执行 -->
-        <div v-if="currentStep === 3" class="step-panel">
+        <div
+          v-if="currentStep === 3"
+          class="step-panel">
           <div class="confirm-section">
             <h4>扫描范围确认</h4>
-            <el-descriptions border :column="2">
+            <el-descriptions
+              border
+              :column="2">
               <el-descriptions-item label="代码仓库">
-                <el-tag v-for="id in scanForm.repoIds" :key="id" size="small" style="margin-right: 4px;">
+                <el-tag
+                  v-for="id in scanForm.repoIds"
+                  :key="id"
+                  size="small"
+                  style="margin-right: 4px;">
                   {{ getRepoName(id) }}
                 </el-tag>
-                <span v-if="scanForm.repoIds.length === 0" class="text-gray">未选择</span>
+                <span
+                  v-if="scanForm.repoIds.length === 0"
+                  class="text-gray">未选择</span>
               </el-descriptions-item>
               <el-descriptions-item label="数据库">
-                <el-tag v-for="id in scanForm.dbIds" :key="id" size="small" style="margin-right: 4px;">
+                <el-tag
+                  v-for="id in scanForm.dbIds"
+                  :key="id"
+                  size="small"
+                  style="margin-right: 4px;">
                   {{ getDbName(id) }}
                 </el-tag>
-                <span v-if="scanForm.dbIds.length === 0" class="text-gray">未选择</span>
+                <span
+                  v-if="scanForm.dbIds.length === 0"
+                  class="text-gray">未选择</span>
               </el-descriptions-item>
               <el-descriptions-item label="文档">
-                <el-tag v-for="id in scanForm.docIds" :key="id" size="small" style="margin-right: 4px;">
+                <el-tag
+                  v-for="id in scanForm.docIds"
+                  :key="id"
+                  size="small"
+                  style="margin-right: 4px;">
                   {{ getDocName(id) }}
                 </el-tag>
-                <span v-if="scanForm.docIds.length === 0" class="text-gray">未选择</span>
+                <span
+                  v-if="scanForm.docIds.length === 0"
+                  class="text-gray">未选择</span>
               </el-descriptions-item>
             </el-descriptions>
           </div>
 
           <div class="confirm-section">
             <h4>扫描类型确认</h4>
-            <el-descriptions border :column="2">
+            <el-descriptions
+              border
+              :column="2">
               <el-descriptions-item label="扫描类型">
-                <el-tag v-for="type in scanForm.scanTypes" :key="type" size="small" type="success" style="margin-right: 4px;">
+                <el-tag
+                  v-for="type in scanForm.scanTypes"
+                  :key="type"
+                  size="small"
+                  type="success"
+                  style="margin-right: 4px;">
                   {{ getScanTypeText(type) }}
                 </el-tag>
-                <span v-if="scanForm.scanTypes.length === 0" class="text-gray">未选择</span>
+                <span
+                  v-if="scanForm.scanTypes.length === 0"
+                  class="text-gray">未选择</span>
               </el-descriptions-item>
             </el-descriptions>
           </div>
 
           <div class="confirm-section">
             <h4>扫描参数确认</h4>
-            <el-descriptions border :column="2">
+            <el-descriptions
+              border
+              :column="2">
               <el-descriptions-item label="任务名称">{{ scanForm.taskName || '-' }}</el-descriptions-item>
               <el-descriptions-item label="增量扫描">{{ scanForm.incremental ? '是' : '否' }}</el-descriptions-item>
               <el-descriptions-item label="AI 归纳">{{ scanForm.enableAi ? '是' : '否' }}</el-descriptions-item>
@@ -189,9 +277,25 @@
       </div>
 
       <div class="step-actions">
-        <el-button v-if="currentStep > 0" @click="prevStep">上一步</el-button>
-        <el-button v-if="currentStep < 3" type="primary" @click="nextStep" :disabled="!canProceed()">下一步</el-button>
-        <el-button v-if="currentStep === 3" type="primary" @click="startScan" :loading="submitting">开始扫描</el-button>
+        <el-button
+          v-if="currentStep > 0"
+          @click="prevStep">
+          上一步
+        </el-button>
+        <el-button
+          v-if="currentStep < 3"
+          type="primary"
+          :disabled="!canProceed()"
+          @click="nextStep">
+          下一步
+        </el-button>
+        <el-button
+          v-if="currentStep === 3"
+          type="primary"
+          :loading="submitting"
+          @click="startScan">
+          开始扫描
+        </el-button>
       </div>
     </el-card>
   </div>

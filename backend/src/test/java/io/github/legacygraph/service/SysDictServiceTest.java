@@ -23,6 +23,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.system.SysDictService;
 
 @ExtendWith(MockitoExtension.class)
 class SysDictServiceTest {

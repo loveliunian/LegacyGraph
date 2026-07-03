@@ -1,0 +1,119 @@
+name: CI Security Gate
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-security:
+    name: Backend Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: Build Backend
+      run: |
+        cd backend
+        mvn clean compile -DskipTests
+        
+    - name: Run SpotBugs Security Analysis
+      run: |
+        cd backend
+        mvn com.github.spotbugs:spotbugs-maven-plugin:4.8.3.1:check
+        
+    - name: OWASP Dependency Check
+      uses: dependency-check/Dependency-Check_Action@main
+      with:
+        project: 'LegacyGraph'
+        path: 'backend'
+        format: 'HTML'
+        args: >
+          --failOnCVSS 7
+          --suppression owasp-suppressions.xml
+          
+    - name: Upload Dependency Check Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: dependency-check-report
+        path: reports/
+        
+    - name: Maven Test with Security Checks
+      run: |
+        cd backend
+        mvn test jacoco:report
+        
+    - name: Upload Test Coverage
+      uses: codecov/codecov-action@v4
+      with:
+        files: backend/target/site/jacoco/jacoco.xml
+        flags: backend
+
+  frontend-security:
+    name: Frontend Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: Run npm audit
+      run: |
+        cd frontend
+        npm audit --audit-level=high
+      continue-on-error: false
+      
+    - name: ESLint Security Scan
+      run: |
+        cd frontend
+        npm run lint
+        
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Upload Frontend Build
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-dist
+        path: frontend/dist/
+
+  security-summary:
+    name: Security Gate Summary
+    needs: [backend-security, frontend-security]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Check Security Gate Status
+      run: |
+        if [[ "${{ needs.backend-security.result }}" == "failure" || "${{ needs.frontend-security.result }}" == "failure" ]]; then
+          echo "❌ Security gate failed"
+          exit 1
+        else
+          echo "✅ Security gate passed"
+        fi

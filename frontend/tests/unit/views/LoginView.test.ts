@@ -36,7 +36,7 @@ describe('LoginPage View', () => {
     const wrapper = mount(LoginView, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-form', 'el-form-item', 'el-input', 'el-button', 'el-icon']
+        stubs: ['el-input', 'el-icon']
       }
     })
     expect(wrapper.find('.login-container').exists()).toBe(true)
@@ -46,7 +46,7 @@ describe('LoginPage View', () => {
     const wrapper = mount(LoginView, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-form', 'el-form-item', 'el-input', 'el-button', 'el-icon']
+        stubs: ['el-input', 'el-icon']
       }
     })
     expect(wrapper.find('form').exists()).toBe(true)
@@ -56,7 +56,7 @@ describe('LoginPage View', () => {
     const wrapper = mount(LoginView, {
       global: {
         plugins: [router, pinia],
-        stubs: ['el-form', 'el-form-item', 'el-input', 'el-button', 'el-icon']
+        stubs: ['el-input', 'el-icon']
       }
     })
     expect(wrapper.find('button').exists()).toBe(true)

@@ -1,5 +1,7 @@
 <template>
-  <el-dropdown @command="handleLocaleChange" trigger="click">
+  <el-dropdown
+    trigger="click"
+    @command="handleLocaleChange">
     <span class="lang-switcher">
       <el-icon :size="18"><Switch /></el-icon>
       <span class="current-lang">{{ currentLangLabel }}</span>

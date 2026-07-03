@@ -1,7 +1,9 @@
 <template>
   <div class="agent-page">
     <!-- 使用指引 -->
-    <el-collapse v-model="helpOpen" class="help-collapse">
+    <el-collapse
+      v-model="helpOpen"
+      class="help-collapse">
       <el-collapse-item name="help">
         <template #title>
           <el-icon><QuestionFilled /></el-icon>
@@ -18,10 +20,21 @@
           </ol>
           <el-divider />
           <p><strong>常用场景速查：</strong></p>
-          <el-table :data="QUICK_REF" size="small" stripe>
-            <el-table-column prop="want" label="我想..." width="220" />
-            <el-table-column prop="use" label="用这个能力" width="160" />
-            <el-table-column prop="need" label="需要准备" />
+          <el-table
+            :data="QUICK_REF"
+            size="small"
+            stripe>
+            <el-table-column
+              prop="want"
+              label="我想..."
+              width="220" />
+            <el-table-column
+              prop="use"
+              label="用这个能力"
+              width="160" />
+            <el-table-column
+              prop="need"
+              label="需要准备" />
           </el-table>
         </div>
       </el-collapse-item>
@@ -33,7 +46,12 @@
         <div class="card-header">
           <el-icon><Cpu /></el-icon>
           <span style="margin-left: 8px; font-weight: 600;">AI 助手</span>
-          <el-tag size="small" type="primary" style="margin-left: 12px;">{{ AGENT_COUNT }} 项能力</el-tag>
+          <el-tag
+            size="small"
+            type="primary"
+            style="margin-left: 12px;">
+            {{ AGENT_COUNT }} 项能力
+          </el-tag>
         </div>
       </template>
 
@@ -41,7 +59,9 @@
         <el-col
           v-for="agent in AGENTS"
           :key="agent.type"
-          :xs="24" :sm="12" :md="8"
+          :xs="24"
+          :sm="12"
+          :md="8"
           style="margin-bottom: 16px;"
         >
           <el-card
@@ -55,7 +75,11 @@
               </div>
               <div class="agent-title-row">
                 <h4>{{ agent.title }}</h4>
-                <el-tag size="small" :type="agent.tagType">{{ agent.tag }}</el-tag>
+                <el-tag
+                  size="small"
+                  :type="agent.tagType">
+                  {{ agent.tag }}
+                </el-tag>
               </div>
             </div>
             <p class="agent-desc">{{ agent.desc }}</p>
@@ -95,7 +119,9 @@
       <template v-if="activeAgent?.type === 'general'">
         <el-form label-width="90px">
           <el-form-item label="Agent 类型">
-            <el-select v-model="generalForm.agentType" style="width: 100%">
+            <el-select
+              v-model="generalForm.agentType"
+              style="width: 100%">
               <el-option
                 v-for="opt in GENERAL_AGENT_TYPES"
                 :key="opt.value"
@@ -107,7 +133,9 @@
           <el-form-item>
             <template #label>
               参数
-              <el-tooltip content="根据上面选的 Agent 类型填写对应参数，字段名见下方提示" placement="top">
+              <el-tooltip
+                content="根据上面选的 Agent 类型填写对应参数，字段名见下方提示"
+                placement="top">
                 <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
               </el-tooltip>
             </template>
@@ -117,7 +145,12 @@
               :rows="6"
               :placeholder="generalPlaceholder"
             />
-            <el-button link type="primary" size="small" @click="fillGeneralExample" style="margin-top: 4px;">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              style="margin-top: 4px;"
+              @click="fillGeneralExample">
               填入示例
             </el-button>
           </el-form-item>
@@ -128,27 +161,47 @@
       <template v-if="activeAgent?.type === 'sql'">
         <el-form label-width="100px">
           <el-form-item label="SQL 名称">
-            <el-input v-model="sqlForm.sqlKey" placeholder="例：用户订单查询 / order_list_query" />
+            <el-input
+              v-model="sqlForm.sqlKey"
+              placeholder="例：用户订单查询 / order_list_query" />
           </el-form-item>
           <el-form-item>
             <template #label>
               SQL 语句 *
-              <el-tooltip content="粘贴你要分析的完整 SQL 语句" placement="top">
+              <el-tooltip
+                content="粘贴你要分析的完整 SQL 语句"
+                placement="top">
                 <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
               </el-tooltip>
             </template>
-            <el-input v-model="sqlForm.sql" type="textarea" :rows="5" placeholder="SELECT o.*, u.name FROM orders o JOIN users u ON o.user_id = u.id WHERE o.status = 'pending' ORDER BY o.created_at DESC" />
+            <el-input
+              v-model="sqlForm.sql"
+              type="textarea"
+              :rows="5"
+              placeholder="SELECT o.*, u.name FROM orders o JOIN users u ON o.user_id = u.id WHERE o.status = 'pending' ORDER BY o.created_at DESC" />
           </el-form-item>
           <el-form-item>
             <template #label>
               表结构
-              <el-tooltip content="可选，粘贴 CREATE TABLE 语句帮助 AI 更准确分析" placement="top">
+              <el-tooltip
+                content="可选，粘贴 CREATE TABLE 语句帮助 AI 更准确分析"
+                placement="top">
                 <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
               </el-tooltip>
             </template>
-            <el-input v-model="sqlForm.schemaInfo" type="textarea" :rows="3" placeholder="CREATE TABLE orders (id BIGINT PRIMARY KEY, user_id BIGINT, status VARCHAR(20), created_at TIMESTAMP);&#10;CREATE TABLE users (id BIGINT PRIMARY KEY, name VARCHAR(100));" />
+            <el-input
+              v-model="sqlForm.schemaInfo"
+              type="textarea"
+              :rows="3"
+              placeholder="CREATE TABLE orders (id BIGINT PRIMARY KEY, user_id BIGINT, status VARCHAR(20), created_at TIMESTAMP);&#10;CREATE TABLE users (id BIGINT PRIMARY KEY, name VARCHAR(100));" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillSqlExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillSqlExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -156,21 +209,39 @@
       <template v-if="activeAgent?.type === 'test'">
         <el-form label-width="100px">
           <el-form-item label="功能标识 *">
-            <el-input v-model="testForm.featureKey" placeholder="例：user-login / order-create" />
+            <el-input
+              v-model="testForm.featureKey"
+              placeholder="例：user-login / order-create" />
           </el-form-item>
           <el-form-item label="功能名称">
-            <el-input v-model="testForm.featureName" placeholder="例：用户登录" />
+            <el-input
+              v-model="testForm.featureName"
+              placeholder="例：用户登录" />
           </el-form-item>
           <el-form-item label="API 端点">
-            <el-input v-model="testForm.apiEndpoint" placeholder="例：POST /api/login" />
+            <el-input
+              v-model="testForm.apiEndpoint"
+              placeholder="例：POST /api/login" />
           </el-form-item>
           <el-form-item label="关联表">
-            <el-input v-model="testForm.relatedTables" placeholder="例：user, login_log" />
+            <el-input
+              v-model="testForm.relatedTables"
+              placeholder="例：user, login_log" />
           </el-form-item>
           <el-form-item label="业务规则">
-            <el-input v-model="testForm.businessRules" type="textarea" :rows="3" placeholder="例：密码错误3次锁定账户30分钟；登录成功后记录登录日志" />
+            <el-input
+              v-model="testForm.businessRules"
+              type="textarea"
+              :rows="3"
+              placeholder="例：密码错误3次锁定账户30分钟；登录成功后记录登录日志" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillTestExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillTestExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -178,15 +249,29 @@
       <template v-if="activeAgent?.type === 'review'">
         <el-form label-width="100px">
           <el-form-item label="目标 ID *">
-            <el-input v-model="reviewForm.targetId" placeholder="例：node-abc123 或 claim-xyz" />
+            <el-input
+              v-model="reviewForm.targetId"
+              placeholder="例：node-abc123 或 claim-xyz" />
           </el-form-item>
           <el-form-item label="目标类型">
-            <el-input v-model="reviewForm.targetType" placeholder="例：GraphNode / KnowledgeClaim" />
+            <el-input
+              v-model="reviewForm.targetType"
+              placeholder="例：GraphNode / KnowledgeClaim" />
           </el-form-item>
           <el-form-item label="待审内容">
-            <el-input v-model="reviewForm.content" type="textarea" :rows="5" placeholder="粘贴需要 AI 审核的内容，比如一段代码/一个图谱节点属性/一条知识主张" />
+            <el-input
+              v-model="reviewForm.content"
+              type="textarea"
+              :rows="5"
+              placeholder="粘贴需要 AI 审核的内容，比如一段代码/一个图谱节点属性/一条知识主张" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillReviewExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillReviewExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -194,18 +279,36 @@
       <template v-if="activeAgent?.type === 'failure'">
         <el-form label-width="100px">
           <el-form-item label="失败用例 *">
-            <el-input v-model="failureForm.testCaseName" placeholder="例：UserLoginTest.testLoginWithInvalidPassword" />
+            <el-input
+              v-model="failureForm.testCaseName"
+              placeholder="例：UserLoginTest.testLoginWithInvalidPassword" />
           </el-form-item>
           <el-form-item label="错误信息 *">
-            <el-input v-model="failureForm.errorMessage" type="textarea" :rows="3" placeholder="粘贴错误堆栈或失败消息" />
+            <el-input
+              v-model="failureForm.errorMessage"
+              type="textarea"
+              :rows="3"
+              placeholder="粘贴错误堆栈或失败消息" />
           </el-form-item>
           <el-form-item label="运行环境">
-            <el-input v-model="failureForm.environment" placeholder="例：dev / test / CI (GitHub Actions)" />
+            <el-input
+              v-model="failureForm.environment"
+              placeholder="例：dev / test / CI (GitHub Actions)" />
           </el-form-item>
           <el-form-item label="最近变更">
-            <el-input v-model="failureForm.recentChanges" type="textarea" :rows="2" placeholder="例：修改了 UserService 的密码加密逻辑" />
+            <el-input
+              v-model="failureForm.recentChanges"
+              type="textarea"
+              :rows="2"
+              placeholder="例：修改了 UserService 的密码加密逻辑" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillFailureExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillFailureExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -215,16 +318,32 @@
           <el-form-item>
             <template #label>
               指标数据 *
-              <el-tooltip content="粘贴图谱扫描报告中的指标数据，如节点数/边数/覆盖率等" placement="top">
+              <el-tooltip
+                content="粘贴图谱扫描报告中的指标数据，如节点数/边数/覆盖率等"
+                placement="top">
                 <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
               </el-tooltip>
             </template>
-            <el-input v-model="reportForm.metrics" type="textarea" :rows="5" :placeholder='`{"totalNodes": 1520, "apiCoverage": 0.65, "testCoverage": 0.32, "pendingReviews": 45}`' />
+            <el-input
+              v-model="reportForm.metrics"
+              type="textarea"
+              :rows="5"
+              :placeholder="`{&quot;totalNodes&quot;: 1520, &quot;apiCoverage&quot;: 0.65, &quot;testCoverage&quot;: 0.32, &quot;pendingReviews&quot;: 45}`" />
           </el-form-item>
           <el-form-item label="缺口信息">
-            <el-input v-model="reportForm.gaps" type="textarea" :rows="2" placeholder="例：缺少订单模块的接口文档、支付模块无测试覆盖" />
+            <el-input
+              v-model="reportForm.gaps"
+              type="textarea"
+              :rows="2"
+              placeholder="例：缺少订单模块的接口文档、支付模块无测试覆盖" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillReportExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillReportExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -232,10 +351,15 @@
       <template v-if="activeAgent?.type === 'refactor'">
         <el-form label-width="100px">
           <el-form-item label="目标文件 *">
-            <el-input v-model="refactorForm.target" placeholder="例：src/service/UserService.java" />
+            <el-input
+              v-model="refactorForm.target"
+              placeholder="例：src/service/UserService.java" />
           </el-form-item>
           <el-form-item label="异味类型">
-            <el-select v-model="refactorForm.smellType" style="width: 100%" placeholder="选择代码异味类型">
+            <el-select
+              v-model="refactorForm.smellType"
+              style="width: 100%"
+              placeholder="选择代码异味类型">
               <el-option
                 v-for="opt in REFACTOR_SMELL_OPTIONS"
                 :key="opt.value"
@@ -245,9 +369,19 @@
             </el-select>
           </el-form-item>
           <el-form-item label="代码片段">
-            <el-input v-model="refactorForm.code" type="textarea" :rows="6" placeholder="粘贴需要分析的代码（可选，不填则分析整个文件）" />
+            <el-input
+              v-model="refactorForm.code"
+              type="textarea"
+              :rows="6"
+              placeholder="粘贴需要分析的代码（可选，不填则分析整个文件）" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillRefactorExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillRefactorExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -255,15 +389,31 @@
       <template v-if="activeAgent?.type === 'change'">
         <el-form label-width="100px">
           <el-form-item label="变更目标 *">
-            <el-input v-model="changeForm.changeTarget" placeholder="例：UserService.createUser 方法" />
+            <el-input
+              v-model="changeForm.changeTarget"
+              placeholder="例：UserService.createUser 方法" />
           </el-form-item>
           <el-form-item label="变更描述 *">
-            <el-input v-model="changeForm.changeDescription" type="textarea" :rows="3" placeholder="例：给 createUser 方法增加手机号校验逻辑，新增 phone 字段" />
+            <el-input
+              v-model="changeForm.changeDescription"
+              type="textarea"
+              :rows="3"
+              placeholder="例：给 createUser 方法增加手机号校验逻辑，新增 phone 字段" />
           </el-form-item>
           <el-form-item label="相关依赖">
-            <el-input v-model="changeForm.dependencies" type="textarea" :rows="2" placeholder="例：UserController&#10;UserMapper&#10;UserValidator" />
+            <el-input
+              v-model="changeForm.dependencies"
+              type="textarea"
+              :rows="2"
+              placeholder="例：UserController&#10;UserMapper&#10;UserValidator" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillChangeExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillChangeExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -271,7 +421,10 @@
       <template v-if="activeAgent?.type === 'migration'">
         <el-form label-width="100px">
           <el-form-item label="迁移方向 *">
-            <el-select v-model="migrationForm.migrationDirection" style="width: 100%" placeholder="选择迁移方向">
+            <el-select
+              v-model="migrationForm.migrationDirection"
+              style="width: 100%"
+              placeholder="选择迁移方向">
               <el-option
                 v-for="opt in MIGRATION_DIRECTION_OPTIONS"
                 :key="opt.value"
@@ -281,18 +434,32 @@
             </el-select>
           </el-form-item>
           <el-form-item label="源文件路径">
-            <el-input v-model="migrationForm.sourcePath" placeholder="例：src/main/java/com/example/dao/UserDao.xml" />
+            <el-input
+              v-model="migrationForm.sourcePath"
+              placeholder="例：src/main/java/com/example/dao/UserDao.xml" />
           </el-form-item>
           <el-form-item>
             <template #label>
               代码 *
-              <el-tooltip content="粘贴需要转换的源代码" placement="top">
+              <el-tooltip
+                content="粘贴需要转换的源代码"
+                placement="top">
                 <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
               </el-tooltip>
             </template>
-            <el-input v-model="migrationForm.code" type="textarea" :rows="6" placeholder="粘贴需要转换的代码" />
+            <el-input
+              v-model="migrationForm.code"
+              type="textarea"
+              :rows="6"
+              placeholder="粘贴需要转换的代码" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillMigrationExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillMigrationExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
@@ -300,27 +467,46 @@
       <template v-if="activeAgent?.type === 'pr'">
         <el-form label-width="100px">
           <el-form-item label="分支名">
-            <el-input v-model="prForm.branch" placeholder="例：feature/user-login" />
+            <el-input
+              v-model="prForm.branch"
+              placeholder="例：feature/user-login" />
           </el-form-item>
           <el-form-item label="关联 Issue">
-            <el-input v-model="prForm.issue" placeholder="例：#42 实现用户登录功能" />
+            <el-input
+              v-model="prForm.issue"
+              placeholder="例：#42 实现用户登录功能" />
           </el-form-item>
           <el-form-item>
             <template #label>
               Diff *
-              <el-tooltip content="在终端执行 git diff 然后粘贴输出；或粘贴变更文件列表和改动说明" placement="top">
+              <el-tooltip
+                content="在终端执行 git diff 然后粘贴输出；或粘贴变更文件列表和改动说明"
+                placement="top">
                 <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
               </el-tooltip>
             </template>
-            <el-input v-model="prForm.diff" type="textarea" :rows="8" placeholder="粘贴 git diff 输出，或手动描述：&#10;+ 新增 UserController.java&#10;~ 修改 UserService.java - 增加 login 方法&#10;- 删除 LegacyAuthFilter.java" />
+            <el-input
+              v-model="prForm.diff"
+              type="textarea"
+              :rows="8"
+              placeholder="粘贴 git diff 输出，或手动描述：&#10;+ 新增 UserController.java&#10;~ 修改 UserService.java - 增加 login 方法&#10;- 删除 LegacyAuthFilter.java" />
           </el-form-item>
-          <el-button link type="primary" size="small" @click="fillPrExample">填入示例</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="fillPrExample">
+            填入示例
+          </el-button>
         </el-form>
       </template>
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="executeAgent" :loading="executing">
+        <el-button
+          type="primary"
+          :loading="executing"
+          @click="executeAgent">
           <el-icon><Promotion /></el-icon>
           开始分析
         </el-button>
@@ -328,24 +514,54 @@
     </el-dialog>
 
     <!-- ===== 执行结果对话框 ===== -->
-    <el-dialog v-model="resultVisible" :title="resultTitle" width="720px" destroy-on-close top="5vh">
-      <div class="result-content" v-loading="executing">
+    <el-dialog
+      v-model="resultVisible"
+      :title="resultTitle"
+      width="720px"
+      destroy-on-close
+      top="5vh">
+      <div
+        v-loading="executing"
+        class="result-content">
         <!-- SQL 分析结果 -->
         <template v-if="resultType === 'sql' && resultData">
-          <el-alert :title="'整体风险：' + (resultData.overallRisk || '未知')" :type="riskType(resultData.overallRisk)" show-icon :closable="false" style="margin-bottom: 12px;" />
-          <p v-if="resultData.summary" class="result-summary">{{ resultData.summary }}</p>
+          <el-alert
+            :title="'整体风险：' + (resultData.overallRisk || '未知')"
+            :type="riskType(resultData.overallRisk)"
+            show-icon
+            :closable="false"
+            style="margin-bottom: 12px;" />
+          <p
+            v-if="resultData.summary"
+            class="result-summary">
+            {{ resultData.summary }}
+          </p>
 
           <h4 v-if="resultData.issues?.length">发现 {{ resultData.issues.length }} 个问题</h4>
-          <div v-for="(issue, i) in resultData.issues" :key="i" class="result-issue">
+          <div
+            v-for="(issue, i) in resultData.issues"
+            :key="i"
+            class="result-issue">
             <div class="issue-header">
-              <el-tag :type="severityType(issue.severity)" size="small">{{ issue.severity }}</el-tag>
-              <el-tag type="info" size="small" style="margin-left: 8px;">{{ issue.issueType }}</el-tag>
+              <el-tag
+                :type="severityType(issue.severity)"
+                size="small">
+                {{ issue.severity }}
+              </el-tag>
+              <el-tag
+                type="info"
+                size="small"
+                style="margin-left: 8px;">
+                {{ issue.issueType }}
+              </el-tag>
             </div>
             <p><strong>问题：</strong>{{ issue.description }}</p>
             <p><strong>建议：</strong>{{ issue.suggestion }}</p>
           </div>
 
-          <div v-if="resultData.optimizedSql" style="margin-top: 16px;">
+          <div
+            v-if="resultData.optimizedSql"
+            style="margin-top: 16px;">
             <h4>优化后的 SQL</h4>
             <pre class="code-block"><code>{{ resultData.optimizedSql }}</code></pre>
           </div>
@@ -353,70 +569,139 @@
 
         <!-- 测试生成结果 -->
         <template v-if="resultType === 'test' && resultData">
-          <p v-if="resultData.summary" class="result-summary">{{ resultData.summary }}</p>
-          <el-table v-if="resultData.testCases?.length" :data="resultData.testCases" size="small" stripe>
-            <el-table-column prop="testName" label="用例名称" width="200" />
-            <el-table-column label="优先级" width="80">
+          <p
+            v-if="resultData.summary"
+            class="result-summary">
+            {{ resultData.summary }}
+          </p>
+          <el-table
+            v-if="resultData.testCases?.length"
+            :data="resultData.testCases"
+            size="small"
+            stripe>
+            <el-table-column
+              prop="testName"
+              label="用例名称"
+              width="200" />
+            <el-table-column
+              label="优先级"
+              width="80">
               <template #default="{ row }">
-                <el-tag :type="priorityType(row.priority)" size="small">{{ row.priority }}</el-tag>
+                <el-tag
+                  :type="priorityType(row.priority)"
+                  size="small">
+                  {{ row.priority }}
+                </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="description" label="测试描述" />
+            <el-table-column
+              prop="description"
+              label="测试描述" />
           </el-table>
         </template>
 
         <!-- 审核建议结果 -->
         <template v-if="resultType === 'review' && resultData">
-          <el-descriptions :column="1" border size="small">
+          <el-descriptions
+            :column="1"
+            border
+            size="small">
             <el-descriptions-item label="评分">{{ resultData.score }} / 100</el-descriptions-item>
             <el-descriptions-item label="建议">{{ resultData.suggestion }}</el-descriptions-item>
-            <el-descriptions-item v-if="resultData.reason" label="理由">{{ resultData.reason }}</el-descriptions-item>
+            <el-descriptions-item
+              v-if="resultData.reason"
+              label="理由">
+              {{ resultData.reason }}
+            </el-descriptions-item>
           </el-descriptions>
         </template>
 
         <!-- 失败分析结果 -->
         <template v-if="resultType === 'failure' && resultData">
-          <p v-if="resultData.summary" class="result-summary"><strong>根因摘要：</strong>{{ resultData.summary }}</p>
+          <p
+            v-if="resultData.summary"
+            class="result-summary">
+            <strong>根因摘要：</strong>{{ resultData.summary }}
+          </p>
 
           <h4 v-if="resultData.rootCauses?.length">可能原因</h4>
-          <div v-for="(rc, i) in resultData.rootCauses" :key="i" class="result-issue">
-            <el-tag :type="likelihoodType(rc.likelihood)" size="small">{{ rc.likelihood }}</el-tag>
+          <div
+            v-for="(rc, i) in resultData.rootCauses"
+            :key="i"
+            class="result-issue">
+            <el-tag
+              :type="likelihoodType(rc.likelihood)"
+              size="small">
+              {{ rc.likelihood }}
+            </el-tag>
             <p><strong>原因：</strong>{{ rc.cause }}</p>
             <p v-if="rc.evidence"><strong>证据：</strong>{{ rc.evidence }}</p>
           </div>
 
           <h4 v-if="resultData.troubleshootingSteps?.length">排查步骤</h4>
           <ol>
-            <li v-for="(step, i) in resultData.troubleshootingSteps" :key="i">{{ step }}</li>
+            <li
+              v-for="(step, i) in resultData.troubleshootingSteps"
+              :key="i">
+              {{ step }}
+            </li>
           </ol>
         </template>
 
         <!-- 报告洞察结果 -->
         <template v-if="resultType === 'report' && resultData">
-          <p v-if="resultData.summary" class="result-summary">{{ resultData.summary }}</p>
-          <el-table v-if="resultData.actions?.length" :data="resultData.actions" size="small" stripe>
-            <el-table-column label="优先级" width="80">
+          <p
+            v-if="resultData.summary"
+            class="result-summary">
+            {{ resultData.summary }}
+          </p>
+          <el-table
+            v-if="resultData.actions?.length"
+            :data="resultData.actions"
+            size="small"
+            stripe>
+            <el-table-column
+              label="优先级"
+              width="80">
               <template #default="{ row }">
-                <el-tag :type="priorityType(row.priority)" size="small">{{ row.priority }}</el-tag>
+                <el-tag
+                  :type="priorityType(row.priority)"
+                  size="small">
+                  {{ row.priority }}
+                </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="title" label="行动项" width="180" />
-            <el-table-column prop="rationale" label="理由" />
+            <el-table-column
+              prop="title"
+              label="行动项"
+              width="180" />
+            <el-table-column
+              prop="rationale"
+              label="理由" />
           </el-table>
         </template>
 
         <!-- 重构建议结果 -->
         <template v-if="resultType === 'refactor' && resultData">
-          <p v-if="resultData.summary" class="result-summary">{{ resultData.summary }}</p>
+          <p
+            v-if="resultData.summary"
+            class="result-summary">
+            {{ resultData.summary }}
+          </p>
 
           <h4 v-if="resultData.splitSuggestions?.length">拆分建议</h4>
-          <div v-for="(ss, i) in resultData.splitSuggestions" :key="i" class="result-issue">
+          <div
+            v-for="(ss, i) in resultData.splitSuggestions"
+            :key="i"
+            class="result-issue">
             <p><strong>新建单元：</strong>{{ ss.newUnit }}</p>
             <p><strong>职责：</strong>{{ ss.responsibility }}</p>
             <p v-if="ss.movedMethods?.length"><strong>移入方法：</strong>{{ ss.movedMethods.join('、') }}</p>
           </div>
 
-          <div v-if="resultData.refactoredSkeleton" style="margin-top: 12px;">
+          <div
+            v-if="resultData.refactoredSkeleton"
+            style="margin-top: 12px;">
             <h4>重构骨架</h4>
             <pre class="code-block"><code>{{ resultData.refactoredSkeleton }}</code></pre>
           </div>
@@ -424,36 +709,82 @@
 
         <!-- 变更影响结果 -->
         <template v-if="resultType === 'change' && resultData">
-          <el-descriptions :column="2" border size="small">
+          <el-descriptions
+            :column="2"
+            border
+            size="small">
             <el-descriptions-item label="变更类型">{{ resultData.changeType }}</el-descriptions-item>
             <el-descriptions-item label="严重程度">
-              <el-tag :type="severityType(resultData.severity)" size="small">{{ resultData.severity }}</el-tag>
+              <el-tag
+                :type="severityType(resultData.severity)"
+                size="small">
+                {{ resultData.severity }}
+              </el-tag>
             </el-descriptions-item>
           </el-descriptions>
-          <p v-if="resultData.summary" class="result-summary" style="margin-top: 12px;">{{ resultData.summary }}</p>
+          <p
+            v-if="resultData.summary"
+            class="result-summary"
+            style="margin-top: 12px;">
+            {{ resultData.summary }}
+          </p>
 
-          <div v-if="resultData.impactedNodes?.length" style="margin-top: 12px;">
+          <div
+            v-if="resultData.impactedNodes?.length"
+            style="margin-top: 12px;">
             <h4>影响节点</h4>
-            <el-tag v-for="n in resultData.impactedNodes" :key="n" size="small" style="margin: 2px;">{{ n }}</el-tag>
+            <el-tag
+              v-for="n in resultData.impactedNodes"
+              :key="n"
+              size="small"
+              style="margin: 2px;">
+              {{ n }}
+            </el-tag>
           </div>
-          <div v-if="resultData.regressionScope?.length" style="margin-top: 12px;">
+          <div
+            v-if="resultData.regressionScope?.length"
+            style="margin-top: 12px;">
             <h4>回归范围</h4>
-            <el-tag v-for="n in resultData.regressionScope" :key="n" size="small" type="warning" style="margin: 2px;">{{ n }}</el-tag>
+            <el-tag
+              v-for="n in resultData.regressionScope"
+              :key="n"
+              size="small"
+              type="warning"
+              style="margin: 2px;">
+              {{ n }}
+            </el-tag>
           </div>
         </template>
 
         <!-- 迁移转换结果 -->
         <template v-if="resultType === 'migration' && resultData">
-          <p v-if="resultData.summary" class="result-summary">{{ resultData.summary }}</p>
+          <p
+            v-if="resultData.summary"
+            class="result-summary">
+            {{ resultData.summary }}
+          </p>
 
           <h4 v-if="resultData.changes?.length">转换清单</h4>
-          <el-table v-if="resultData.changes?.length" :data="resultData.changes" size="small" stripe>
-            <el-table-column prop="ruleType" label="规则" width="120" />
-            <el-table-column prop="before" label="转换前" />
-            <el-table-column prop="after" label="转换后" />
+          <el-table
+            v-if="resultData.changes?.length"
+            :data="resultData.changes"
+            size="small"
+            stripe>
+            <el-table-column
+              prop="ruleType"
+              label="规则"
+              width="120" />
+            <el-table-column
+              prop="before"
+              label="转换前" />
+            <el-table-column
+              prop="after"
+              label="转换后" />
           </el-table>
 
-          <div v-if="resultData.migratedCode" style="margin-top: 12px;">
+          <div
+            v-if="resultData.migratedCode"
+            style="margin-top: 12px;">
             <h4>转换后代码</h4>
             <pre class="code-block"><code>{{ resultData.migratedCode }}</code></pre>
           </div>
@@ -465,10 +796,16 @@
           <pre class="code-block"><code>{{ resultData.commitMessage }}</code></pre>
 
           <h4 style="margin-top: 12px;">PR 标题</h4>
-          <el-tag size="large" type="primary">{{ resultData.prTitle }}</el-tag>
+          <el-tag
+            size="large"
+            type="primary">
+            {{ resultData.prTitle }}
+          </el-tag>
 
           <h4 style="margin-top: 12px;">PR 描述</h4>
-          <div class="pr-body" v-html="renderMarkdown(resultData.prBody)"></div>
+          <div
+            class="pr-body"
+            v-html="renderMarkdown(resultData.prBody)" />
         </template>
 
         <!-- 通用 Agent 结果（fallback 为结构化 JSON） -->

@@ -19,6 +19,9 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.service.qa.VectorRetrievalService;
+import io.github.legacygraph.service.qa.VectorizationService;
 
 @ExtendWith(MockitoExtension.class)
 class VectorRetrievalServiceTest {
@@ -31,13 +34,15 @@ class VectorRetrievalServiceTest {
     private Neo4jGraphDao neo4jGraphDao;
     @Mock
     private VectorizationService vectorizationService;
+    @Mock
+    private io.github.legacygraph.repository.SemanticCacheRepository semanticCacheRepository;
 
     private VectorRetrievalService vectorRetrievalService;
 
     @BeforeEach
     void setUp() {
         vectorRetrievalService = new VectorRetrievalService(
-                vectorDocumentRepository, neo4jGraphDao, vectorizationService);
+                vectorDocumentRepository, neo4jGraphDao, vectorizationService, semanticCacheRepository);
         setField(vectorRetrievalService, "embeddingModel", embeddingModel);
     }
 
@@ -178,7 +183,7 @@ class VectorRetrievalServiceTest {
         VectorizationService realVectorization =
                 new VectorizationService(vectorDocumentRepository);
         VectorRetrievalService retrieval = new VectorRetrievalService(
-                vectorDocumentRepository, neo4jGraphDao, realVectorization);
+                vectorDocumentRepository, neo4jGraphDao, realVectorization, semanticCacheRepository);
         setField(realVectorization, "embeddingModel", embeddingModel);
         setField(retrieval, "embeddingModel", embeddingModel);
 

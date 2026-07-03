@@ -241,6 +241,31 @@ classpath:db/migration
 - `V3__fix_schema_gaps.sql`
 - `V4__add_deleted_columns.sql`
 - `V5__create_missing_tables.sql`
+- `V6__add_privacy_and_agent_run.sql`
+- `V7__fix_prompt_run_column_types.sql`
+- `V8__init_dict_seed_data.sql`
+- `V9__create_change_task_tables.sql`
+- `V10__dedup_evidence.sql`
+- `V11__fix_llm_provider_api_config.sql`
+- `V12__seed_prompt_templates.sql`
+- `V13__add_scan_version_stats.sql`
+- `V14__add_change_task_version.sql`
+- `V15__create_knowledge_claim_gap_task.sql`
+- `V16__create_domain_ontology.sql`
+- `V17__switch_embedding_to_siliconflow.sql`
+- `V18__fix_prompt_output_schema.sql`
+- `V19__switch_embedding_to_ollama.sql`
+- `V20__create_source_asset_snapshot.sql`
+- `V21__create_graph_write_intent.sql`
+- `V22__create_tool_run_tables.sql`
+- `V23__rebuild_vector_document.sql`
+- `V24__add_scan_task_progress.sql`
+- `V25__add_dict_items.sql`
+- `V26__fix_scan_task_progress.sql`
+- `V27__add_db_connection_schema_fp.sql`
+- `V28__create_ai_scan_job.sql`
+- `V29__create_qa_tables.sql`
+- `V30__create_semantic_cache.sql`
 
 ### 初始化验证
 
@@ -250,7 +275,7 @@ FROM flyway_schema_history
 ORDER BY installed_rank;
 ```
 
-应看到 `V1` 到 `V5` 且 `success = true`。
+应看到 `V1` 到 `V30` 且 `success = true`。
 
 检查核心表：
 
@@ -576,6 +601,7 @@ mc mirror legacygraph/legacy-graph ./backup/legacy-graph
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 2.0 | 2026-07-03 | 新增 V6-V30 迁移版本（25 个新脚本）；更新 Flyway 版本检查范围 |
 | 1.2 | 2026-07-01 | 修正图谱存储描述：Neo4j 查询替换 PostgreSQL `lg_graph_node`/`lg_graph_edge` |
 | 1.1 | 2026-06-30 | 按当前 Dockerfile、Compose、Flyway、前端代理和外部依赖部署方式更新 |
 | 1.0 | 2026-06-27 | 初始版本 |

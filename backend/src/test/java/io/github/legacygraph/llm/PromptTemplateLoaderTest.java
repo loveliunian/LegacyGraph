@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.legacygraph.service.system.PromptTemplateService;
 
 /**
  * PromptTemplateLoader 单元测试
@@ -21,8 +22,8 @@ class PromptTemplateLoaderTest {
     @BeforeEach
     void setUp() {
         // DB 中无模板时回退到 classpath 文件（测试用 src/test/resources/prompts 下的模板）
-        io.github.legacygraph.service.PromptTemplateService svc =
-                org.mockito.Mockito.mock(io.github.legacygraph.service.PromptTemplateService.class);
+        io.github.legacygraph.service.system.PromptTemplateService svc =
+                org.mockito.Mockito.mock(io.github.legacygraph.service.system.PromptTemplateService.class);
         org.mockito.Mockito.lenient().when(svc.getActiveByCode(
                 org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
         loader = new PromptTemplateLoader(svc);

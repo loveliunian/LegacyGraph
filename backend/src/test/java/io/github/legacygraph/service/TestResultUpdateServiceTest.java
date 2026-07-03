@@ -1,5 +1,6 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.service.test.TestResultUpdateService;
 import io.github.legacygraph.agent.TestFailureAnalysisAgent;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.TestFailureAnalysis;
@@ -24,6 +25,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.repository.TestCaseRepository;
+import io.github.legacygraph.repository.TestResultRepository;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)

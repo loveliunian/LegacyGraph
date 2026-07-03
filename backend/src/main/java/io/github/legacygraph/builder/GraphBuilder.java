@@ -483,7 +483,9 @@ public class GraphBuilder {
                 null,
                 null,
                 BigDecimal.valueOf(0.95),
-                NodeStatus.CONFIRMED
+                NodeStatus.CONFIRMED,
+                "DATABASE_SCAN",
+                null
         );
     }
 
@@ -500,7 +502,9 @@ public class GraphBuilder {
                 null,
                 null,
                 BigDecimal.ONE,
-                NodeStatus.CONFIRMED
+                NodeStatus.CONFIRMED,
+                "DATABASE_SCAN",
+                null
         );
     }
 
@@ -598,7 +602,9 @@ public class GraphBuilder {
                     classInfo.getStartLine(),
                     classInfo.getEndLine(),
                     BigDecimal.ONE,
-                    NodeStatus.CONFIRMED
+                    NodeStatus.CONFIRMED,
+                    "CODE_SCAN",
+                    classInfo.getQualifiedName()
             );
             nodes.add(classNode);
 

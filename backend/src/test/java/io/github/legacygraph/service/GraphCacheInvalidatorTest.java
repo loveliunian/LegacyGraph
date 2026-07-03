@@ -6,6 +6,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 
 /**
  * GraphCacheInvalidator 测试 — 按版本失效图谱视图 + 整体失效报告缓存。

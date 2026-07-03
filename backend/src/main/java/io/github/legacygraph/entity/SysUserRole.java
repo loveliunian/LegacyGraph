@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
  * 用户角色关联实体
  */
 @Data
-@TableName("sys_user_role")
+@TableName("lg_sys_user_role")
 public class SysUserRole {
 
     @TableId(type = IdType.ASSIGN_UUID)

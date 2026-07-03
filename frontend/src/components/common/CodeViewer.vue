@@ -1,8 +1,13 @@
 <template>
   <div class="code-viewer">
-    <div class="code-viewer__header" v-if="showHeader">
+    <div
+      v-if="showHeader"
+      class="code-viewer__header">
       <span class="code-viewer__language">{{ language }}</span>
-      <el-button link size="small" @click="copyCode">
+      <el-button
+        link
+        size="small"
+        @click="copyCode">
         <el-icon><CopyDocument /></el-icon>
         复制
       </el-button>

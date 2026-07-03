@@ -19,11 +19,18 @@
       </el-card>
 
       <!-- 质量问题 -->
-      <el-card shadow="hover" header="质量问题">
+      <el-card
+        shadow="hover"
+        header="质量问题">
         <div class="stat-row">
           <span>无证据节点</span>
           <strong class="red">{{ stats.noEvidenceNodes ?? 0 }}</strong>
-          <el-tag v-if="(stats.noEvidenceNodes ?? 0) > 0" size="small" type="danger">需关注</el-tag>
+          <el-tag
+            v-if="(stats.noEvidenceNodes ?? 0) > 0"
+            size="small"
+            type="danger">
+            需关注
+          </el-tag>
         </div>
         <div class="stat-row">
           <span>无证据边</span>
@@ -32,7 +39,12 @@
         <div class="stat-row">
           <span>AI-only 节点</span>
           <strong class="orange">{{ stats.aiOnlyNodes ?? 0 }}</strong>
-          <el-tag v-if="stats.aiOnlyNodes > 0" size="small" type="warning">待审核</el-tag>
+          <el-tag
+            v-if="stats.aiOnlyNodes > 0"
+            size="small"
+            type="warning">
+            待审核
+          </el-tag>
         </div>
         <div class="stat-row">
           <span>AI-only 边</span>
@@ -45,14 +57,23 @@
       </el-card>
 
       <!-- 覆盖指标 -->
-      <el-card shadow="hover" header="覆盖指标">
-        <div class="stat-row"><span>有证据节点率</span>
+      <el-card
+        shadow="hover"
+        header="覆盖指标">
+        <div class="stat-row">
+          <span>有证据节点率</span>
           <strong>{{ evidenceRate }}%</strong>
-          <el-progress :percentage="evidenceRate" :stroke-width="6" />
+          <el-progress
+            :percentage="evidenceRate"
+            :stroke-width="6" />
         </div>
-        <div class="stat-row"><span>节点确认率</span>
+        <div class="stat-row">
+          <span>节点确认率</span>
           <strong>{{ confirmationRate }}%</strong>
-          <el-progress :percentage="confirmationRate" :stroke-width="6" :color="confirmationColor" />
+          <el-progress
+            :percentage="confirmationRate"
+            :stroke-width="6"
+            :color="confirmationColor" />
         </div>
       </el-card>
     </div>

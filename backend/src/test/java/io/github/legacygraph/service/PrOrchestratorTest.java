@@ -23,6 +23,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.change.PrOrchestrator;
 
 @ExtendWith(MockitoExtension.class)
 class PrOrchestratorTest {

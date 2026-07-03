@@ -141,6 +141,7 @@ CREATE TABLE lg_scan_version (
     task_failed       INT,
     current_stage     VARCHAR(64),
     stats_updated_at  TIMESTAMP,
+    ai_enrichment_status VARCHAR(32),
     deleted         SMALLINT NOT NULL DEFAULT 0,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -186,6 +187,7 @@ CREATE TABLE lg_ai_scan_job (
     status          VARCHAR(32) NOT NULL DEFAULT 'PENDING',
     config_json     TEXT,
     error_message   TEXT,
+    current_step    VARCHAR(64),
     started_at      TIMESTAMP,
     finished_at     TIMESTAMP,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -247,6 +249,8 @@ CREATE TABLE lg_graph_node (
     confidence      DECIMAL(5,4) NOT NULL DEFAULT 1.0000,
     status          VARCHAR(32) NOT NULL DEFAULT 'PENDING_CONFIRM',
     properties      TEXT,
+    scan_type       VARCHAR(64),
+    class_name      VARCHAR(512),
     alias_names     TEXT,
     evidence_ids    TEXT,
     semantic_vector_ref BIGINT,
@@ -975,12 +979,19 @@ CREATE TABLE lg_graph_write_intent (
     last_error        TEXT,
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    finished_at       TIMESTAMP
+    finished_at       TIMESTAMP,
+    running_lock      VARCHAR(64)
 );
 
 CREATE UNIQUE INDEX idx_gwi_idempotency ON lg_graph_write_intent(idempotency_key);
 CREATE INDEX idx_gwi_status ON lg_graph_write_intent(status, created_at);
 CREATE INDEX idx_gwi_project_version ON lg_graph_write_intent(project_id, version_id);
+
+ALTER TABLE lg_graph_write_intent ADD COLUMN IF NOT EXISTS running_lock_at TIMESTAMP;
+ALTER TABLE lg_graph_write_intent ADD COLUMN IF NOT EXISTS dead_letter_at TIMESTAMP;
+ALTER TABLE lg_graph_write_intent ADD COLUMN IF NOT EXISTS dead_letter BOOLEAN DEFAULT FALSE;
+ALTER TABLE lg_graph_write_intent ADD COLUMN IF NOT EXISTS dead_letter_reason VARCHAR(1024);
+ALTER TABLE lg_graph_write_intent ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 0;
 
 -- ============================================
 -- 代码理解工具运行与证据
@@ -1093,3 +1104,126 @@ CREATE TABLE lg_pr_task (
 -- Disable referential integrity for tests (FK constraints cause issues with
 -- soft-delete + unique constraint combos in H2)
 SET REFERENTIAL_INTEGRITY FALSE;
+
+-- ============================================
+-- 系统用户表
+-- ============================================
+CREATE TABLE lg_sys_user (
+    id              VARCHAR(36) PRIMARY KEY,
+    username        VARCHAR(64) NOT NULL UNIQUE,
+    password        VARCHAR(128) NOT NULL,
+    nickname        VARCHAR(128),
+    email           VARCHAR(128),
+    phone           VARCHAR(32),
+    avatar          VARCHAR(512),
+    roles           VARCHAR(256),
+    permissions     TEXT,
+    status          VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    last_login_at   TIMESTAMP,
+    last_login_ip   VARCHAR(64),
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- 系统操作日志表
+-- ============================================
+CREATE TABLE lg_sys_operation_log (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    trace_id        VARCHAR(64),
+    operation       VARCHAR(128),
+    method          VARCHAR(256),
+    request_uri     VARCHAR(512),
+    request_method  VARCHAR(16),
+    client_ip       VARCHAR(64),
+    user_agent      VARCHAR(512),
+    operator_id     VARCHAR(64),
+    operator_name   VARCHAR(128),
+    status          VARCHAR(32),
+    duration_ms     BIGINT,
+    request_params  TEXT,
+    response_result TEXT,
+    error_stack     TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- lg_sys_dict (系统字典类型表 - lg_ 前缀)
+-- ============================================
+CREATE TABLE lg_sys_dict (
+    id              VARCHAR(36) PRIMARY KEY,
+    dict_code       VARCHAR(64) NOT NULL UNIQUE,
+    dict_name       VARCHAR(128) NOT NULL,
+    description     VARCHAR(512),
+    sort_order      INT NOT NULL DEFAULT 0,
+    status          VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- lg_sys_dict_item (系统字典项表 - lg_ 前缀)
+-- ============================================
+CREATE TABLE lg_sys_dict_item (
+    id              VARCHAR(36) PRIMARY KEY,
+    dict_id         VARCHAR(36) NOT NULL,
+    item_value      VARCHAR(256) NOT NULL,
+    item_label      VARCHAR(256) NOT NULL,
+    description     VARCHAR(512),
+    sort_order      INT NOT NULL DEFAULT 0,
+    is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+    status          VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- lg_sys_config (系统配置表 - lg_ 前缀)
+-- ============================================
+CREATE TABLE lg_sys_config (
+    id              VARCHAR(36) PRIMARY KEY,
+    config_key      VARCHAR(128) NOT NULL UNIQUE,
+    config_name     VARCHAR(128) NOT NULL,
+    config_value    TEXT,
+    config_type     VARCHAR(32),
+    description     VARCHAR(512),
+    is_system       BOOLEAN NOT NULL DEFAULT FALSE,
+    status          VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- lg_migration_risk (迁移风险表 - lg_ 前缀)
+-- ============================================
+CREATE TABLE lg_migration_risk (
+    id                  VARCHAR(36) PRIMARY KEY,
+    project_id          VARCHAR(64) NOT NULL,
+    version_id          VARCHAR(64),
+    risk_type           VARCHAR(64),
+    risk_name           VARCHAR(256),
+    description         TEXT,
+    affected_nodes      TEXT,
+    severity            VARCHAR(32),
+    status              VARCHAR(32) NOT NULL DEFAULT 'OPEN',
+    mitigation          TEXT,
+    estimated_effort    INTEGER,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_migration_risk_project ON lg_migration_risk(project_id);
+CREATE INDEX idx_lg_migration_risk_severity ON lg_migration_risk(severity);
+CREATE INDEX idx_lg_migration_risk_status ON lg_migration_risk(status);
+
+-- ============================================
+-- lg_notifications (系统通知表)
+-- ============================================
+CREATE TABLE IF NOT EXISTS lg_notifications (
+    id VARCHAR(36) PRIMARY KEY,
+    project_id VARCHAR(36) NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    payload TEXT,
+    read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

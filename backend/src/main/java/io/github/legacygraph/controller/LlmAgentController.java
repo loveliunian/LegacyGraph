@@ -8,7 +8,7 @@ import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.dto.GraphMergeDecision;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.dao.Neo4jGraphDao;
-import io.github.legacygraph.service.GraphMergeService;
+import io.github.legacygraph.service.graph.GraphMergeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -55,6 +55,7 @@ public class LlmAgentController {
     private final GraphMergeService graphMergeService;
     private final Neo4jGraphDao neo4jGraphDao;
     private final AgentConfigProperties agentConfig;
+    private final io.github.legacygraph.tenant.TenantQuotaManager quotaManager;
 
     /**
      * Agent 类型 → 执行器 的字典注册表。
@@ -100,10 +101,19 @@ public class LlmAgentController {
         String projectId = request.getProjectId();
         Map<String, String> variables = request.getVariables();
 
+        // 配额检查
+        if (!quotaManager.checkQuota(projectId, io.github.legacygraph.tenant.TenantQuotaManager.QuotaType.AGENT_CALLS, 1)) {
+            return Result.badRequest("Agent调用次数已达配额上限");
+        }
+
         BiFunction<String, Map<String, String>, ?> handler = agentRegistry.get(agentType.toLowerCase());
         if (handler == null) {
             return Result.badRequest("Unknown agent type: " + agentType);
         }
+        
+        // 扣减配额
+        quotaManager.incrementUsage(projectId, io.github.legacygraph.tenant.TenantQuotaManager.QuotaType.AGENT_CALLS, 1);
+        
         return Result.ok(handler.apply(projectId, variables));
     }
 

@@ -10,7 +10,8 @@ vi.mock('@/utils/request', () => ({
 
 vi.mock('@/utils/dict', () => ({
   dictLabel: vi.fn((_code: string, val: string) => val),
-  loadAllDicts: vi.fn(() => Promise.resolve())
+  loadAllDicts: vi.fn(() => Promise.resolve()),
+  preloadDicts: vi.fn(() => Promise.resolve())
 }))
 
 describe('ScanVersionList 页面', () => {

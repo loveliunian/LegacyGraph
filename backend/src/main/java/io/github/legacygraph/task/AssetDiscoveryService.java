@@ -140,19 +140,23 @@ public class AssetDiscoveryService {
     }
 
     private List<SourceAsset> walkAndBuildAssets(Path root, Path basePath, String repoId, ResolvedScanPlan plan) {
-        List<SourceAsset> assets = new ArrayList<>();
-        try {
-            Files.walk(root)
+        List<Path> paths;
+        try (var stream = Files.walk(root)) {
+            paths = stream
                     .filter(Files::isRegularFile)
                     .filter(p -> !isExcludedDir(p, root))
                     .filter(p -> hasSupportedExtension(p))
-                    .forEach(p -> {
-                        String relativePath = root.relativize(p).toString();
-                        SourceAsset asset = buildAsset(p, relativePath, repoId);
-                        assets.add(asset);
-                    });
+                    .sorted() // 按路径字典序排序，确保 maxFiles 截断确定性
+                    .toList();
         } catch (IOException e) {
             log.warn("Failed to walk directory {}: {}", root, e.getMessage());
+            return new ArrayList<>();
+        }
+        List<SourceAsset> assets = new ArrayList<>(paths.size());
+        for (Path p : paths) {
+            String relativePath = root.relativize(p).toString();
+            SourceAsset asset = buildAsset(p, relativePath, repoId);
+            assets.add(asset);
         }
         return assets;
     }

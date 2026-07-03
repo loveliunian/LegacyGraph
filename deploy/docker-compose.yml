@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 # LegacyGraph 应用部署 Docker Compose 配置
 # 仅包含前后端应用代码；PostgreSQL、Neo4j、Redis、MinIO 均使用外部服务器
 # 外部服务连接信息通过 .env 文件或环境变量注入（参见同目录 .env）
@@ -31,11 +32,17 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?需在 .env 配置 MinIO Secret Key}
       # ---- LLM（可选）----
       SPRING_AI_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - legacygraph-network
     restart: unless-stopped
 
-  # 前端 Nginx 静态服务
+  # 前端 Nginx 静态部署
   frontend:
     build:
       context: ../frontend
@@ -44,11 +51,53 @@ services:
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - legacygraph-network
     restart: unless-stopped
 
+  # === 观测栈 ===
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lg-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - legacygraph-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lg-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - legacygraph-network
+
 networks:
   legacygraph-network:
     driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:

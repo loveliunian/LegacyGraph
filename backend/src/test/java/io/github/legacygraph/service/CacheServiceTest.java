@@ -16,6 +16,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.system.CacheService;
 
 /**
  * CacheService 测试 — 验证读写、getOrLoad 回源回填、以及 Redis 故障时的容错降级。

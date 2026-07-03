@@ -1,5 +1,7 @@
 <template>
-  <el-tag :type="tagType" :size="size">
+  <el-tag
+    :type="tagType"
+    :size="size">
     {{ displayText }}
   </el-tag>
 </template>
@@ -20,14 +22,14 @@ const props = withDefaults(defineProps<Props>(), {
 
 const tagType = computed(() => {
   if (props.value >= 0.8) return 'success'
-  if (props.value >= 0.6) return 'warning'
+  if (props.value >= 0.5) return 'warning'
   return 'danger'
 })
 
 const displayText = computed(() => {
   if (!props.showText) return ''
   if (props.value >= 0.8) return '高置信度'
-  if (props.value >= 0.6) return '中置信度'
+  if (props.value >= 0.5) return '中置信度'
   return '低置信度'
 })
 </script>

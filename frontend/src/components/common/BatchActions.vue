@@ -1,7 +1,11 @@
 <template>
-  <div class="batch-actions" v-if="selectedCount > 0">
+  <div
+    v-if="selectedCount > 0"
+    class="batch-actions">
     <div class="batch-info">
-      <el-tag type="info" size="small">
+      <el-tag
+        type="info"
+        size="small">
         已选择 {{ selectedCount }} 项
       </el-tag>
       <el-button
@@ -15,7 +19,9 @@
     </div>
 
     <div class="batch-buttons">
-      <template v-for="action in actions" :key="action.key">
+      <template
+        v-for="action in actions"
+        :key="action.key">
         <el-button
           v-if="!action.divider"
           :type="action.type || 'primary'"
@@ -27,11 +33,15 @@
         >
           {{ action.label }}
         </el-button>
-        <el-divider v-else direction="vertical" />
+        <el-divider
+          v-else
+          direction="vertical" />
       </template>
     </div>
 
-    <div class="batch-more" v-if="moreActions.length > 0">
+    <div
+      v-if="moreActions.length > 0"
+      class="batch-more">
       <el-dropdown @command="(key: string) => $emit('action', key, selectedItems)">
         <el-button size="small">
           更多操作
@@ -45,7 +55,9 @@
               :command="action.key"
               :disabled="action.disabled"
             >
-              <el-icon v-if="action.icon" class="action-icon">
+              <el-icon
+                v-if="action.icon"
+                class="action-icon">
                 <component :is="action.icon" />
               </el-icon>
               {{ action.label }}

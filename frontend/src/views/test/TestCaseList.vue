@@ -3,71 +3,184 @@
     <div class="page-header">
       <h3>测试用例</h3>
       <div class="header-actions">
-        <el-select v-model="filters.caseType" placeholder="用例类型" size="small" clearable style="width: 140px;">
-          <el-option label="API测试" value="API" />
-          <el-option label="端到端测试" value="E2E" />
-          <el-option label="数据库断言" value="DB_ASSERTION" />
-          <el-option label="业务规则测试" value="BUSINESS_RULE" />
+        <el-select
+          v-model="filters.caseType"
+          placeholder="用例类型"
+          size="small"
+          clearable
+          style="width: 140px;">
+          <el-option
+            label="API测试"
+            value="API" />
+          <el-option
+            label="端到端测试"
+            value="E2E" />
+          <el-option
+            label="数据库断言"
+            value="DB_ASSERTION" />
+          <el-option
+            label="业务规则测试"
+            value="BUSINESS_RULE" />
         </el-select>
-        <el-select v-model="filters.status" placeholder="状态" size="small" clearable style="width: 120px;">
-          <el-option label="草稿" value="DRAFT" />
-          <el-option label="已确认" value="CONFIRMED" />
-          <el-option label="已禁用" value="DISABLED" />
+        <el-select
+          v-model="filters.status"
+          placeholder="状态"
+          size="small"
+          clearable
+          style="width: 120px;">
+          <el-option
+            label="草稿"
+            value="DRAFT" />
+          <el-option
+            label="已确认"
+            value="CONFIRMED" />
+          <el-option
+            label="已禁用"
+            value="DISABLED" />
         </el-select>
-        <el-button type="primary" size="small" @click="showGenerateDialog">
+        <el-button
+          type="primary"
+          size="small"
+          @click="showGenerateDialog">
           <el-icon><MagicStick /></el-icon>
           AI 生成用例
         </el-button>
       </div>
     </div>
 
-    <el-table :data="caseList" v-loading="loading" border stripe>
-      <el-table-column prop="caseNo" label="用例编号" width="140" />
-      <el-table-column prop="caseName" label="用例名称" min-width="250" show-overflow-tooltip />
-      <el-table-column prop="caseType" label="类型" width="120">
+    <el-table
+      v-loading="loading"
+      :data="caseList"
+      border
+      stripe>
+      <el-table-column
+        prop="caseNo"
+        label="用例编号"
+        width="140" />
+      <el-table-column
+        prop="caseName"
+        label="用例名称"
+        min-width="250"
+        show-overflow-tooltip />
+      <el-table-column
+        prop="caseType"
+        label="类型"
+        width="120">
         <template #default="{ row }">
-          <el-tag size="small" :type="getCaseTypeColor(row.caseType)">{{ getCaseTypeText(row.caseType) }}</el-tag>
+          <el-tag
+            size="small"
+            :type="getCaseTypeColor(row.caseType)">
+            {{ getCaseTypeText(row.caseType) }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="featureName" label="关联功能" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="apiPath" label="API路径" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="assertionCount" label="断言数" width="100" align="center">
+      <el-table-column
+        prop="featureName"
+        label="关联功能"
+        min-width="150"
+        show-overflow-tooltip />
+      <el-table-column
+        prop="apiPath"
+        label="API路径"
+        min-width="200"
+        show-overflow-tooltip />
+      <el-table-column
+        prop="assertionCount"
+        label="断言数"
+        width="100"
+        align="center">
         <template #default="{ row }">
-          <el-tag size="small" type="info">{{ row.assertionCount }}</el-tag>
+          <el-tag
+            size="small"
+            type="info">
+            {{ row.assertionCount }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="generateType" label="生成方式" width="100">
+      <el-table-column
+        prop="generateType"
+        label="生成方式"
+        width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.generateType === 'AI_GENERATED' ? 'warning' : 'info'">
+          <el-tag
+            size="small"
+            :type="row.generateType === 'AI_GENERATED' ? 'warning' : 'info'">
             {{ row.generateType === 'AI_GENERATED' ? 'AI生成' : '手动' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="100">
+      <el-table-column
+        prop="status"
+        label="状态"
+        width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.status === 'CONFIRMED' ? 'success' : 'warning'">{{ getStatusText(row.status) }}</el-tag>
+          <el-tag
+            size="small"
+            :type="row.status === 'CONFIRMED' ? 'success' : 'warning'">
+            {{ getStatusText(row.status) }}
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="lastRunStatus" label="最近运行" width="100">
+      <el-table-column
+        prop="lastRunStatus"
+        label="最近运行"
+        width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.lastRunStatus" size="small" :type="row.lastRunStatus === 'PASSED' ? 'success' : 'danger'">
+          <el-tag
+            v-if="row.lastRunStatus"
+            size="small"
+            :type="row.lastRunStatus === 'PASSED' ? 'success' : 'danger'">
             {{ row.lastRunStatus === 'PASSED' ? '通过' : '失败' }}
           </el-tag>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="lastRunTime" label="运行时间" width="180">
+      <el-table-column
+        prop="lastRunTime"
+        label="运行时间"
+        width="180">
         <template #default="{ row }">
           <span v-if="row.lastRunTime">{{ formatTime(row.lastRunTime) }}</span>
-          <span v-else class="text-gray">-</span>
+          <span
+            v-else
+            class="text-gray">-</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="250" fixed="right">
+      <el-table-column
+        label="操作"
+        width="250"
+        fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="viewDetail(row)">查看</el-button>
-          <el-button type="success" link size="small" @click="runCase(row)">运行</el-button>
-          <el-button type="warning" link size="small" @click="editCase(row)">编辑</el-button>
-          <el-button type="danger" link size="small" @click="deleteCase(row)">删除</el-button>
+          <el-button
+            type="primary"
+            link
+            size="small"
+            @click="viewDetail(row)">
+            查看
+          </el-button>
+          <el-button
+            type="success"
+            link
+            size="small"
+            @click="runCase(row)">
+            运行
+          </el-button>
+          <el-button
+            type="warning"
+            link
+            size="small"
+            @click="editCase(row)">
+            编辑
+          </el-button>
+          <el-button
+            type="danger"
+            link
+            size="small"
+            @click="deleteCase(row)">
+            删除
+          </el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -81,10 +194,17 @@
       style="margin-top: 20px; justify-content: flex-end;"
     />
 
-    <el-dialog v-model="generateDialogVisible" title="AI 生成测试用例" width="700px">
+    <el-dialog
+      v-model="generateDialogVisible"
+      title="AI 生成测试用例"
+      width="700px">
       <el-form label-width="120px">
         <el-form-item label="扫描版本">
-          <el-select v-model="generateForm.versionId" placeholder="选择扫描版本" style="width: 100%;" @focus="loadVersionsForGenerate">
+          <el-select
+            v-model="generateForm.versionId"
+            placeholder="选择扫描版本"
+            style="width: 100%;"
+            @focus="loadVersionsForGenerate">
             <el-option
               v-for="v in generateVersions"
               :key="v.id"
@@ -109,21 +229,40 @@
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="生成数量">
-          <el-input-number v-model="generateForm.count" :min="1" :max="100" />
+          <el-input-number
+            v-model="generateForm.count"
+            :min="1"
+            :max="100" />
         </el-form-item>
         <el-form-item label="补充说明">
-          <el-input v-model="generateForm.remark" type="textarea" :rows="3" placeholder="请输入需要特别关注的业务场景..." />
+          <el-input
+            v-model="generateForm.remark"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入需要特别关注的业务场景..." />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="generateDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="generateCases" :loading="generating">开始生成</el-button>
+        <el-button
+          type="primary"
+          :loading="generating"
+          @click="generateCases">
+          开始生成
+        </el-button>
       </template>
     </el-dialog>
 
-    <el-drawer v-model="detailVisible" title="用例详情" size="60%">
-      <div v-if="selectedCase" class="case-detail">
-        <el-descriptions border :column="2">
+    <el-drawer
+      v-model="detailVisible"
+      title="用例详情"
+      size="60%">
+      <div
+        v-if="selectedCase"
+        class="case-detail">
+        <el-descriptions
+          border
+          :column="2">
           <el-descriptions-item label="用例编号">{{ selectedCase.caseNo }}</el-descriptions-item>
           <el-descriptions-item label="用例名称">{{ selectedCase.caseName }}</el-descriptions-item>
           <el-descriptions-item label="用例类型">{{ getCaseTypeText(selectedCase.caseType) }}</el-descriptions-item>
@@ -132,7 +271,9 @@
           <el-descriptions-item label="状态">{{ getStatusText(selectedCase.status) }}</el-descriptions-item>
         </el-descriptions>
 
-        <div class="detail-section" style="margin-top: 24px;">
+        <div
+          class="detail-section"
+          style="margin-top: 24px;">
           <h4>测试步骤</h4>
           <el-timeline>
             <el-timeline-item
@@ -145,16 +286,28 @@
           </el-timeline>
         </div>
 
-        <div class="detail-section" style="margin-top: 24px;">
+        <div
+          class="detail-section"
+          style="margin-top: 24px;">
           <h4>断言列表 ({{ selectedCase.assertionCount }})</h4>
           <ul class="assertion-list">
-            <li v-for="(assertion, index) in selectedCase.assertions" :key="index">{{ assertion }}</li>
+            <li
+              v-for="(assertion, index) in selectedCase.assertions"
+              :key="index">
+              {{ assertion }}
+            </li>
           </ul>
         </div>
 
-        <div class="detail-section" style="margin-top: 24px;">
+        <div
+          class="detail-section"
+          style="margin-top: 24px;">
           <h4>关联节点</h4>
-          <el-tag v-for="node in selectedCase.relatedNodeIds" :key="node" size="small" style="margin-right: 8px; margin-bottom: 8px;">
+          <el-tag
+            v-for="node in selectedCase.relatedNodeIds"
+            :key="node"
+            size="small"
+            style="margin-right: 8px; margin-bottom: 8px;">
             {{ node }}
           </el-tag>
         </div>

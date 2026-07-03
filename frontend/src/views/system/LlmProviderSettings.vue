@@ -4,15 +4,25 @@
       <template #header>
         <div class="card-header">
           <span class="card-title">🤖 LLM 提供商管理</span>
-          <el-button type="primary" size="small" @click="showAddDialog">
+          <el-button
+            type="primary"
+            size="small"
+            @click="showAddDialog">
             <el-icon><Plus /></el-icon>
             添加提供商
           </el-button>
         </div>
       </template>
 
-      <el-table :data="providers" v-loading="loading" border stripe>
-        <el-table-column label="状态" width="80" align="center">
+      <el-table
+        v-loading="loading"
+        :data="providers"
+        border
+        stripe>
+        <el-table-column
+          label="状态"
+          width="80"
+          align="center">
           <template #default="{ row }">
             <el-tag
               :type="row.isActive ? 'success' : 'info'"
@@ -23,18 +33,39 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="默认" width="80" align="center">
+        <el-table-column
+          label="默认"
+          width="80"
+          align="center">
           <template #default="{ row }">
-            <el-icon v-if="row.isDefault" color="var(--el-color-primary)" :size="20">
+            <el-icon
+              v-if="row.isDefault"
+              color="var(--el-color-primary)"
+              :size="20">
               <Check />
             </el-icon>
           </template>
         </el-table-column>
-        <el-table-column prop="providerCode" label="提供商代码" width="160" />
-        <el-table-column prop="modelId" label="模型" width="160" />
-        <el-table-column prop="endpoint" label="API 端点" min-width="200" />
-        <el-table-column prop="deploymentMode" label="部署方式" width="100" />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column
+          prop="providerCode"
+          label="提供商代码"
+          width="160" />
+        <el-table-column
+          prop="modelId"
+          label="模型"
+          width="160" />
+        <el-table-column
+          prop="endpoint"
+          label="API 端点"
+          min-width="200" />
+        <el-table-column
+          prop="deploymentMode"
+          label="部署方式"
+          width="100" />
+        <el-table-column
+          label="操作"
+          width="280"
+          fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="!row.isDefault && row.isActive"
@@ -66,7 +97,12 @@
               @confirm="handleDelete(row)"
             >
               <template #reference>
-                <el-button link type="danger" size="small">删除</el-button>
+                <el-button
+                  link
+                  type="danger"
+                  size="small">
+                  删除
+                </el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -88,20 +124,43 @@
         label-width="110px"
         label-position="right"
       >
-        <el-form-item label="提供商代码" prop="providerCode">
-          <el-input v-model="form.providerCode" :disabled="dialogMode === 'edit'" placeholder="如 deepseek, openai" />
+        <el-form-item
+          label="提供商代码"
+          prop="providerCode">
+          <el-input
+            v-model="form.providerCode"
+            :disabled="dialogMode === 'edit'"
+            placeholder="如 deepseek, openai" />
         </el-form-item>
-        <el-form-item label="模型ID" prop="modelId">
-          <el-input v-model="form.modelId" placeholder="如 deepseek-chat, gpt-4o" />
+        <el-form-item
+          label="模型ID"
+          prop="modelId">
+          <el-input
+            v-model="form.modelId"
+            placeholder="如 deepseek-chat, gpt-4o" />
         </el-form-item>
-        <el-form-item label="API 端点" prop="endpoint">
-          <el-input v-model="form.endpoint" placeholder="如 https://api.deepseek.com/v1" />
+        <el-form-item
+          label="API 端点"
+          prop="endpoint">
+          <el-input
+            v-model="form.endpoint"
+            placeholder="如 https://api.deepseek.com/v1" />
         </el-form-item>
-        <el-form-item label="部署方式" prop="deploymentMode">
-          <el-select v-model="form.deploymentMode" style="width: 100%">
-            <el-option label="云服务" value="cloud" />
-            <el-option label="私有部署" value="private" />
-            <el-option label="混合部署" value="hybrid" />
+        <el-form-item
+          label="部署方式"
+          prop="deploymentMode">
+          <el-select
+            v-model="form.deploymentMode"
+            style="width: 100%">
+            <el-option
+              label="云服务"
+              value="cloud" />
+            <el-option
+              label="私有部署"
+              value="private" />
+            <el-option
+              label="混合部署"
+              value="hybrid" />
           </el-select>
         </el-form-item>
         <el-form-item label="API Key">
@@ -135,7 +194,10 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave" :loading="saving">
+        <el-button
+          type="primary"
+          :loading="saving"
+          @click="handleSave">
           {{ dialogMode === 'add' ? '添加' : '保存' }}
         </el-button>
       </template>

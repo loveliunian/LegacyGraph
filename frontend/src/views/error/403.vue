@@ -5,7 +5,9 @@
       <h1 class="error-title">{{ $t('common.forbidden') }}</h1>
       <p class="error-desc">抱歉，您没有权限访问此页面</p>
       <div class="error-actions">
-        <el-button type="primary" @click="goHome">
+        <el-button
+          type="primary"
+          @click="goHome">
           <el-icon><House /></el-icon>
           {{ $t('common.backToHome') }}
         </el-button>

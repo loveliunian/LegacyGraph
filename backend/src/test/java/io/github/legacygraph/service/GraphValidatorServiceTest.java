@@ -23,6 +23,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.graph.GraphCacheInvalidator;
+import io.github.legacygraph.service.graph.GraphValidatorService;
 
 @ExtendWith(MockitoExtension.class)
 class GraphValidatorServiceTest {

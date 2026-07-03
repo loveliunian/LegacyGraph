@@ -20,6 +20,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import io.github.legacygraph.service.scan.DatabaseMetadataScanService;
 
 /**
  * 数据库元数据扫描服务单元测试。
@@ -193,7 +194,7 @@ class DatabaseMetadataScanServiceTest {
     }
 
     @Test
-    void testScan_WhenSchemaFingerprintUnchanged_SkipsGraphRebuild() throws Exception {
+    void testScan_WhenSchemaFingerprintUnchanged_StillRebuildsGraph() throws Exception {
         when(mockDataSource.getConnection()).thenReturn(mockConnection);
         when(mockConnection.getMetaData()).thenReturn(mockMetaData);
         when(mockMetaData.getTables(any(), any(), any(), any())).thenReturn(mockTablesResultSet);
@@ -209,9 +210,7 @@ class DatabaseMetadataScanServiceTest {
         int count = databaseMetadataScanService.scan("proj-1", "v1", mockDataSource, connection);
 
         assertEquals(0, count);
-        verify(graphBuilder, never()).buildDatabaseGraph(any(), any(), anyList());
-        verify(graphBuilder, never()).buildDatabaseConstraintGraph(any(), any(), any(), anyList(), anyList());
-        verify(databaseConstraintExtractor, never()).extractForeignKeys(any(), any(), any());
-        verify(databaseConstraintExtractor, never()).extractIndexes(any(), any(), any());
+        // 即使 fingerprint 相同也重建图谱（保证数据一致性）
+        verify(graphBuilder, times(1)).buildDatabaseGraph(any(), any(), anyList());
     }
 }

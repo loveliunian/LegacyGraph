@@ -8,7 +8,7 @@ import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
 import io.github.legacygraph.entity.Report;
-import io.github.legacygraph.service.ReportingService;
+import io.github.legacygraph.service.report.ReportingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;

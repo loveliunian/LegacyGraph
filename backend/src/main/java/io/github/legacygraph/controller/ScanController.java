@@ -4,8 +4,8 @@ import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.github.legacygraph.dto.ScanProgressResponse;
 import io.github.legacygraph.entity.ScanVersion;
-import io.github.legacygraph.service.ScanPerformanceReportService;
-import io.github.legacygraph.service.ScanVersionService;
+import io.github.legacygraph.service.report.ScanPerformanceReportService;
+import io.github.legacygraph.service.scan.ScanVersionService;
 import io.github.legacygraph.task.ProjectScanner;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -30,6 +30,7 @@ public class ScanController {
     private final ScanVersionService scanVersionService;
     private final ProjectScanner projectScanner;
     private final ScanPerformanceReportService scanPerformanceReportService;
+    private final io.github.legacygraph.tenant.TenantQuotaManager quotaManager;
 
     /**
      * 构造函数注入
@@ -37,10 +38,12 @@ public class ScanController {
      * @param projectScanner 项目扫描器
      */
     public ScanController(ScanVersionService scanVersionService, ProjectScanner projectScanner,
-                          ScanPerformanceReportService scanPerformanceReportService) {
+                          ScanPerformanceReportService scanPerformanceReportService,
+                          io.github.legacygraph.tenant.TenantQuotaManager quotaManager) {
         this.scanVersionService = scanVersionService;
         this.projectScanner = projectScanner;
         this.scanPerformanceReportService = scanPerformanceReportService;
+        this.quotaManager = quotaManager;
     }
 
     /**
@@ -61,7 +64,12 @@ public class ScanController {
             @PathVariable String projectId,
             @Parameter(description = "创建扫描版本请求", required = true)
             @RequestBody CreateScanVersionRequest request) {
+        // 配额检查：扫描版本数
+        if (!quotaManager.checkQuota(projectId, io.github.legacygraph.tenant.TenantQuotaManager.QuotaType.SCAN_VERSIONS, 1)) {
+            return Result.error("扫描版本数已达配额上限，请清理历史版本后再试");
+        }
         ScanVersion version = scanVersionService.createScanVersion(projectId, request);
+        quotaManager.incrementUsage(projectId, io.github.legacygraph.tenant.TenantQuotaManager.QuotaType.SCAN_VERSIONS, 1);
         return Result.success(version.getId());
     }
 

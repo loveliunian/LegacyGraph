@@ -1,6 +1,10 @@
 <template>
-  <div class="skeleton-container" :class="{ animated: animated }">
-    <div v-if="type === 'table'" class="skeleton-table">
+  <div
+    class="skeleton-container"
+    :class="{ animated: animated }">
+    <div
+      v-if="type === 'table'"
+      class="skeleton-table">
       <div class="skeleton-table-header">
         <div
           v-for="i in cols"
@@ -8,136 +12,234 @@
           class="skeleton-col"
           :style="{ width: colWidth + '%' }"
         >
-          <div class="skeleton-item skeleton-title"></div>
+          <div class="skeleton-item skeleton-title" />
         </div>
       </div>
       <div class="skeleton-table-body">
-        <div v-for="i in rows" :key="i" class="skeleton-row">
+        <div
+          v-for="i in rows"
+          :key="i"
+          class="skeleton-row">
           <div
             v-for="j in cols"
             :key="j"
             class="skeleton-col"
             :style="{ width: colWidth + '%' }"
           >
-            <div class="skeleton-item skeleton-text"></div>
+            <div class="skeleton-item skeleton-text" />
           </div>
         </div>
       </div>
     </div>
 
-    <div v-else-if="type === 'card'" class="skeleton-card">
+    <div
+      v-else-if="type === 'card'"
+      class="skeleton-card">
       <div class="skeleton-card-header">
         <div class="skeleton-avatar-wrap">
-          <div class="skeleton-item skeleton-avatar"></div>
+          <div class="skeleton-item skeleton-avatar" />
         </div>
         <div class="skeleton-title-wrap">
-          <div class="skeleton-item skeleton-title"></div>
-          <div class="skeleton-item skeleton-subtitle"></div>
+          <div class="skeleton-item skeleton-title" />
+          <div class="skeleton-item skeleton-subtitle" />
         </div>
       </div>
       <div class="skeleton-card-body">
-        <div class="skeleton-item skeleton-paragraph"></div>
-        <div class="skeleton-item skeleton-paragraph" style="width: 70%"></div>
-        <div class="skeleton-item skeleton-paragraph" style="width: 85%"></div>
+        <div class="skeleton-item skeleton-paragraph" />
+        <div
+          class="skeleton-item skeleton-paragraph"
+          style="width: 70%" />
+        <div
+          class="skeleton-item skeleton-paragraph"
+          style="width: 85%" />
       </div>
       <div class="skeleton-card-footer">
-        <div class="skeleton-item skeleton-button"></div>
-        <div class="skeleton-item skeleton-button"></div>
+        <div class="skeleton-item skeleton-button" />
+        <div class="skeleton-item skeleton-button" />
       </div>
     </div>
 
-    <div v-else-if="type === 'list'" class="skeleton-list">
-      <div v-for="i in rows" :key="i" class="skeleton-list-item">
+    <div
+      v-else-if="type === 'list'"
+      class="skeleton-list">
+      <div
+        v-for="i in rows"
+        :key="i"
+        class="skeleton-list-item">
         <div class="skeleton-avatar-wrap">
-          <div class="skeleton-item skeleton-avatar"></div>
+          <div class="skeleton-item skeleton-avatar" />
         </div>
         <div class="skeleton-list-content">
-          <div class="skeleton-item skeleton-title"></div>
-          <div class="skeleton-item skeleton-subtitle"></div>
-          <div class="skeleton-item skeleton-paragraph"></div>
+          <div class="skeleton-item skeleton-title" />
+          <div class="skeleton-item skeleton-subtitle" />
+          <div class="skeleton-item skeleton-paragraph" />
         </div>
       </div>
     </div>
 
-    <div v-else-if="type === 'detail'" class="skeleton-detail">
+    <div
+      v-else-if="type === 'detail'"
+      class="skeleton-detail">
       <div class="skeleton-detail-header">
-        <div class="skeleton-item skeleton-title large"></div>
-        <div class="skeleton-item skeleton-subtitle"></div>
+        <div class="skeleton-item skeleton-title large" />
+        <div class="skeleton-item skeleton-subtitle" />
       </div>
       <div class="skeleton-detail-body">
         <div class="skeleton-detail-row">
           <div class="skeleton-detail-label">
-            <div class="skeleton-item skeleton-text"></div>
+            <div class="skeleton-item skeleton-text" />
           </div>
           <div class="skeleton-detail-value">
-            <div class="skeleton-item skeleton-text" style="width: 60%"></div>
+            <div
+              class="skeleton-item skeleton-text"
+              style="width: 60%" />
           </div>
         </div>
-        <div class="skeleton-detail-row" v-for="i in 4" :key="i">
+        <div
+          v-for="i in 4"
+          :key="i"
+          class="skeleton-detail-row">
           <div class="skeleton-detail-label">
-            <div class="skeleton-item skeleton-text"></div>
+            <div class="skeleton-item skeleton-text" />
           </div>
           <div class="skeleton-detail-value">
-            <div class="skeleton-item skeleton-text" style="width: 70%"></div>
+            <div
+              class="skeleton-item skeleton-text"
+              style="width: 70%" />
           </div>
         </div>
       </div>
     </div>
 
-    <div v-else-if="type === 'form'" class="skeleton-form">
-      <div class="skeleton-form-row" v-for="i in rows" :key="i">
+    <div
+      v-else-if="type === 'form'"
+      class="skeleton-form">
+      <div
+        v-for="i in rows"
+        :key="i"
+        class="skeleton-form-row">
         <div class="skeleton-form-label">
-          <div class="skeleton-item skeleton-text"></div>
+          <div class="skeleton-item skeleton-text" />
         </div>
         <div class="skeleton-form-input">
-          <div class="skeleton-item skeleton-input"></div>
+          <div class="skeleton-item skeleton-input" />
         </div>
       </div>
     </div>
 
-    <div v-else-if="type === 'graph'" class="skeleton-graph">
+    <div
+      v-else-if="type === 'graph'"
+      class="skeleton-graph">
       <div class="skeleton-toolbar">
         <div class="skeleton-toolbar-left">
-          <div class="skeleton-item skeleton-button" v-for="i in 4" :key="i"></div>
+          <div
+            v-for="i in 4"
+            :key="i"
+            class="skeleton-item skeleton-button" />
         </div>
         <div class="skeleton-toolbar-right">
-          <div class="skeleton-item skeleton-input" style="width: 150px"></div>
-          <div class="skeleton-item skeleton-button"></div>
+          <div
+            class="skeleton-item skeleton-input"
+            style="width: 150px" />
+          <div class="skeleton-item skeleton-button" />
         </div>
       </div>
       <div class="skeleton-graph-area">
-        <svg viewBox="0 0 100 100" class="skeleton-svg">
-          <circle cx="20" cy="30" r="8" fill="#e5e7eb" />
-          <circle cx="50" cy="20" r="10" fill="#e5e7eb" />
-          <circle cx="80" cy="35" r="9" fill="#e5e7eb" />
-          <circle cx="35" cy="60" r="7" fill="#e5e7eb" />
-          <circle cx="65" cy="55" r="8" fill="#e5e7eb" />
-          <circle cx="90" cy="70" r="6" fill="#e5e7eb" />
-          <line x1="20" y1="30" x2="35" y2="60" stroke="#e5e7eb" stroke-width="2" />
-          <line x1="50" y1="20" x2="65" y2="55" stroke="#e5e7eb" stroke-width="2" />
-          <line x1="65" y1="55" x2="80" y2="35" stroke="#e5e7eb" stroke-width="2" />
-          <line x1="65" y1="55" x2="90" y2="70" stroke="#e5e7eb" stroke-width="2" />
-          <line x1="35" y1="60" x2="65" y2="55" stroke="#e5e7eb" stroke-width="2" />
+        <svg
+          viewBox="0 0 100 100"
+          class="skeleton-svg">
+          <circle
+            cx="20"
+            cy="30"
+            r="8"
+            fill="#e5e7eb" />
+          <circle
+            cx="50"
+            cy="20"
+            r="10"
+            fill="#e5e7eb" />
+          <circle
+            cx="80"
+            cy="35"
+            r="9"
+            fill="#e5e7eb" />
+          <circle
+            cx="35"
+            cy="60"
+            r="7"
+            fill="#e5e7eb" />
+          <circle
+            cx="65"
+            cy="55"
+            r="8"
+            fill="#e5e7eb" />
+          <circle
+            cx="90"
+            cy="70"
+            r="6"
+            fill="#e5e7eb" />
+          <line
+            x1="20"
+            y1="30"
+            x2="35"
+            y2="60"
+            stroke="#e5e7eb"
+            stroke-width="2" />
+          <line
+            x1="50"
+            y1="20"
+            x2="65"
+            y2="55"
+            stroke="#e5e7eb"
+            stroke-width="2" />
+          <line
+            x1="65"
+            y1="55"
+            x2="80"
+            y2="35"
+            stroke="#e5e7eb"
+            stroke-width="2" />
+          <line
+            x1="65"
+            y1="55"
+            x2="90"
+            y2="70"
+            stroke="#e5e7eb"
+            stroke-width="2" />
+          <line
+            x1="35"
+            y1="60"
+            x2="65"
+            y2="55"
+            stroke="#e5e7eb"
+            stroke-width="2" />
         </svg>
       </div>
       <div class="skeleton-legend">
-        <div class="skeleton-legend-item" v-for="i in 3" :key="i">
-          <div class="skeleton-item skeleton-dot"></div>
-          <div class="skeleton-item skeleton-text"></div>
+        <div
+          v-for="i in 3"
+          :key="i"
+          class="skeleton-legend-item">
+          <div class="skeleton-item skeleton-dot" />
+          <div class="skeleton-item skeleton-text" />
         </div>
       </div>
     </div>
 
-    <div v-else-if="type === 'avatar'" class="skeleton-avatar-container">
+    <div
+      v-else-if="type === 'avatar'"
+      class="skeleton-avatar-container">
       <div
         class="skeleton-item skeleton-avatar"
         :class="{ circle: avatarShape === 'circle' }"
         :style="{ width: avatarSize + 'px', height: avatarSize + 'px' }"
-      ></div>
+      />
     </div>
 
-    <div v-else class="skeleton-custom">
-      <slot></slot>
+    <div
+      v-else
+      class="skeleton-custom">
+      <slot />
     </div>
   </div>
 </template>

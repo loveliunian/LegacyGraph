@@ -1,17 +1,23 @@
 <template>
   <div class="project-layout">
     <el-container>
-      <el-aside width="220px" class="sidebar">
+      <el-aside
+        width="220px"
+        class="sidebar">
         <div class="project-info">
           <h3>{{ currentProject?.projectName || '项目详情' }}</h3>
-          <el-tag v-if="currentProject?.status" size="small">{{ getProjectStatusText(currentProject.status) }}</el-tag>
+          <el-tag
+            v-if="currentProject?.status"
+            size="small">
+            {{ getProjectStatusText(currentProject.status) }}
+          </el-tag>
         </div>
         
         <el-menu
           :default-active="activeMenu"
           :default-openeds="defaultOpeneds"
+          router
           class="sidebar-menu"
-          @select="handleMenuSelect"
         >
           <el-menu-item :index="`/projects/${projectId}/overview`">
             <el-icon><DataBoard /></el-icon>
@@ -23,12 +29,18 @@
             <span>QA 问答</span>
           </el-menu-item>
 
-          <el-sub-menu v-for="section in menuSections" :key="section.index" :index="section.index">
+          <el-sub-menu
+            v-for="section in menuSections"
+            :key="section.index"
+            :index="section.index">
             <template #title>
               <el-icon><component :is="section.icon" /></el-icon>
               <span>{{ section.label }}</span>
             </template>
-            <el-menu-item v-for="item in section.items" :key="item.path" :index="item.path">
+            <el-menu-item
+              v-for="item in section.items"
+              :key="item.path"
+              :index="item.path">
               {{ item.label }}
             </el-menu-item>
           </el-sub-menu>
@@ -45,7 +57,10 @@
           </div>
           <div class="header-right">
             <el-space>
-              <el-tag v-if="runningTasksCount > 0" type="warning" size="small">
+              <el-tag
+                v-if="runningTasksCount > 0"
+                type="warning"
+                size="small">
                 {{ runningTasksCount }} 个任务运行中
               </el-tag>
             </el-space>
@@ -61,8 +76,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, markRaw, onMounted, type Component } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, markRaw, type Component } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   DataBoard,
   FolderOpened,
@@ -74,10 +89,9 @@ import {
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'
-import { preloadDicts, dictLabel } from '@/utils/dict'
+import { dictLabel } from '@/utils/dict'
 
 const route = useRoute()
-const router = useRouter()
 const projectStore = useProjectStore()
 const taskStore = useTaskStore()
 
@@ -178,18 +192,6 @@ const defaultOpeneds = computed(() =>
 )
 
 const getProjectStatusText = (status: string) => dictLabel('project_status', status)
-
-onMounted(async () => {
-  preloadDicts(['project_status'])
-  if (projectId.value) {
-    projectStore.setCurrentProject(projectId.value)
-    await projectStore.fetchCurrentProject()
-  }
-})
-
-function handleMenuSelect(index: string) {
-  router.push(index)
-}
 </script>
 
 <style scoped>

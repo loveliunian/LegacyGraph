@@ -1,5 +1,6 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.service.scan.TraceIngestionService;
 import io.github.legacygraph.dto.trace.TraceIngestRequest;
 import io.github.legacygraph.dto.trace.TraceTopology;
 import io.github.legacygraph.builder.TraceGraphAligner;

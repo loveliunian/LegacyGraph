@@ -1,6 +1,6 @@
 package io.github.legacygraph.controller;
 
-import io.github.legacygraph.service.ReportExportService;
+import io.github.legacygraph.service.report.ReportExportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

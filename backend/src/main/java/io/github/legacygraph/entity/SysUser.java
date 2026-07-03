@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
  * 系统用户实体
  */
 @Data
-@TableName("sys_user")
+@TableName("lg_sys_user")
 public class SysUser {
 
     @TableId(type = IdType.ASSIGN_UUID)

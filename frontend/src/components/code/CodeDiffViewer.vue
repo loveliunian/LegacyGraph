@@ -1,39 +1,76 @@
 <template>
   <div class="code-diff-container">
-    <div class="diff-header" v-if="showHeader">
+    <div
+      v-if="showHeader"
+      class="diff-header">
       <div class="diff-file-info">
         <el-icon><Document /></el-icon>
         <span class="file-name">{{ fileName || '代码对比' }}</span>
-        <el-tag v-if="stats.total > 0" size="small" type="success">+{{ stats.additions }}</el-tag>
-        <el-tag v-if="stats.total > 0" size="small" type="danger">-{{ stats.deletions }}</el-tag>
+        <el-tag
+          v-if="stats.total > 0"
+          size="small"
+          type="success">
+          +{{ stats.additions }}
+        </el-tag>
+        <el-tag
+          v-if="stats.total > 0"
+          size="small"
+          type="danger">
+          -{{ stats.deletions }}
+        </el-tag>
       </div>
       <div class="diff-actions">
         <el-button-group size="small">
-          <el-tooltip :content="$t('common.expandAll')" placement="top">
-            <el-button :icon="Expand" @click="expandAll" />
+          <el-tooltip
+            :content="$t('common.expandAll')"
+            placement="top">
+            <el-button
+              :icon="Expand"
+              @click="expandAll" />
           </el-tooltip>
-          <el-tooltip :content="$t('common.collapse')" placement="top">
-            <el-button :icon="Fold" @click="collapseAll" />
+          <el-tooltip
+            :content="$t('common.collapse')"
+            placement="top">
+            <el-button
+              :icon="Fold"
+              @click="collapseAll" />
           </el-tooltip>
-          <el-tooltip :content="$t('common.copy')" placement="top">
-            <el-button :icon="CopyDocument" @click="copyNewCode" />
+          <el-tooltip
+            :content="$t('common.copy')"
+            placement="top">
+            <el-button
+              :icon="CopyDocument"
+              @click="copyNewCode" />
           </el-tooltip>
         </el-button-group>
-        <el-radio-group v-model="viewMode" size="small" @change="handleViewModeChange">
+        <el-radio-group
+          v-model="viewMode"
+          size="small"
+          @change="handleViewModeChange">
           <el-radio-button value="split">{{ $t('graph.codeGraph') }}</el-radio-button>
           <el-radio-button value="unified">{{ $t('graph.unifiedGraph') }}</el-radio-button>
         </el-radio-group>
       </div>
     </div>
 
-    <div class="diff-content" :class="{ 'split-view': viewMode === 'split' }">
-      <div v-if="loading" class="loading-overlay">
-        <el-skeleton :rows="15" animated />
+    <div
+      class="diff-content"
+      :class="{ 'split-view': viewMode === 'split' }">
+      <div
+        v-if="loading"
+        class="loading-overlay">
+        <el-skeleton
+          :rows="15"
+          animated />
       </div>
-      <div v-else-if="!oldCode && !newCode" class="empty-state">
+      <div
+        v-else-if="!oldCode && !newCode"
+        class="empty-state">
         <el-empty :description="$t('common.noData')" />
       </div>
-      <div v-else class="diff-view">
+      <div
+        v-else
+        class="diff-view">
         <template v-if="viewMode === 'split'">
           <div class="diff-column old-code">
             <div class="column-header">
@@ -49,7 +86,9 @@
               >
                 <span class="line-number">{{ line.oldLine || '' }}</span>
                 <span class="line-symbol">{{ getLineSymbol(line.type) }}</span>
-                <span class="line-content" v-html="highlightLine(line.content, language, line.type)"></span>
+                <span
+                  class="line-content"
+                  v-html="highlightLine(line.content, language, line.type)" />
               </div>
             </div>
           </div>
@@ -67,7 +106,9 @@
               >
                 <span class="line-number">{{ line.newLine || '' }}</span>
                 <span class="line-symbol">{{ getLineSymbol(line.type) }}</span>
-                <span class="line-content" v-html="highlightLine(line.content, language, line.type)"></span>
+                <span
+                  class="line-content"
+                  v-html="highlightLine(line.content, language, line.type)" />
               </div>
             </div>
           </div>
@@ -84,38 +125,55 @@
               <span class="line-number old-num">{{ line.oldLine || '' }}</span>
               <span class="line-number new-num">{{ line.newLine || '' }}</span>
               <span class="line-symbol">{{ getLineSymbol(line.type) }}</span>
-              <span class="line-content" v-html="highlightLine(line.content, language, line.type)"></span>
+              <span
+                class="line-content"
+                v-html="highlightLine(line.content, language, line.type)" />
             </div>
           </div>
         </template>
       </div>
     </div>
 
-    <div class="diff-legend" v-if="showLegend">
+    <div
+      v-if="showLegend"
+      class="diff-legend">
       <div class="legend-item">
-        <span class="legend-color added"></span>
+        <span class="legend-color added" />
         <span>{{ $t('migration.codeRefactoring') }}</span>
       </div>
       <div class="legend-item">
-        <span class="legend-color removed"></span>
+        <span class="legend-color removed" />
         <span>{{ $t('migration.dataMigration') }}</span>
       </div>
       <div class="legend-item">
-        <span class="legend-color modified"></span>
+        <span class="legend-color modified" />
         <span>{{ $t('migration.compatibility') }}</span>
       </div>
       <div class="legend-item">
-        <span class="legend-color unchanged"></span>
+        <span class="legend-color unchanged" />
         <span>{{ $t('migration.accepted') }}</span>
       </div>
     </div>
 
-    <div v-if="showStats && stats.total > 0" class="diff-stats">
-      <el-statistic title="总变更行数" :value="stats.total" size="small" />
-      <el-statistic title="新增行数" :value="stats.additions" size="small" class="success">
+    <div
+      v-if="showStats && stats.total > 0"
+      class="diff-stats">
+      <el-statistic
+        title="总变更行数"
+        :value="stats.total"
+        size="small" />
+      <el-statistic
+        title="新增行数"
+        :value="stats.additions"
+        size="small"
+        class="success">
         <template #prefix><el-icon><Top /></el-icon></template>
       </el-statistic>
-      <el-statistic title="删除行数" :value="stats.deletions" size="small" class="danger">
+      <el-statistic
+        title="删除行数"
+        :value="stats.deletions"
+        size="small"
+        class="danger">
         <template #prefix><el-icon><Bottom /></el-icon></template>
       </el-statistic>
     </div>

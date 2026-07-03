@@ -4,7 +4,9 @@
       <template #header>
         <div class="card-header">
           <span>迁移风险检测</span>
-          <el-button type="primary" @click="refreshDetection">
+          <el-button
+            type="primary"
+            @click="refreshDetection">
             <el-icon><Refresh /></el-icon>
             重新检测
           </el-button>
@@ -20,27 +22,37 @@
       />
 
       <!-- 统计信息 -->
-      <el-row :gutter="20" class="stats-row">
+      <el-row
+        :gutter="20"
+        class="stats-row">
         <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
+          <el-card
+            shadow="hover"
+            class="stat-card">
             <div class="stat-value">{{ stats.totalNodes }}</div>
             <div class="stat-label">总节点数</div>
           </el-card>
         </el-col>
         <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
+          <el-card
+            shadow="hover"
+            class="stat-card">
             <div class="stat-value">{{ stats.confirmedNodes }}</div>
             <div class="stat-label">已确认节点</div>
           </el-card>
         </el-col>
         <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
+          <el-card
+            shadow="hover"
+            class="stat-card">
             <div class="stat-value">{{ stats.pendingNodes }}</div>
             <div class="stat-label">待确认节点</div>
           </el-card>
         </el-col>
         <el-col :span="6">
-          <el-card shadow="hover" class="stat-card">
+          <el-card
+            shadow="hover"
+            class="stat-card">
             <div class="stat-value">{{ stats.risks }}</div>
             <div class="stat-label">风险项数量</div>
           </el-card>
@@ -50,28 +62,45 @@
       <!-- 风险列表 -->
       <div class="table-header">
         <span class="table-title">风险列表</span>
-        <el-button v-if="overallScore !== null" type="primary" size="small" @click="exportReport">
+        <el-button
+          v-if="overallScore !== null"
+          type="primary"
+          size="small"
+          @click="exportReport">
           <el-icon><Download /></el-icon>
           导出报告
         </el-button>
       </div>
 
       <el-table
-        :data="pagedRisks"
         v-loading="loading"
+        :data="pagedRisks"
         border
         style="width: 100%"
       >
-        <el-table-column prop="riskType" label="风险类型" width="150">
+        <el-table-column
+          prop="riskType"
+          label="风险类型"
+          width="150">
           <template #default="{ row }">
             <el-tag :type="getRiskTypeTag(row.riskType)">
               {{ getRiskTypeName(row.riskType) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="affectedNodeName" label="影响节点" min-width="200" />
-        <el-table-column prop="description" label="描述" min-width="250" />
-        <el-table-column prop="riskLevel" label="风险等级" width="100" align="center">
+        <el-table-column
+          prop="affectedNodeName"
+          label="影响节点"
+          min-width="200" />
+        <el-table-column
+          prop="description"
+          label="描述"
+          min-width="250" />
+        <el-table-column
+          prop="riskLevel"
+          label="风险等级"
+          width="100"
+          align="center">
           <template #default="{ row }">
             <el-progress
               :percentage="row.riskLevel * 100"
@@ -80,9 +109,15 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column
+          label="操作"
+          width="120"
+          fixed="right">
           <template #default="{ row }">
-            <el-button link size="small" @click="goToNode(row.affectedNodeId)">
+            <el-button
+              link
+              size="small"
+              @click="goToNode(row.affectedNodeId)">
               查看节点
             </el-button>
           </template>
@@ -91,8 +126,8 @@
 
       <el-pagination
         v-if="risks.length > pageSize"
-        class="pagination"
         v-model:current-page="currentPage"
+        class="pagination"
         :page-size="pageSize"
         :total="risks.length"
         layout="total, prev, pager, next"

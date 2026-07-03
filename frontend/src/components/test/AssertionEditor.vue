@@ -2,27 +2,56 @@
   <div class="assertion-editor">
     <div class="assertion-header">
       <span>断言列表</span>
-      <el-button type="primary" link size="small" @click="addAssertion">
+      <el-button
+        type="primary"
+        link
+        size="small"
+        @click="addAssertion">
         <el-icon><plus /></el-icon>
         添加断言
       </el-button>
     </div>
 
-    <el-empty v-if="assertions.length === 0" description="暂无断言" />
+    <el-empty
+      v-if="assertions.length === 0"
+      description="暂无断言" />
 
-    <div v-else class="assertion-list">
-      <div v-for="(assertion, index) in assertions" :key="index" class="assertion-item">
+    <div
+      v-else
+      class="assertion-list">
+      <div
+        v-for="(assertion, index) in assertions"
+        :key="index"
+        class="assertion-item">
         <el-card size="small">
           <div class="assertion-row">
             <span class="label">类型：</span>
-            <el-select v-model="assertion.type" placeholder="选择断言类型" size="small" @change="handleTypeChange(index)">
-              <el-option label="HTTP状态码" value="HTTP_STATUS" />
-              <el-option label="JSON路径存在" value="JSON_PATH_NOT_NULL" />
-              <el-option label="JSON路径等于" value="JSON_PATH" />
-              <el-option label="数据库存在" value="DB_EXISTS" />
-              <el-option label="数据库不存在" value="DB_NOT_EXISTS" />
-              <el-option label="数据库行数" value="DB_COUNT" />
-              <el-option label="数据库字段值" value="DB_FIELD_VALUE" />
+            <el-select
+              v-model="assertion.type"
+              placeholder="选择断言类型"
+              size="small"
+              @change="handleTypeChange(index)">
+              <el-option
+                label="HTTP状态码"
+                value="HTTP_STATUS" />
+              <el-option
+                label="JSON路径存在"
+                value="JSON_PATH_NOT_NULL" />
+              <el-option
+                label="JSON路径等于"
+                value="JSON_PATH" />
+              <el-option
+                label="数据库存在"
+                value="DB_EXISTS" />
+              <el-option
+                label="数据库不存在"
+                value="DB_NOT_EXISTS" />
+              <el-option
+                label="数据库行数"
+                value="DB_COUNT" />
+              <el-option
+                label="数据库字段值"
+                value="DB_FIELD_VALUE" />
             </el-select>
             <el-button
               type="danger"
@@ -44,7 +73,9 @@
             />
           </div>
 
-          <div class="assertion-row" v-if="needExpected(assertion.type)">
+          <div
+            v-if="needExpected(assertion.type)"
+            class="assertion-row">
             <span class="label">预期值：</span>
             <el-input
               v-model="assertion.expected"
@@ -54,7 +85,9 @@
             />
           </div>
 
-          <div class="assertion-row" v-if="needColumn(assertion.type)">
+          <div
+            v-if="needColumn(assertion.type)"
+            class="assertion-row">
             <span class="label">列名：</span>
             <el-input
               v-model="assertion.column"
@@ -64,7 +97,9 @@
             />
           </div>
 
-          <div class="assertion-row" v-if="needTolerance(assertion.type)">
+          <div
+            v-if="needTolerance(assertion.type)"
+            class="assertion-row">
             <span class="label">容差：</span>
             <el-input-number
               v-model="assertion.tolerance"

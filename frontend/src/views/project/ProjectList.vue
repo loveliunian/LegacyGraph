@@ -4,22 +4,55 @@
       <template #header>
         <div class="card-header">
           <span>项目列表</span>
-          <el-button type="primary" @click="showCreateDialog">创建项目</el-button>
+          <el-button
+            type="primary"
+            @click="showCreateDialog">
+            创建项目
+          </el-button>
         </div>
       </template>
 
-      <el-table :data="pageData?.list" v-loading="loading" border>
-        <el-table-column prop="projectCode" label="项目编码" width="180" />
-        <el-table-column prop="projectName" label="项目名称" width="200" />
-        <el-table-column prop="description" label="描述" />
-        <el-table-column prop="owner" label="负责人" width="120" />
-        <el-table-column label="创建时间" width="180">
+      <el-table
+        v-loading="loading"
+        :data="pageData?.list"
+        border>
+        <el-table-column
+          prop="projectCode"
+          label="项目编码"
+          width="180" />
+        <el-table-column
+          prop="projectName"
+          label="项目名称"
+          width="200" />
+        <el-table-column
+          prop="description"
+          label="描述" />
+        <el-table-column
+          prop="owner"
+          label="负责人"
+          width="120" />
+        <el-table-column
+          label="创建时间"
+          width="180">
           <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column
+          label="操作"
+          width="200"
+          fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link @click="goToDetail(row.id)">详情</el-button>
-            <el-button type="danger" link @click="deleteProject(row.id)">删除</el-button>
+            <el-button
+              type="primary"
+              link
+              @click="goToDetail(row.id)">
+              详情
+            </el-button>
+            <el-button
+              type="danger"
+              link
+              @click="deleteProject(row.id)">
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -36,13 +69,26 @@
     </el-card>
 
     <!-- 创建项目对话框 -->
-    <el-dialog v-model="createDialogVisible" title="创建项目" width="500px">
-      <el-form :model="newProject" label-width="100px">
-        <el-form-item label="项目编码" required>
-          <el-input v-model="newProject.projectCode" placeholder="例如: legacy-bpm" />
+    <el-dialog
+      v-model="createDialogVisible"
+      title="创建项目"
+      width="500px">
+      <el-form
+        :model="newProject"
+        label-width="100px">
+        <el-form-item
+          label="项目编码"
+          required>
+          <el-input
+            v-model="newProject.projectCode"
+            placeholder="例如: legacy-bpm" />
         </el-form-item>
-        <el-form-item label="项目名称" required>
-          <el-input v-model="newProject.projectName" placeholder="例如: 老流程平台" />
+        <el-form-item
+          label="项目名称"
+          required>
+          <el-input
+            v-model="newProject.projectName"
+            placeholder="例如: 老流程平台" />
         </el-form-item>
         <el-form-item label="项目描述">
           <el-input
@@ -52,15 +98,23 @@
           />
         </el-form-item>
         <el-form-item label="Git 地址">
-          <el-input v-model="newProject.repoUrl" placeholder="Git 仓库地址" />
+          <el-input
+            v-model="newProject.repoUrl"
+            placeholder="Git 仓库地址" />
         </el-form-item>
         <el-form-item label="负责人">
-          <el-input v-model="newProject.owner" placeholder="项目负责人" />
+          <el-input
+            v-model="newProject.owner"
+            placeholder="项目负责人" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="createProject">创建</el-button>
+        <el-button
+          type="primary"
+          @click="createProject">
+          创建
+        </el-button>
       </template>
     </el-dialog>
   </div>

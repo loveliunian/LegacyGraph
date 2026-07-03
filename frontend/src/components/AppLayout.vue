@@ -1,13 +1,31 @@
 <template>
   <div class="app-layout">
     <!-- Top Header Bar -->
-    <el-header class="app-header" height="var(--lg-header-height)">
+    <el-header
+      class="app-header"
+      height="var(--lg-header-height)">
       <div class="header-inner">
         <div class="header-left">
-          <router-link to="/dashboard" class="header-logo">
-            <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
-              <rect width="40" height="40" rx="10" fill="var(--el-color-primary)" opacity="0.9"/>
-              <path d="M12 20L18 26L28 14" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <router-link
+            to="/dashboard"
+            class="header-logo">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 40 40"
+              fill="none">
+              <rect
+                width="40"
+                height="40"
+                rx="10"
+                fill="var(--el-color-primary)"
+                opacity="0.9" />
+              <path
+                d="M12 20L18 26L28 14"
+                stroke="white"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round" />
             </svg>
             <span class="logo-text">LegacyGraph</span>
           </router-link>
@@ -19,17 +37,26 @@
             :ellipsis="false"
             @select="handleTopMenuSelect"
           >
-            <template v-for="item in visibleTopMenus" :key="item.index">
-              <el-sub-menu v-if="item.children?.length" :index="item.index">
+            <template
+              v-for="item in visibleTopMenus"
+              :key="item.index">
+              <el-sub-menu
+                v-if="item.children?.length"
+                :index="item.index">
                 <template #title>
                   <el-icon><component :is="item.icon" /></el-icon>
                   <span>{{ item.label }}</span>
                 </template>
-                <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+                <el-menu-item
+                  v-for="child in item.children"
+                  :key="child.path"
+                  :index="child.path">
                   {{ child.label }}
                 </el-menu-item>
               </el-sub-menu>
-              <el-menu-item v-else :index="item.path">
+              <el-menu-item
+                v-else
+                :index="item.path">
                 <el-icon><component :is="item.icon" /></el-icon>
                 <span>{{ item.label }}</span>
               </el-menu-item>
@@ -38,23 +65,34 @@
         </div>
 
         <div class="header-right">
-          <el-tooltip content="切换主题" placement="bottom">
+          <el-tooltip
+            content="切换主题"
+            placement="bottom">
             <el-button
               :icon="themeIcon"
               text
               circle
-              @click="toggleTheme"
               class="header-icon-btn"
+              @click="toggleTheme"
             />
           </el-tooltip>
 
-          <el-tooltip content="语言切换" placement="bottom">
+          <el-tooltip
+            content="语言切换"
+            placement="bottom">
             <LangSwitcher />
           </el-tooltip>
 
-          <el-dropdown @command="handleUserCommand" trigger="click">
+          <NotificationCenter />
+
+          <el-dropdown
+            trigger="click"
+            @command="handleUserCommand">
             <span class="user-dropdown">
-              <el-avatar :size="28" :icon="UserFilled" class="user-avatar" />
+              <el-avatar
+                :size="28"
+                :icon="UserFilled"
+                class="user-avatar" />
               <span class="user-name">{{ userInfo?.nickname || userInfo?.username }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
@@ -66,7 +104,9 @@
                 <el-dropdown-item command="settings">
                   <el-icon><Setting /></el-icon>系统设置
                 </el-dropdown-item>
-                <el-dropdown-item divided command="logout">
+                <el-dropdown-item
+                  divided
+                  command="logout">
                   <el-icon><SwitchButton /></el-icon>退出登录
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -101,6 +141,7 @@ import {
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
 import LangSwitcher from '@/components/LangSwitcher.vue'
+import NotificationCenter from '@/components/NotificationCenter.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
