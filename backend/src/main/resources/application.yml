@@ -152,7 +152,7 @@ legacygraph:
         timeout-seconds: 120
         max-output-bytes: 100000
       zread:
-        enabled: false
+        enabled: true
         kind: CLI
         path: zread
       repomix:

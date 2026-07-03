@@ -12,6 +12,7 @@ import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.FactExtractionResult;
+import io.github.legacygraph.entity.AiScanJob;
 import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.entity.Document;
@@ -24,6 +25,7 @@ import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.FactRepository;
+import io.github.legacygraph.repository.AiScanJobRepository;
 import io.github.legacygraph.repository.ReviewRecordRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
@@ -44,11 +46,13 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -74,6 +78,8 @@ import java.util.function.BooleanSupplier;
 public class AiScanOrchestrator {
 
     private final ScanTaskRepository scanTaskRepository;
+    private final ScanTaskRecorder scanTaskRecorder;
+    private final AiScanJobRepository aiScanJobRepository;
     private final DocumentRepository documentRepository;
     private final FactRepository factRepository;
     private final ReviewRecordRepository reviewRecordRepository;
@@ -130,6 +136,8 @@ public class AiScanOrchestrator {
     }
 
     public AiScanOrchestrator(ScanTaskRepository scanTaskRepository,
+                              ScanTaskRecorder scanTaskRecorder,
+                              AiScanJobRepository aiScanJobRepository,
                               DocumentRepository documentRepository,
                               FactRepository factRepository,
                               ReviewRecordRepository reviewRecordRepository,
@@ -146,6 +154,8 @@ public class AiScanOrchestrator {
                               ScanUnderstandingEnhancer scanUnderstandingEnhancer,
                               VectorizationService vectorizationService) {
         this.scanTaskRepository = scanTaskRepository;
+        this.scanTaskRecorder = scanTaskRecorder;
+        this.aiScanJobRepository = aiScanJobRepository;
         this.documentRepository = documentRepository;
         this.factRepository = factRepository;
         this.reviewRecordRepository = reviewRecordRepository;
@@ -161,6 +171,35 @@ public class AiScanOrchestrator {
         this.gapFinderService = gapFinderService;
         this.scanUnderstandingEnhancer = scanUnderstandingEnhancer;
         this.vectorizationService = vectorizationService;
+    }
+
+    /**
+     * 将 AI 增强任务排入异步队列，不阻塞基础扫描完成。
+     * 基础扫描完成后，由 AiScanJobWorker 定期拉取 PENDING job 异步执行。
+     */
+    public void enqueue(String projectId, String versionId, AiScanConfig config) {
+        AiScanJob job = new AiScanJob();
+        job.setProjectId(projectId);
+        job.setVersionId(versionId);
+        job.setStatus("PENDING");
+        try {
+            job.setConfigJson(objectMapper.writeValueAsString(config));
+        } catch (Exception e) {
+            log.warn("Failed to serialize AI config for job: {}", e.getMessage());
+        }
+        job.setCreatedAt(LocalDateTime.now());
+        job.setUpdatedAt(LocalDateTime.now());
+        aiScanJobRepository.insert(job);
+        log.info("AI scan job enqueued: projectId={}, versionId={}, jobId={}", projectId, versionId, job.getId());
+    }
+
+    /**
+     * 记录 AI 编排跳过状态（enableAi=false 时的替代路径）。
+     */
+    public void recordSkipped(String projectId, String versionId) {
+        ScanTask task = scanTaskRecorder.createTask(projectId, versionId, "AI_ORCHESTRATION", "AI 编排");
+        scanTaskRecorder.completeTask(task, "AI 编排已跳过：enableAi=false", null, "SKIPPED");
+        log.info("AI orchestration recorded as skipped: projectId={}, versionId={}", projectId, versionId);
     }
 
     /**
@@ -244,8 +283,9 @@ public class AiScanOrchestrator {
                     if (content == null || content.isBlank()) {
                         return;
                     }
-                    // 向量化文档内容（非阻塞：失败不影响后续 LLM 抽取）
-                    vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                    // 向量化文档内容（fire-and-forget：不阻塞 LLM 调用线程）
+                    CompletableFuture.runAsync(() ->
+                            vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content));
                     try {
                         DocUnderstandingAgent.BusinessFactExtraction extraction =
                                 docUnderstandingAgent.extractBusinessFacts(projectId,
@@ -312,31 +352,57 @@ public class AiScanOrchestrator {
                 return;
             }
 
-            int factCount = 0;
-            int processed = 0;
-            Set<String> visitedPaths = new HashSet<>();
+            // 按 sourcePath 去重后截断到上限
+            Set<String> uniquePaths = new LinkedHashSet<>();
+            List<GraphNode> uniqueNodes = new ArrayList<>();
             for (GraphNode node : codeNodes) {
-                if (processed >= MAX_CODE_EXTRACT_NODES) {
-                    break;
-                }
-                String content = readCodeContent(node, visitedPaths);
-                if (content == null || content.isBlank()) {
-                    continue;
-                }
-                processed++;
-                // 向量化代码内容（非阻塞：失败不影响后续 LLM 抽取）
-                vectorizeContent(projectId, versionId, "CODE", node.getSourcePath(), content);
-                try {
-                    FactExtractionResult result = codeFactAgent.extractFacts(
-                            projectId, truncate(content, CODE_CONTENT_LIMIT), node.getSourcePath());
-                    factCount += persistAndBuildCodeFacts(projectId, versionId, node, result);
-                } catch (Exception e) {
-                    log.warn("Code fact extract failed for node {}: {}", node.getNodeKey(), e.getMessage());
+                String path = node.getSourcePath();
+                if (path != null && !path.isBlank() && uniquePaths.add(path)) {
+                    uniqueNodes.add(node);
+                    if (uniqueNodes.size() >= MAX_CODE_EXTRACT_NODES) break;
                 }
             }
-            String summary = factCount > 0
-                    ? "AI 从代码抽取业务事实 " + factCount + " 条，分析类节点 " + processed + " 个"
-                    : "⚠ 分析类节点 " + processed + " 个，未抽取到业务事实";
+
+            log.info("AI_CODE_EXTRACT starting: versionId={}, nodeCount={}, dedupedTo={}, parallelism={}",
+                    versionId, codeNodes.size(), uniqueNodes.size(), DOC_EXTRACT_PARALLELISM);
+
+            AtomicInteger factCount = new AtomicInteger(0);
+            AtomicInteger processed = new AtomicInteger(0);
+            Set<String> visitedPaths = ConcurrentHashMap.newKeySet();
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+            for (GraphNode node : uniqueNodes) {
+                futures.add(CompletableFuture.runAsync(() -> {
+                    String content = readCodeContent(node, visitedPaths);
+                    if (content == null || content.isBlank()) {
+                        return;
+                    }
+                    processed.incrementAndGet();
+                    // 向量化代码内容（fire-and-forget：不阻塞 LLM 调用线程）
+                    CompletableFuture.runAsync(() ->
+                            vectorizeContent(projectId, versionId, "CODE", node.getSourcePath(), content));
+                    try {
+                        FactExtractionResult result = codeFactAgent.extractFacts(
+                                projectId, truncate(content, CODE_CONTENT_LIMIT), node.getSourcePath());
+                        factCount.addAndGet(
+                                persistAndBuildCodeFacts(projectId, versionId, node, result));
+                    } catch (Exception e) {
+                        log.warn("Code fact extract failed for node {}: {}", node.getNodeKey(), e.getMessage());
+                    }
+                }, docExtractExecutor));
+            }
+
+            // 等待所有代码分析完成
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            int totalFacts = factCount.get();
+            int totalProcessed = processed.get();
+            log.info("AI_CODE_EXTRACT completed: versionId={}, factCount={}, processed={}",
+                    versionId, totalFacts, totalProcessed);
+
+            String summary = totalFacts > 0
+                    ? "AI 从代码抽取业务事实 " + totalFacts + " 条，分析类节点 " + totalProcessed + " 个"
+                    : "⚠ 分析类节点 " + totalProcessed + " 个，未抽取到业务事实";
             completeTask(task, summary, null);
         } catch (Exception e) {
             log.error("AI_CODE_EXTRACT failed: versionId={}", versionId, e);
@@ -923,6 +989,10 @@ public class AiScanOrchestrator {
     }
 
     private ScanTask createTask(String projectId, String versionId, String taskType, String taskName) {
+        if (scanTaskRecorder != null) {
+            return scanTaskRecorder.createTask(projectId, versionId, taskType, taskName);
+        }
+        // fallback: 测试环境 scanTaskRecorder 可能为 null
         ScanTask task = new ScanTask();
         task.setId(UUID.randomUUID().toString());
         task.setProjectId(projectId);
@@ -938,6 +1008,20 @@ public class AiScanOrchestrator {
     }
 
     private void completeTask(ScanTask task, String summary, String error) {
+        String terminalStatus;
+        if (error != null) {
+            terminalStatus = "FAILED";
+        } else if (summary != null && summary.startsWith("⚠")) {
+            terminalStatus = "WARNING";
+        } else {
+            terminalStatus = "SUCCESS";
+        }
+        if (scanTaskRecorder != null) {
+            scanTaskRecorder.completeTask(task, summary, error,
+                    "SUCCESS".equals(terminalStatus) ? null : terminalStatus);
+            return;
+        }
+        // fallback: 测试环境
         try {
             if (summary != null) {
                 task.setOutputSummary(objectMapper.writeValueAsString(summary));
@@ -946,15 +1030,7 @@ public class AiScanOrchestrator {
             task.setOutputSummary("\"" + (summary != null ? summary.replace("\"", "\\\"") : "") + "\"");
         }
         task.setErrorMessage(error);
-        if (error != null) {
-            task.setTaskStatus("FAILED");
-        } else if (summary != null && summary.startsWith("⚠")) {
-            // P1-B：空结果/跳过等非错误但有告警的情况，标记为 WARNING
-            // 与 SUCCESS 区分，便于在扫描任务列表中快速定位"业务图谱为空"的原因
-            task.setTaskStatus("WARNING");
-        } else {
-            task.setTaskStatus("SUCCESS");
-        }
+        task.setTaskStatus(terminalStatus);
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);

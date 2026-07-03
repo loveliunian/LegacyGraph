@@ -68,4 +68,10 @@ public class GraphNodeClaim {
     /** 幂等键：同一意图重复提交不产生副作用（可选） */
     private String idempotencyKey;
 
+    /** 扫描类型（CODE_SCAN / DATABASE_SCAN / DOC_SCAN / AI_SCAN） */
+    private String scanType;
+
+    /** 所属类的全限定名（用于代码节点） */
+    private String className;
+
 }

@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -249,12 +250,16 @@ public class ChangeTaskService {
     @Transactional
     public List<ValidationGate> registerGates(String taskId, List<String> gateTypes) {
         ChangeTask task = requireTask(taskId);
+        List<ValidationGate> gates = new ArrayList<>(gateTypes.size());
         for (String type : gateTypes) {
             ValidationGate gate = new ValidationGate();
             gate.setId(UUID.randomUUID().toString());
             gate.setChangeTaskId(taskId);
             gate.setGateType(type);
             gate.setResult("PENDING");
+            gates.add(gate);
+        }
+        for (ValidationGate gate : gates) {
             validationGateRepository.insert(gate);
         }
         task.setStatus("VALIDATING");

@@ -243,7 +243,7 @@ export const graphApi = {
 
   /** 获取统一图谱全量数据 */
   getUnifiedGraph: (projectId: string, versionId: string, minConfidence: number = 0) => {
-    return get(`/lg/projects/${projectId}/graph/unified`, { versionId, minConfidence })
+    return get(`/lg/projects/${projectId}/graph/unified`, { versionId, minConfidence }, { timeout: 120000 })
   },
 
   /**

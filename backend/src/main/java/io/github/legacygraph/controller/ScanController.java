@@ -4,6 +4,7 @@ import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.github.legacygraph.dto.ScanProgressResponse;
 import io.github.legacygraph.entity.ScanVersion;
+import io.github.legacygraph.service.ScanPerformanceReportService;
 import io.github.legacygraph.service.ScanVersionService;
 import io.github.legacygraph.task.ProjectScanner;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,15 +29,18 @@ public class ScanController {
 
     private final ScanVersionService scanVersionService;
     private final ProjectScanner projectScanner;
+    private final ScanPerformanceReportService scanPerformanceReportService;
 
     /**
      * 构造函数注入
      * @param scanVersionService 扫描版本服务
      * @param projectScanner 项目扫描器
      */
-    public ScanController(ScanVersionService scanVersionService, ProjectScanner projectScanner) {
+    public ScanController(ScanVersionService scanVersionService, ProjectScanner projectScanner,
+                          ScanPerformanceReportService scanPerformanceReportService) {
         this.scanVersionService = scanVersionService;
         this.projectScanner = projectScanner;
+        this.scanPerformanceReportService = scanPerformanceReportService;
     }
 
     /**
@@ -196,5 +200,17 @@ public class ScanController {
             @PathVariable String projectId,
             @PathVariable String versionId) {
         return Result.success(scanVersionService.getScanLogs(versionId));
+    }
+
+    /**
+     * 获取扫描性能报告
+     * 返回 Markdown 格式的扫描性能分析报告
+     */
+    @GetMapping("/{versionId}/performance-report")
+    @Operation(summary = "获取扫描性能报告", description = "返回 Markdown 格式的扫描性能分析报告，包含各阶段耗时和汇总")
+    public Result<String> performanceReport(
+            @PathVariable String projectId,
+            @PathVariable String versionId) {
+        return Result.success(scanPerformanceReportService.generateMarkdown(projectId, versionId));
     }
 }

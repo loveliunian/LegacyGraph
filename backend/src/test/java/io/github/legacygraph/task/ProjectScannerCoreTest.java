@@ -1,11 +1,14 @@
 package io.github.legacygraph.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.repository.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -44,7 +47,35 @@ class ProjectScannerCoreTest {
                 objectMapper,
                 null,  // aiScanOrchestrator
                 null,  // dbSchemaAnalysisAgent
-                null   // extractionAdapterRegistry
+                null,  // extractionAdapterRegistry
+                null,  // scanTaskRecorder
+                null   // adapterExecutionService
         ));
+    }
+
+    @Test
+    void resolveAiConfigForScan_respectsExplicitDisableWhenDocParseSelected() {
+        AiScanConfig config = ProjectScanner.resolveAiConfigForScan(
+                "{\"scanTypes\":[\"DOC_PARSE\"],\"enableAi\":false}",
+                List.of("DOC_PARSE"),
+                objectMapper,
+                false,
+                false,
+                0.6);
+
+        assertFalse(config.isEnableAi());
+    }
+
+    @Test
+    void resolveAiConfigForScan_defaultsDocParseToAiWhenSwitchMissing() {
+        AiScanConfig config = ProjectScanner.resolveAiConfigForScan(
+                "{\"scanTypes\":[\"DOC_PARSE\"]}",
+                List.of("DOC_PARSE"),
+                objectMapper,
+                false,
+                false,
+                0.6);
+
+        assertTrue(config.isEnableAi());
     }
 }

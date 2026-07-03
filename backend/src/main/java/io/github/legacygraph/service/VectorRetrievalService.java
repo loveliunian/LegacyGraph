@@ -66,12 +66,13 @@ public class VectorRetrievalService {
      */
     @Transactional
     public void batchUpsertVectors(String projectId, String versionId, List<VectorDocument> documents) {
-        log.info("Batch upserting {} vectors for projectId={}, versionId={}", documents.size(), projectId, versionId);
+        String effectiveVersionId = effectiveVersionId(versionId);
+        log.info("Batch upserting {} vectors for projectId={}, versionId={}", documents.size(), projectId, effectiveVersionId);
         for (VectorDocument doc : documents) {
             if (doc.getContent() != null && !doc.getContent().isBlank()) {
                 vectorizationService.embedAndStore(
                     doc.getProjectId() != null ? doc.getProjectId() : projectId,
-                    doc.getVersionId() != null ? doc.getVersionId() : versionId,
+                    doc.getVersionId() != null ? doc.getVersionId() : effectiveVersionId,
                     doc.getChunkType(),
                     doc.getSourceUri(),
                     doc.getChunkIndex() != null ? doc.getChunkIndex() : 0,
@@ -87,20 +88,21 @@ public class VectorRetrievalService {
      */
     public List<VectorDocument> semanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
         log.info("Semantic search: projectId={}, query={}, topK={}", projectId, query, topK);
+        String effectiveVersionId = effectiveVersionId(versionId);
 
         // 缓存优先：相同 (project, version, query, topK, chunkType) 复用
         if (cacheService != null) {
-            String cacheKey = searchCacheKey(projectId, versionId, query, topK, chunkType);
+            String cacheKey = searchCacheKey(projectId, effectiveVersionId, query, topK, chunkType);
             @SuppressWarnings("unchecked")
             List<VectorDocument> cached = cacheService.get(cacheKey, List.class);
             if (cached != null) {
                 return cached;
             }
-            List<VectorDocument> fresh = doSemanticSearch(projectId, versionId, query, topK, chunkType);
+            List<VectorDocument> fresh = doSemanticSearch(projectId, effectiveVersionId, query, topK, chunkType);
             cacheService.put(cacheKey, fresh, SEARCH_CACHE_TTL);
             return fresh;
         }
-        return doSemanticSearch(projectId, versionId, query, topK, chunkType);
+        return doSemanticSearch(projectId, effectiveVersionId, query, topK, chunkType);
     }
 
     private List<VectorDocument> doSemanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
@@ -128,6 +130,7 @@ public class VectorRetrievalService {
      */
     public List<GraphNode> findSimilarNodes(String projectId, String versionId, String searchText, double similarityThreshold) {
         log.info("Find similar nodes: projectId={}, searchText={}, threshold={}", projectId, searchText, similarityThreshold);
+        String effectiveVersionId = effectiveVersionId(versionId);
 
         if (embeddingModel == null) {
             log.debug("EmbeddingModel not available (SILICONFLOW_API_KEY not set)");
@@ -140,7 +143,7 @@ public class VectorRetrievalService {
 
             // 从向量文档中检索相似的语义片段，然后映射到节点
             List<VectorDocument> similarDocs = vectorDocumentRepository.findSimilar(
-                projectId, versionId, queryEmbedding, 20, null
+                projectId, effectiveVersionId, queryEmbedding, 20, null
             );
 
             // 从匹配的文档中提取关联的节点：收集所有 sourceUri，批量查询 Neo4j
@@ -184,5 +187,9 @@ public class VectorRetrievalService {
             result.add((double) f);
         }
         return result;
+    }
+
+    private String effectiveVersionId(String versionId) {
+        return versionId != null && !versionId.isBlank() ? versionId : "default";
     }
 }

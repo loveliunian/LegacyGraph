@@ -41,6 +41,7 @@ public class ScanTaskRecorder {
         task.setTaskType(taskType);
         task.setTaskName(taskName);
         task.setTaskStatus("RUNNING");
+        task.setStartedAt(LocalDateTime.now());
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.insert(task);
@@ -73,15 +74,59 @@ public class ScanTaskRecorder {
     }
 
     /**
-     * 记录子任务进度（日志级，非持久化）。
+     * 完成扫描子任务（支持非 SUCCESS/FAILED 终态，如 WARNING/SKIPPED）。
+     *
+     * @param task           子任务
+     * @param summary        结果摘要（可空）
+     * @param error          错误信息（null 表示非失败）
+     * @param terminalStatus 终态状态（null 时自动推导：error==null → SUCCESS，否则 → FAILED）
+     */
+    public void completeTask(ScanTask task, String summary, String error, String terminalStatus) {
+        if (task == null) {
+            return;
+        }
+        try {
+            if (summary != null) {
+                task.setOutputSummary(objectMapper.writeValueAsString(summary));
+            }
+        } catch (Exception e) {
+            task.setOutputSummary("\"" + (summary != null ? summary.replace("\"", "\\\"") : "") + "\"");
+        }
+        task.setErrorMessage(error);
+        task.setTaskStatus(terminalStatus != null ? terminalStatus
+                : (error == null ? "SUCCESS" : "FAILED"));
+        task.setFinishedAt(LocalDateTime.now());
+        task.setUpdatedAt(LocalDateTime.now());
+        scanTaskRepository.updateById(task);
+        log.info("Scan task completed: projectId={}, versionId={}, taskType={}, taskName={}, taskId={}, status={}",
+                task.getProjectId(), task.getVersionId(), task.getTaskType(), task.getTaskName(),
+                task.getId(), task.getTaskStatus());
+    }
+
+    /**
+     * 记录子任务进度（日志级，不写 DB）。
      * 按 PROGRESS_LOG_INTERVAL 采样输出，减少日志噪音。
      *
      * @param task      关联的子任务
      * @param processed 已处理数
      * @param total     总数
-     * @param unit      数据单位名称（如 "files", "database connections"）
+     * @param unit      数据单位名称
      */
     public void logProgress(ScanTask task, int processed, int total, String unit) {
+        logProgress(task, processed, total, unit, null);
+    }
+
+    /**
+     * 记录子任务进度并同步到 DB（供前端轮询读取）。
+     * 按 PROGRESS_LOG_INTERVAL 采样输出日志，减少噪音。
+     *
+     * @param task           关联的子任务
+     * @param processed      已处理数
+     * @param total          总数
+     * @param unit           数据单位名称（如 "files", "database connections"）
+     * @param currentItem    当前处理项名称（可空）
+     */
+    public void logProgress(ScanTask task, int processed, int total, String unit, String currentItem) {
         if (task == null) {
             return;
         }
@@ -94,6 +139,18 @@ public class ScanTaskRecorder {
             log.info("Scan still running: projectId={}, versionId={}, taskType={}, taskName={}, progress={}/{}, unit={}",
                     task.getProjectId(), task.getVersionId(), task.getTaskType(), task.getTaskName(),
                     processed, total, unit);
+        }
+        // 同步更新 DB 进度字段
+        try {
+            task.setTotalItems(total);
+            task.setProcessedItems(processed);
+            if (currentItem != null) {
+                task.setCurrentItem(currentItem);
+            }
+            task.setUpdatedAt(LocalDateTime.now());
+            scanTaskRepository.updateById(task);
+        } catch (Exception e) {
+            log.debug("Failed to update task progress for {}: {}", task.getTaskType(), e.getMessage());
         }
     }
 }

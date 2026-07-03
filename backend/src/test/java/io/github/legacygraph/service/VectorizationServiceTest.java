@@ -5,6 +5,7 @@ import io.github.legacygraph.repository.VectorDocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -58,7 +59,11 @@ class VectorizationServiceTest {
 
         // then
         assertNotNull(resultId);
-        verify(vectorDocumentRepository, times(1)).insert(any(VectorDocument.class));
+        ArgumentCaptor<VectorDocument> docCaptor = ArgumentCaptor.forClass(VectorDocument.class);
+        verify(vectorDocumentRepository, times(1)).insert(docCaptor.capture());
+        VectorDocument savedDoc = docCaptor.getValue();
+        assertEquals("[0.1,0.2,0.3,0.4]", savedDoc.getEmbedding());
+        assertEquals(4, savedDoc.getEmbeddingDim());
         verify(embeddingModel, times(1)).embed(content);
     }
 

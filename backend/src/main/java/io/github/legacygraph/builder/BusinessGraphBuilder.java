@@ -287,7 +287,8 @@ public class BusinessGraphBuilder {
     }
 
     /**
-     * 功能映射：将文档中的功能映射到已有的前端页面和后端接口
+     * 功能映射：将文档中的功能映射到已有的前端页面和后端接口。
+     * <p>收集所有匹配边后批量 MERGE，避免逐条创建导致的大量 Neo4j 往返。</p>
      */
     @Transactional
     public int mapFeaturesToCode(String projectId, String versionId) {
@@ -303,7 +304,7 @@ public class BusinessGraphBuilder {
         List<GraphNode> apis = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.ApiEndpoint.name(), null, null, null, 0);
 
-        int mappedCount = 0;
+        List<GraphEdge> candidateEdges = new ArrayList<>();
         // 基于名称语义相似度做简单匹配（向量服务已可用，后续可替换为 semanticSearch 提升精度）
         for (GraphNode feature : safeList(docFeatures)) {
             String featureName = normalizeSearchName(feature);
@@ -320,16 +321,13 @@ public class BusinessGraphBuilder {
 
                 double score = nameSimilarity(featureName, pageName);
                 if (score > 0.6) {
-                    // 业务功能 EXPOSED_BY 页面
-                    createEdge(projectId, versionId,
+                    candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), page.getId(),
                             EdgeType.EXPOSED_BY.name(),
                             feature.getNodeKey() + "->exposed_by->" + page.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score * 0.8),
-                            score >= 0.8 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
-                    );
-                    mappedCount++;
+                            score >= 0.8 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
             }
 
@@ -341,20 +339,24 @@ public class BusinessGraphBuilder {
                 }
                 double score = nameSimilarity(featureName, apiName);
                 if (score > 0.5) {
-                    createEdge(projectId, versionId,
+                    candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), api.getId(),
                             EdgeType.IMPLEMENTED_BY.name(),
                             feature.getNodeKey() + "->implemented_by->" + api.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score * 0.7),
-                            score >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
-                    );
-                    mappedCount++;
+                            score >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
             }
         }
 
-        log.info("Mapped {} feature-doc to code", mappedCount);
+        // 批量 MERGE 所有匹配边（避免空列表调用）
+        if (candidateEdges.isEmpty()) {
+            log.info("Mapped 0 feature-doc to code (no matches)");
+            return 0;
+        }
+        int mappedCount = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
+        log.info("Mapped {} feature-doc to code (batch merged)", mappedCount);
         return mappedCount;
     }
 
@@ -380,7 +382,6 @@ public class BusinessGraphBuilder {
         // 技术层候选：数据库表
         List<GraphNode> tables = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Table.name(), null, null, null, 0);
-        // 技术层候选：代码实体类（Service / Mapper / Controller，承载核心业务逻辑）
         List<GraphNode> services = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Service.name(), null, null, null, 0);
         List<GraphNode> mappers = neo4jGraphDao.queryNodes(
@@ -388,7 +389,6 @@ public class BusinessGraphBuilder {
         List<GraphNode> controllers = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Controller.name(), null, null, null, 0);
 
-        // 合并所有技术层候选
         List<GraphNode> techEntities = new ArrayList<>();
         if (tables != null) techEntities.addAll(tables);
         if (services != null) techEntities.addAll(services);
@@ -400,46 +400,39 @@ public class BusinessGraphBuilder {
             return 0;
         }
 
-        int mappedToTable = 0;
-        int mappedToCode = 0;
+        List<GraphEdge> candidateEdges = new ArrayList<>();
         for (GraphNode obj : businessObjects) {
             String objName = normalizeEntityName(nodeDisplayName(obj));
-            if (objName.isBlank()) {
-                continue;
-            }
+            if (objName.isBlank()) continue;
             for (GraphNode tech : techEntities) {
                 String techName = normalizeEntityName(nodeDisplayName(tech));
-                if (techName.isBlank()) {
-                    continue;
-                }
+                if (techName.isBlank()) continue;
                 double score = nameSimilarity(objName, techName);
-                // 对代码实体类使用稍高阈值（Service/Mapper/Controller 命名噪声更大）
                 boolean isCodeEntity = NodeType.Service.name().equals(tech.getNodeType())
                         || NodeType.Mapper.name().equals(tech.getNodeType())
                         || NodeType.Controller.name().equals(tech.getNodeType());
                 double threshold = isCodeEntity ? 0.65 : 0.6;
                 if (score > threshold) {
                     String edgeLabel = isCodeEntity ? "IMPLEMENTED_BY" : EdgeType.MAPS_TO.name();
-                    createEdge(projectId, versionId,
+                    candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             obj.getId(), tech.getId(),
                             edgeLabel,
                             obj.getNodeKey() + "->" + edgeLabel.toLowerCase() + "->" + tech.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score * 0.8),
-                            score >= 0.85 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM
-                    );
-                    if (isCodeEntity) {
-                        mappedToCode++;
-                    } else {
-                        mappedToTable++;
-                    }
+                            score >= 0.85 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
             }
         }
 
-        log.info("Mapped business-object: {} to tables, {} to code entities (Service/Mapper)",
-                mappedToTable, mappedToCode);
-        return mappedToTable + mappedToCode;
+        // 批量 MERGE 所有匹配边（避免空列表调用）
+        if (candidateEdges.isEmpty()) {
+            log.info("Mapped business-object: 0 edges (no matches, projectId={})", projectId);
+            return 0;
+        }
+        int totalMapped = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
+        log.info("Mapped business-object: {} edges (batch merged, projectId={})", totalMapped, projectId);
+        return totalMapped;
     }
 
     /**
@@ -574,5 +567,31 @@ public class BusinessGraphBuilder {
                 .confidence(confidence)
                 .status(status != null ? status.name() : null)
                 .build());
+    }
+
+    /**
+     * 构建边 POJO（不写 Neo4j），供批量 mergeEdgesBatch 使用。
+     * 与 {@link #createEdge} 的区别：不调用 writer.upsertEdge，
+     * 仅构造 GraphEdge 对象用于后续批量 MERGE。
+     */
+    private GraphEdge buildEdgePOJO(String projectId, String versionId,
+            String fromNodeId, String toNodeId,
+            String edgeType, String edgeKey,
+            String sourceType, BigDecimal confidence,
+            NodeStatus status) {
+        GraphEdge edge = new GraphEdge();
+        edge.setId(UUID.randomUUID().toString());
+        edge.setProjectId(projectId);
+        edge.setVersionId(versionId);
+        edge.setFromNodeId(fromNodeId);
+        edge.setToNodeId(toNodeId);
+        edge.setEdgeType(edgeType);
+        edge.setEdgeKey(edgeKey);
+        edge.setSourceType(sourceType);
+        edge.setConfidence(confidence);
+        edge.setStatus(status != null ? status.name() : null);
+        edge.setCreatedAt(LocalDateTime.now());
+        edge.setUpdatedAt(LocalDateTime.now());
+        return edge;
     }
 }

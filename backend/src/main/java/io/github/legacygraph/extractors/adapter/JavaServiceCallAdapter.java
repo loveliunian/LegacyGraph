@@ -63,14 +63,22 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
                         .summary("Java service: " + structureNodes.size() + " structure nodes, no calls")
                         .build();
             }
-            for (ServiceCallExtractor.CallRelation call : calls) {
-                factPersister.saveFact(context.getProjectId(), context.getVersionId(),
-                        "CODE_AST", "SERVICE_CALL",
-                        call.getCallerClass() + "." + call.getCallerMethod(),
-                        call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod(),
-                        asset.getRelativePath(), call.getLineNumber(), call.getLineNumber(),
-                        call, BigDecimal.ONE, "EXTRACTED");
-            }
+            factPersister.saveFacts(calls.stream()
+                    .map(call -> FactPersister.FactDraft.builder()
+                            .projectId(context.getProjectId())
+                            .versionId(context.getVersionId())
+                            .sourceType("CODE_AST")
+                            .factType("SERVICE_CALL")
+                            .factKey(call.getCallerClass() + "." + call.getCallerMethod())
+                            .factName(call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod())
+                            .sourcePath(asset.getRelativePath())
+                            .startLine(call.getLineNumber())
+                            .endLine(call.getLineNumber())
+                            .data(call)
+                            .confidence(BigDecimal.ONE)
+                            .status("EXTRACTED")
+                            .build())
+                    .toList());
             graphBuilder.buildServiceCallGraph(context.getProjectId(), context.getVersionId(), calls);
             return ExtractionResult.builder()
                     .processedAssets(1)

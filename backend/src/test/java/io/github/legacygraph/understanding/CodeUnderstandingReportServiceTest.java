@@ -1,5 +1,6 @@
 package io.github.legacygraph.understanding;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import io.github.legacygraph.dto.understanding.CodeUnderstandingTaskResult;
 import io.github.legacygraph.entity.ToolEvidenceEntity;
 import io.github.legacygraph.entity.ToolRunEntity;
@@ -16,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
@@ -96,8 +98,8 @@ class CodeUnderstandingReportServiceTest {
                 createRunEntity("run-2", "codex", "SUCCESS", 1200L),
                 createRunEntity("run-3", "local-fallback", "SUCCESS", 100L)
         );
-        when(toolRunRepository.selectList(null)).thenReturn(runs);
-        when(toolEvidenceRepository.selectList(null)).thenReturn(List.of());
+        when(toolRunRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(runs);
+        when(toolEvidenceRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
 
         // when
         String markdown = reportService.generateMarkdown(
@@ -123,8 +125,8 @@ class CodeUnderstandingReportServiceTest {
         List<ToolRunEntity> runs = List.of(
                 createRunEntity("run-abc", "codebase-memory-mcp", "SUCCESS", 500L)
         );
-        when(toolRunRepository.selectList(null)).thenReturn(runs);
-        when(toolEvidenceRepository.selectList(null)).thenReturn(List.of());
+        when(toolRunRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(runs);
+        when(toolEvidenceRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
 
         // when
         String markdown = reportService.generateMarkdown(
@@ -151,8 +153,8 @@ class CodeUnderstandingReportServiceTest {
                 createEvidenceEntity("SUMMARY", "src/main/Analysis.java", "AnalysisResult", 0.7),
                 createEvidenceEntity("SOURCE_SNIPPET", "src/main/UserService.java", "UserService", 0.95)
         );
-        when(toolRunRepository.selectList(null)).thenReturn(runs);
-        when(toolEvidenceRepository.selectList(null)).thenReturn(allEvidence);
+        when(toolRunRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(runs);
+        when(toolEvidenceRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(allEvidence);
 
         // when
         String markdown = reportService.generateMarkdown(
@@ -171,7 +173,7 @@ class CodeUnderstandingReportServiceTest {
     @DisplayName("无工具运行时，报告应包含警告提示")
     void shouldWarnWhenNoToolRuns() {
         // given: 无工具运行，两个 repo 都返回空
-        when(toolRunRepository.selectList(null)).thenReturn(List.of());
+        when(toolRunRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
 
         // when
         String markdown = reportService.generateMarkdown(
@@ -197,8 +199,8 @@ class CodeUnderstandingReportServiceTest {
                 createEvidenceEntity("SOURCE_SNIPPET", "src/main/UserService.java",
                         "com.example.UserService", 0.95)
         );
-        when(toolRunRepository.selectList(null)).thenReturn(runs);
-        when(toolEvidenceRepository.selectList(null)).thenReturn(confirmedEvidence);
+        when(toolRunRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(runs);
+        when(toolEvidenceRepository.selectList(any(LambdaQueryWrapper.class))).thenReturn(confirmedEvidence);
 
         // when
         String markdown = reportService.generateMarkdown(

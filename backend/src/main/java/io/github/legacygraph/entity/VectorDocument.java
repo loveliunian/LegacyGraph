@@ -1,6 +1,7 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -43,6 +44,13 @@ public class VectorDocument {
 
     /** 元数据JSON */
     private String meta;
+
+    /** pgvector 文本表示，如 [0.1,0.2,0.3] */
+    private String embedding;
+
+    /** pgvector 距离查询结果，越小越相似 */
+    @TableField(exist = false)
+    private Double distance;
 
     /** 使用的embedding模型名 */
     private String embeddingModel;

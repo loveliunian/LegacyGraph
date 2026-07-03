@@ -1064,10 +1064,11 @@ public class SourceController {
             java.io.File file = new java.io.File(doc.getFilePath());
             String text = extractor.extractText(file);
 
-            // 切片并保存到数据库
+            // 切片并保存到数据库（批量插入，避免 N+1）
             List<DocumentExtractor.DocumentChunk> chunks = extractor.chunkDocument(text, doc.getDocName(), 500);
 
-            // 保存所有切片
+            // 收集所有切片后批量插入
+            List<io.github.legacygraph.entity.DocChunk> chunkEntities = new java.util.ArrayList<>();
             for (DocumentExtractor.DocumentChunk chunk : chunks) {
                 io.github.legacygraph.entity.DocChunk docChunk = new io.github.legacygraph.entity.DocChunk();
                 docChunk.setProjectId(projectId);
@@ -1078,7 +1079,12 @@ public class SourceController {
                 docChunk.setTitlePath(chunk.getTitlePath());
                 docChunk.setContent(chunk.getContent());
                 docChunk.setTokenCount(chunk.getTokenCount());
-                docChunkRepository.insert(docChunk);
+                chunkEntities.add(docChunk);
+            }
+            if (!chunkEntities.isEmpty()) {
+                for (io.github.legacygraph.entity.DocChunk d : chunkEntities) {
+                    docChunkRepository.insert(d);
+                }
             }
 
             doc.setParseStatus("PARSED");

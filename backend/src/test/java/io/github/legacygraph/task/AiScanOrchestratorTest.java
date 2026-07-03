@@ -21,6 +21,7 @@ import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.FactRepository;
+import io.github.legacygraph.repository.AiScanJobRepository;
 import io.github.legacygraph.repository.ReviewRecordRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
@@ -53,6 +54,8 @@ import static org.mockito.Mockito.*;
 class AiScanOrchestratorTest {
 
     @Mock private ScanTaskRepository scanTaskRepository;
+    @Mock private ScanTaskRecorder scanTaskRecorder;
+    @Mock private AiScanJobRepository aiScanJobRepository;
     @Mock private DocumentRepository documentRepository;
     @Mock private FactRepository factRepository;
     @Mock private ReviewRecordRepository reviewRecordRepository;
@@ -75,7 +78,8 @@ class AiScanOrchestratorTest {
 
     @BeforeEach
     void setUp() {
-        orchestrator = new AiScanOrchestrator(scanTaskRepository, documentRepository, factRepository,
+        orchestrator = new AiScanOrchestrator(scanTaskRepository, scanTaskRecorder, aiScanJobRepository,
+                documentRepository, factRepository,
                 reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
                 featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper(),
                 knowledgeClaimService, gapFinderService, scanUnderstandingEnhancer, vectorizationService);
@@ -98,6 +102,51 @@ class AiScanOrchestratorTest {
                         .enabled(false)
                         .message("扫描后增强未启用")
                         .build());
+        // 配置 scanTaskRecorder mock 正确创建和完成任务（委托给 scanTaskRepository）
+        lenient().when(scanTaskRecorder.createTask(anyString(), anyString(), anyString(), anyString()))
+                .thenAnswer(inv -> {
+                    ScanTask task = new ScanTask();
+                    task.setId(java.util.UUID.randomUUID().toString());
+                    task.setProjectId(inv.getArgument(0));
+                    task.setVersionId(inv.getArgument(1));
+                    task.setTaskType(inv.getArgument(2));
+                    task.setTaskName(inv.getArgument(3));
+                    task.setTaskStatus("RUNNING");
+                    task.setStartedAt(java.time.LocalDateTime.now());
+                    task.setCreatedAt(java.time.LocalDateTime.now());
+                    task.setUpdatedAt(java.time.LocalDateTime.now());
+                    scanTaskRepository.insert(task);
+                    return task;
+                });
+        lenient().doAnswer(inv -> {
+                    ScanTask task = inv.getArgument(0);
+                    String summary = inv.getArgument(1);
+                    String error = inv.getArgument(2);
+                    if (task != null) {
+                        if (summary != null) task.setOutputSummary(summary);
+                        task.setErrorMessage(error);
+                        task.setTaskStatus(error == null ? "SUCCESS" : "FAILED");
+                        task.setFinishedAt(java.time.LocalDateTime.now());
+                        task.setUpdatedAt(java.time.LocalDateTime.now());
+                        scanTaskRepository.updateById(task);
+                    }
+                    return null;
+                }).when(scanTaskRecorder).completeTask(any(ScanTask.class), anyString(), nullable(String.class));
+        lenient().doAnswer(inv -> {
+                    ScanTask task = inv.getArgument(0);
+                    String summary = inv.getArgument(1);
+                    String error = inv.getArgument(2);
+                    String terminalStatus = inv.getArgument(3);
+                    if (task != null) {
+                        if (summary != null) task.setOutputSummary(summary);
+                        task.setErrorMessage(error);
+                        task.setTaskStatus(terminalStatus != null ? terminalStatus : (error == null ? "SUCCESS" : "FAILED"));
+                        task.setFinishedAt(java.time.LocalDateTime.now());
+                        task.setUpdatedAt(java.time.LocalDateTime.now());
+                        scanTaskRepository.updateById(task);
+                    }
+                    return null;
+                }).when(scanTaskRecorder).completeTask(any(ScanTask.class), anyString(), nullable(String.class), nullable(String.class));
     }
 
     private GraphNode node(String type, String key, String name, double conf) {

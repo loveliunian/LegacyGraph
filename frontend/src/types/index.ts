@@ -15,8 +15,37 @@ export interface ScanTask {
   nodeCount?: number
   edgeCount?: number
   factCount?: number
+  totalItems?: number
+  processedItems?: number
+  currentItem?: string
+  startedAt?: string
+  finishedAt?: string
+  estimatedSecondsRemaining?: number
   createdAt: string
   updatedAt: string
+}
+
+// 扫描进度响应
+export interface ScanProgressResponse {
+  versionId: string
+  status: string
+  progress: number
+  warningCount?: number
+  overallEta?: number
+  tasks: TaskProgressItem[]
+}
+
+export interface TaskProgressItem {
+  taskType: string
+  phaseName: string
+  status: string
+  factCount: number
+  totalItems?: number
+  processedItems?: number
+  currentItem?: string
+  startedAt?: string
+  finishedAt?: string
+  estimatedSecondsRemaining?: number
 }
 
 // 通用分页结果
@@ -271,12 +300,12 @@ export interface Document {
 // 向量文档
 export interface VectorDocument {
   id: string
-  projectId: number
+  projectId: string
   chunkType: string
   sourceUri: string
   chunkIndex: number
   content: string
-  embedding: number[]
+  embedding: string
   embeddingModel: string
   embeddingDim: number
   createdAt: string

@@ -16,8 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class JavaServiceCallAdapterTest {
@@ -73,5 +72,54 @@ class JavaServiceCallAdapterTest {
                 captor.capture());
         assertEquals(1, captor.getValue().size());
         assertEquals("com.demo.OrderService", captor.getValue().get(0).getQualifiedName());
+    }
+
+    @Test
+    void extractBatchesServiceCallFacts() throws Exception {
+        Path file = tempDir.resolve("OrderService.java");
+        Files.writeString(file, """
+                package com.demo;
+
+                public class OrderService {
+                    private final OrderMapper orderMapper;
+
+                    public OrderService(OrderMapper orderMapper) {
+                        this.orderMapper = orderMapper;
+                    }
+
+                    public void create() {
+                        orderMapper.insert();
+                    }
+                }
+
+                interface OrderMapper {
+                    void insert();
+                }
+                """);
+        when(graphBuilder.buildJavaStructureGraph(any(), any(), any())).thenReturn(List.of());
+        JavaStructureExtractor.JavaClassInfo classInfo = new JavaStructureExtractor.JavaClassInfo();
+        classInfo.setQualifiedName("com.demo.OrderService");
+        classInfo.setClassName("OrderService");
+        classInfo.setPackageName("com.demo");
+        classInfo.setMethods(List.of());
+        when(structureExtractor.extractFromFile(any())).thenReturn(List.of(classInfo));
+
+        JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor);
+        ScanContext context = ScanContext.builder()
+                .projectId("project-1")
+                .versionId("v1")
+                .config(Map.of())
+                .build();
+        SourceAsset asset = SourceAsset.builder()
+                .file(file)
+                .relativePath("OrderService.java")
+                .fileType("java")
+                .language("java")
+                .build();
+
+        adapter.extract(context, asset);
+
+        verify(factPersister).saveFacts(argThat(drafts -> drafts != null && !drafts.isEmpty()));
+        verify(factPersister, never()).saveFact(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 }

@@ -61,7 +61,11 @@ public class H2TestConfig {
     @Primary
     public EmbeddingModel embeddingModel() {
         EmbeddingModel mockModel = mock(EmbeddingModel.class);
-        when(mockModel.embed(anyString())).thenReturn(new float[]{0.1f, 0.2f, 0.3f});
+        float[] embedding = new float[1024];
+        for (int i = 0; i < embedding.length; i++) {
+            embedding[i] = 0.001f * (i + 1);
+        }
+        when(mockModel.embed(anyString())).thenReturn(embedding);
         return mockModel;
     }
 

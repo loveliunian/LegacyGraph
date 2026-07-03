@@ -118,42 +118,95 @@
     <el-empty v-if="versionList.length === 0 && !loading" description="暂无扫描版本" />
 
     <!-- 版本详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="版本详情" width="700px" append-to-body>
-      <el-descriptions :column="2" border v-if="currentVersion">
-        <el-descriptions-item label="版本号">{{ currentVersion.versionNumber }}</el-descriptions-item>
-        <el-descriptions-item label="版本名称">{{ currentVersion.versionName }}</el-descriptions-item>
-        <el-descriptions-item label="扫描类型">
-          <el-tag
-            v-for="t in parseScanTypes(currentVersion.scanType)"
-            :key="t"
-            size="small"
-            type="primary"
-            style="margin-right: 4px;"
-          >{{ dictLabel('scan_type', t) }}</el-tag>
-          <span v-if="parseScanTypes(currentVersion.scanType).length === 0">-</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag size="small" :type="getStatusType(currentVersion.status)">{{ getStatusText(currentVersion.status) }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="当前阶段">
-          <el-tag v-if="currentVersion.stage && currentVersion.stage !== '-'" size="small" :type="getStageTagType(currentVersion.stage)">
-            {{ getStageText(currentVersion.stage) }}
-          </el-tag>
-          <span v-else>-</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="进度">
-          <el-progress :percentage="currentVersion.progress || 0" :stroke-width="14" style="width: 200px;" />
-        </el-descriptions-item>
-        <el-descriptions-item label="任务进度">
-          {{ currentVersion.completedTaskCount || 0 }} / {{ currentVersion.taskCount || 0 }}
-        </el-descriptions-item>
-        <el-descriptions-item label="节点数">{{ currentVersion.nodeCount || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="关系数">{{ currentVersion.edgeCount || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="事实数">{{ currentVersion.factCount || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="耗时">{{ currentVersion.duration ? formatDuration(currentVersion.duration) : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ formatTime(currentVersion.createdAt) }}</el-descriptions-item>
-        <el-descriptions-item label="创建人">{{ currentVersion.createdBy || '-' }}</el-descriptions-item>
-      </el-descriptions>
+    <el-dialog v-model="detailDialogVisible" title="版本详情" width="720px" append-to-body @opened="startDetailPolling" @closed="stopDetailPolling">
+      <template v-if="currentVersion">
+        <!-- 基本信息 -->
+        <el-descriptions :column="2" border size="small" style="margin-bottom: 16px;">
+          <el-descriptions-item label="版本号">{{ currentVersion.versionNumber }}</el-descriptions-item>
+          <el-descriptions-item label="版本名称">{{ currentVersion.versionName }}</el-descriptions-item>
+          <el-descriptions-item label="扫描类型">
+            <el-tag v-for="t in parseScanTypes(currentVersion.scanType)" :key="t" size="small" type="primary" style="margin-right: 4px;">
+              {{ dictLabel('scan_type', t) }}
+            </el-tag>
+            <span v-if="parseScanTypes(currentVersion.scanType).length === 0">-</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag size="small" :type="getStatusType(currentVersion.status)">{{ getStatusText(currentVersion.status) }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="图谱节点">{{ currentVersion.nodeCount || 0 }}</el-descriptions-item>
+          <el-descriptions-item label="图谱关系">{{ currentVersion.edgeCount || 0 }}</el-descriptions-item>
+          <el-descriptions-item label="图谱事实">{{ currentVersion.factCount || 0 }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatTime(currentVersion.createdAt) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <!-- 扫描环节进度 -->
+        <div class="scan-phases">
+          <div class="phases-header">
+            <span class="phases-title">扫描环节</span>
+            <span v-if="detailProgress" class="phases-eta">
+              整体进度 {{ detailProgress.progress || 0 }}%
+              <template v-if="detailProgress.estimatedSecondsRemaining && detailProgress.estimatedSecondsRemaining > 0">
+                · 预计剩余 {{ formatDuration(detailProgress.estimatedSecondsRemaining) }}
+              </template>
+            </span>
+          </div>
+          <div class="phase-list">
+            <div
+              v-for="(phase, idx) in (detailProgress?.tasks || [])"
+              :key="phase.taskType"
+              class="phase-item"
+              :class="{
+                'phase-running': phase.status === 'RUNNING',
+                'phase-success': phase.status === 'SUCCESS',
+                'phase-warning': phase.status === 'WARNING',
+                'phase-failed': phase.status === 'FAILED',
+                'phase-pending': phase.status === 'PENDING',
+                'phase-skipped': phase.status === 'SKIPPED'
+              }"
+            >
+              <!-- 阶段序号+状态图标 -->
+              <div class="phase-icon">
+                <el-icon v-if="phase.status === 'SUCCESS'" class="icon-success"><CircleCheckFilled /></el-icon>
+                <el-icon v-else-if="phase.status === 'WARNING'" class="icon-warning"><WarningFilled /></el-icon>
+                <el-icon v-else-if="phase.status === 'FAILED'" class="icon-fail"><CircleCloseFilled /></el-icon>
+                <el-icon v-else-if="phase.status === 'RUNNING'" class="icon-running"><Loading /></el-icon>
+                <span v-else class="phase-num">{{ idx + 1 }}</span>
+              </div>
+              <!-- 阶段信息 -->
+              <div class="phase-body">
+                <div class="phase-top">
+                  <span class="phase-name">{{ phase.phaseName || phase.taskType }}</span>
+                  <span class="phase-status-text">{{ dictLabel('scan_status', phase.status) }}</span>
+                </div>
+                <!-- 进度条（RUNNING/SUCCESS/WARNING 阶段显示） -->
+                <div v-if="phase.totalItems && phase.totalItems > 0 && (phase.status === 'RUNNING' || phase.status === 'SUCCESS' || phase.status === 'WARNING')" class="phase-progress-row">
+                  <el-progress
+                    :percentage="phase.totalItems > 0 ? Math.round((phase.processedItems || 0) * 100 / phase.totalItems) : 0"
+                    :stroke-width="6"
+                    :status="phase.status === 'FAILED' ? 'exception' : undefined"
+                    :color="phase.status === 'SUCCESS' ? '#67c23a' : '#409eff'"
+                  />
+                  <span class="phase-counts">{{ phase.processedItems || 0 }} / {{ phase.totalItems }} 项</span>
+                </div>
+                <!-- 当前处理项名称 -->
+                <div v-if="phase.currentItem && phase.status === 'RUNNING'" class="phase-current-item">
+                  <el-icon><Document /></el-icon>
+                  {{ phase.currentItem }}
+                </div>
+                <div v-if="phase.startedAt || phase.finishedAt" class="phase-time-row">
+                  <span>开始 {{ formatTime(phase.startedAt) }}</span>
+                  <span>结束 {{ formatTime(phase.finishedAt) }}</span>
+                  <span>耗时 {{ formatPhaseDuration(phase.startedAt, phase.finishedAt) }}</span>
+                </div>
+                <!-- 预估剩余时间 -->
+                <div v-if="phase.estimatedSecondsRemaining && phase.estimatedSecondsRemaining > 0 && phase.status === 'RUNNING'" class="phase-eta">
+                  预计剩余 {{ formatDuration(phase.estimatedSecondsRemaining) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
         <el-button type="primary" @click="goToGraph(currentVersion)">查看图谱</el-button>
@@ -166,7 +219,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Loading, CircleCheckFilled, CircleCloseFilled, WarningFilled, Document } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { t } from '@/locales'
 import { scanApi } from '@/api'
@@ -184,6 +237,9 @@ const pageSize = ref(10)
 const total = ref(0)
 const detailDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
+const detailProgress = ref<any>(null)  // 增强的进度响应
+let detailPollTimer: ReturnType<typeof setInterval> | null = null
+const DETAIL_POLL_INTERVAL = 2000  // 详情进度轮询间隔 2s
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 const POLL_INTERVAL = 100000
@@ -208,6 +264,12 @@ const formatDuration = (seconds: number) => {
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+}
+
+const formatPhaseDuration = (startedAt?: string, finishedAt?: string) => {
+  if (!startedAt || !finishedAt) return '-'
+  const seconds = dayjs(finishedAt).diff(dayjs(startedAt), 'second')
+  return formatDuration(seconds)
 }
 
 // 解析 scanType JSON，返回扫描类型数组
@@ -236,6 +298,8 @@ const getStatusType = (status: string): string => {
     PENDING: 'info',
     RUNNING: 'warning',
     PROCESSING: 'warning',
+    WARNING: 'warning',
+    SKIPPED: 'info',
     SUCCESS: 'success',
     COMPLETED: 'success',
     FAILED: 'danger',
@@ -249,19 +313,43 @@ const getStatusText = (status: string): string => dictLabel('scan_status', statu
 
 const getStageText = (stage: string): string => dictLabel('scan_stage', stage)
 
-// 当前阶段的 tag 类型
-const getStageTagType = (stage: string): string => {
-  if (stage === 'COMPLETED') return 'success'
-  return '' // 默认色
-}
-
 const goToCreate = () => {
   router.push(`/projects/${projectId}/scan-versions/create`)
 }
 
 const viewDetail = (row: any) => {
   currentVersion.value = row
+  detailProgress.value = null
   detailDialogVisible.value = true
+}
+
+const loadDetailProgress = async () => {
+  if (!currentVersion.value) return
+  try {
+    const res = await scanApi.progress(projectId, currentVersion.value.id)
+    detailProgress.value = res
+    // 终态时停止轮询
+    const termStatuses = ['SUCCESS', 'FAILED', 'CANCELLED', 'COMPLETED']
+    if (res.status && termStatuses.includes(res.status)) {
+      stopDetailPolling()
+    }
+  } catch {
+    // 静默
+  }
+}
+
+const startDetailPolling = () => {
+  stopDetailPolling()
+  if (!currentVersion.value) return
+  loadDetailProgress()
+  detailPollTimer = setInterval(loadDetailProgress, DETAIL_POLL_INTERVAL)
+}
+
+const stopDetailPolling = () => {
+  if (detailPollTimer) {
+    clearInterval(detailPollTimer)
+    detailPollTimer = null
+  }
 }
 
 const compareWithPrevious = (row: any) => {
@@ -629,5 +717,219 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+/* ====== 扫描环节进度（版本详情） ====== */
+.scan-phases {
+  background: #fafbfc;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+
+.phases-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.phases-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.phases-eta {
+  font-size: 12px;
+  color: #909399;
+}
+
+.phase-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.phase-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.phase-item + .phase-item {
+  border-top: 1px solid #ebeef5;
+}
+
+.phase-item.phase-running {
+  background: #ecf5ff;
+}
+
+.phase-item.phase-success {
+  background: transparent;
+}
+
+.phase-item.phase-failed {
+  background: #fef0f0;
+}
+
+.phase-item.phase-warning {
+  background: #fdf6ec;
+}
+
+.phase-item.phase-skipped {
+  opacity: 0.6;
+}
+
+.phase-item.phase-pending {
+  opacity: 0.55;
+}
+
+.phase-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.phase-num {
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 12px;
+  color: #909399;
+  background: #e4e7ed;
+  font-weight: 500;
+}
+
+.phase-item.phase-running .phase-num {
+  display: none;
+}
+
+.phase-item.phase-success .phase-num {
+  display: none;
+}
+
+.icon-success {
+  color: #67c23a;
+  font-size: 18px;
+}
+
+.icon-warning {
+  color: #e6a23c;
+  font-size: 18px;
+}
+
+.icon-fail {
+  color: #f56c6c;
+  font-size: 18px;
+}
+
+.icon-running {
+  color: #409eff;
+  font-size: 18px;
+  animation: rotate 1.5s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.phase-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.phase-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.phase-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.phase-status-text {
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.phase-item.phase-running .phase-name {
+  color: #409eff;
+}
+
+.phase-item.phase-running .phase-status-text {
+  color: #409eff;
+  font-weight: 500;
+}
+
+.phase-item.phase-failed .phase-name {
+  color: #f56c6c;
+}
+
+.phase-item.phase-failed .phase-status-text {
+  color: #f56c6c;
+}
+
+.phase-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.phase-progress-row .el-progress {
+  flex: 1;
+}
+
+.phase-counts {
+  font-size: 11px;
+  color: #909399;
+  white-space: nowrap;
+  min-width: 50px;
+  text-align: right;
+}
+
+.phase-current-item {
+  font-size: 11px;
+  color: #909399;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phase-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #909399;
+  line-height: 1.4;
+}
+
+.phase-eta {
+  font-size: 11px;
+  color: #e6a23c;
+  margin-top: 3px;
 }
 </style>

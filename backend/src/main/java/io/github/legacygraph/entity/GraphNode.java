@@ -32,6 +32,8 @@ public class GraphNode {
     private BigDecimal confidence;
     private String status;
     private String properties;
+    private String scanType;
+    private String className;
 
     private BigDecimal verifiedScore;
     private String evidenceIds;

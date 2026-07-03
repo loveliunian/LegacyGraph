@@ -132,13 +132,9 @@ class BusinessGraphBuilderTest {
      */
     @Test
     void testMapBusinessObjectsToTables_CreatesMapsToEdge() {
-        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenAnswer(invocation -> {
-            GraphEdgeClaim claim = invocation.getArgument(0);
-            GraphEdge edge = new GraphEdge();
-            edge.setId(claim.getEdgeType() + ":" + claim.getEdgeKey());
-            edge.setEdgeType(claim.getEdgeType());
-            edge.setEdgeKey(claim.getEdgeKey());
-            return edge;
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(invocation -> {
+            List<GraphEdge> edges = invocation.getArgument(0);
+            return edges.size();
         });
 
         GraphNode order = new GraphNode();
@@ -171,9 +167,11 @@ class BusinessGraphBuilderTest {
         businessGraphBuilder.mapBusinessObjectsToTables("project-1", "version-1");
 
         // 仅"订单"↔订单表(t_order) 匹配，用户表不匹配
-        ArgumentCaptor<GraphEdgeClaim> edgeCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(writer, times(1)).upsertEdge(edgeCaptor.capture());
-        GraphEdgeClaim edge = edgeCaptor.getValue();
+        ArgumentCaptor<List<GraphEdge>> edgeCaptor = ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertEquals(1, edges.size());
+        GraphEdge edge = edges.get(0);
         assertEquals(EdgeType.MAPS_TO.name(), edge.getEdgeType());
         assertEquals("bo-order", edge.getFromNodeId());
         assertEquals("tbl-orders", edge.getToNodeId());
@@ -211,18 +209,14 @@ class BusinessGraphBuilderTest {
 
         businessGraphBuilder.mapBusinessObjectsToTables("project-1", "version-1");
 
-        verify(writer, never()).upsertEdge(any(GraphEdgeClaim.class));
+        verify(neo4jGraphDao, never()).mergeEdgesBatch(anyList());
     }
 
     @Test
     void testMapFeaturesToCode_UsesDisplayNameFallbackAndDoesNotThrowOnBlankNodeName() {
-        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenAnswer(invocation -> {
-            GraphEdgeClaim claim = invocation.getArgument(0);
-            GraphEdge edge = new GraphEdge();
-            edge.setId(claim.getEdgeType() + ":" + claim.getEdgeKey());
-            edge.setEdgeType(claim.getEdgeType());
-            edge.setEdgeKey(claim.getEdgeKey());
-            return edge;
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(invocation -> {
+            List<GraphEdge> edges = invocation.getArgument(0);
+            return edges.size();
         });
 
         GraphNode feature = new GraphNode();
@@ -249,11 +243,12 @@ class BusinessGraphBuilderTest {
 
         businessGraphBuilder.mapFeaturesToCode("project-1", "version-1");
 
-        ArgumentCaptor<GraphEdgeClaim> edgeCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(writer).upsertEdge(edgeCaptor.capture());
-        assertEquals(EdgeType.EXPOSED_BY.name(), edgeCaptor.getValue().getEdgeType());
-        assertEquals("feature-order", edgeCaptor.getValue().getFromNodeId());
-        assertEquals("page-order", edgeCaptor.getValue().getToNodeId());
+        ArgumentCaptor<List<GraphEdge>> edgeCaptor = ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        GraphEdge edge = edgeCaptor.getValue().get(0);
+        assertEquals(EdgeType.EXPOSED_BY.name(), edge.getEdgeType());
+        assertEquals("feature-order", edge.getFromNodeId());
+        assertEquals("page-order", edge.getToNodeId());
     }
 
     /**
@@ -382,13 +377,9 @@ class BusinessGraphBuilderTest {
      */
     @Test
     void testMapBusinessObjectsToTables_MapsToCodeEntities() {
-        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenAnswer(invocation -> {
-            GraphEdgeClaim claim = invocation.getArgument(0);
-            GraphEdge edge = new GraphEdge();
-            edge.setId(claim.getEdgeType() + ":" + claim.getEdgeKey());
-            edge.setEdgeType(claim.getEdgeType());
-            edge.setEdgeKey(claim.getEdgeKey());
-            return edge;
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(invocation -> {
+            List<GraphEdge> edges = invocation.getArgument(0);
+            return edges.size();
         });
 
         GraphNode orderBo = new GraphNode();
@@ -432,10 +423,11 @@ class BusinessGraphBuilderTest {
         businessGraphBuilder.mapBusinessObjectsToTables("project-1", "version-1");
 
         // 应产生 3 条边：MAPS_TO(Table) + IMPLEMENTED_BY(Service) + IMPLEMENTED_BY(Mapper)
-        ArgumentCaptor<GraphEdgeClaim> edgeCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(writer, times(3)).upsertEdge(edgeCaptor.capture());
+        ArgumentCaptor<List<GraphEdge>> edgeCaptor = ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
 
-        List<GraphEdgeClaim> edges = edgeCaptor.getAllValues();
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertEquals(3, edges.size());
         // 1 条 MAPS_TO（Table）
         assertEquals(1, edges.stream()
                 .filter(e -> EdgeType.MAPS_TO.name().equals(e.getEdgeType())).count());

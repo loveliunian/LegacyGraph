@@ -10,9 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -144,6 +142,77 @@ public class AdapterExecutionService {
             taskRecorder.completeTask(task, "Adapter scan failed", e.getMessage());
             return 0;
         }
+    }
+
+    /**
+     * 对已发现的资产列表执行并发扫描抽取（取代 ProjectScanner 中的顺序循环）。
+     *
+     * @param context              扫描上下文
+     * @param assets               已发现的资产列表
+     * @param task                 关联的子任务（用于进度记录）
+     * @param cancelChecker        取消检查器（可空）
+     * @param incremental          是否增量模式（跳过未变更资产）
+     * @param assetDiscoveryService 资产发现服务（用于增量跳过判断，可空）
+     * @return 成功处理的资产数量
+     */
+    public int executeDiscoveredAssets(ScanContext context,
+                                       List<SourceAsset> assets,
+                                       ScanTask task,
+                                       java.util.function.Supplier<Boolean> cancelChecker,
+                                       boolean incremental,
+                                       AssetDiscoveryService assetDiscoveryService) {
+        if (context == null || assets == null || assets.isEmpty() || adapterRegistry == null) {
+            taskRecorder.logProgress(task, 0, 0, "adapter candidate files");
+            return 0;
+        }
+
+        int total = assets.size();
+        taskRecorder.logProgress(task, 0, total, "adapter candidate files", null);
+        int maxConcurrency = Math.max(1, Integer.getInteger("legacy-graph.scan.adapter-concurrency", 8));
+        Semaphore semaphore = new Semaphore(maxConcurrency);
+        AtomicInteger visited = new AtomicInteger(0);
+        AtomicInteger processed = new AtomicInteger(0);
+
+        List<Callable<Void>> calls = assets.stream()
+                .<Callable<Void>>map(asset -> () -> {
+                    if (cancelChecker != null && cancelChecker.get()) {
+                        return null;
+                    }
+                    try {
+                        semaphore.acquire();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                    try {
+                        if (incremental && assetDiscoveryService != null
+                                && assetDiscoveryService.isIncrementalSkip(asset, context.getProjectId(), context.getVersionId())) {
+                            return null;
+                        }
+                        var adapter = adapterRegistry.selectAdapter(context, asset);
+                        if (adapter.isPresent()) {
+                            ExtractionResult result = adapter.get().extract(context, asset);
+                            processed.addAndGet(result != null && result.getProcessedAssets() > 0
+                                    ? result.getProcessedAssets() : 1);
+                        }
+                    } catch (Exception ex) {
+                        log.warn("Adapter failed for discovered asset {}: {}",
+                                asset.getRelativePath(), ex.getMessage());
+                    } finally {
+                        semaphore.release();
+                        int done = visited.incrementAndGet();
+                        taskRecorder.logProgress(task, done, total, "adapter candidate files", null);
+                    }
+                    return null;
+                })
+                .toList();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            executor.invokeAll(calls);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+        return processed.get();
     }
 
     /** 判断文件是否有潜在适配器能处理 */

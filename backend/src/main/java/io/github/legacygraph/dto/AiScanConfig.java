@@ -19,7 +19,7 @@ public class AiScanConfig {
     private boolean enableAi = false;
 
     /** 是否自动生成测试用例 */
-    private boolean autoGenerateTestCase = true;
+    private boolean autoGenerateTestCase = false;
 
     /** 最低置信度阈值：低于此值的节点进入人工审核准备 */
     private double minConfidence = 0.6;
@@ -53,6 +53,9 @@ public class AiScanConfig {
             JsonNode node = objectMapper.readTree(scanScopeJson);
             if (node.hasNonNull("enableAi")) {
                 config.setEnableAi(node.get("enableAi").asBoolean(config.isEnableAi()));
+            } else if (node.hasNonNull("aiEnabled")) {
+                // 兼容旧字段 aiEnabled（运行库历史 scanScope 可能使用此字段名）
+                config.setEnableAi(node.get("aiEnabled").asBoolean(config.isEnableAi()));
             }
             if (node.hasNonNull("autoGenerateTestCase")) {
                 config.setAutoGenerateTestCase(node.get("autoGenerateTestCase").asBoolean(config.isAutoGenerateTestCase()));

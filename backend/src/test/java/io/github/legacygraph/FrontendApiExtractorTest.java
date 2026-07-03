@@ -97,6 +97,37 @@ class FrontendApiExtractorTest {
         assertEquals("get", getCall.getMethod());
     }
 
+    @Test
+    void testExtractRequestHelpersAndMultilineRequestObjects() throws IOException {
+        String content = """
+                import { get, post } from '@/utils/request';
+
+                export const scanApi = {
+                  progress: (projectId, versionId) => {
+                    return get(`/lg/projects/${projectId}/scan-versions/${versionId}/progress`, { includeLogs: true })
+                  },
+                  create: (projectId, data) => post('/lg/projects/' + projectId + '/scan-versions', data),
+                  cancel(projectId, versionId) {
+                    return request({
+                      url: `/lg/projects/${projectId}/scan-versions/${versionId}/cancel`,
+                      method: 'post'
+                    })
+                  }
+                }
+                """;
+        Path file = tempDir.resolve("scan.api.ts");
+        Files.writeString(file, content);
+
+        List<FrontendPageFact.FrontendApiCall> calls = extractor.extractFromFile(file);
+
+        assertTrue(calls.stream().anyMatch(c ->
+                "get".equals(c.getMethod())
+                        && "/lg/projects/${projectId}/scan-versions/${versionId}/progress".equals(c.getUrl())));
+        assertTrue(calls.stream().anyMatch(c ->
+                "post".equals(c.getMethod())
+                        && "/lg/projects/${projectId}/scan-versions/${versionId}/cancel".equals(c.getUrl())));
+    }
+
     // ---------------------------------------------------------------
     // 用例3：api 模块函数中的调用（url 与 method 需在同一行，因为
     // extractApiModuleCalls 的 URL 和 method 匹配均基于同一行）

@@ -1,7 +1,6 @@
 package io.github.legacygraph.extractors.adapter;
 
 import io.github.legacygraph.builder.FrontendGraphBuilder;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -9,6 +8,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 
@@ -20,7 +20,6 @@ import static org.mockito.Mockito.*;
  * 验证 Vue 前端适配器的 supports/extract/capability 方法。
  */
 @ExtendWith(MockitoExtension.class)
-@Disabled("子代理自动生成，Mock 需要微调")
 class VueFrontendAdapterTest {
 
     @TempDir
@@ -43,8 +42,10 @@ class VueFrontendAdapterTest {
         ScanContext ctx = ScanContext.builder().build();
 
         for (String ext : new String[]{"vue", "jsx", "tsx"}) {
+            Path file = tempDir.resolve("component." + ext);
+            assertDoesNotThrow(() -> Files.writeString(file, "export default {}"));
             SourceAsset asset = SourceAsset.builder()
-                    .file(tempDir.resolve("component." + ext))
+                    .file(file)
                     .fileType(ext)
                     .build();
             assertTrue(adapter.supports(ctx, asset), "Should support " + ext);
@@ -86,7 +87,7 @@ class VueFrontendAdapterTest {
     @Test
     void extract_nonVueFile_returnsResult() throws Exception {
         Path file = tempDir.resolve("Test.tsx");
-        java.nio.file.Files.writeString(file, "export default {}");
+        Files.writeString(file, "export default {}");
         ScanContext ctx = ScanContext.builder()
                 .projectId("project-1").versionId("v1").build();
         SourceAsset asset = SourceAsset.builder()
@@ -97,5 +98,37 @@ class VueFrontendAdapterTest {
 
         assertNotNull(result);
         assertTrue(result.getSummary().contains("Frontend"));
+    }
+
+    @Test
+    void extractBatchesFrontendPageFacts() throws Exception {
+        Path file = tempDir.resolve("routes.tsx");
+        Files.writeString(file, """
+                export default [
+                  {
+                    path: '/orders',
+                    name: 'Orders',
+                    component: 'OrderList',
+                    meta: { title: '订单管理' }
+                  }
+                ]
+                """);
+        ScanContext ctx = ScanContext.builder()
+                .projectId("project-1")
+                .versionId("v1")
+                .build();
+        SourceAsset asset = SourceAsset.builder()
+                .file(file)
+                .relativePath("src/router/routes.tsx")
+                .fileType("tsx")
+                .language("javascript")
+                .build();
+
+        adapter.extract(ctx, asset);
+
+        verify(factPersister).saveFacts(argThat(drafts -> drafts != null
+                && drafts.stream().anyMatch(draft -> "FRONTEND_PAGE".equals(draft.getFactType())
+                && "/orders".equals(draft.getFactKey()))));
+        verify(factPersister, never()).saveFact(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 }

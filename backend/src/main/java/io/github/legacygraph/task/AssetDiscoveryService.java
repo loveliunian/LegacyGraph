@@ -1,6 +1,7 @@
 package io.github.legacygraph.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import io.github.legacygraph.dto.scan.ResolvedScanPlan;
 import io.github.legacygraph.entity.SourceAssetSnapshot;
 import io.github.legacygraph.extractors.adapter.SourceAsset;
@@ -16,6 +17,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 资产发现服务 — 从 ResolvedScanPlan 发现 SourceAsset，
@@ -83,20 +85,40 @@ public class AssetDiscoveryService {
     }
 
     /**
-     * 批量写入资产快照。
+     * 批量写入资产快照（优化：一次查询现有记录，批量 insert/update）。
      */
     public void persistSnapshots(String projectId, String versionId, List<SourceAsset> assets) {
+        if (assets.isEmpty()) return;
+
+        // 一次查询所有现有快照，构建 path→snapshot 索引
+        List<SourceAssetSnapshot> existingSnapshots = snapshotRepository.selectList(
+                new LambdaQueryWrapper<SourceAssetSnapshot>()
+                        .eq(SourceAssetSnapshot::getProjectId, projectId)
+                        .eq(SourceAssetSnapshot::getVersionId, versionId));
+        Map<String, SourceAssetSnapshot> existingMap = existingSnapshots.stream()
+                .collect(Collectors.toMap(SourceAssetSnapshot::getRelativePath, s -> s, (a, b) -> a));
+
+        List<SourceAssetSnapshot> toInsert = new ArrayList<>();
+        List<SourceAssetSnapshot> toUpdate = new ArrayList<>();
+
         for (SourceAsset asset : assets) {
             SourceAssetSnapshot snapshot = toSnapshot(projectId, versionId, asset);
-            // 查找已存在记录
-            SourceAssetSnapshot existing = findSnapshotByPath(projectId, versionId, asset.getRelativePath());
+            SourceAssetSnapshot existing = existingMap.get(asset.getRelativePath());
             if (existing != null) {
                 snapshot.setId(existing.getId());
                 snapshot.setCreatedAt(existing.getCreatedAt());
-                snapshotRepository.updateById(snapshot);
+                toUpdate.add(snapshot);
             } else {
-                snapshotRepository.insert(snapshot);
+                toInsert.add(snapshot);
             }
+        }
+
+        // 批量操作
+        for (SourceAssetSnapshot s : toInsert) {
+            snapshotRepository.insert(s);
+        }
+        for (SourceAssetSnapshot s : toUpdate) {
+            snapshotRepository.updateById(s);
         }
     }
 

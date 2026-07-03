@@ -88,7 +88,9 @@ class ProjectScannerProgressLoggingTest {
                 new ObjectMapper(),
                 aiScanOrchestrator,
                 dbSchemaAnalysisAgent,
-                extractionAdapterRegistry
+                extractionAdapterRegistry,
+                null,  // scanTaskRecorder
+                null   // adapterExecutionService
         );
 
         scanner.startFullScan(projectId, versionId, tempDir.toString());

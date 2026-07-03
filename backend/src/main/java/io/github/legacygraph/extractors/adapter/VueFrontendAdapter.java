@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -43,13 +44,24 @@ public class VueFrontendAdapter implements ExtractionAdapter {
     public ExtractionResult extract(ScanContext context, SourceAsset asset) {
         int count = 0;
         try {
+            List<FactPersister.FactDraft> drafts = new ArrayList<>();
             List<FrontendPageFact> pages = vueExtractor.extractFromFile(asset.getFile());
             if (pages != null && !pages.isEmpty()) {
                 for (FrontendPageFact page : pages) {
-                    factPersister.saveFact(context.getProjectId(), context.getVersionId(),
-                            "FRONTEND_AST", "FRONTEND_PAGE", page.getRoutePath(), page.getPageName(),
-                            asset.getRelativePath(), page.getStartLine(), page.getEndLine(),
-                            page, BigDecimal.ONE, "EXTRACTED");
+                    drafts.add(FactPersister.FactDraft.builder()
+                            .projectId(context.getProjectId())
+                            .versionId(context.getVersionId())
+                            .sourceType("FRONTEND_AST")
+                            .factType("FRONTEND_PAGE")
+                            .factKey(page.getRoutePath())
+                            .factName(page.getPageName())
+                            .sourcePath(asset.getRelativePath())
+                            .startLine(page.getStartLine())
+                            .endLine(page.getEndLine())
+                            .data(page)
+                            .confidence(BigDecimal.ONE)
+                            .status("EXTRACTED")
+                            .build());
                     count++;
                 }
                 frontendGraphBuilder.buildFrontendGraph(
@@ -58,16 +70,26 @@ public class VueFrontendAdapter implements ExtractionAdapter {
             List<FrontendPageFact.FrontendApiCall> apiCalls = apiExtractor.extractFromFile(asset.getFile());
             if (apiCalls != null && !apiCalls.isEmpty()) {
                 for (FrontendPageFact.FrontendApiCall api : apiCalls) {
-                    factPersister.saveFact(context.getProjectId(), context.getVersionId(),
-                            "FRONTEND_AST", "FRONTEND_API", api.getUrl(),
-                            api.getMethod() + " " + api.getUrl(),
-                            asset.getRelativePath(), api.getLineNumber(), api.getLineNumber(),
-                            api, BigDecimal.ONE, "EXTRACTED");
+                    drafts.add(FactPersister.FactDraft.builder()
+                            .projectId(context.getProjectId())
+                            .versionId(context.getVersionId())
+                            .sourceType("FRONTEND_AST")
+                            .factType("FRONTEND_API")
+                            .factKey(api.getUrl())
+                            .factName(api.getMethod() + " " + api.getUrl())
+                            .sourcePath(asset.getRelativePath())
+                            .startLine(api.getLineNumber())
+                            .endLine(api.getLineNumber())
+                            .data(api)
+                            .confidence(BigDecimal.ONE)
+                            .status("EXTRACTED")
+                            .build());
                     count++;
                 }
                 frontendGraphBuilder.buildFrontendApiGraph(
                         context.getProjectId(), context.getVersionId(), apiCalls);
             }
+            factPersister.saveFacts(drafts);
         } catch (IOException e) {
             log.warn("VueFrontendAdapter failed for {}: {}", asset.getRelativePath(), e.getMessage());
         }

@@ -1,6 +1,7 @@
 package io.github.legacygraph.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
@@ -311,18 +312,17 @@ public class ReviewController {
             }
         }
 
-        for (String id : ids) {
-            ReviewRecord record = reviewRecordRepository.selectById(id);
-            if (record != null && record.getProjectId().equals(projectId)) {
-                record.setStatus("CONFIRMED");
-                if (comment != null) {
-                    record.setComment(comment);
-                }
-                record.setReviewedBy(reviewedBy);
-                record.setReviewedAt(LocalDateTime.now());
-                reviewRecordRepository.updateById(record);
-            }
+        // 批量更新：一次 SQL 更新所有选中记录
+        UpdateWrapper<ReviewRecord> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.in("id", ids)
+                .eq("project_id", projectId)
+                .set("status", "CONFIRMED")
+                .set("reviewed_by", reviewedBy)
+                .set("reviewed_at", LocalDateTime.now());
+        if (comment != null) {
+            updateWrapper.set("comment", comment);
         }
+        reviewRecordRepository.update(null, updateWrapper);
 
         return Result.success();
     }

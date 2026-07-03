@@ -288,16 +288,22 @@ public class CliToolAdapter implements CodeUnderstandingToolAdapter {
 
     /**
      * 根据命令模板构建实际的命令列表。
-     * 模板中的 {query} 占位符被替换为实际查询。
+     * 先解析模板为命令列表，再将真实 query 作为独立参数追加，
+     * 避免将用户输入混入模板字符串解析导致的命令注入风险。
      *
      * <p>模板示例：{@code codex exec --no-write --json "{query}"}
-     * 替换后：   {@code [codex, exec, --no-write, --json, "用户查询内容"]}
+     * 解析后：   {@code [codex, exec, --no-write, --json, 用户查询内容]}
      */
     private List<String> buildCommand(final String query, final ToolCapability operation) {
-        // 将 {query} 占位符替换为实际查询
-        final String resolved = commandTemplate.replace("{query}", query != null ? query : "");
-        // 按空格分割为参数列表（支持引号保护）
-        return parseCommandLine(resolved);
+        // 解析模板为参数列表，{query} 被当作一个普通占位符 token
+        final List<String> command = new ArrayList<>(parseCommandLine(commandTemplate));
+        // 移除占位符 token，避免模板中残留的 {query} 被当作真实参数
+        command.remove("{query}");
+        // 将 query 作为独立参数直接追加，不经过模板解析，防止引号注入
+        if (query != null && !query.isEmpty()) {
+            command.add(query);
+        }
+        return command;
     }
 
     /**

@@ -44,6 +44,10 @@ public class DbConnection {
 
     private LocalDateTime lastScanTime;
 
+    /** schema 指纹：用于判断是否需要进行增量重扫 */
+    private String schemaFingerprint;
+    private LocalDateTime schemaFingerprintUpdatedAt;
+
     private String createdBy;
 
     private LocalDateTime createdAt;

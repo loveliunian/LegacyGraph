@@ -9,7 +9,7 @@ export interface VectorDocument {
   /** 向量文档ID */
   id: string
   /** 关联项目ID */
-  projectId: number
+  projectId: string
   /** 块类型：CODE|DOC|COMMENT */
   chunkType: string
   /** 来源文件URI */
@@ -18,8 +18,8 @@ export interface VectorDocument {
   chunkIndex: number
   /** 块内容 */
   content: string
-  /** 向量embedding数组 */
-  embedding: number[]
+  /** pgvector 文本表示 */
+  embedding: string
   /** 使用的embedding模型 */
   embeddingModel: string
   /** 向量维度 */

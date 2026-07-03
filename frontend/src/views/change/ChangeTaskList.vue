@@ -21,7 +21,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="statusTag(row.status)">{{ row.status }}</el-tag>
+            <el-tag size="small" :type="statusTag(row.status)">{{ dictLabel('change_task_status', row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="影响子图" width="100" align="center">
@@ -119,7 +119,7 @@
           <el-tag size="small" :type="taskTypeTag(currentTask.taskType)">{{ taskTypeLabel(currentTask.taskType) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag size="small" :type="statusTag(currentTask.status)">{{ currentTask.status }}</el-tag>
+          <el-tag size="small" :type="statusTag(currentTask.status)">{{ dictLabel('change_task_status', currentTask.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="项目ID">{{ currentTask.projectId }}</el-descriptions-item>
         <el-descriptions-item label="版本ID">{{ currentTask.versionId }}</el-descriptions-item>
@@ -142,6 +142,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { changeTaskApi, graphApi } from '@/api'
+import { preloadDicts, dictLabel } from '@/utils/dict'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -170,10 +171,7 @@ const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
-const taskTypeLabel = (type: string) => {
-  const map: Record<string, string> = { BUGFIX: 'Bug修复', REFACTOR: '重构', UPGRADE: '升级' }
-  return map[type] || type || '-'
-}
+const taskTypeLabel = (type: string) => dictLabel('change_task_type', type)
 
 const taskTypeTag = (type: string) => {
   const map: Record<string, string> = { BUGFIX: 'danger', REFACTOR: 'warning', UPGRADE: 'primary' }
@@ -302,6 +300,7 @@ async function handleRunValidation(row: any) {
 }
 
 onMounted(() => {
+  preloadDicts(['change_task_type', 'change_task_status'])
   loadList()
 })
 </script>

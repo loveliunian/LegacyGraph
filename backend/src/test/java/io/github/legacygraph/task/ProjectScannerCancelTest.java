@@ -42,7 +42,9 @@ class ProjectScannerCancelTest {
                 objectMapper,
                 null,  // aiScanOrchestrator
                 null,  // dbSchemaAnalysisAgent
-                null   // extractionAdapterRegistry
+                null,  // extractionAdapterRegistry
+                null,  // scanTaskRecorder
+                null   // adapterExecutionService
         );
     }
 

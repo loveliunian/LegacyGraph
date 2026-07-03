@@ -5,8 +5,12 @@
 </template>
 
 <script setup lang="ts">
+import { dictLabel } from '@/utils/dict'
+
 interface Props {
   status: string
+  /** 字典编码，提供后文本从数据字典获取，不使用 defaultMap */
+  dictCode?: string
   statusMap?: Record<string, { text: string; type: 'primary' | 'success' | 'warning' | 'danger' | 'info' }>
 }
 
@@ -36,16 +40,21 @@ const defaultMap: Record<string, { text: string; type: any }> = {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  dictCode: undefined,
   statusMap: undefined,
 })
 
 function getType(status: string) {
-  const map = props.statusMap || defaultMap
-  return map[status]?.type || 'info'
+  if (props.statusMap) return props.statusMap[status]?.type || 'info'
+  return defaultMap[status]?.type || 'info'
 }
 
 function getText(status: string) {
-  const map = props.statusMap || defaultMap
-  return map[status]?.text || status
+  // 提供了 dictCode 时优先用数据字典
+  if (props.dictCode) return dictLabel(props.dictCode, status)
+  // 提供了自定义 statusMap 时用它
+  if (props.statusMap) return props.statusMap[status]?.text || status
+  // 否则用内置默认映射
+  return defaultMap[status]?.text || status
 }
 </script>

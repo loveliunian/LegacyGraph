@@ -99,12 +99,16 @@ public class TestCaseService {
         }
 
         int count = 0;
+        List<TestCase> batch = new ArrayList<>(scenarios.size());
         for (ScenarioDSL dsl : scenarios) {
             TestCase tc = scenarioToTestCase(slice.getProjectId(), slice.getVersionId(), dsl, slice);
             if (tc != null) {
-                testCaseRepository.insert(tc);
+                batch.add(tc);
                 count++;
             }
+        }
+        for (TestCase tc : batch) {
+            testCaseRepository.insert(tc);
         }
 
         // 回写 slice：关联 testCaseIds

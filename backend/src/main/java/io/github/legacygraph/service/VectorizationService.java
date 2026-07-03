@@ -70,7 +70,6 @@ public class VectorizationService {
 
         // 执行向量化
         float[] embeddingFloat = embeddingModel.embed(content);
-        List<Double> embedding = floatArrayToDoubleList(embeddingFloat);
 
         VectorDocument doc = new VectorDocument();
         doc.setProjectId(projectId);
@@ -82,8 +81,9 @@ public class VectorizationService {
         doc.setContent(content);
         doc.setContentSha256(contentSha256);
         doc.setMeta("{}");
+        doc.setEmbedding(floatArrayToVectorLiteral(embeddingFloat));
         doc.setEmbeddingModel(embeddingModelName);
-        doc.setEmbeddingDim(embedding.size());
+        doc.setEmbeddingDim(embeddingFloat.length);
         doc.setCreatedAt(LocalDateTime.now());
 
         vectorDocumentRepository.insert(doc);
@@ -231,5 +231,17 @@ public class VectorizationService {
             result.add((double) f);
         }
         return result;
+    }
+
+    private String floatArrayToVectorLiteral(float[] floats) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < floats.length; i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(Float.toString(floats[i]));
+        }
+        sb.append("]");
+        return sb.toString();
     }
 }

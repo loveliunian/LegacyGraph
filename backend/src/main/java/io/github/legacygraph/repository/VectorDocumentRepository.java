@@ -4,11 +4,15 @@ import io.github.legacygraph.entity.VectorDocument;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
 @Mapper
 public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocument> {
+
+    Logger LOG = LoggerFactory.getLogger(VectorDocumentRepository.class);
 
     @Select("SELECT * FROM lg_vector_document WHERE project_id = #{projectId} AND version_id = #{versionId} AND chunk_type = #{chunkType}")
     List<VectorDocument> findByProjectAndVersionAndType(String projectId, String versionId, String chunkType);
@@ -18,7 +22,7 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
      * 注意：embedding 列是 vector 类型，由 Spring AI pgvector 自动处理
      * 这里使用原生 SQL 执行余弦相似度查询，distance 越小越相似
      */
-    @Select("SELECT *, embedding <-> CAST(#{embedding} AS vector) AS distance " +
+    @Select("SELECT *, embedding <=> CAST(#{embedding} AS vector) AS distance " +
             "FROM lg_vector_document " +
             "WHERE project_id = #{projectId} " +
             "AND version_id = #{versionId} " +
@@ -35,7 +39,7 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
     /**
      * 使用 pgvector 余弦相似度查找相似文档（不过滤类型）
      */
-    @Select("SELECT *, embedding <-> CAST(#{embedding} AS vector) AS distance " +
+    @Select("SELECT *, embedding <=> CAST(#{embedding} AS vector) AS distance " +
             "FROM lg_vector_document " +
             "WHERE project_id = #{projectId} " +
             "AND version_id = #{versionId} " +
@@ -49,7 +53,7 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
 
     /**
      * 通用方法：根据是否有chunkType选择不同查询。
-     * pgvector 扩展未安装或 embedding 列不存在时，静默返回空列表。
+     * pgvector 扩展未安装或 embedding 列不存在时，记录告警并返回空列表。
      */
     default List<VectorDocument> findSimilar(String projectId, String versionId, List<Double> embedding, int topK, String chunkType) {
         // 将List<Double>转换为PostgreSQL vector格式: [x,y,z]
@@ -68,7 +72,8 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
                 return findSimilarByEmbeddingWithoutType(projectId, versionId, embeddingStr, topK);
             }
         } catch (Exception e) {
-            // pgvector 扩展未安装或 embedding 列不存在时静默降级
+            LOG.warn("pgvector similarity query failed for projectId={}, versionId={}: {}",
+                    projectId, versionId, e.getMessage());
             return java.util.Collections.emptyList();
         }
     }

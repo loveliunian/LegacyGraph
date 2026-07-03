@@ -86,7 +86,10 @@ public class ScanScopeResolver {
                     scopeScanTypes = new ArrayList<>();
                     for (JsonNode n : scopeNode.get("scanTypes")) scopeScanTypes.add(n.asText());
                 }
-                if (scopeNode.has("aiEnabled")) {
+                if (scopeNode.has("enableAi")) {
+                    aiEnabled = scopeNode.get("enableAi").asBoolean();
+                } else if (scopeNode.has("aiEnabled")) {
+                    // 兼容旧字段 aiEnabled
                     aiEnabled = scopeNode.get("aiEnabled").asBoolean();
                 }
                 if (scopeNode.has("incremental")) {

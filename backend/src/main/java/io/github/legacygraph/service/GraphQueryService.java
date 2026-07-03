@@ -18,11 +18,16 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 public class GraphQueryService {
 
     // Phase 2.6: 图谱只读查询已收口到 GraphPathReadModel / GraphProjectionReadModel。
+
+    private static final ExecutorService graphQueryExecutor = Executors.newFixedThreadPool(4);
 
     private final Neo4jGraphDao neo4jGraphDao;
     private final ScanVersionRepository scanVersionRepository;
@@ -266,44 +271,31 @@ public class GraphQueryService {
         }
         String projectId = version.getProjectId();
 
-        // 从Neo4j查询节点（用无横线 versionId）
+        // 从Neo4j并行查询节点和边（用无横线 versionId）— 使用 map projection 优化
         String effectiveStatus = (statusFilter != null && !statusFilter.isBlank()) ? statusFilter : null;
-        List<GraphNode> nodes = neo4jGraphDao.queryNodes(projectId, neo4jVersionId, null, null, minConfidence, effectiveStatus, 0);
-
-        // 从Neo4j查询边（用无横线 versionId）
-        List<GraphEdge> edges = neo4jGraphDao.queryEdges(projectId, neo4jVersionId, minConfidence, effectiveStatus, 0);
-
+        
+        CompletableFuture<List<Map<String, Object>>> nodesFuture = CompletableFuture.supplyAsync(() -> 
+            neo4jGraphDao.queryNodesProjection(projectId, neo4jVersionId, minConfidence, effectiveStatus),
+            graphQueryExecutor);
+        
+        CompletableFuture<List<Map<String, Object>>> edgesFuture = CompletableFuture.supplyAsync(() -> 
+            neo4jGraphDao.queryEdgesProjection(projectId, neo4jVersionId, minConfidence, effectiveStatus),
+            graphQueryExecutor);
+        
+        List<Map<String, Object>> nodes = nodesFuture.join();
+        List<Map<String, Object>> edges = edgesFuture.join();
+        
+        // 为 edges 添加 label 字段
+        edges.forEach(edge -> {
+            String edgeType = (String) edge.get("type");
+            edge.put("label", getEdgeLabel(edgeType));
+        });
+        
         Map<String, Object> result = new HashMap<>();
         result.put("versionId", versionId);
         result.put("statusFilter", statusFilter);
-        result.put("nodes", nodes.stream().map(node -> {
-            Map<String, Object> nodeMap = new HashMap<>();
-            nodeMap.put("id", node.getId());
-            nodeMap.put("key", node.getNodeKey());
-            nodeMap.put("label", node.getDisplayName());
-            nodeMap.put("type", node.getNodeType());
-            nodeMap.put("confidence", node.getConfidence());
-            nodeMap.put("status", node.getStatus());
-            nodeMap.put("description", node.getDescription());
-            nodeMap.put("sourcePath", node.getSourcePath());
-            nodeMap.put("sourceType", node.getSourceType());
-            nodeMap.put("verifiedScore", node.getVerifiedScore());
-            nodeMap.put("runtimeVerified", node.getRuntimeVerified());
-            nodeMap.put("lastSeenAt", node.getLastSeenAt() != null ? node.getLastSeenAt().toString() : null);
-            nodeMap.put("traceCount", node.getTraceCount());
-            return nodeMap;
-        }).toList());
-        result.put("edges", edges.stream().map(edge -> {
-            Map<String, Object> edgeMap = new HashMap<>();
-            edgeMap.put("id", edge.getId());
-            edgeMap.put("source", edge.getFromNodeId());
-            edgeMap.put("target", edge.getToNodeId());
-            edgeMap.put("type", edge.getEdgeType());
-            edgeMap.put("label", getEdgeLabel(edge.getEdgeType()));
-            edgeMap.put("confidence", edge.getConfidence());
-            edgeMap.put("status", edge.getStatus());
-            return edgeMap;
-        }).toList());
+        result.put("nodes", nodes);
+        result.put("edges", edges);
         result.put("nodeCount", nodes.size());
         result.put("edgeCount", edges.size());
 

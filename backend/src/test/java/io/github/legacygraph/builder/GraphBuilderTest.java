@@ -37,6 +37,25 @@ class GraphBuilderTest {
         assertNotNull(graphBuilder);
     }
 
+    @Test
+    void normalizeApiKey_StripsQueryAndUnifiesParameterNames() {
+        assertEquals(
+                "GET /lg/projects/{id}/scan-versions/{id}",
+                GraphBuilder.normalizeApiKey(
+                        "get",
+                        "/lg/projects/${projectId}/scan-versions/${versionId}?includeLogs=true"
+                )
+        );
+
+        assertEquals(
+                "GET /lg/projects/{id}/scan-versions/{id}",
+                GraphBuilder.normalizeApiKey(
+                        "GET",
+                        "/lg/projects/{projectId}/scan-versions/{versionId}"
+                )
+        );
+    }
+
     /**
      * C：扫描期不再调用 SQL 顾问 LLM，buildMapperSqlGraph 仅构建图谱节点/边。
      */

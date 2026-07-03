@@ -68,7 +68,9 @@ class ProjectScannerAdapterTest {
                 new ObjectMapper(),
                 aiScanOrchestrator,
                 dbSchemaAnalysisAgent,
-                adapterRegistry
+                adapterRegistry,
+                null,  // scanTaskRecorder
+                null   // adapterExecutionService
         );
 
         int processed = scanner.scanAssetsWithAdapters("project-1", "v1",
@@ -109,7 +111,9 @@ class ProjectScannerAdapterTest {
                 new ObjectMapper(),
                 aiScanOrchestrator,
                 dbSchemaAnalysisAgent,
-                adapterRegistry
+                adapterRegistry,
+                null,  // scanTaskRecorder
+                null   // adapterExecutionService
         );
         scanner.setScanPlanningServices(null, assetDiscoveryService);
 

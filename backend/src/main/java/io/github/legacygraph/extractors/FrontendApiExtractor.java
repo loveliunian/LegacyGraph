@@ -18,6 +18,11 @@ import java.util.regex.Pattern;
 @Slf4j
 public class FrontendApiExtractor {
 
+    private static final Pattern URL_PATTERN = Pattern.compile("url\\s*:\\s*([`'\"])(.*?)\\1");
+    private static final Pattern METHOD_PATTERN = Pattern.compile(
+            "method\\s*:\\s*['\"](get|post|put|delete|patch)['\"]",
+            Pattern.CASE_INSENSITIVE);
+
     /**
      * 从文件抽取API调用
      */
@@ -30,13 +35,16 @@ public class FrontendApiExtractor {
         // 1. axios.get/post/put/delete
         extractAxiosCalls(lines, result, file);
 
-        // 2. 封装的 request({ url, method })
+        // 2. 封装的 get/post/put/delete('/url') helper
+        extractRequestHelperCalls(lines, result, file);
+
+        // 3. 封装的 request({ url, method })
         extractRequestCalls(lines, result, file);
 
-        // 3. api.xxx() 调用
+        // 4. api.xxx() 调用
         extractApiModuleCalls(lines, result, file);
 
-        // 4. fetch(url)
+        // 5. fetch(url)
         extractFetchCalls(lines, result, file);
 
         log.debug("Extracted {} API calls from {}", result.size(), file);
@@ -52,33 +60,61 @@ public class FrontendApiExtractor {
     }
 
     /**
+     * 抽取项目常用的 request helper：get('/xxx') / post(`/xxx/${id}`)
+     */
+    private void extractRequestHelperCalls(String[] lines, List<FrontendPageFact.FrontendApiCall> result, Path file) {
+        Pattern pattern = Pattern.compile(
+                "(?<![\\w.])(get|post|put|delete|patch)\\s*(?:<[^>]+>)?\\s*\\(\\s*([`'\"])([^`'\"]+)\\2",
+                Pattern.CASE_INSENSITIVE);
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            Matcher matcher = pattern.matcher(line);
+            while (matcher.find()) {
+                String trailing = line.substring(matcher.end()).stripLeading();
+                if (trailing.startsWith("+")) {
+                    continue;
+                }
+                FrontendPageFact.FrontendApiCall call = new FrontendPageFact.FrontendApiCall();
+                call.setMethod(matcher.group(1).toLowerCase());
+                call.setUrl(matcher.group(3));
+                call.setSourceFile(file.toString());
+                call.setLineNumber(i + 1);
+                result.add(call);
+            }
+        }
+    }
+
+    /**
      * 抽取 request({ url: '/xxx', method: 'post' })
      */
     private void extractRequestCalls(String[] lines, List<FrontendPageFact.FrontendApiCall> result, Path file) {
-        // 匹配 request({  格式
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
-            int lineNum = i + 1;
+            if (!line.contains("request(")) {
+                continue;
+            }
 
-            // 查找 url
-            Pattern urlPattern = Pattern.compile("url\\s*:\\s*['\"]([^'\"]+)['\"]");
-            Matcher urlMatcher = urlPattern.matcher(line);
-            if (urlMatcher.find()) {
-                String url = urlMatcher.group(1);
-
-                // 查找 method
-                Pattern methodPattern = Pattern.compile("method\\s*:\\s*['\"](get|post|put|delete|patch)['\"]", Pattern.CASE_INSENSITIVE);
-                Matcher methodMatcher = methodPattern.matcher(line);
-                String method = "get";
-                if (methodMatcher.find()) {
-                    method = methodMatcher.group(1).toLowerCase();
+            StringBuilder block = new StringBuilder();
+            int urlLineNumber = i + 1;
+            for (int j = i; j < lines.length; j++) {
+                block.append(lines[j]).append('\n');
+                if (URL_PATTERN.matcher(lines[j]).find()) {
+                    urlLineNumber = j + 1;
                 }
+                if (lines[j].contains("})") || lines[j].contains("});")) {
+                    break;
+                }
+            }
 
+            Matcher urlMatcher = URL_PATTERN.matcher(block);
+            if (urlMatcher.find()) {
+                Matcher methodMatcher = METHOD_PATTERN.matcher(block);
+                String method = methodMatcher.find() ? methodMatcher.group(1).toLowerCase() : "get";
                 FrontendPageFact.FrontendApiCall call = new FrontendPageFact.FrontendApiCall();
-                call.setUrl(url);
+                call.setUrl(urlMatcher.group(2));
                 call.setMethod(method);
                 call.setSourceFile(file.toString());
-                call.setLineNumber(lineNum);
+                call.setLineNumber(urlLineNumber);
                 result.add(call);
             }
         }
@@ -110,8 +146,7 @@ public class FrontendApiExtractor {
                 if (urlMatcher.find()) {
                     String url = urlMatcher.group(1);
 
-                    Pattern methodPattern = Pattern.compile("method\\s*:\\s*['\"](get|post|put|delete|patch)['\"]", Pattern.CASE_INSENSITIVE);
-                    Matcher methodMatcher = methodPattern.matcher(line);
+                    Matcher methodMatcher = METHOD_PATTERN.matcher(line);
                     String method = "get";
                     if (methodMatcher.find()) {
                         method = methodMatcher.group(1).toLowerCase();
@@ -153,7 +188,7 @@ public class FrontendApiExtractor {
             int lineNum = i + 1;
             Matcher matcher = pattern.matcher(line);
             while (matcher.find()) {
-                String method = matcher.group(methodGroup).toLowerCase();
+                String method = methodGroup == urlGroup ? "get" : matcher.group(methodGroup).toLowerCase();
                 String url = matcher.group(urlGroup);
 
                 FrontendPageFact.FrontendApiCall call = new FrontendPageFact.FrontendApiCall();

@@ -4,6 +4,7 @@ import io.github.legacygraph.agent.DbSchemaAnalysisAgent;
 import io.github.legacygraph.builder.FrontendGraphBuilder;
 import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.DbSchemaAnalysis;
 import io.github.legacygraph.dto.scan.ResolvedDbScope;
 import io.github.legacygraph.dto.scan.ResolvedDocScope;
@@ -48,6 +49,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,6 +78,8 @@ public class ProjectScanner {
     private final DbSchemaAnalysisAgent dbSchemaAnalysisAgent;
     private final ExtractionAdapterRegistry extractionAdapterRegistry;
     private final DatabaseMetadataScanService databaseMetadataScanService;
+    private final ScanTaskRecorder scanTaskRecorder;
+    private final AdapterExecutionService adapterExecutionService;
     private ScanScopeResolver scanScopeResolver;
     private AssetDiscoveryService assetDiscoveryService;
 
@@ -142,11 +146,13 @@ public class ProjectScanner {
                          ObjectMapper objectMapper,
                          AiScanOrchestrator aiScanOrchestrator,
                          DbSchemaAnalysisAgent dbSchemaAnalysisAgent,
-                         ExtractionAdapterRegistry extractionAdapterRegistry) {
+                         ExtractionAdapterRegistry extractionAdapterRegistry,
+                         ScanTaskRecorder scanTaskRecorder,
+                         AdapterExecutionService adapterExecutionService) {
         this(scanVersionRepository, scanTaskRepository, factRepository, dbConnectionRepository,
                 codeRepoRepository, documentRepository, graphBuilder, frontendGraphBuilder,
                 neo4jGraphDao, objectMapper, aiScanOrchestrator, dbSchemaAnalysisAgent,
-                extractionAdapterRegistry, new DatabaseMetadataScanService(graphBuilder));
+                extractionAdapterRegistry, new DatabaseMetadataScanService(graphBuilder), scanTaskRecorder, adapterExecutionService);
     }
 
     @Autowired
@@ -163,8 +169,10 @@ public class ProjectScanner {
 	                         AiScanOrchestrator aiScanOrchestrator,
 	                         DbSchemaAnalysisAgent dbSchemaAnalysisAgent,
 	                         ExtractionAdapterRegistry extractionAdapterRegistry,
-                             DatabaseMetadataScanService databaseMetadataScanService) {
-        this.scanVersionRepository = scanVersionRepository;
+	                         DatabaseMetadataScanService databaseMetadataScanService,
+	                         ScanTaskRecorder scanTaskRecorder,
+	                         AdapterExecutionService adapterExecutionService) {
+	                         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
         this.dbConnectionRepository = dbConnectionRepository;
@@ -178,6 +186,8 @@ public class ProjectScanner {
         this.dbSchemaAnalysisAgent = dbSchemaAnalysisAgent;
         this.extractionAdapterRegistry = extractionAdapterRegistry;
         this.databaseMetadataScanService = databaseMetadataScanService;
+        this.scanTaskRecorder = scanTaskRecorder;
+        this.adapterExecutionService = adapterExecutionService;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -303,7 +313,7 @@ public class ProjectScanner {
 
             // 0a. 从代码中自动发现数据库连接配置
             ScanTask dbDiscoveryTask = createTask(projectId, versionId, "DB_DISCOVERY", "数据库连接自动发现");
-            int dbCount = discoverDbConnections(projectId, baseDir);
+            int dbCount = discoverDbConnections(projectId, baseDir, dbDiscoveryTask);
             completeTask(dbDiscoveryTask, "Discovered " + dbCount + " database connections", null);
             log.info("Auto-discovered {} database connections", dbCount);
 
@@ -322,7 +332,7 @@ public class ProjectScanner {
                     || scopeScanTypes.contains("DOC_PARSE");
             if (shouldScanDocs) {
                 ScanTask docDiscoveryTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
-                int docCount = discoverDocuments(projectId, versionId, baseDir);
+                int docCount = discoverDocuments(projectId, versionId, baseDir, docDiscoveryTask);
                 completeTask(docDiscoveryTask, "Discovered " + docCount + " documents", null);
                 log.info("Auto-discovered {} documents", docCount);
             } else {
@@ -381,7 +391,7 @@ public class ProjectScanner {
                     if (isCancelled(versionId)) break;
                     try {
                         DataSource dataSource = createDataSource(conn);
-                        totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn.getSchemaName(), conn.getDbType());
+                        totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn);
                     } catch (Exception e) {
                         log.warn("Failed to scan database connection id={} host={}:{}/{} dbType={}: {}",
                                 conn.getId(), conn.getHost(), conn.getPort(),
@@ -394,16 +404,19 @@ public class ProjectScanner {
                 completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables + " tables", null);
                 log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables);
 
-                // LLM 语义增强：从 Neo4j 构建 Schema 摘要，调用 LLM 分析
+                // LLM 语义增强：异步执行，不阻塞扫描主流程
                 if (totalTables > 0) {
-                    try {
-                        String schemaText = graphBuilder.buildDbSchemaSummary(projectId, versionId);
-                        if (schemaText != null && !schemaText.isBlank()) {
-                            enrichDbGraphWithLLM(projectId, versionId, schemaText);
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            String schemaText = graphBuilder.buildDbSchemaSummary(projectId, versionId);
+                            if (schemaText != null && !schemaText.isBlank()) {
+                                enrichDbGraphWithLLM(projectId, versionId, schemaText);
+                            }
+                        } catch (Exception e) {
+                            log.warn("DB schema LLM enrichment failed (non-blocking): {}", e.getMessage());
                         }
-                    } catch (Exception e) {
-                        log.warn("DB schema LLM enrichment failed (non-blocking): {}", e.getMessage());
-                    }
+                    });
+                    log.info("DB schema LLM enrichment dispatched asynchronously: versionId={}", versionId);
                 }
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=no READY database connections found for project",
@@ -422,26 +435,23 @@ public class ProjectScanner {
             completeTask(buildTask, "Graph built in Neo4j", null);
 
             // 6. 扫描后 AI 编排
-            // DOC_PARSE 在 scanTypes 中时强制开启 AI 归纳，确保文档内容被分析
+            // DOC_PARSE 未显式指定 AI 开关时默认开启 AI；显式 enableAi=false 必须被尊重。
             if (isCancelled(versionId)) return;
             try {
-                boolean docParseEnabled = scopeScanTypes != null && scopeScanTypes.contains("DOC_PARSE");
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=starting",
                         projectId, versionId);
-                io.github.legacygraph.dto.AiScanConfig aiDefaults = new io.github.legacygraph.dto.AiScanConfig();
-                aiDefaults.setEnableAi(aiEnableDefault || docParseEnabled);
-                aiDefaults.setAutoGenerateTestCase(aiAutoGenerateTestCaseDefault);
-                aiDefaults.setMinConfidence(aiMinConfidenceDefault);
-                io.github.legacygraph.dto.AiScanConfig aiConfig =
-                        io.github.legacygraph.dto.AiScanConfig.fromScanScope(
-                                version != null ? version.getScanScope() : null, objectMapper, aiDefaults);
-                // DOC_PARSE 时强制 AI 归纳（前端可能未勾选 enableAi）
-                if (docParseEnabled && !aiConfig.isEnableAi()) {
-                    aiConfig.setEnableAi(true);
-                    log.info("AI orchestration: enableAi forced to true because DOC_PARSE is in scanTypes");
+                AiScanConfig aiConfig = resolveAiConfigForScan(
+                        version != null ? version.getScanScope() : null,
+                        scopeScanTypes,
+                        objectMapper,
+                        aiEnableDefault,
+                        aiAutoGenerateTestCaseDefault,
+                        aiMinConfidenceDefault);
+                if (aiConfig.isEnableAi()) {
+                    aiScanOrchestrator.enqueue(projectId, versionId, aiConfig);
+                } else {
+                    aiScanOrchestrator.recordSkipped(projectId, versionId);
                 }
-                aiScanOrchestrator.orchestrate(projectId, versionId, aiConfig,
-                        () -> isCancelled(versionId));
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=completed",
                         projectId, versionId);
             } catch (Exception aiEx) {
@@ -482,6 +492,20 @@ public class ProjectScanner {
                 scanVersionRepository.updateById(version);
             }
         }
+    }
+
+    static AiScanConfig resolveAiConfigForScan(String scanScope,
+                                               List<String> scopeScanTypes,
+                                               ObjectMapper objectMapper,
+                                               boolean aiEnableDefault,
+                                               boolean aiAutoGenerateTestCaseDefault,
+                                               double aiMinConfidenceDefault) {
+        boolean docParseEnabled = scopeScanTypes != null && scopeScanTypes.contains("DOC_PARSE");
+        AiScanConfig aiDefaults = new AiScanConfig();
+        aiDefaults.setEnableAi(aiEnableDefault || docParseEnabled);
+        aiDefaults.setAutoGenerateTestCase(aiAutoGenerateTestCaseDefault);
+        aiDefaults.setMinConfidence(aiMinConfidenceDefault);
+        return AiScanConfig.fromScanScope(scanScope, objectMapper, aiDefaults);
     }
 
     private ResolvedScanPlan resolveScanPlan(String projectId, String versionId, ScanVersion version) {
@@ -538,7 +562,7 @@ public class ProjectScanner {
      * 每处失败均单独 try/catch：任何统计失败都不能影响主扫描落 SUCCESS/FAILED 状态。
      * 仅在扫描终态调用（成功/失败），列表接口对 RUNNING 状态版本仍走批量聚合兜底。
      */
-    private void applyStatsSnapshot(ScanVersion version, String projectId, String versionId) {
+    public void applyStatsSnapshot(ScanVersion version, String projectId, String versionId) {
         try {
             long nodeCount = 0L;
             try {
@@ -602,7 +626,7 @@ public class ProjectScanner {
      * 如果同一 (host+port+database) 的连接已存在则更新，否则新建
      * @return 新创建或更新的数据库连接数量
      */
-    private int discoverDbConnections(String projectId, String baseDir) {
+    private int discoverDbConnections(String projectId, String baseDir, ScanTask task) {
         if (baseDir == null) return 0;
         int count = 0;
         try {
@@ -622,9 +646,14 @@ public class ProjectScanner {
                     .collect(Collectors.toList());
 
             Set<String> discoveredUrls = new HashSet<>(); // 本次扫描去重
+            int total = configFiles.size();
+            scanTaskRecorder.logProgress(task, 0, total, "config files", null);
 
+            int idx = 0;
             for (Path configFile : configFiles) {
                 try {
+                    idx++;
+                    scanTaskRecorder.logProgress(task, idx, total, "config files", configFile.getFileName().toString());
                     String content = Files.readString(configFile);
                     Map<String, String> dbConfig = extractDatasourceConfig(content, configFile.getFileName().toString());
                     if (dbConfig != null && !dbConfig.isEmpty()) {
@@ -967,7 +996,7 @@ public class ProjectScanner {
      * 写入 filePath（绝对路径）、versionId，使自动发现文档可解析。
      * @return 发现的文档数量
      */
-    private int discoverDocuments(String projectId, String versionId, String baseDir) {
+    private int discoverDocuments(String projectId, String versionId, String baseDir, ScanTask task) {
         if (baseDir == null) return 0;
         int count = 0;
         try {
@@ -1003,9 +1032,14 @@ public class ProjectScanner {
                     projectId, versionId, docFiles.size());
 
             Path relativeRoot = basePath.toAbsolutePath();
+            int total = docFiles.size();
+            scanTaskRecorder.logProgress(task, 0, total, "document files", null);
+            int idx = 0;
             for (Path docFile : docFiles) {
                 if (isCancelled(versionId)) break;
                 try {
+                    idx++;
+                    scanTaskRecorder.logProgress(task, idx, total, "document files", docFile.getFileName().toString());
                     String relativePath;
                     try {
                         relativePath = relativeRoot.relativize(docFile.toAbsolutePath()).toString();
@@ -1243,40 +1277,45 @@ public class ProjectScanner {
                                                  ResolvedScanPlan plan,
                                                  ScanTask task) {
         List<SourceAsset> assets = assetDiscoveryService.discoverAssets(plan);
-        int total = assets.size();
-        if (total == 0) {
-            logTaskProgress(task, 0, 0, "adapter candidate files");
-            assetDiscoveryService.persistSnapshots(projectId, versionId, assets);
-            return 0;
-        }
 
-        logTaskProgress(task, 0, total, "adapter candidate files");
-        int visited = 0;
-        int processed = 0;
-        for (SourceAsset asset : assets) {
-            if (isCancelled(versionId)) {
-                break;
-            }
-            visited++;
-            try {
-                if (plan.isIncremental() && assetDiscoveryService.isIncrementalSkip(asset, projectId, versionId)) {
-                    continue;
-                }
-                var adapter = extractionAdapterRegistry.selectAdapter(context, asset);
-                if (adapter.isEmpty()) {
-                    continue;
-                }
-                ExtractionResult result = adapter.get().extract(context, asset);
-                if (result != null && result.getProcessedAssets() > 0) {
-                    processed += result.getProcessedAssets();
-                } else {
-                    processed++;
-                }
-            } catch (Exception e) {
-                log.warn("Adapter failed for discovered asset {}: {}", asset.getRelativePath(), e.getMessage());
-            } finally {
-                if (visited % PROGRESS_LOG_INTERVAL == 0 || visited == total) {
-                    logTaskProgress(task, visited, total, "adapter candidate files");
+        // 使用并发 Adapter 执行器（替换原顺序 for 循环）
+        // 若 adapterExecutionService 为 null（测试环境），回退到直调 adapter registry
+        int processed;
+        if (adapterExecutionService != null) {
+            processed = adapterExecutionService.executeDiscoveredAssets(
+                    context, assets, task,
+                    () -> isCancelled(versionId),
+                    plan.isIncremental(),
+                    assetDiscoveryService);
+        } else {
+            // fallback: 顺序执行（测试兼容）
+            processed = 0;
+            int total = assets.size();
+            int visited = 0;
+            logTaskProgress(task, 0, total, "adapter candidate files");
+            for (SourceAsset asset : assets) {
+                if (isCancelled(versionId)) break;
+                visited++;
+                try {
+                    if (plan.isIncremental() && assetDiscoveryService != null
+                            && assetDiscoveryService.isIncrementalSkip(asset, projectId, versionId)) {
+                        continue;
+                    }
+                    var adapter = extractionAdapterRegistry.selectAdapter(context, asset);
+                    if (adapter.isPresent()) {
+                        ExtractionResult result = adapter.get().extract(context, asset);
+                        if (result != null && result.getProcessedAssets() > 0) {
+                            processed += result.getProcessedAssets();
+                        } else {
+                            processed++;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Adapter failed for discovered asset {}: {}", asset.getRelativePath(), e.getMessage());
+                } finally {
+                    if (visited % PROGRESS_LOG_INTERVAL == 0 || visited == total) {
+                        logTaskProgress(task, visited, total, "adapter candidate files");
+                    }
                 }
             }
         }
@@ -1384,15 +1423,22 @@ public class ProjectScanner {
         return databaseMetadataScanService.scan(projectId, versionId, dataSource, schema, dbType);
     }
 
+    public int scanDatabaseMetadata(String projectId, String versionId, DataSource dataSource, DbConnection connection) {
+        return databaseMetadataScanService.scan(projectId, versionId, dataSource, connection);
+    }
+
     // ==================== 工具方法 ====================
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
     }
 
-    // ⚠️ B-M1：createTask/completeTask 与 AiScanOrchestrator 中的实现逐行重复。
-    // 建议提取到共享工具类 ScanTaskHelper，消除重复并统一差异（startedAt、null guard）。
+    // 委托给 ScanTaskRecorder（消除与 AiScanOrchestrator 的重复实现）
     private ScanTask createTask(String projectId, String versionId, String taskType, String taskName) {
+        if (scanTaskRecorder != null) {
+            return scanTaskRecorder.createTask(projectId, versionId, taskType, taskName);
+        }
+        // fallback: 测试环境
         ScanTask task = new ScanTask();
         task.setId(UUID.randomUUID().toString());
         task.setProjectId(projectId);
@@ -1400,6 +1446,7 @@ public class ProjectScanner {
         task.setTaskType(taskType);
         task.setTaskName(taskName);
         task.setTaskStatus("RUNNING");
+        task.setStartedAt(LocalDateTime.now());
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.insert(task);
@@ -1409,6 +1456,11 @@ public class ProjectScanner {
     }
 
     private void completeTask(ScanTask task, String summary, String error) {
+        if (scanTaskRecorder != null) {
+            scanTaskRecorder.completeTask(task, summary, error);
+            return;
+        }
+        // fallback: 测试环境
         try {
             task.setOutputSummary(objectMapper.writeValueAsString(summary));
         } catch (Exception e) {
@@ -1425,9 +1477,12 @@ public class ProjectScanner {
     }
 
     private void logTaskProgress(ScanTask task, int processed, int total, String unit) {
-        if (task == null) {
+        if (scanTaskRecorder != null) {
+            scanTaskRecorder.logProgress(task, processed, total, unit, null);
             return;
         }
+        // fallback: 测试环境
+        if (task == null) return;
         if (total <= 0) {
             log.info("Scan still running: projectId={}, versionId={}, taskType={}, taskName={}, detail=found 0 {}",
                     task.getProjectId(), task.getVersionId(), task.getTaskType(), task.getTaskName(), unit);
@@ -1437,6 +1492,14 @@ public class ProjectScanner {
             log.info("Scan still running: projectId={}, versionId={}, taskType={}, taskName={}, progress={}/{}, unit={}",
                     task.getProjectId(), task.getVersionId(), task.getTaskType(), task.getTaskName(),
                     processed, total, unit);
+        }
+        try {
+            task.setTotalItems(total);
+            task.setProcessedItems(processed);
+            task.setUpdatedAt(LocalDateTime.now());
+            scanTaskRepository.updateById(task);
+        } catch (Exception e) {
+            log.debug("Failed to update task progress for {}: {}", task.getTaskType(), e.getMessage());
         }
     }
 

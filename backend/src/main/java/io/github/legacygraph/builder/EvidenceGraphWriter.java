@@ -20,7 +20,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -106,6 +108,8 @@ public class EvidenceGraphWriter {
         node.setConfidence(claim.getConfidence() != null ? claim.getConfidence() : BigDecimal.ONE);
         node.setStatus(deriveNodeStatus(claim.getSourceType(), claim.getConfidence(), claim.getStatus()));
         node.setProperties(claim.getProperties());
+        node.setScanType(claim.getScanType());
+        node.setClassName(claim.getClassName());
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
@@ -363,6 +367,9 @@ public class EvidenceGraphWriter {
         var nodeEvidences = nodeEvidenceRepository.lambdaQuery()
                 .eq(NodeEvidence::getNodeId, fromNodeId)
                 .list();
+        if (nodeEvidences.isEmpty()) return;
+
+        List<EdgeEvidence> batch = new ArrayList<>(nodeEvidences.size());
         for (NodeEvidence ne : nodeEvidences) {
             EdgeEvidence ee = new EdgeEvidence();
             ee.setId(UUID.randomUUID().toString());
@@ -370,6 +377,9 @@ public class EvidenceGraphWriter {
             ee.setEvidenceId(ne.getEvidenceId());
             ee.setRelationType(EvidenceRole.INHERITED.name());
             ee.setCreatedAt(LocalDateTime.now());
+            batch.add(ee);
+        }
+        for (EdgeEvidence ee : batch) {
             edgeEvidenceRepository.insert(ee);
         }
     }

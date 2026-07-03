@@ -3,15 +3,15 @@ package io.github.legacygraph.extractors.adapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.repository.FactRepository;
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -21,17 +21,17 @@ import static org.mockito.Mockito.*;
  * 验证 Fact 持久化助手将抽取事实正确入库。
  */
 @ExtendWith(MockitoExtension.class)
-@Disabled("子代理自动生成，Mock 需要微调")
 class FactPersisterTest {
 
     @Mock
     private FactRepository factRepository;
 
-    @Mock
-    private ObjectMapper objectMapper;
-
-    @InjectMocks
     private FactPersister persister;
+
+    @BeforeEach
+    void setUp() {
+        persister = new FactPersister(factRepository, new ObjectMapper());
+    }
 
     /**
      * 测试 saveFact 构造 Fact 并调用 upsert。
@@ -94,5 +94,51 @@ class FactPersisterTest {
                 "project-1", "v1", "DOC", "DOC",
                 "key", "name", "/path", null, null,
                 "data", BigDecimal.ONE, "EXTRACTED"));
+    }
+
+    @Test
+    void saveFacts_batchesDraftsInOneRepositoryCall() {
+        when(factRepository.batchUpsert(anyList())).thenReturn(2);
+
+        persister.saveFacts(List.of(
+                FactPersister.FactDraft.builder()
+                        .projectId("project-1")
+                        .versionId("v1")
+                        .sourceType("CODE_AST")
+                        .factType("SERVICE_CALL")
+                        .factKey("OrderService.create")
+                        .factName("OrderService -> OrderMapper.insert")
+                        .sourcePath("OrderService.java")
+                        .startLine(10)
+                        .endLine(10)
+                        .data("call-1")
+                        .confidence(BigDecimal.ONE)
+                        .status("EXTRACTED")
+                        .build(),
+                FactPersister.FactDraft.builder()
+                        .projectId("project-1")
+                        .versionId("v1")
+                        .sourceType("CODE_AST")
+                        .factType("SERVICE_CALL")
+                        .factKey("OrderService.update")
+                        .factName("OrderService -> OrderMapper.update")
+                        .sourcePath("OrderService.java")
+                        .startLine(20)
+                        .endLine(20)
+                        .data("call-2")
+                        .confidence(null)
+                        .status("EXTRACTED")
+                        .build()));
+
+        ArgumentCaptor<List<Fact>> captor = ArgumentCaptor.forClass(List.class);
+        verify(factRepository).batchUpsert(captor.capture());
+        verify(factRepository, never()).upsert(any(Fact.class));
+
+        List<Fact> facts = captor.getValue();
+        assertEquals(2, facts.size());
+        assertEquals("project-1", facts.get(0).getProjectId());
+        assertEquals("SERVICE_CALL", facts.get(0).getFactType());
+        assertEquals(0.0, facts.get(1).getConfidence());
+        assertNotNull(facts.get(0).getNormalizedData());
     }
 }

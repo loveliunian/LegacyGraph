@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -83,6 +84,7 @@ class FullPipelineIntegrationTest {
                 new com.fasterxml.jackson.databind.ObjectMapper();
         factPersister = new FactPersister(factRepository, objectMapper);
         lenient().when(factRepository.upsert(any(Fact.class))).thenReturn(1);
+        lenient().when(factRepository.batchUpsert(anyList())).thenReturn(1);
 
         // 构建 Adapter Registry（注册所有真实适配器）
         adapterRegistry = new ExtractionAdapterRegistry(List.of(
@@ -478,11 +480,15 @@ class FullPipelineIntegrationTest {
         var xmlAdapter = adapterRegistry.selectAdapter(ctx, xmlAsset).orElseThrow();
         xmlAdapter.extract(ctx, xmlAsset);
 
-        // 验证 FactRepository.upsert 被调用了
+        // 验证单条和批量 Fact 写入都被调用：
+        // JavaServiceCallAdapter 走 batchUpsert，MyBatisXmlAdapter 保留 upsert。
         ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
         verify(factRepository, atLeast(1)).upsert(factCaptor.capture());
+        ArgumentCaptor<List<Fact>> batchFactCaptor = ArgumentCaptor.forClass(List.class);
+        verify(factRepository, atLeast(1)).batchUpsert(batchFactCaptor.capture());
 
-        List<Fact> facts = factCaptor.getAllValues();
+        List<Fact> facts = new ArrayList<>(factCaptor.getAllValues());
+        batchFactCaptor.getAllValues().forEach(facts::addAll);
 
         // 验证基本字段
         assertFalse(facts.isEmpty(), "至少应有 1 条 Fact 被持久化");

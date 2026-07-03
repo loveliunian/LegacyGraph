@@ -24,6 +24,12 @@ public class ScanTask {
     private String outputSummary; // JSONB
     private String errorMessage;
     private Integer retryCount;
+    /** 本阶段需要处理的项总数（如文件数、数据库连接数等） */
+    private Integer totalItems;
+    /** 本阶段已处理的项数 */
+    private Integer processedItems;
+    /** 当前正在处理的项名称（文件路径、表名等） */
+    private String currentItem;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
 

@@ -276,6 +276,7 @@ import {
 } from '@element-plus/icons-vue'
 import { graphApi, reviewApi, factApi } from '@/api'
 import { loadScanVersions } from '@/utils/versionsCache'
+import { dictLabel } from '@/utils/dict'
 import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
 import EvidencePanel from '@/components/EvidencePanel.vue'
 import type { Node, Edge } from '@vue-flow/core'
@@ -419,20 +420,7 @@ function getTagType(type?: string): string {
 }
 
 function getTypeLabel(type?: string): string {
-  const labelMap: Record<string, string> = {
-    BusinessDomain: '业务域',
-    BusinessProcess: '业务流程',
-    FeatureModule: '功能模块',
-    Feature: '功能点',
-    ApiEndpoint: 'API接口',
-    Controller: 'Controller',
-    Service: 'Service',
-    Mapper: 'Mapper',
-    SqlStatement: 'SQL语句',
-    Table: '数据库表',
-    Column: '字段'
-  }
-  return labelMap[type || ''] || type || '未知'
+  return dictLabel('graph_node_type', type || '')
 }
 
 function getStatusType(status?: string): string {
@@ -446,13 +434,7 @@ function getStatusType(status?: string): string {
 }
 
 function getStatusLabel(status?: string): string {
-  const group = normalizeStatusGroup(status)
-  const labelMap: Record<string, string> = {
-    approved: '已通过',
-    pending: '待审核',
-    rejected: '已拒绝'
-  }
-  return labelMap[group] || '未知'
+  return dictLabel('review_status', status || '')
 }
 
 function normalizeStatusGroup(status?: string): string {

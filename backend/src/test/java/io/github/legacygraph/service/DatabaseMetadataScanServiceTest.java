@@ -1,8 +1,10 @@
 package io.github.legacygraph.service;
 
 import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.entity.DbConnection;
 import io.github.legacygraph.extractors.DatabaseConstraintExtractor;
 import io.github.legacygraph.extractors.DatabaseMetadataExtractor.TableMetadata;
+import io.github.legacygraph.repository.DbConnectionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +36,9 @@ class DatabaseMetadataScanServiceTest {
 
     @Mock
     private DatabaseConstraintExtractor databaseConstraintExtractor;
+
+    @Mock
+    private DbConnectionRepository dbConnectionRepository;
 
     @Mock
     private DataSource mockDataSource;
@@ -185,5 +190,28 @@ class DatabaseMetadataScanServiceTest {
         verify(databaseConstraintExtractor).extractForeignKeys(mockDataSource, null, "public");
         verify(databaseConstraintExtractor).extractIndexes(mockDataSource, null, "public");
         verify(graphBuilder).buildDatabaseConstraintGraph("proj-1", "v1", "public", List.of(fk), List.of(idx));
+    }
+
+    @Test
+    void testScan_WhenSchemaFingerprintUnchanged_SkipsGraphRebuild() throws Exception {
+        when(mockDataSource.getConnection()).thenReturn(mockConnection);
+        when(mockConnection.getMetaData()).thenReturn(mockMetaData);
+        when(mockMetaData.getTables(any(), any(), any(), any())).thenReturn(mockTablesResultSet);
+        when(mockTablesResultSet.next()).thenReturn(false);
+
+        DbConnection connection = new DbConnection();
+        connection.setId("db-1");
+        connection.setProjectId("proj-1");
+        connection.setSchemaName("public");
+        connection.setDbType("postgresql");
+        connection.setSchemaFingerprint("");
+
+        int count = databaseMetadataScanService.scan("proj-1", "v1", mockDataSource, connection);
+
+        assertEquals(0, count);
+        verify(graphBuilder, never()).buildDatabaseGraph(any(), any(), anyList());
+        verify(graphBuilder, never()).buildDatabaseConstraintGraph(any(), any(), any(), anyList(), anyList());
+        verify(databaseConstraintExtractor, never()).extractForeignKeys(any(), any(), any());
+        verify(databaseConstraintExtractor, never()).extractIndexes(any(), any(), any());
     }
 }

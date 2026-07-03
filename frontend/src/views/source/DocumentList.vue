@@ -48,7 +48,7 @@
       <el-table-column prop="parseStatus" label="解析状态" width="100">
         <template #default="{ row }">
           <el-tag size="small" :type="getParseStatusType(row.parseStatus)">
-            {{ row.parseStatus }}
+            {{ dictLabel('doc_parse_status', row.parseStatus) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -184,7 +184,10 @@ const getParseStatusType = (status: string): string => {
     PARSED: 'success',
     PARSING: 'warning',
     FAILED: 'danger',
-    UPLOADED: 'info'
+    PARSE_FAILED: 'danger',
+    UPLOADED: 'info',
+    DISCOVERED: '',
+    PENDING: 'info'
   }
   return map[status] || 'info'
 }
@@ -340,7 +343,7 @@ const handlePageChange = (page: number) => {
 }
 
 onMounted(async () => {
-  preloadDicts(['doc_type'])
+  preloadDicts(['doc_type', 'doc_parse_status'])
   await loadDocList()
 })
 </script>

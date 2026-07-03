@@ -199,14 +199,15 @@ public class TestCaseController {
 
         int totalGenerated = 0;
         for (GraphNode node : apiNodes) {
+            if (!"ApiEndpoint".equals(node.getNodeType())) continue;
             if (!targetTypes.contains(node.getNodeType())) continue;
 
             TestCaseAgent.TestGenerationRequest genReq = new TestCaseAgent.TestGenerationRequest();
             genReq.setProjectId(projectId);
             genReq.setFeatureKey(node.getNodeKey());
             genReq.setFeatureName(node.getNodeName());
-            genReq.setApiEndpoint(node.getNodeKey());
-            genReq.setHttpMethod("GET");
+            genReq.setApiEndpoint(extractApiEndpoint(node));
+            genReq.setHttpMethod(extractHttpMethod(node));
 
             List<GeneratedTestCase> generated = testCaseAgent.generateTestCases(genReq);
 
@@ -237,6 +238,33 @@ public class TestCaseController {
                 "status", "completed",
                 "generated", totalGenerated
         ));
+    }
+
+    static String extractHttpMethod(GraphNode node) {
+        if (node == null || node.getNodeKey() == null) {
+            return "GET";
+        }
+        String nodeKey = node.getNodeKey().trim();
+        int spaceIndex = nodeKey.indexOf(' ');
+        if (spaceIndex > 0) {
+            String method = nodeKey.substring(0, spaceIndex).trim();
+            if (method.matches("(?i)GET|POST|PUT|DELETE|PATCH")) {
+                return method.toUpperCase();
+            }
+        }
+        return "GET";
+    }
+
+    static String extractApiEndpoint(GraphNode node) {
+        if (node == null || node.getNodeKey() == null) {
+            return "";
+        }
+        String nodeKey = node.getNodeKey().trim();
+        int spaceIndex = nodeKey.indexOf(' ');
+        if (spaceIndex > 0 && nodeKey.substring(0, spaceIndex).matches("(?i)GET|POST|PUT|DELETE|PATCH")) {
+            return nodeKey.substring(spaceIndex + 1).trim();
+        }
+        return nodeKey;
     }
 
     @PostMapping("/test-cases/{id}/run")

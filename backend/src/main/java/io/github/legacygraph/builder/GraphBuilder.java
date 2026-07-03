@@ -47,7 +47,6 @@ public class GraphBuilder {
     /**
      * 构建API接口图谱
      */
-    @Transactional
     public List<GraphNode> buildApiNodes(String projectId, String versionId, List<ApiFact> apiFacts, String sourcePath) {
         List<GraphNode> nodes = new ArrayList<>();
 
@@ -103,7 +102,9 @@ public class GraphBuilder {
                     api.getStartLine(),
                     api.getEndLine(),
                     BigDecimal.ONE,
-                    NodeStatus.CONFIRMED
+                    NodeStatus.CONFIRMED,
+                    "CODE_SCAN",
+                    controllerNodeKey
             );
             nodes.add(methodNode);
 
@@ -163,7 +164,6 @@ public class GraphBuilder {
     /**
      * 构建Mapper和SQL图谱
      */
-    @Transactional
     public void buildMapperSqlGraph(String projectId, String versionId, MapperSqlFact mapperFact) {
         // 创建Mapper节点
         String mapperKey = mapperFact.getNamespace();
@@ -267,84 +267,75 @@ public class GraphBuilder {
     }
 
     /**
-     * 构建数据库表和字段图谱
+     * 构建数据库表和字段图谱。
+     * <p>使用批量 UNWIND MERGE 替代逐条 MERGE，将 1000+ 次 Neo4j 往返压缩为 ~5 次。</p>
      */
-    @Transactional
     public void buildDatabaseGraph(String projectId, String versionId,
             List<io.github.legacygraph.extractors.DatabaseMetadataExtractor.TableMetadata> tables) {
+        if (tables == null || tables.isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+        List<GraphEdge> allEdges = new ArrayList<>();
+
         for (var tableMeta : tables) {
             String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
-            GraphNode tableNode = findOrCreateNode(
-                    projectId, versionId,
-                    NodeType.Table.name(),
-                    tableKey,
-                    tableMeta.getTableName(),
-                    tableMeta.getTableName(),
-                    tableMeta.getTableComment(),
-                    SourceType.DB_METADATA.name(),
-                    null,
-                    null,
-                    null,
-                    BigDecimal.ONE,
-                    NodeStatus.CONFIRMED
-            );
+            String tableId = UUID.randomUUID().toString();
 
-            // 创建字段节点
+            // 表节点
+            GraphNode tableNode = buildNode(projectId, versionId, tableId,
+                    NodeType.Table.name(), tableKey, tableMeta.getTableName(),
+                    tableMeta.getTableName(), tableMeta.getTableComment(),
+                    SourceType.DB_METADATA.name(), null, BigDecimal.ONE, NodeStatus.CONFIRMED,
+                    "DATABASE_SCAN");
+            allNodes.add(tableNode);
+
+            // 字段节点 + HAS_COLUMN 边
             for (var colMeta : tableMeta.getColumns()) {
                 String colKey = tableKey + "." + colMeta.getColumnName();
-                GraphNode colNode = findOrCreateNode(
-                        projectId, versionId,
-                        NodeType.Column.name(),
-                        colKey,
-                        colMeta.getColumnName(),
-                        colMeta.getColumnName(),
-                        colMeta.getColumnComment(),
-                        SourceType.DB_METADATA.name(),
-                        null,
-                        null,
-                        null,
-                        BigDecimal.ONE,
-                        NodeStatus.CONFIRMED
-                );
+                String colId = UUID.randomUUID().toString();
 
-                // Table -HAS_COLUMN-> Column
-                createEdge(projectId, versionId,
-                        tableNode.getId(), colNode.getId(),
+                GraphNode colNode = buildNode(projectId, versionId, colId,
+                        NodeType.Column.name(), colKey, colMeta.getColumnName(),
+                        colMeta.getColumnName(), colMeta.getColumnComment(),
+                        SourceType.DB_METADATA.name(), null, BigDecimal.ONE, NodeStatus.CONFIRMED,
+                        "DATABASE_SCAN");
+                allNodes.add(colNode);
+
+                // HAS_COLUMN 边
+                allEdges.add(buildEdge(projectId, versionId,
+                        tableId, colId,
                         EdgeType.HAS_COLUMN.name(),
                         tableKey + "->has_column->" + colKey,
-                        SourceType.DB_METADATA.name(),
-                        BigDecimal.ONE,
-                        NodeStatus.CONFIRMED
-                );
+                        SourceType.DB_METADATA.name(), BigDecimal.ONE, NodeStatus.CONFIRMED));
 
-                // 如果推断为外键，添加 Table→Table REFERENCES 边
+                // 推断外键：Table→Table REFERENCES 边（保留逐条处理，量少且需查引用表）
                 if (Boolean.TRUE.equals(colMeta.getForeignKey()) && colMeta.getReferencedTableName() != null) {
-                    String refTableKey;
-                    if (tableMeta.getTableSchema() != null) {
-                        refTableKey = tableMeta.getTableSchema() + "." + colMeta.getReferencedTableName();
-                    } else {
-                        refTableKey = colMeta.getReferencedTableName();
-                    }
+                    String refTableKey = tableMeta.getTableSchema() != null
+                            ? tableMeta.getTableSchema() + "." + colMeta.getReferencedTableName()
+                            : colMeta.getReferencedTableName();
                     GraphNode refTable = findOrCreateTableNode(projectId, versionId, colMeta.getReferencedTableName());
-                    // 创建表间外键引用边（FK: 当前表 → 引用表）
                     String fkEdgeKey = tableKey + "->references->" + refTableKey + "." + colMeta.getColumnName();
                     createEdge(projectId, versionId,
-                            tableNode.getId(), refTable.getId(),
+                            tableId, refTable.getId(),
                             EdgeType.REFERENCES.name(),
                             fkEdgeKey,
                             SourceType.DB_METADATA.name(),
                             BigDecimal.valueOf(0.9),
-                            NodeStatus.CONFIRMED
-                    );
+                            NodeStatus.CONFIRMED);
                 }
             }
         }
+
+        // 批量写入所有节点和边
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
+        log.info("Batch merged DB graph: {} nodes, {} edges (projectId={}, versionId={})",
+                nodeCount, edgeCount, projectId, versionId);
     }
 
     /**
      * 构建数据库真实约束图谱：外键、索引和唯一约束。
      */
-    @Transactional
     public void buildDatabaseConstraintGraph(String projectId, String versionId, String schema,
             List<DatabaseConstraintExtractor.ForeignKeyInfo> foreignKeys,
             List<DatabaseConstraintExtractor.IndexInfo> indexes) {
@@ -441,7 +432,8 @@ public class GraphBuilder {
             String displayName, String description,
             String sourceType, String sourcePath,
             Integer startLine, Integer endLine,
-            BigDecimal confidence, NodeStatus status) {
+            BigDecimal confidence, NodeStatus status,
+            String scanType, String className) {
         return writer.upsertNode(GraphNodeClaim.builder()
                 .projectId(projectId)
                 .versionId(versionId)
@@ -456,7 +448,23 @@ public class GraphBuilder {
                 .endLine(endLine)
                 .confidence(confidence)
                 .status(status != null ? status.name() : null)
+                .scanType(scanType)
+                .className(className)
                 .build());
+    }
+
+    /**
+     * 查找或创建节点（便捷方法，不带 scanType 和 className）
+     */
+    private GraphNode findOrCreateNode(String projectId, String versionId,
+            String nodeType, String nodeKey, String nodeName,
+            String displayName, String description,
+            String sourceType, String sourcePath,
+            Integer startLine, Integer endLine,
+            BigDecimal confidence, NodeStatus status) {
+        return findOrCreateNode(projectId, versionId, nodeType, nodeKey, nodeName,
+                displayName, description, sourceType, sourcePath,
+                startLine, endLine, confidence, status, null, null);
     }
 
     /**
@@ -532,20 +540,33 @@ public class GraphBuilder {
      * API路径归一化
      */
     public static String normalizeApiKey(String httpMethod, String path) {
-        return httpMethod + " " + normalizePath(path);
+        return httpMethod.toUpperCase() + " " + normalizePath(path);
     }
 
     /**
      * 归一化路径，将不同参数风格统一为 {param} 形式
      */
     public static String normalizePath(String path) {
-        // /user/:id -> /user/{id}
-        // /user/${id} -> /user/{id}
-        // /user/123 -> /user/{id} (无法确定参数名保持原样)
-        String normalized = path;
+        if (path == null) {
+            return "";
+        }
+        String normalized = path.trim();
+        int queryIndex = normalized.indexOf('?');
+        int hashIndex = normalized.indexOf('#');
+        int cutIndex = -1;
+        if (queryIndex >= 0 && hashIndex >= 0) {
+            cutIndex = Math.min(queryIndex, hashIndex);
+        } else if (queryIndex >= 0) {
+            cutIndex = queryIndex;
+        } else if (hashIndex >= 0) {
+            cutIndex = hashIndex;
+        }
+        if (cutIndex >= 0) {
+            normalized = normalized.substring(0, cutIndex);
+        }
         normalized = normalized.replaceAll("/:[^/]+", "/{id}");
         normalized = normalized.replaceAll("/\\$\\{[^}]+\\}", "/{id}");
-        // 数字路径段保留，不做归一化，因为可能不是参数
+        normalized = normalized.replaceAll("\\{[^}/]+\\}", "{id}");
         return normalized;
     }
 
@@ -600,7 +621,9 @@ public class GraphBuilder {
                         methodInfo.getStartLine(),
                         methodInfo.getEndLine(),
                         BigDecimal.ONE,
-                        NodeStatus.CONFIRMED
+                        NodeStatus.CONFIRMED,
+                        "CODE_SCAN",
+                        classInfo.getQualifiedName()
                 );
                 nodes.add(methodNode);
                 createEdge(projectId, versionId,
@@ -932,5 +955,53 @@ public class GraphBuilder {
             }
         }
         return map;
+    }
+
+    // ==================== 批量写入辅助方法 ====================
+
+    /** 构建节点 POJO（不写 Neo4j），供批量 mergeNodesBatch 使用 */
+    private GraphNode buildNode(String projectId, String versionId, String nodeId,
+            String nodeType, String nodeKey, String nodeName,
+            String displayName, String description,
+            String sourceType, String sourcePath,
+            BigDecimal confidence, NodeStatus status, String scanType) {
+        GraphNode node = new GraphNode();
+        node.setId(nodeId);
+        node.setProjectId(projectId);
+        node.setVersionId(versionId);
+        node.setNodeType(nodeType);
+        node.setNodeKey(nodeKey);
+        node.setNodeName(nodeName);
+        node.setDisplayName(displayName);
+        node.setDescription(description);
+        node.setSourceType(sourceType);
+        node.setSourcePath(sourcePath);
+        node.setConfidence(confidence);
+        node.setStatus(status != null ? status.name() : null);
+        node.setScanType(scanType != null ? scanType : "");
+        node.setCreatedAt(LocalDateTime.now());
+        node.setUpdatedAt(LocalDateTime.now());
+        return node;
+    }
+
+    /** 构建边 POJO（不写 Neo4j），供批量 mergeEdgesBatch 使用 */
+    private GraphEdge buildEdge(String projectId, String versionId,
+            String fromNodeId, String toNodeId,
+            String edgeType, String edgeKey,
+            String sourceType, BigDecimal confidence, NodeStatus status) {
+        GraphEdge edge = new GraphEdge();
+        edge.setId(UUID.randomUUID().toString());
+        edge.setProjectId(projectId);
+        edge.setVersionId(versionId);
+        edge.setFromNodeId(fromNodeId);
+        edge.setToNodeId(toNodeId);
+        edge.setEdgeType(edgeType);
+        edge.setEdgeKey(edgeKey);
+        edge.setSourceType(sourceType);
+        edge.setConfidence(confidence);
+        edge.setStatus(status != null ? status.name() : null);
+        edge.setCreatedAt(LocalDateTime.now());
+        edge.setUpdatedAt(LocalDateTime.now());
+        return edge;
     }
 }

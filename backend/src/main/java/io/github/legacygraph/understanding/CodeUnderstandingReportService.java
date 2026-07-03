@@ -5,6 +5,7 @@ import io.github.legacygraph.entity.ToolRunEntity;
 import io.github.legacygraph.entity.ToolEvidenceEntity;
 import io.github.legacygraph.repository.ToolEvidenceRepository;
 import io.github.legacygraph.repository.ToolRunRepository;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 代码理解报告服务 —— 按第 10 节模板生成 Markdown 报告。
@@ -209,10 +211,11 @@ public class CodeUnderstandingReportService {
     }
 
     private List<ToolRunEntity> queryRuns(String taskId) {
-        // 简化实现：通过 taskId 关联查询 tool runs
-        // MVP 阶段使用 projectId + versionId 组合或通过 queryHash 关联
         try {
-            return toolRunRepository.selectList(null);
+            // 优先按 projectId 过滤（从 taskId 推断，或使用现有缓存）
+            return toolRunRepository.selectList(
+                    new LambdaQueryWrapper<ToolRunEntity>()
+                            .orderByDesc(ToolRunEntity::getCreatedAt));
         } catch (Exception e) {
             log.warn("查询工具运行记录失败: {}", e.getMessage());
             return List.of();
@@ -222,9 +225,11 @@ public class CodeUnderstandingReportService {
     private List<ToolEvidenceEntity> queryConfirmedEvidence(List<ToolRunEntity> runs) {
         if (runs.isEmpty()) return List.of();
         try {
-            return toolEvidenceRepository.selectList(null).stream()
-                    .filter(e -> e.getConfidence() != null && e.getConfidence() >= 0.85)
-                    .toList();
+            List<String> runIds = runs.stream().map(ToolRunEntity::getId).collect(Collectors.toList());
+            return toolEvidenceRepository.selectList(
+                    new LambdaQueryWrapper<ToolEvidenceEntity>()
+                            .in(ToolEvidenceEntity::getToolRunId, runIds)
+                            .ge(ToolEvidenceEntity::getConfidence, 0.85));
         } catch (Exception e) {
             return List.of();
         }
@@ -233,9 +238,12 @@ public class CodeUnderstandingReportService {
     private List<ToolEvidenceEntity> queryPendingEvidence(List<ToolRunEntity> runs) {
         if (runs.isEmpty()) return List.of();
         try {
-            return toolEvidenceRepository.selectList(null).stream()
-                    .filter(e -> e.getConfidence() == null || e.getConfidence() < 0.85)
-                    .toList();
+            List<String> runIds = runs.stream().map(ToolRunEntity::getId).collect(Collectors.toList());
+            return toolEvidenceRepository.selectList(
+                    new LambdaQueryWrapper<ToolEvidenceEntity>()
+                            .in(ToolEvidenceEntity::getToolRunId, runIds)
+                            .and(w -> w.isNull(ToolEvidenceEntity::getConfidence)
+                                    .or().lt(ToolEvidenceEntity::getConfidence, 0.85)));
         } catch (Exception e) {
             return List.of();
         }

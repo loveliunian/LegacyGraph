@@ -4,6 +4,7 @@ import com.openai.client.OpenAIClientImpl;
 import com.openai.core.ClientOptions;
 import io.github.legacygraph.entity.LlmProvider;
 import io.github.legacygraph.service.LlmProviderService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
@@ -45,6 +46,7 @@ public class LlmConfig {
      */
     @Bean
     @Primary
+    @ConditionalOnMissingBean(EmbeddingModel.class)
     @Profile("!test")
     @DependsOn("flyway")
     public EmbeddingModel embeddingModel(LlmProviderService llmProviderService) {
