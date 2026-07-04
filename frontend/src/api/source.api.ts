@@ -198,7 +198,7 @@ export const sourceApi = {
    * @returns 解析结果
    */
   parseDocument: (projectId: string, id: string) => {
-    return post<{ factCount: number }>(`/lg/projects/${projectId}/sources/documents/${id}/parse`)
+    return post<{ factCount: number; chunkCount?: number; success?: boolean; message?: string }>(`/lg/projects/${projectId}/sources/documents/${id}/parse`)
   },
 
   /**

@@ -92,27 +92,45 @@ public class SemanticCache {
         try {
             // 1. 计算问题 embedding
             float[] embedding = vectorService.computeEmbedding(question);
+            if (embedding == null || embedding.length == 0) {
+                log.warn("Semantic cache store skipped: embedding unavailable for question='{}'",
+                    truncate(question, 50));
+                return;
+            }
 
-            // 2. 创建缓存条目
+            // 2. 转为 pgvector 文本格式 "[0.1,0.2,...]"
+            String embeddingStr = floatArrayToVectorLiteral(embedding);
+
+            // 3. 创建缓存条目
             SemanticCacheEntry entry = new SemanticCacheEntry();
             entry.setProjectId(projectId);
             entry.setQuestion(question);
             entry.setAnswer(answer);
             entry.setEvidence(evidence);
-            entry.setQuestionEmbedding(embedding);
+            entry.setQuestionEmbedding(embeddingStr);
             entry.setHitCount(0);
             entry.setCreatedAt(LocalDateTime.now());
             entry.setLastAccessAt(LocalDateTime.now());
 
-            // 3. 保存（会自动生成 ID 和向量索引）
+            // 4. 保存
             cacheRepository.insert(entry);
 
             log.info("Semantic cache stored: question='{}', answerLength={}",
                 truncate(question, 50), answer.length());
 
         } catch (Exception e) {
-            log.warn("Semantic cache store failed: {}", e.getMessage());
+            log.warn("Semantic cache store failed: {}", e.getMessage(), e);
         }
+    }
+
+    private String floatArrayToVectorLiteral(float[] floats) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < floats.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(floats[i]);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     /**

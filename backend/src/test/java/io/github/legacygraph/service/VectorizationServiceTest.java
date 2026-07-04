@@ -202,4 +202,22 @@ class VectorizationServiceTest {
 
         verify(vectorDocumentRepository, times(2)).insert(any(VectorDocument.class));
     }
+
+    @Test
+    void embedDocument_allowsSameSourceUriInDifferentVersion() {
+        String sourceUri = "/docs/design.md";
+        when(vectorDocumentRepository.countBySourceUriAndVersionId(sourceUri, "v2")).thenReturn(0);
+        when(embeddingModel.embed("设计文档")).thenReturn(new float[]{0.1f});
+        when(vectorDocumentRepository.insert(any(VectorDocument.class))).thenAnswer(inv -> {
+            inv.getArgument(0, VectorDocument.class).setId(2L);
+            return 1;
+        });
+
+        int stored = vectorizationService.embedDocument(
+                "1001", "v2", "DOC", sourceUri, "设计文档", 1000, 100, "model");
+
+        assertEquals(1, stored);
+        verify(vectorDocumentRepository).countBySourceUriAndVersionId(sourceUri, "v2");
+        verify(vectorDocumentRepository, never()).countBySourceUri(sourceUri);
+    }
 }

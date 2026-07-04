@@ -29,8 +29,8 @@ public class SemanticCacheEntry {
     /** 使用的证据（JSON） */
     private String evidence;
 
-    /** 问题 embedding（用于向量检索） */
-    private float[] questionEmbedding;
+    /** 问题 embedding（pgvector 文本格式 "[0.1,0.2,...]"，用于向量检索） */
+    private String questionEmbedding;
 
     /** 相似度分数（查询时填充） */
     private Double similarity;

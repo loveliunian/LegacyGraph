@@ -50,7 +50,11 @@ public class DocumentAdapter implements ExtractionAdapter {
                     .build();
         } catch (Exception e) {
             log.warn("DocumentAdapter failed for {}: {}", asset.getRelativePath(), e.getMessage());
-            return ExtractionResult.builder().processedAssets(1).summary("Document failed: " + e.getMessage()).build();
+            return ExtractionResult.builder()
+                    .processedAssets(0)
+                    .evidenceCount(0)
+                    .summary("Document failed: " + e.getMessage())
+                    .build();
         }
     }
 

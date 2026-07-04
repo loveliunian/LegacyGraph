@@ -377,6 +377,12 @@ const parseDoc = async (row: any) => {
     // 调用后端文档解析接口
     if (row.id) {
       const res = await sourceApi.parseDocument(projectId, row.id)
+      if (res?.success === false) {
+        row.parseStatus = 'PARSE_FAILED'
+        row.factCount = 0
+        ElMessage.error(res?.message || '解析失败')
+        return
+      }
       row.factCount = res?.factCount || 0
       row.parseStatus = 'PARSED'
       ElMessage.success(`解析完成，共抽取 ${row.factCount} 个事实`)
@@ -386,7 +392,7 @@ const parseDoc = async (row: any) => {
       ElMessage.success('解析完成')
     }
   } catch {
-    row.parseStatus = 'FAILED'
+    row.parseStatus = 'PARSE_FAILED'
     // 错误消息已由响应拦截器统一展示
   }
 }

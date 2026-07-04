@@ -18,6 +18,30 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
     List<VectorDocument> findByProjectAndVersionAndType(String projectId, String versionId, String chunkType);
 
     /**
+     * 根据 sourceUri 查找已向量化的文档
+     */
+    @Select("SELECT * FROM lg_vector_document WHERE source_uri = #{sourceUri} LIMIT 1")
+    VectorDocument findBySourceUri(String sourceUri);
+
+    /**
+     * 统计某个 sourceUri 的向量化记录数
+     */
+    @Select("SELECT COUNT(*) FROM lg_vector_document WHERE source_uri = #{sourceUri}")
+    int countBySourceUri(String sourceUri);
+
+    /**
+     * 统计某个扫描版本内 sourceUri 的向量化记录数
+     */
+    @Select("SELECT COUNT(*) FROM lg_vector_document WHERE source_uri = #{sourceUri} AND version_id = #{versionId}")
+    int countBySourceUriAndVersionId(@Param("sourceUri") String sourceUri, @Param("versionId") String versionId);
+
+    /**
+     * 删除某个 sourceUri 的所有向量化记录
+     */
+    @org.apache.ibatis.annotations.Delete("DELETE FROM lg_vector_document WHERE source_uri = #{sourceUri}")
+    int deleteBySourceUri(String sourceUri);
+
+    /**
      * 使用 pgvector 余弦相似度查找相似文档（带类型过滤）
      * 注意：embedding 列是 vector 类型，由 Spring AI pgvector 自动处理
      * 这里使用原生 SQL 执行余弦相似度查询，distance 越小越相似

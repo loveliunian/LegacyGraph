@@ -64,6 +64,17 @@ public class ProjectService {
     private final PrTaskRepository prTaskRepository;
     private final PatchFileRepository patchFileRepository;
     private final ValidationGateRepository validationGateRepository;
+    private final AiScanJobRepository aiScanJobRepository;
+    private final EvidenceConflictRepository evidenceConflictRepository;
+    private final GraphWriteIntentRepository graphWriteIntentRepository;
+    private final NotificationRepository notificationRepository;
+    private final QaConversationRepository qaConversationRepository;
+    private final QaFeedbackRepository qaFeedbackRepository;
+    private final SemanticCacheRepository semanticCacheRepository;
+    private final SourceAssetSnapshotRepository sourceAssetSnapshotRepository;
+    private final ToolRunRepository toolRunRepository;
+    private final QaMessageRepository qaMessageRepository;
+    private final ToolEvidenceRepository toolEvidenceRepository;
     private final GraphCacheInvalidator graphCacheInvalidator;
     private final ScanVersionService scanVersionService;
 
@@ -101,6 +112,17 @@ public class ProjectService {
                           PrTaskRepository prTaskRepository,
                           PatchFileRepository patchFileRepository,
                           ValidationGateRepository validationGateRepository,
+                          AiScanJobRepository aiScanJobRepository,
+                          EvidenceConflictRepository evidenceConflictRepository,
+                          GraphWriteIntentRepository graphWriteIntentRepository,
+                          NotificationRepository notificationRepository,
+                          QaConversationRepository qaConversationRepository,
+                          QaFeedbackRepository qaFeedbackRepository,
+                          SemanticCacheRepository semanticCacheRepository,
+                          SourceAssetSnapshotRepository sourceAssetSnapshotRepository,
+                          ToolRunRepository toolRunRepository,
+                          QaMessageRepository qaMessageRepository,
+                          ToolEvidenceRepository toolEvidenceRepository,
                           GraphCacheInvalidator graphCacheInvalidator,
                           ScanVersionService scanVersionService) {
         this.projectRepository = projectRepository;
@@ -137,6 +159,17 @@ public class ProjectService {
         this.prTaskRepository = prTaskRepository;
         this.patchFileRepository = patchFileRepository;
         this.validationGateRepository = validationGateRepository;
+        this.aiScanJobRepository = aiScanJobRepository;
+        this.evidenceConflictRepository = evidenceConflictRepository;
+        this.graphWriteIntentRepository = graphWriteIntentRepository;
+        this.notificationRepository = notificationRepository;
+        this.qaConversationRepository = qaConversationRepository;
+        this.qaFeedbackRepository = qaFeedbackRepository;
+        this.semanticCacheRepository = semanticCacheRepository;
+        this.sourceAssetSnapshotRepository = sourceAssetSnapshotRepository;
+        this.toolRunRepository = toolRunRepository;
+        this.qaMessageRepository = qaMessageRepository;
+        this.toolEvidenceRepository = toolEvidenceRepository;
         this.graphCacheInvalidator = graphCacheInvalidator;
         this.scanVersionService = scanVersionService;
     }
@@ -276,20 +309,47 @@ public class ProjectService {
             reportRepository.delete(new QueryWrapper<Report>().eq("project_id", id));
         });
 
-        // 8. 向量/提示/本体
+        // 8. 向量/提示/本体/Agent（agent_run 引用 prompt_run，须先删 agent_run）
         CompletableFuture<Void> miscFuture = CompletableFuture.runAsync(() -> {
             vectorDocumentRepository.delete(new QueryWrapper<VectorDocument>().eq("project_id", id));
+            agentRunRepository.delete(new QueryWrapper<AgentRun>().eq("project_id", id));
             promptRunRepository.delete(new QueryWrapper<PromptRun>().eq("project_id", id));
             domainOntologyTermRepository.delete(new QueryWrapper<DomainOntologyTerm>().eq("project_id", id));
             domainOntologyRelationRepository.delete(new QueryWrapper<DomainOntologyRelation>().eq("project_id", id));
         });
 
-        // 9. 知识/缺口/风险/Agent
+        // 8.1 遗漏表：AI扫描任务/证据冲突/写意图/通知/QA/语义缓存/资产快照/工具运行
+        CompletableFuture<Void> extraFuture = CompletableFuture.runAsync(() -> {
+            aiScanJobRepository.delete(new QueryWrapper<AiScanJob>().eq("project_id", id));
+            evidenceConflictRepository.delete(new QueryWrapper<EvidenceConflict>().eq("project_id", id));
+            graphWriteIntentRepository.delete(new QueryWrapper<GraphWriteIntentEntity>().eq("project_id", id));
+            notificationRepository.delete(new QueryWrapper<Notification>().eq("project_id", id));
+            // QA 删除顺序：qa_feedback(FK→qa_message) → qa_message(FK→qa_conversation) → qa_conversation
+            List<QaConversation> conversations = qaConversationRepository.selectList(
+                    new QueryWrapper<QaConversation>().select("id").eq("project_id", id));
+            if (!conversations.isEmpty()) {
+                List<String> conversationIds = conversations.stream().map(QaConversation::getId).toList();
+                qaFeedbackRepository.delete(new QueryWrapper<QaFeedback>().eq("project_id", id));
+                qaMessageRepository.delete(new QueryWrapper<QaMessage>().in("conversation_id", conversationIds));
+            }
+            qaConversationRepository.delete(new QueryWrapper<QaConversation>().eq("project_id", id));
+            semanticCacheRepository.delete(new QueryWrapper<SemanticCacheEntry>().eq("project_id", id));
+            sourceAssetSnapshotRepository.delete(new QueryWrapper<SourceAssetSnapshot>().eq("project_id", id));
+            // 先删 tool_evidence（子表，FK→tool_run），再删 tool_run（父表）
+            List<ToolRunEntity> toolRuns = toolRunRepository.selectList(
+                    new QueryWrapper<ToolRunEntity>().select("id").eq("project_id", id));
+            if (!toolRuns.isEmpty()) {
+                List<String> toolRunIds = toolRuns.stream().map(ToolRunEntity::getId).toList();
+                toolEvidenceRepository.delete(new QueryWrapper<ToolEvidenceEntity>().in("tool_run_id", toolRunIds));
+            }
+            toolRunRepository.delete(new QueryWrapper<ToolRunEntity>().eq("project_id", id));
+        });
+
+        // 9. 知识/缺口/风险
         CompletableFuture<Void> kgFuture = CompletableFuture.runAsync(() -> {
             knowledgeClaimRepository.delete(new QueryWrapper<KnowledgeClaim>().eq("project_id", id));
             gapTaskRepository.delete(new QueryWrapper<GapTask>().eq("project_id", id));
             migrationRiskRepository.delete(new QueryWrapper<MigrationRisk>().eq("project_id", id));
-            agentRunRepository.delete(new QueryWrapper<AgentRun>().eq("project_id", id));
         });
 
         // 10. 变更管线（先查 ID 再批量删）
@@ -307,7 +367,7 @@ public class ProjectService {
 
         // 等待所有并行删除完成
         CompletableFuture.allOf(graphFuture, evidenceFuture, docFuture, testFuture,
-                auditFuture, miscFuture, kgFuture, changeFuture).join();
+                auditFuture, miscFuture, extraFuture, kgFuture, changeFuture).join();
 
         // 11. 项目级配置（可并行但依赖上面的变更管线结果）
         codeRepoRepository.delete(new QueryWrapper<CodeRepo>().eq("project_id", id));

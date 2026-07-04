@@ -212,10 +212,10 @@ public class VectorRetrievalService {
             return Optional.empty();
         }
         try {
-            List<Double> queryVec = floatArrayToDoubleList(queryEmbedding);
+            String embeddingStr = floatArrayToVectorLiteral(queryEmbedding);
             // 从语义缓存表中查找相似条目
             List<SemanticCacheEntry> candidates = semanticCacheRepository.findSimilar(
-                projectId, queryVec, 1, threshold
+                projectId, embeddingStr, 1, threshold
             );
             return candidates.isEmpty() ? Optional.empty() : Optional.of(candidates.get(0));
         } catch (Exception e) {
@@ -230,6 +230,16 @@ public class VectorRetrievalService {
             result.add((double) f);
         }
         return result;
+    }
+
+    private String floatArrayToVectorLiteral(float[] floats) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < floats.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(floats[i]);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     private String effectiveVersionId(String versionId) {

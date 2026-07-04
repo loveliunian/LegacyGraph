@@ -138,9 +138,12 @@ public class ScanScopeResolver {
      * 解析仓库范围，补全本地路径信息。
      */
     private List<ResolvedRepoScope> resolveRepos(String projectId, List<String> scopeRepoIds) {
+        if (scopeRepoIds != null && scopeRepoIds.isEmpty()) {
+            return List.of();
+        }
         LambdaQueryWrapper<CodeRepo> repoQuery = new LambdaQueryWrapper<CodeRepo>()
                 .eq(CodeRepo::getProjectId, projectId);
-        if (scopeRepoIds != null && !scopeRepoIds.isEmpty()) {
+        if (scopeRepoIds != null) {
             repoQuery.in(CodeRepo::getId, scopeRepoIds);
         }
         List<CodeRepo> repos = codeRepoRepository.selectList(repoQuery);
@@ -175,10 +178,13 @@ public class ScanScopeResolver {
      * 解析数据库范围（仅 READY 状态的连接）。
      */
     private List<ResolvedDbScope> resolveDatabases(String projectId, List<String> scopeDbIds) {
+        if (scopeDbIds != null && scopeDbIds.isEmpty()) {
+            return List.of();
+        }
         LambdaQueryWrapper<DbConnection> dbQuery = new LambdaQueryWrapper<DbConnection>()
                 .eq(DbConnection::getProjectId, projectId)
                 .eq(DbConnection::getStatus, "READY");
-        if (scopeDbIds != null && !scopeDbIds.isEmpty()) {
+        if (scopeDbIds != null) {
             dbQuery.in(DbConnection::getId, scopeDbIds);
         }
         List<DbConnection> connections = dbConnectionRepository.selectList(dbQuery);
@@ -202,9 +208,12 @@ public class ScanScopeResolver {
      * 解析文档范围。
      */
     private List<ResolvedDocScope> resolveDocuments(String projectId, List<String> scopeDocIds) {
+        if (scopeDocIds != null && scopeDocIds.isEmpty()) {
+            return List.of();
+        }
         LambdaQueryWrapper<Document> docQuery = new LambdaQueryWrapper<Document>()
                 .eq(Document::getProjectId, projectId);
-        if (scopeDocIds != null && !scopeDocIds.isEmpty()) {
+        if (scopeDocIds != null) {
             docQuery.in(Document::getId, scopeDocIds);
         }
         List<Document> docs = documentRepository.selectList(docQuery);

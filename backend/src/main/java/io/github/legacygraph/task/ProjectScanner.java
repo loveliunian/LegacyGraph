@@ -266,37 +266,75 @@ public class ProjectScanner {
                 }
             }
 
+            // ⚡ DB 连接状态快照：扫描开始前固定 READY 连接列表，扫描期间不受状态变化影响
+            boolean shouldScanDb = scopeScanTypes == null || scopeScanTypes.isEmpty()
+                    || scopeScanTypes.contains("DB_SCAN");
+            List<DbConnection> dbConnectionSnapshot;
+            if (shouldScanDb) {
+                if (resolvedPlan != null && scopeDbIds != null && scopeDbIds.isEmpty()) {
+                    dbConnectionSnapshot = List.of();
+                } else {
+                    LambdaQueryWrapper<DbConnection> dbQuery = new LambdaQueryWrapper<DbConnection>()
+                            .eq(DbConnection::getProjectId, projectId)
+                            .eq(DbConnection::getStatus, "READY");
+                    if (scopeDbIds != null && !scopeDbIds.isEmpty()) {
+                        dbQuery.in(DbConnection::getId, scopeDbIds);
+                    }
+                    dbConnectionSnapshot = dbConnectionRepository.selectList(dbQuery);
+                }
+                log.info("DB connection snapshot: {} READY connections fixed at scan start for projectId={}, versionId={}",
+                        dbConnectionSnapshot.size(), projectId, versionId);
+            } else {
+                dbConnectionSnapshot = List.of();
+            }
+
             // 如果 baseDir 为空，从 scope 中指定的 repoIds 解析本地代码路径
             if (baseDir == null || baseDir.isBlank()) {
-                LambdaQueryWrapper<CodeRepo> baseRepoQuery = new LambdaQueryWrapper<CodeRepo>()
-                        .eq(CodeRepo::getProjectId, projectId);
-                if (scopeRepoIds != null && !scopeRepoIds.isEmpty()) {
-                    baseRepoQuery.in(CodeRepo::getId, scopeRepoIds);
-                }
-                List<CodeRepo> baseRepos = codeRepoRepository.selectList(baseRepoQuery);
-                if (!baseRepos.isEmpty()) {
-                    CodeRepo firstRepo = baseRepos.get(0);
-                    baseDir = firstRepo.getLocalPath();
-                    if (baseDir == null || baseDir.isBlank()) {
-                        baseDir = System.getProperty("user.home") + "/.legacygraph/repos/" + projectId + "/" + firstRepo.getId();
-                    }
+                if (resolvedPlan != null && resolvedPlan.getRepos() != null && !resolvedPlan.getRepos().isEmpty()) {
+                    ResolvedRepoScope firstRepo = resolvedPlan.getRepos().get(0);
+                    baseDir = firstRepo.getBaseDir();
                     log.info("Scan still running: projectId={}, versionId={}, detail=resolved baseDir from scope repos: {}",
                             projectId, versionId, baseDir);
+                } else if (resolvedPlan == null) {
+                    LambdaQueryWrapper<CodeRepo> baseRepoQuery = new LambdaQueryWrapper<CodeRepo>()
+                            .eq(CodeRepo::getProjectId, projectId);
+                    if (scopeRepoIds != null && !scopeRepoIds.isEmpty()) {
+                        baseRepoQuery.in(CodeRepo::getId, scopeRepoIds);
+                    }
+                    List<CodeRepo> baseRepos = codeRepoRepository.selectList(baseRepoQuery);
+                    if (!baseRepos.isEmpty()) {
+                        CodeRepo firstRepo = baseRepos.get(0);
+                        baseDir = firstRepo.getLocalPath();
+                        if (baseDir == null || baseDir.isBlank()) {
+                            baseDir = System.getProperty("user.home") + "/.legacygraph/repos/" + projectId + "/" + firstRepo.getId();
+                        }
+                        log.info("Scan still running: projectId={}, versionId={}, detail=resolved baseDir from scope repos: {}",
+                                projectId, versionId, baseDir);
+                    } else {
+                        log.warn("No code repo found for project {} and baseDir is null — code scanning will be skipped", projectId);
+                    }
                 } else {
                     log.warn("No code repo found for project {} and baseDir is null — code scanning will be skipped", projectId);
                 }
             }
 
             // 读取 CodeRepo 配置，按 scope 过滤，获取子路径和 include/exclude 规则
-            LambdaQueryWrapper<CodeRepo> repoQuery = new LambdaQueryWrapper<CodeRepo>()
-                    .eq(CodeRepo::getProjectId, projectId);
-            if (scopeRepoIds != null && !scopeRepoIds.isEmpty()) {
-                repoQuery.in(CodeRepo::getId, scopeRepoIds);
+            List<CodeRepo> repos = List.of();
+            if (resolvedPlan == null || (scopeRepoIds != null && !scopeRepoIds.isEmpty())) {
+                LambdaQueryWrapper<CodeRepo> repoQuery = new LambdaQueryWrapper<CodeRepo>()
+                        .eq(CodeRepo::getProjectId, projectId);
+                if (scopeRepoIds != null && !scopeRepoIds.isEmpty()) {
+                    repoQuery.in(CodeRepo::getId, scopeRepoIds);
+                }
+                repos = codeRepoRepository.selectList(repoQuery);
             }
-            List<CodeRepo> repos = codeRepoRepository.selectList(repoQuery);
             String backendDir = baseDir;
             String frontendDir = baseDir;
-            if (!repos.isEmpty() && baseDir != null) {
+            if (resolvedPlan != null && resolvedPlan.getRepos() != null && !resolvedPlan.getRepos().isEmpty()) {
+                ResolvedRepoScope repo = resolvedPlan.getRepos().get(0);
+                backendDir = repo.getBackendDir() != null && !repo.getBackendDir().isBlank() ? repo.getBackendDir() : baseDir;
+                frontendDir = repo.getFrontendDir() != null && !repo.getFrontendDir().isBlank() ? repo.getFrontendDir() : baseDir;
+            } else if (!repos.isEmpty() && baseDir != null) {
                 CodeRepo repo = repos.get(0);
                 if (repo.getBackendSubPath() != null && !repo.getBackendSubPath().isBlank()) {
                     backendDir = Paths.get(baseDir, repo.getBackendSubPath()).toString();
@@ -333,7 +371,10 @@ public class ProjectScanner {
                     || scopeScanTypes.contains("DOC_PARSE");
             if (shouldScanDocs) {
                 ScanTask docDiscoveryTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
-                int docCount = discoverDocuments(projectId, versionId, baseDir, docDiscoveryTask);
+                int docCount = attachPlanDocuments(projectId, versionId, resolvedPlan);
+                if (baseDir != null && !baseDir.isBlank()) {
+                    docCount += discoverDocuments(projectId, versionId, baseDir, docDiscoveryTask);
+                }
                 completeTask(docDiscoveryTask, "Discovered " + docCount + " documents", null);
                 log.info("Auto-discovered {} documents", docCount);
             } else {
@@ -343,12 +384,12 @@ public class ProjectScanner {
 
             if (isCancelled(versionId)) return;
 
-            // 0d. Adapter Registry 扫描：仅在 CODE_SCAN 已启用时执行代码结构抽取
+            // 0d. Adapter Registry 扫描：代码和文档抽取都通过 Adapter Registry 统一执行
             if (isCancelled(versionId)) return;
             boolean shouldScanCode = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("CODE_SCAN");
             int adapterCount = 0;
-            if (shouldScanCode) {
+            if (shouldScanCode || shouldScanDocs) {
                 log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
                         projectId, versionId);
                 ScanTask adapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
@@ -356,85 +397,77 @@ public class ProjectScanner {
                 completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
                 log.info("Adapter registry scan processed {} assets", adapterCount);
                 if (adapterCount > 0) {
-                    log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=completed by Adapter Registry ({} assets)",
+                    log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=completed by Adapter Registry ({} assets)",
                             projectId, versionId, adapterCount);
                 } else {
-                    log.warn("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=no supported source assets found by Adapter Registry",
+                    log.warn("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=no supported source assets found by Adapter Registry",
                             projectId, versionId);
                 }
             } else {
-                log.info("Scan still running: projectId={}, versionId={}, phase=CODE_SCAN, detail=skipped (CODE_SCAN not in scanTypes)",
+                log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=skipped (CODE_SCAN/DOC_PARSE not in scanTypes)",
                         projectId, versionId);
             }
 
             // 4. 扫描所有已配置数据库的元数据（按 scope 过滤）
             // 仅在未指定 scanTypes 或包含 DB_SCAN 时执行
             if (isCancelled(versionId)) return;
-            boolean shouldScanDb = scopeScanTypes == null || scopeScanTypes.isEmpty()
-                    || scopeScanTypes.contains("DB_SCAN");
             if (shouldScanDb) {
-            LambdaQueryWrapper<DbConnection> dbQuery = new LambdaQueryWrapper<DbConnection>()
-                    .eq(DbConnection::getProjectId, projectId)
-                    .eq(DbConnection::getStatus, "READY");
-            if (scopeDbIds != null && !scopeDbIds.isEmpty()) {
-                dbQuery.in(DbConnection::getId, scopeDbIds);
-            }
-            List<DbConnection> dbConnections = dbConnectionRepository.selectList(dbQuery);
+                List<DbConnection> dbConnections = dbConnectionSnapshot;
 
-            if (!dbConnections.isEmpty()) {
-                log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=scanning {} databases",
-                        projectId, versionId, dbConnections.size());
-                ScanTask dbTask = createTask(projectId, versionId, "DATABASE_SCAN", "数据库元数据扫描");
-                int totalTables = 0;
-                int processedConnections = 0;
-                logTaskProgress(dbTask, 0, dbConnections.size(), "database connections");
-                for (DbConnection conn : dbConnections) {
-                    if (isCancelled(versionId)) break;
-                    try {
-                        DataSource dataSource = createDataSource(conn);
-                        totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn);
-                    } catch (Exception e) {
-                        log.warn("Failed to scan database connection id={} host={}:{}/{} dbType={}: {}",
-                                conn.getId(), conn.getHost(), conn.getPort(),
-                                conn.getDatabaseName(), conn.getDbType(), e.getMessage());
-                    } finally {
-                        processedConnections++;
-                        logTaskProgress(dbTask, processedConnections, dbConnections.size(), "database connections");
-                    }
-                }
-                completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables + " tables", null);
-                log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables);
-
-                // LLM 语义增强：异步执行，不阻塞扫描主流程
-                if (totalTables > 0) {
-                    // 标记 AI 增强为 PENDING
-                    updateScanVersionAiStatus(versionId, "PENDING");
-                    CompletableFuture.runAsync(() -> {
+                if (!dbConnections.isEmpty()) {
+                    log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=scanning {} databases",
+                            projectId, versionId, dbConnections.size());
+                    ScanTask dbTask = createTask(projectId, versionId, "DATABASE_SCAN", "数据库元数据扫描");
+                    int totalTables = 0;
+                    int processedConnections = 0;
+                    logTaskProgress(dbTask, 0, dbConnections.size(), "database connections");
+                    for (DbConnection conn : dbConnections) {
+                        if (isCancelled(versionId)) break;
                         try {
-                            updateScanVersionAiStatus(versionId, "RUNNING");
-                            String schemaText = graphBuilder.buildDbSchemaSummary(projectId, versionId);
-                            if (schemaText != null && !schemaText.isBlank()) {
-                                enrichDbGraphWithLLM(projectId, versionId, schemaText);
-                                updateScanVersionAiStatus(versionId, "COMPLETED");
-                                log.info("DB schema LLM enrichment completed: versionId={}", versionId);
-                            } else {
-                                updateScanVersionAiStatus(versionId, "SKIPPED");
-                                log.info("DB schema LLM enrichment skipped (empty schema): versionId={}", versionId);
-                            }
+                            DataSource dataSource = createDataSource(conn);
+                            totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn);
                         } catch (Exception e) {
-                            updateScanVersionAiStatus(versionId, "FAILED");
-                            log.warn("DB schema LLM enrichment failed (non-blocking): versionId={}, error={}", versionId, e.getMessage());
+                            log.warn("Failed to scan database connection id={} host={}:{}/{} dbType={}: {}",
+                                    conn.getId(), conn.getHost(), conn.getPort(),
+                                    conn.getDatabaseName(), conn.getDbType(), e.getMessage());
+                        } finally {
+                            processedConnections++;
+                            logTaskProgress(dbTask, processedConnections, dbConnections.size(), "database connections");
                         }
-                    });
-                    log.info("DB schema LLM enrichment dispatched asynchronously: versionId={}", versionId);
+                    }
+                    completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables + " tables", null);
+                    log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables);
+
+                    // LLM 语义增强：异步执行，不阻塞扫描主流程
+                    if (totalTables > 0) {
+                        // 标记 AI 增强为 PENDING
+                        updateScanVersionAiStatus(versionId, "PENDING");
+                        CompletableFuture.runAsync(() -> {
+                            try {
+                                updateScanVersionAiStatus(versionId, "RUNNING");
+                                String schemaText = graphBuilder.buildDbSchemaSummary(projectId, versionId);
+                                if (schemaText != null && !schemaText.isBlank()) {
+                                    enrichDbGraphWithLLM(projectId, versionId, schemaText);
+                                    updateScanVersionAiStatus(versionId, "COMPLETED");
+                                    log.info("DB schema LLM enrichment completed: versionId={}", versionId);
+                                } else {
+                                    updateScanVersionAiStatus(versionId, "SKIPPED");
+                                    log.info("DB schema LLM enrichment skipped (empty schema): versionId={}", versionId);
+                                }
+                            } catch (Exception e) {
+                                updateScanVersionAiStatus(versionId, "FAILED");
+                                log.warn("DB schema LLM enrichment failed (non-blocking): versionId={}, error={}", versionId, e.getMessage());
+                            }
+                        });
+                        log.info("DB schema LLM enrichment dispatched asynchronously: versionId={}", versionId);
+                    } else {
+                        updateScanVersionAiStatus(versionId, "SKIPPED");
+                        log.info("DB schema LLM enrichment skipped (no tables): versionId={}", versionId);
+                    }
                 } else {
-                    updateScanVersionAiStatus(versionId, "SKIPPED");
-                    log.info("DB schema LLM enrichment skipped (no tables): versionId={}", versionId);
+                    log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=no READY database connections found for project",
+                            projectId, versionId);
                 }
-            } else {
-                log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=no READY database connections found for project",
-                        projectId, versionId);
-            }
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=skipped (DB_SCAN not in scanTypes)",
                         projectId, versionId);
@@ -1003,6 +1036,49 @@ public class ProjectScanner {
     }
 
     // ==================== 文档发现 ====================
+
+    private int attachPlanDocuments(String projectId, String versionId, ResolvedScanPlan resolvedPlan) {
+        if (resolvedPlan == null || resolvedPlan.getDocuments() == null || resolvedPlan.getDocuments().isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (ResolvedDocScope scopedDoc : resolvedPlan.getDocuments()) {
+            if (scopedDoc.getDocId() == null || scopedDoc.getDocId().isBlank()) {
+                continue;
+            }
+            try {
+                Document doc = documentRepository.selectById(scopedDoc.getDocId());
+                if (doc == null || !Objects.equals(projectId, doc.getProjectId())) {
+                    continue;
+                }
+                doc.setVersionId(versionId);
+                if (scopedDoc.getFilePath() != null && !scopedDoc.getFilePath().isBlank()) {
+                    doc.setFilePath(scopedDoc.getFilePath());
+                }
+                if ((doc.getDocName() == null || doc.getDocName().isBlank())
+                        && scopedDoc.getDocName() != null && !scopedDoc.getDocName().isBlank()) {
+                    doc.setDocName(scopedDoc.getDocName());
+                }
+                if (shouldMarkDocumentDiscovered(doc.getParseStatus())) {
+                    doc.setParseStatus("DISCOVERED");
+                }
+                doc.setUpdatedAt(LocalDateTime.now());
+                documentRepository.updateById(doc);
+                count++;
+            } catch (Exception e) {
+                log.debug("Skip selected document {}: {}", scopedDoc.getDocId(), e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    private boolean shouldMarkDocumentDiscovered(String parseStatus) {
+        return parseStatus == null
+                || parseStatus.isBlank()
+                || "UPLOADED".equals(parseStatus)
+                || "FAILED".equals(parseStatus)
+                || "PARSE_FAILED".equals(parseStatus);
+    }
 
     /**
      * 自动发现代码仓库中的文档文件，创建 Document 记录。

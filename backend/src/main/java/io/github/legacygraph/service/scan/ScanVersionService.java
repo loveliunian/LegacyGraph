@@ -187,6 +187,14 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
      * 返回增强的进度信息：各阶段总项数/已处理数、当前处理项、预估剩余时间、
      * 阶段顺序与当前阶段索引。
      * </p>
+     * <p>
+     * ETA 算法改进：
+     * 1. 浮点除法替代整数除法，慢速场景不再得 0
+     * 2. 最小样本保护：处理不到 3 项时显示"计算中"
+     * 3. 历史基准：利用同项目已完成扫描的平均每项耗时
+     * 4. 混合加权：实时速率与历史基准按样本量加权
+     * 5. 后续阶段 ETA：历史均值替代固定 30s 兜底
+     * </p>
      */
     public ScanProgressResponse getScanProgress(String versionId) {
         String cacheKey = PROGRESS_KEY + versionId;
@@ -203,6 +211,8 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         LambdaQueryWrapper<ScanTask> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ScanTask::getVersionId, versionId);
         List<ScanTask> tasks = scanTaskRepository.selectList(wrapper);
+
+        String projectId = version.getProjectId();
 
         // 构建所有阶段的完整列表（含 PENDING 阶段）
         List<ScanPhase> allPhases = ScanPhaseRegistry.getAllPhases();
@@ -232,19 +242,13 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 tp.setStartedAt(task.getStartedAt());
                 tp.setFinishedAt(task.getFinishedAt());
 
-                // 计算本阶段 ETA
+                // 计算本阶段 ETA（混合算法：实时速率 + 历史基准）
                 if ("RUNNING".equals(task.getTaskStatus())
                         && task.getTotalItems() != null && task.getTotalItems() > 0
                         && task.getProcessedItems() != null && task.getProcessedItems() > 0
                         && task.getStartedAt() != null) {
-                    long elapsedSeconds = Duration.between(task.getStartedAt(), LocalDateTime.now()).getSeconds();
-                    if (elapsedSeconds > 0) {
-                        long itemsPerSecond = task.getProcessedItems() / elapsedSeconds;
-                        if (itemsPerSecond > 0) {
-                            int remaining = task.getTotalItems() - task.getProcessedItems();
-                            tp.setEstimatedSecondsRemaining(remaining / itemsPerSecond);
-                        }
-                    }
+                    tp.setEstimatedSecondsRemaining(
+                            computeBlendedEta(projectId, task));
                 } else {
                     tp.setEstimatedSecondsRemaining(-1L);
                 }
@@ -279,17 +283,18 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
             progress = 100;
         }
 
-        // 整体 ETA：取当前运行阶段的预估剩余时间，加上后续阶段的经验时间
+        // 整体 ETA：取当前运行阶段的预估剩余时间，加上后续阶段的历史均值（无历史时兜底 30s）
         Long overallEta = -1L;
         if (currentPhaseIndex >= 0 && currentPhaseIndex < taskProgressList.size()) {
             ScanProgressResponse.TaskProgress currentTp = taskProgressList.get(currentPhaseIndex);
             if (currentTp.getEstimatedSecondsRemaining() != null && currentTp.getEstimatedSecondsRemaining() > 0) {
                 overallEta = currentTp.getEstimatedSecondsRemaining();
-                // 加上后续未开始阶段的粗略预估（每阶段 30s 兜底）
+                // 加上后续未开始阶段的历史均值预估
                 for (int i = currentPhaseIndex + 1; i < taskProgressList.size(); i++) {
                     ScanProgressResponse.TaskProgress tp = taskProgressList.get(i);
                     if ("PENDING".equals(tp.getStatus())) {
-                        overallEta += 30;
+                        Double avgDuration = getHistoricalPhaseDuration(projectId, tp.getTaskType());
+                        overallEta += avgDuration != null ? Math.round(avgDuration) : 30;
                     }
                 }
             }
@@ -304,6 +309,130 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 || "CANCELLED".equals(version.getScanStatus());
         cacheService.put(cacheKey, response, terminal ? TERMINAL_TTL : RUNNING_TTL);
         return response;
+    }
+
+    // ==================== ETA 预估算法 ====================
+
+    /** 最小样本数：处理不到此数量时不显示实时 ETA（数据不稳定） */
+    private static final int MIN_SAMPLE_FOR_REALTIME = 3;
+    /** 历史基准查询的最大样本数 */
+    private static final int HISTORY_SAMPLE_LIMIT = 5;
+    /** 后续阶段无历史时的默认兜底时间（秒） */
+    private static final long DEFAULT_PHASE_FALLBACK_SECONDS = 30;
+
+    /**
+     * 混合 ETA 计算：实时速率 + 历史基准加权。
+     * <p>
+     * 权重策略：已处理项数越多，越信任实时数据。
+     * processed=3 → 实时权重 0.12, processed=10 → 0.4, processed=25+ → 0.9
+     * </p>
+     *
+     * @param projectId 项目 ID（用于查历史基准）
+     * @param task      当前运行中的子任务
+     * @return 预估剩余秒数，-1 表示无法预估
+     */
+    private long computeBlendedEta(String projectId, ScanTask task) {
+        double elapsedSeconds = Duration.between(task.getStartedAt(), LocalDateTime.now()).toMillis() / 1000.0;
+        int processed = task.getProcessedItems();
+        int remaining = task.getTotalItems() - processed;
+
+        // 实时速率（浮点除法，解决慢速场景）
+        double currentRate = elapsedSeconds > 0 ? processed / elapsedSeconds : 0; // items/sec
+        long realtimeEta = currentRate > 0.001 ? Math.round(remaining / currentRate) : -1;
+
+        // 历史基准
+        Double histSecPerItem = getHistoricalSecondsPerItem(projectId, task.getTaskType());
+        long histEta = histSecPerItem != null ? Math.round(remaining * histSecPerItem) : -1;
+
+        // 混合加权
+        if (processed < MIN_SAMPLE_FOR_REALTIME) {
+            // 样本不足：优先用历史，无历史则不显示
+            return histEta > 0 ? histEta : -1;
+        }
+
+        if (realtimeEta > 0 && histEta > 0) {
+            // 两者都有：按样本量加权
+            double realtimeWeight = Math.min(0.9, processed / 25.0);
+            double histWeight = 1.0 - realtimeWeight;
+            return Math.round(realtimeEta * realtimeWeight + histEta * histWeight);
+        } else if (realtimeEta > 0) {
+            return realtimeEta;
+        } else if (histEta > 0) {
+            return histEta;
+        }
+        return -1;
+    }
+
+    /**
+     * 查询同项目同类型历史任务的平均每项耗时（秒）。
+     * 取最近 N 次成功完成的任务，计算总耗时/总项数。
+     *
+     * @param projectId 项目 ID
+     * @param taskType  阶段类型（如 ADAPTER_SCAN）
+     * @return 平均每项耗时（秒），无历史数据时返回 null
+     */
+    private Double getHistoricalSecondsPerItem(String projectId, String taskType) {
+        try {
+            LambdaQueryWrapper<ScanTask> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(ScanTask::getProjectId, projectId)
+                    .eq(ScanTask::getTaskType, taskType)
+                    .eq(ScanTask::getTaskStatus, "SUCCESS")
+                    .isNotNull(ScanTask::getFinishedAt)
+                    .isNotNull(ScanTask::getStartedAt)
+                    .orderByDesc(ScanTask::getCreatedAt)
+                    .last("LIMIT " + HISTORY_SAMPLE_LIMIT);
+            List<ScanTask> history = scanTaskRepository.selectList(wrapper);
+
+            double totalSec = 0;
+            int totalItems = 0;
+            for (ScanTask t : history) {
+                long sec = Duration.between(t.getStartedAt(), t.getFinishedAt()).getSeconds();
+                int items = t.getProcessedItems() != null ? t.getProcessedItems() : 0;
+                if (items > 0 && sec > 0) {
+                    totalSec += sec;
+                    totalItems += items;
+                }
+            }
+            return totalItems > 0 ? totalSec / totalItems : null;
+        } catch (Exception e) {
+            log.debug("Failed to compute historical seconds per item for {}/{}: {}",
+                    projectId, taskType, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 查询同项目某阶段历史平均总耗时（秒）。
+     * 用于后续 PENDING 阶段的粗略预估。
+     *
+     * @param projectId 项目 ID
+     * @param taskType  阶段类型
+     * @return 平均总耗时（秒），无历史数据时返回 null
+     */
+    private Double getHistoricalPhaseDuration(String projectId, String taskType) {
+        try {
+            LambdaQueryWrapper<ScanTask> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(ScanTask::getProjectId, projectId)
+                    .eq(ScanTask::getTaskType, taskType)
+                    .eq(ScanTask::getTaskStatus, "SUCCESS")
+                    .isNotNull(ScanTask::getFinishedAt)
+                    .isNotNull(ScanTask::getStartedAt)
+                    .orderByDesc(ScanTask::getCreatedAt)
+                    .last("LIMIT " + HISTORY_SAMPLE_LIMIT);
+            List<ScanTask> history = scanTaskRepository.selectList(wrapper);
+
+            if (history.isEmpty()) {
+                return null;
+            }
+            return history.stream()
+                    .mapToDouble(t -> Duration.between(t.getStartedAt(), t.getFinishedAt()).getSeconds())
+                    .average()
+                    .orElse(DEFAULT_PHASE_FALLBACK_SECONDS);
+        } catch (Exception e) {
+            log.debug("Failed to compute historical phase duration for {}/{}: {}",
+                    projectId, taskType, e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -368,11 +497,7 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
             }
         });
 
-        // 6. 文档删除
-        CompletableFuture<Void> docFuture = CompletableFuture.runAsync(() -> {
-            docChunkRepository.delete(new QueryWrapper<DocChunk>().eq("version_id", versionId));
-            documentRepository.delete(new QueryWrapper<Document>().eq("version_id", versionId));
-        });
+        // 6. 文档和向量数据保留（删除扫描版本不清理文档和向量，文档属于项目级别资源）
 
         // 7. 测试数据删除
         CompletableFuture<Void> testFuture = CompletableFuture.runAsync(() -> {
@@ -398,7 +523,7 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
 
         // 等待所有并行删除完成
         CompletableFuture.allOf(graphFuture, factFuture, evidenceFuture,
-                docFuture, testFuture, auditFuture).join();
+                testFuture, auditFuture).join();
 
         // 9. 删除版本本身前，彻底清除所有相关缓存
         cacheService.evict(PROGRESS_KEY + versionId);

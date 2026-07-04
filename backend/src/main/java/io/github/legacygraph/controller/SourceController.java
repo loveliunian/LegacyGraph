@@ -18,6 +18,7 @@ import io.github.legacygraph.repository.DocChunkRepository;
 import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 import io.github.legacygraph.service.scan.ScanVersionService;
 import io.github.legacygraph.service.scan.SourceService;
+import io.github.legacygraph.service.qa.VectorizationService;
 import io.github.legacygraph.task.ProjectScanner;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -74,6 +75,7 @@ public class SourceController {
     private final ProjectScanner projectScanner;
     private final GraphCacheInvalidator graphCacheInvalidator;
     private final SourceService sourceService;
+    private final VectorizationService vectorizationService;
 
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -98,7 +100,8 @@ public class SourceController {
                             ScanVersionService scanVersionService,
                             ProjectScanner projectScanner,
                             GraphCacheInvalidator graphCacheInvalidator,
-                            SourceService sourceService) {
+                            SourceService sourceService,
+                            VectorizationService vectorizationService) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
@@ -107,6 +110,7 @@ public class SourceController {
         this.projectScanner = projectScanner;
         this.graphCacheInvalidator = graphCacheInvalidator;
         this.sourceService = sourceService;
+        this.vectorizationService = vectorizationService;
     }
 
     // ==================== 代码仓库 ====================
@@ -941,6 +945,73 @@ public class SourceController {
 
         documentRepository.insert(doc);
         graphCacheInvalidator.invalidateProjectOverview(projectId);
+
+        // 上传后自动触发解析和向量化
+        try {
+            // 解析文档：抽取文本并切片
+            DocumentExtractor extractor = new DocumentExtractor();
+            java.io.File uploadedFile = filePath.toFile();
+            String text = extractor.extractText(uploadedFile);
+
+            if (text != null && !text.isBlank()) {
+                doc.setParseStatus("PARSING");
+                documentRepository.updateById(doc);
+
+                // 切片并保存到数据库（批量插入，避免 N+1）
+                List<DocumentExtractor.DocumentChunk> chunks = extractor.chunkDocument(text, doc.getDocName(), 500);
+
+                // 收集所有切片后批量插入
+                List<io.github.legacygraph.entity.DocChunk> chunkEntities = new java.util.ArrayList<>();
+                for (DocumentExtractor.DocumentChunk chunk : chunks) {
+                    io.github.legacygraph.entity.DocChunk docChunk = new io.github.legacygraph.entity.DocChunk();
+                    docChunk.setProjectId(projectId);
+                    docChunk.setVersionId(doc.getVersionId());
+                    docChunk.setDocName(doc.getDocName());
+                    docChunk.setDocPath(doc.getFilePath());
+                    docChunk.setChunkIndex(chunk.getIndex());
+                    docChunk.setTitlePath(chunk.getTitlePath());
+                    docChunk.setContent(chunk.getContent());
+                    docChunk.setTokenCount(chunk.getTokenCount());
+                    chunkEntities.add(docChunk);
+                }
+                if (!chunkEntities.isEmpty()) {
+                    for (io.github.legacygraph.entity.DocChunk d : chunkEntities) {
+                        docChunkRepository.insert(d);
+                    }
+                }
+
+                // 向量化：调用 VectorizationService 对文档内容进行向量化
+                int vectorized = 0;
+                if (vectorizationService != null && vectorizationService.isAvailable()) {
+                    vectorized = vectorizationService.embedDocument(
+                        projectId,
+                        doc.getVersionId() != null ? doc.getVersionId() : "default",
+                        "DOC",
+                        doc.getFilePath(),
+                        text,
+                        1000,  // maxChars
+                        100,   // overlapChars
+                        "bge-m3"
+                    );
+                }
+
+                doc.setParseStatus("PARSED");
+                doc.setFactCount(chunks.size());
+                doc.setParsedAt(LocalDateTime.now());
+                doc.setUpdatedAt(LocalDateTime.now());
+                documentRepository.updateById(doc);
+
+                log.info("Document auto-parsed and vectorized: {}, {} chunks, {} vectors", 
+                         doc.getDocName(), chunks.size(), vectorized);
+            } else {
+                log.warn("Document extracted empty text, skip parsing: {}", doc.getDocName());
+            }
+        } catch (Exception e) {
+            doc.setParseStatus("PARSE_FAILED");
+            documentRepository.updateById(doc);
+            log.error("Auto parse/vectorize failed for document {}: {}", doc.getDocName(), e.getMessage(), e);
+        }
+
         return Result.success(doc.getId());
     }
 
@@ -1056,9 +1127,7 @@ public class SourceController {
                 doc.setParseStatus("PARSE_FAILED");
                 doc.setErrorMessage("文档缺少文件路径(filePath)，无法解析。请确认文档来源：上传文档或自动发现文档是否已正确记录路径。");
                 documentRepository.updateById(doc);
-                result.put("success", false);
-                result.put("message", doc.getErrorMessage());
-                return Result.success(result);
+                return Result.error(doc.getErrorMessage());
             }
 
             // 使用 DocumentExtractor 真实抽取文本并切片
@@ -1101,10 +1170,10 @@ public class SourceController {
             log.info("Document parsed successfully: {}, {} chunks", doc.getDocName(), chunks.size());
         } catch (Exception e) {
             doc.setParseStatus("PARSE_FAILED");
+            doc.setErrorMessage("解析失败: " + e.getMessage());
             documentRepository.updateById(doc);
-            result.put("success", false);
-            result.put("message", "解析失败: " + e.getMessage());
             log.error("Document parsing failed", e);
+            return Result.error(doc.getErrorMessage());
         }
 
         return Result.success(result);
@@ -1192,6 +1261,19 @@ public class SourceController {
         if (doc == null || !doc.getProjectId().equals(projectId)) {
             return Result.error("文档不存在");
         }
+        
+        // 删除文档相关的向量化记录
+        if (doc.getFilePath() != null) {
+            try {
+                int deletedVectors = vectorizationService.deleteBySourceUri(doc.getFilePath());
+                if (deletedVectors > 0) {
+                    log.info("Deleted {} vector records for document: {}", deletedVectors, doc.getDocName());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to delete vectors for document {}: {}", doc.getDocName(), e.getMessage());
+            }
+        }
+        
         documentRepository.deleteById(id);
         graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success();

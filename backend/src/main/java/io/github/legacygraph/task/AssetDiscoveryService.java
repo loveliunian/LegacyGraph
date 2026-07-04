@@ -1,7 +1,7 @@
 package io.github.legacygraph.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import io.github.legacygraph.dto.scan.ResolvedDocScope;
 import io.github.legacygraph.dto.scan.ResolvedScanPlan;
 import io.github.legacygraph.entity.SourceAssetSnapshot;
 import io.github.legacygraph.extractors.adapter.SourceAsset;
@@ -46,30 +46,102 @@ public class AssetDiscoveryService {
      * 发现代码和文档资产。
      */
     public List<SourceAsset> discoverAssets(ResolvedScanPlan plan) {
-        List<SourceAsset> assets = new ArrayList<>();
-        if (plan.getRepos() == null || plan.getRepos().isEmpty()) {
-            return assets;
+        Map<String, SourceAsset> assets = new LinkedHashMap<>();
+        boolean scanCode = shouldScanType(plan, "CODE_SCAN");
+        boolean scanDocs = shouldScanType(plan, "DOC_PARSE");
+
+        if (scanDocs) {
+            addExplicitDocumentAssets(plan, assets);
         }
 
-        for (var repo : plan.getRepos()) {
-            Path backendPath = Path.of(repo.getBackendDir());
-            Path frontendPath = Path.of(repo.getFrontendDir());
+        if (plan.getRepos() != null && !plan.getRepos().isEmpty()) {
+            for (var repo : plan.getRepos()) {
+                Path backendPath = Path.of(repo.getBackendDir());
+                Path frontendPath = Path.of(repo.getFrontendDir());
 
-            if (Files.exists(backendPath)) {
-                assets.addAll(walkAndBuildAssets(backendPath, backendPath, repo.getRepoId(), plan));
+                if (Files.exists(backendPath)) {
+                    addAssets(assets, walkAndBuildAssets(backendPath, scanCode, scanDocs));
+                }
+                if (!frontendPath.equals(backendPath) && Files.exists(frontendPath)) {
+                    addAssets(assets, walkAndBuildAssets(frontendPath, scanCode, scanDocs));
+                }
             }
-            if (!frontendPath.equals(backendPath) && Files.exists(frontendPath)) {
-                assets.addAll(walkAndBuildAssets(frontendPath, frontendPath, repo.getRepoId(), plan));
+        }
+
+        return limitAssets(new ArrayList<>(assets.values()), plan);
+    }
+
+    private void addExplicitDocumentAssets(ResolvedScanPlan plan, Map<String, SourceAsset> assets) {
+        if (plan.getDocuments() == null || plan.getDocuments().isEmpty()) {
+            return;
+        }
+        for (ResolvedDocScope doc : plan.getDocuments()) {
+            if (doc.getFilePath() == null || doc.getFilePath().isBlank()) {
+                continue;
+            }
+            Path file = Path.of(doc.getFilePath());
+            if (!Files.exists(file) || !Files.isRegularFile(file) || !hasSupportedExtension(file)) {
+                continue;
+            }
+            String relativePath = doc.getDocName() != null && !doc.getDocName().isBlank()
+                    ? doc.getDocName()
+                    : file.getFileName().toString();
+            SourceAsset asset = buildAsset(file, relativePath);
+            if ("DOC".equals(asset.getAssetKind())) {
+                assets.put(assetKey(asset), asset);
             }
         }
+    }
 
-        // 限制文件数量
-        if (assets.size() > plan.getMaxFiles()) {
-            log.warn("Asset count {} exceeds maxFiles limit {}, truncating", assets.size(), plan.getMaxFiles());
-            return assets.subList(0, plan.getMaxFiles());
+    private void addAssets(Map<String, SourceAsset> assets, List<SourceAsset> discovered) {
+        for (SourceAsset asset : discovered) {
+            assets.putIfAbsent(assetKey(asset), asset);
         }
+    }
 
-        return assets;
+    private List<SourceAsset> limitAssets(List<SourceAsset> assets, ResolvedScanPlan plan) {
+        int maxFiles = plan.getMaxFiles() > 0 ? plan.getMaxFiles() : Integer.MAX_VALUE;
+        int maxDocs = plan.getMaxDocs() > 0 ? plan.getMaxDocs() : Integer.MAX_VALUE;
+        List<SourceAsset> limited = new ArrayList<>();
+        int docCount = 0;
+
+        for (SourceAsset asset : assets) {
+            if ("DOC".equals(asset.getAssetKind())) {
+                docCount++;
+                if (docCount > maxDocs) {
+                    continue;
+                }
+            }
+            if (limited.size() >= maxFiles) {
+                break;
+            }
+            limited.add(asset);
+        }
+        if (assets.size() > limited.size()) {
+            log.warn("Asset count {} exceeds scan limits maxFiles={}, maxDocs={}, truncating",
+                    assets.size(), plan.getMaxFiles(), plan.getMaxDocs());
+        }
+        return limited;
+    }
+
+    private boolean shouldScanType(ResolvedScanPlan plan, String scanType) {
+        return plan.getScanTypes() == null
+                || plan.getScanTypes().isEmpty()
+                || plan.getScanTypes().contains(scanType);
+    }
+
+    private boolean shouldIncludeAsset(SourceAsset asset, boolean scanCode, boolean scanDocs) {
+        if ("DOC".equals(asset.getAssetKind())) {
+            return scanDocs;
+        }
+        return scanCode;
+    }
+
+    private String assetKey(SourceAsset asset) {
+        if (asset.getFile() != null) {
+            return asset.getFile().toAbsolutePath().normalize().toString();
+        }
+        return asset.getRelativePath();
     }
 
     /**
@@ -139,7 +211,7 @@ public class AssetDiscoveryService {
         return deletions;
     }
 
-    private List<SourceAsset> walkAndBuildAssets(Path root, Path basePath, String repoId, ResolvedScanPlan plan) {
+    private List<SourceAsset> walkAndBuildAssets(Path root, boolean scanCode, boolean scanDocs) {
         List<Path> paths;
         try (var stream = Files.walk(root)) {
             paths = stream
@@ -155,13 +227,15 @@ public class AssetDiscoveryService {
         List<SourceAsset> assets = new ArrayList<>(paths.size());
         for (Path p : paths) {
             String relativePath = root.relativize(p).toString();
-            SourceAsset asset = buildAsset(p, relativePath, repoId);
-            assets.add(asset);
+            SourceAsset asset = buildAsset(p, relativePath);
+            if (shouldIncludeAsset(asset, scanCode, scanDocs)) {
+                assets.add(asset);
+            }
         }
         return assets;
     }
 
-    private SourceAsset buildAsset(Path file, String relativePath, String repoId) {
+    private SourceAsset buildAsset(Path file, String relativePath) {
         String ext = getExtension(file);
         String assetKind = classifyAssetKind(ext, relativePath);
 

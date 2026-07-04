@@ -424,16 +424,32 @@ const nextStep = () => {
 const startScan = async () => {
   submitting.value = true
   try {
+    // 检测是否选择了 FULLSTACK 类型仓库
+    const hasFullstackRepo = repoList.value.some(
+      r => scanForm.repoIds.includes(r.id) && r.repoType === 'FULLSTACK'
+    )
+
+    // FULLSTACK 项目自动补全缺失的扫描类型，确保 DB 扫描和 AI 分析都能执行
+    let effectiveScanTypes = [...scanForm.scanTypes]
+    if (hasFullstackRepo) {
+      if (!effectiveScanTypes.includes('DB_SCAN')) {
+        effectiveScanTypes.push('DB_SCAN')
+      }
+      if (!effectiveScanTypes.includes('DOC_PARSE')) {
+        effectiveScanTypes.push('DOC_PARSE')
+      }
+    }
+
     const res: any = await scanApi.create(projectId, {
       versionNo: scanForm.taskName.replace(/[\s-]/g, '_'),
       branchName: 'main',
       // 将 AI 开关随 scanScope 传递给后端扫描后编排器
       scanScope: JSON.stringify({
-        scanTypes: scanForm.scanTypes,
+        scanTypes: effectiveScanTypes,
         repoIds: scanForm.repoIds,
         dbIds: scanForm.dbIds,
         docIds: scanForm.docIds,
-        enableAi: scanForm.enableAi,
+        enableAi: scanForm.enableAi || hasFullstackRepo,
         autoGenerateTestCase: scanForm.autoGenerateTestCase,
         minConfidence: scanForm.minConfidence
       })

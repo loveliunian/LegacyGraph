@@ -4,6 +4,15 @@ import { createPinia, setActivePinia } from 'pinia'
 
 config.global.renderStubDefaultSlot = false
 
+// 注册 v-loading 指令为空操作
+config.global.directives = {
+  loading: {
+    mounted() {},
+    updated() {},
+    unmounted() {}
+  }
+}
+
 beforeEach(() => {
   setActivePinia(createPinia())
 })
@@ -71,7 +80,6 @@ config.global.stubs = {
   'el-badge': { template: '<span class="el-badge"><slot /></span>' },
   'el-alert': true,
   'el-loading': true,
-  'v-loading': true,
   'el-message': true,
   'el-message-box': true,
   'el-notification': true,
@@ -115,7 +123,27 @@ config.global.stubs = {
   'el-link': { template: '<a class="el-link"><slot /></a>' },
   'el-input-number': true,
   'el-slider': true,
-  'el-checkbox-group': renderDefault
+  'el-checkbox-group': renderDefault,
+  'el-result': renderDefault,
+  'el-timeline': renderDefault,
+  'el-timeline-item': renderDefault,
+  'el-steps': renderDefault,
+  'el-step': renderDefault,
+  'el-sub-menu': renderDefault,
+  'el-breadcrumb': renderDefault,
+  'el-breadcrumb-item': renderDefault,
+  'el-popconfirm': renderDefault,
+  'el-color-picker': true,
+  'el-image': true,
+  'el-cascader': true,
+  'el-transfer': true,
+  'el-tree': true,
+  'el-autocomplete': true,
+  'el-rate': true,
+  'el-tour': true,
+  'el-tour-step': true,
+  'router-view': renderDefault,
+  'router-link': renderDefault
 }
 
 // Global mocks for $t (i18n) and common helpers
@@ -125,8 +153,6 @@ config.global.mocks = {
 }
 
 // Mock i18n
-config.global.plugins = []
-
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string) => key,

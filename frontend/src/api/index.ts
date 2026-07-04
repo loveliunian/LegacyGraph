@@ -30,7 +30,7 @@ export const projectApi = {
    * @returns 分页后的项目列表
    */
   list: (params: { pageNum: number, pageSize: number, keyword?: string }) => {
-    return get('/lg/projects', { params })
+    return get('/lg/projects', params)
   },
 
   /**

@@ -200,7 +200,18 @@ const createProject = async () => {
 
 const deleteProject = async (id: string) => {
   try {
+    // 第一次确认
     await ElMessageBox.confirm('确认删除此项目？', '提示')
+    // 第二次确认：需要输入项目名称
+    const projectName = pageData.value.list.find(p => p.id === id)?.projectName || ''
+    await ElMessageBox.confirm('确认删除此项目？此操作将删除项目及其所有关联数据，包括扫描版本、图谱、文档等，且无法恢复。', '删除项目', {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      inputPattern: new RegExp(`^${projectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+      inputErrorMessage: `请输入项目名称"${projectName}"以确认删除`,
+      showInput: true
+    })
     await projectApi.delete(id)
     ElMessage.success('删除成功')
     await loadData()

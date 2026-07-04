@@ -115,6 +115,13 @@ public class VectorizationService {
             return 0;
         }
 
+        // 去重检查限定在本次扫描版本内；同一 sourceUri 在新版本中需要重新向量化
+        int existingCount = vectorDocumentRepository.countBySourceUriAndVersionId(sourceUri, versionId);
+        if (existingCount > 0) {
+            log.debug("Source already vectorized ({} vectors exist), skip: {}", existingCount, sourceUri);
+            return 0;
+        }
+
         List<String> chunks = chunkDocument(content, maxChars, overlapChars);
         int stored = 0;
         for (int i = 0; i < chunks.size(); i++) {
@@ -205,6 +212,20 @@ public class VectorizationService {
     public boolean isProbablyDuplicate(List<Double> embedding1, List<Double> embedding2) {
         double similarity = cosineSimilarity(embedding1, embedding2);
         return similarity >= 0.92;
+    }
+
+    /**
+     * 删除某个 sourceUri 的所有向量化记录
+     */
+    public int deleteBySourceUri(String sourceUri) {
+        if (sourceUri == null || sourceUri.isBlank()) {
+            return 0;
+        }
+        int deleted = vectorDocumentRepository.deleteBySourceUri(sourceUri);
+        if (deleted > 0) {
+            log.info("Deleted {} vector records for source: {}", deleted, sourceUri);
+        }
+        return deleted;
     }
 
     private String sha256Hex(String input) {

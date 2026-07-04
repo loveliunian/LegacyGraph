@@ -110,10 +110,8 @@ public class AdapterExecutionService {
                             }
                             try {
                                 ExtractionResult result = adapter.get().extract(context, asset);
-                                if (result != null && result.getProcessedAssets() > 0) {
-                                    processed.addAndGet(result.getProcessedAssets());
-                                } else {
-                                    processed.incrementAndGet();
+                                if (result != null) {
+                                    processed.addAndGet(Math.max(0, result.getProcessedAssets()));
                                 }
                             } catch (Exception e) {
                                 log.warn("Adapter {} failed for {}: {}",
@@ -192,8 +190,9 @@ public class AdapterExecutionService {
                         var adapter = adapterRegistry.selectAdapter(context, asset);
                         if (adapter.isPresent()) {
                             ExtractionResult result = adapter.get().extract(context, asset);
-                            processed.addAndGet(result != null && result.getProcessedAssets() > 0
-                                    ? result.getProcessedAssets() : 1);
+                            if (result != null) {
+                                processed.addAndGet(Math.max(0, result.getProcessedAssets()));
+                            }
                         }
                     } catch (Exception ex) {
                         log.warn("Adapter failed for discovered asset {}: {}",

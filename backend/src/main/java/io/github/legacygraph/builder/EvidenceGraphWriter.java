@@ -25,6 +25,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 统一证据图谱写入器。
@@ -56,6 +58,13 @@ public class EvidenceGraphWriter {
     private final EdgeEvidenceRepository edgeEvidenceRepository;
     private final SecretScanService secretScanService;
     private final PgEvidenceTxExecutor pgEvidenceTxExecutor;
+
+    /**
+     * per-nodeKey 细粒度锁：防止并发 MERGE 同一 (nodeType, nodeKey) 产生重复节点。
+     * key = "nodeType::nodeKey"，value = ReentrantLock。
+     * 不同 nodeKey 的 MERGE 互不阻塞，仅相同 nodeKey 串行化。
+     */
+    private final ConcurrentHashMap<String, ReentrantLock> nodeMergeLocks = new ConcurrentHashMap<>();
 
     public EvidenceGraphWriter(Neo4jGraphDao neo4jGraphDao,
                                EvidenceRepository evidenceRepository,
@@ -113,24 +122,36 @@ public class EvidenceGraphWriter {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        // 一次 MERGE 完成去重 + 创建（替代原 findNode + createNode 两次远程往返）
-        Neo4jGraphDao.NodeUpsert upsert = neo4jGraphDao.mergeNode(node);
-        GraphNode merged = upsert.node();
+        // 加锁：防止并发 MERGE 同一 (nodeType, nodeKey) 产生重复节点
+        String lockKey = claim.getNodeType() + "::" + claim.getNodeKey();
+        ReentrantLock lock = nodeMergeLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
+        lock.lock();
+        try {
+            // 一次 MERGE 完成去重 + 创建（替代原 findNode + createNode 两次远程往返）
+            Neo4jGraphDao.NodeUpsert upsert = neo4jGraphDao.mergeNode(node);
+            GraphNode merged = upsert.node();
 
-        // 仅新建节点时创建证据（命中已存在节点则跳过，避免重复 evidence）
-        if (upsert.created() && (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType()))) {
-            try {
-                pgEvidenceTxExecutor.execute(() -> createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
-                        claim.getStartLine(), claim.getEndLine()));
-            } catch (Exception pgEx) {
-                // 跨存储补偿：Neo4j 已写入但 PG 证据写入失败 → 标记节点 INCOMPLETE
-                log.error("PG evidence write failed for Neo4j node {} (idempotencyKey={}): {} — marking INCOMPLETE",
-                        merged.getId(), claim.getIdempotencyKey(), pgEx.getMessage());
-                markNodeIncomplete(merged.getId(), pgEx.getMessage());
+            // 仅新建节点时创建证据（命中已存在节点则跳过，避免重复 evidence）
+            if (upsert.created() && (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType()))) {
+                try {
+                    pgEvidenceTxExecutor.execute(() -> createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
+                            claim.getStartLine(), claim.getEndLine()));
+                } catch (Exception pgEx) {
+                    // 跨存储补偿：Neo4j 已写入但 PG 证据写入失败 → 标记节点 INCOMPLETE
+                    log.error("PG evidence write failed for Neo4j node {} (idempotencyKey={}): {} — marking INCOMPLETE",
+                            merged.getId(), claim.getIdempotencyKey(), pgEx.getMessage());
+                    markNodeIncomplete(merged.getId(), pgEx.getMessage());
+                }
+            }
+
+            return merged;
+        } finally {
+            lock.unlock();
+            // 清理锁：如果队列中无其他等待者，移除锁对象避免内存泄漏
+            if (!lock.hasQueuedThreads()) {
+                nodeMergeLocks.remove(lockKey, lock);
             }
         }
-
-        return merged;
     }
 
     // ==================== 边操作 ====================
