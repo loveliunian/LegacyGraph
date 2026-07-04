@@ -31,7 +31,7 @@ export const llmApi = {
 
   /** 获取指定提供商 */
   getByCode: (code: string) => {
-    return get<LlmProvider>(`/llm/providers/${code}`)
+    return get<LlmProvider>(`/llm/providers/${encodeURIComponent(code)}`)
   },
 
   /** 保存或更新提供商 */
@@ -41,12 +41,12 @@ export const llmApi = {
 
   /** 切换为默认提供商 */
   setDefault: (code: string) => {
-    return put<void>(`/llm/providers/${code}/set-default`)
+    return put<void>(`/llm/providers/${encodeURIComponent(code)}/set-default`)
   },
 
   /** 启用/禁用 */
   toggleActive: (code: string, active: boolean) => {
-    return put<void>(`/llm/providers/${code}/toggle-active?active=${active}`)
+    return put<void>(`/llm/providers/${encodeURIComponent(code)}/toggle-active?active=${encodeURIComponent(active)}`)
   },
 
   /** 删除提供商 */

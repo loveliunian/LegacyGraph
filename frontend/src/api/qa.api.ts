@@ -61,14 +61,12 @@ export const qaApi = {
     projectId?: string
     versionId?: string
     conversationId?: string
-  }): EventSource => {
+  }): any => {
     // POST SSE: 使用 fetch + ReadableStream 替代原生 EventSource（原生只支持 GET）
     const baseUrl = (import.meta.env.VITE_API_BASE_URL || '/api') + '/qa/ask/stream'
-    const es = new EventSource(`${baseUrl}?t=${Date.now()}`) // placeholder, we use fetch below
-    es.close() // 关闭原生 ES，改用 fetch
 
     // 返回自定义对象模拟 EventSource
-    return createFetchSSE(baseUrl, data) as any
+    return createFetchSSE(baseUrl, data)
   },
 
   /**
@@ -158,12 +156,12 @@ export const qaApi = {
 
   /** 列出对话 */
   listConversations: (projectId: string) => {
-    return get(`/qa/conversations?projectId=${projectId}`) as Promise<{ data: QaConversation[] }>
+    return get(`/qa/conversations?projectId=${encodeURIComponent(projectId)}`) as Promise<{ data: QaConversation[] }>
   },
 
   /** 获取对话消息 */
   getMessages: (conversationId: string) => {
-    return get(`/qa/conversations/${conversationId}/messages`) as Promise<{ data: QaMessage[] }>
+    return get(`/qa/conversations/${encodeURIComponent(conversationId)}/messages`) as Promise<{ data: QaMessage[] }>
   },
 
   /** 删除对话 */

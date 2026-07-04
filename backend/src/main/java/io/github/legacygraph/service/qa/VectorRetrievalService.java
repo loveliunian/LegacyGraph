@@ -7,6 +7,7 @@ import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.repository.VectorDocumentRepository;
 import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.util.VectorUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,10 @@ public class VectorRetrievalService {
         return "vec:search:" + sha256(raw);
     }
 
+    /**
+     * L4 修复：SHA-256 在所有 JDK 上均为强制可用算法（JCA 规范要求），不存在 NoSuchAlgorithmException。
+     * 移除 hashCode 降级路径 —— 其 32 位碰撞率会导致缓存键冲突，引发语义错乱。
+     */
     private String sha256(String input) {
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
@@ -63,8 +68,9 @@ public class VectorRetrievalService {
                 sb.append(Character.forDigit(b & 0xF, 16));
             }
             return sb.toString();
-        } catch (Exception e) {
-            return Integer.toHexString(input.hashCode());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // SHA-256 是 JCA 强制实现算法，此分支在合规 JVM 上不可达
+            throw new IllegalStateException("SHA-256 algorithm unavailable — JVM does not comply with JCA spec", e);
         }
     }
 
@@ -120,7 +126,7 @@ public class VectorRetrievalService {
         try {
             // 对查询进行向量化 - Spring AI 1.0+ API
             float[] embedding = embeddingModel.embed(query);
-            List<Double> queryEmbedding = floatArrayToDoubleList(embedding);
+            List<Double> queryEmbedding = VectorUtils.floatArrayToDoubleList(embedding);
 
             // 使用 pgvector 余弦相似度检索
             return vectorDocumentRepository.findSimilar(
@@ -146,7 +152,7 @@ public class VectorRetrievalService {
         try {
             // 对查询进行向量化
             float[] embedding = embeddingModel.embed(searchText);
-            List<Double> queryEmbedding = floatArrayToDoubleList(embedding);
+            List<Double> queryEmbedding = VectorUtils.floatArrayToDoubleList(embedding);
 
             // 从向量文档中检索相似的语义片段，然后映射到节点
             List<VectorDocument> similarDocs = vectorDocumentRepository.findSimilar(
@@ -189,18 +195,20 @@ public class VectorRetrievalService {
      * Convert float array to List<Double>
      */
     /**
-     * 计算文本的 embedding 向量
+     * 计算文本的 embedding 向量。
+     * L5 修复：失败/不可用时明确返回 null（而非空数组），调用方按 Optional/Optional.empty 语义处理。
+     * 返回 null 比 new float[0] 语义更清晰：避免下游误判为"有效但空"的向量。
      */
     public float[] computeEmbedding(String text) {
         if (embeddingModel == null) {
             log.debug("EmbeddingModel not available (SILICONFLOW_API_KEY not set)");
-            return new float[0];
+            return null;
         }
         try {
             return embeddingModel.embed(text);
         } catch (Exception e) {
             log.error("Failed to compute embedding: {}", e.getMessage(), e);
-            return new float[0];
+            return null;
         }
     }
 
@@ -212,7 +220,7 @@ public class VectorRetrievalService {
             return Optional.empty();
         }
         try {
-            String embeddingStr = floatArrayToVectorLiteral(queryEmbedding);
+            String embeddingStr = VectorUtils.floatArrayToVectorLiteral(queryEmbedding);
             // 从语义缓存表中查找相似条目
             List<SemanticCacheEntry> candidates = semanticCacheRepository.findSimilar(
                 projectId, embeddingStr, 1, threshold
@@ -222,24 +230,6 @@ public class VectorRetrievalService {
             log.error("Find similar cache failed: {}", e.getMessage(), e);
             return Optional.empty();
         }
-    }
-
-    private List<Double> floatArrayToDoubleList(float[] floats) {
-        List<Double> result = new ArrayList<>(floats.length);
-        for (float f : floats) {
-            result.add((double) f);
-        }
-        return result;
-    }
-
-    private String floatArrayToVectorLiteral(float[] floats) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < floats.length; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(floats[i]);
-        }
-        sb.append("]");
-        return sb.toString();
     }
 
     private String effectiveVersionId(String versionId) {

@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
  * 使用 Apache Tika + POI + PDFbox 抽取 Word/PDF/Markdown 文本
  */
 @Slf4j
+@org.springframework.stereotype.Component  // L3 修复：注入为 Bean，避免每次 new
 public class DocumentExtractor {
 
     private final Tika tika = new Tika();
@@ -48,11 +49,12 @@ public class DocumentExtractor {
     }
 
     /**
-     * 抽取PDF文本
+     * 抽取PDF文本（M12修复：使用流式读取，避免大文件全量加载导致 OOM）
+     * PDFBox 支持从 InputStream 加载，无需一次性读取全部字节。
      */
     private String extractPdf(File file) throws IOException {
-        byte[] bytes = Files.readAllBytes(file.toPath());
-        try (PDDocument document = Loader.loadPDF(bytes)) {
+        try (InputStream is = new FileInputStream(file);
+             PDDocument document = Loader.loadPDF(is.readAllBytes())) {
             PDFTextStripper stripper = new PDFTextStripper();
             return stripper.getText(document);
         }

@@ -100,7 +100,7 @@ export const testRunApi = {
     pageSize: number
     status?: string
   }) => {
-    return get<PageResult<TestRun>>(`/lg/projects/${projectId}/test-runs`, params)
+    return get<PageResult<TestRun>>(`/lg/projects/${encodeURIComponent(projectId)}/test-runs`, params)
   },
 
   /**
@@ -110,7 +110,7 @@ export const testRunApi = {
    * @returns 测试运行详情
    */
   getTestRunDetail: (projectId: string, runId: string) => {
-    return get<TestRun>(`/lg/projects/${projectId}/test-runs/${runId}`)
+    return get<TestRun>(`/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}`)
   },
 
   /**
@@ -120,7 +120,7 @@ export const testRunApi = {
    * @returns 测试结果列表
    */
   getCaseResults: (projectId: string, runId: string) => {
-    return get<TestResult[]>(`/lg/projects/${projectId}/test-runs/${runId}/results`)
+    return get<TestResult[]>(`/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/results`)
   },
 
   /**
@@ -130,7 +130,7 @@ export const testRunApi = {
    * @returns 日志内容
    */
   getResultLogs: (projectId: string, runId: string) => {
-    return get<string>(`/lg/projects/${projectId}/test-runs/${runId}/logs`)
+    return get<string>(`/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/logs`)
   },
 
   /**
@@ -145,7 +145,7 @@ export const testRunApi = {
     caseIds: string[]
     environment: string
   }) => {
-    return post<string>(`/lg/projects/${projectId}/test-runs/start`, data)
+    return post<string>(`/lg/projects/${encodeURIComponent(projectId)}/test-runs/start`, data)
   },
 
   /**
@@ -156,7 +156,7 @@ export const testRunApi = {
    * @returns 新的测试运行ID
    */
   rerunFailed: (projectId: string, runId: string) => {
-    return post<string>(`/lg/projects/${projectId}/test-runs/${runId}/rerun-failed`)
+    return post<string>(`/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/rerun-failed`)
   },
 
   /**
@@ -165,7 +165,7 @@ export const testRunApi = {
    * @param runId 测试运行ID
    */
   cancelRun: (projectId: string, runId: string) => {
-    return post(`/lg/projects/${projectId}/test-runs/${runId}/cancel`)
+    return post(`/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/cancel`)
   },
 
   /**
@@ -173,6 +173,6 @@ export const testRunApi = {
    * @param projectId 项目ID
    */
   getRunStats: (projectId: string) => {
-    return get(`/lg/projects/${projectId}/test-runs/stats`)
+    return get(`/lg/projects/${encodeURIComponent(projectId)}/test-runs/stats`)
   }
 }

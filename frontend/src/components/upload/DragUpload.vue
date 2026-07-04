@@ -163,6 +163,7 @@ import {
   Upload
 } from '@element-plus/icons-vue'
 import SparkMD5 from 'spark-md5'
+import { useUserStore } from '@/stores/user'
 
 interface ChunkUpload {
   file: File
@@ -326,15 +327,34 @@ async function uploadChunk(chunk: Blob, chunkIndex: number, totalChunks: number,
 
   abortController.value = new AbortController()
 
+  // 原生fetch需要手动添加认证头
+  const userStore = useUserStore()
+  const headers: Record<string, string> = {}
+  if (userStore.accessToken) {
+    headers['Authorization'] = `Bearer ${userStore.accessToken}`
+  }
+
   try {
     const response = await fetch(props.uploadUrl, {
       method: 'POST',
+      headers,
       body: formData,
       signal: abortController.value.signal
     })
 
+    if (response.status === 401) {
+      userStore.clearAuth()
+      throw new Error('登录状态已过期，请重新登录')
+    }
+
     if (!response.ok) {
-      throw new Error(`分片 ${chunkIndex + 1}/${totalChunks} 上传失败`)
+      // 尝试从响应体提取后端错误消息
+      let serverMessage = ''
+      try {
+        const body = await response.json()
+        serverMessage = body?.message || ''
+      } catch { /* 非JSON响应忽略 */ }
+      throw new Error(serverMessage || `分片 ${chunkIndex + 1}/${totalChunks} 上传失败 (${response.status})`)
     }
   } catch (error) {
     if (error instanceof Error && error.name !== 'AbortError') {
@@ -449,13 +469,26 @@ async function submitSingleUpload(file: File): Promise<void> {
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve()
+        } else if (xhr.status === 401) {
+          useUserStore().clearAuth()
+          reject(new Error('登录状态已过期，请重新登录'))
         } else {
-          reject(new Error(`上传失败: ${xhr.statusText}`))
+          // 尝试从响应体提取后端错误消息
+          let serverMessage = ''
+          try {
+            const body = JSON.parse(xhr.responseText)
+            serverMessage = body?.message || ''
+          } catch { /* 非JSON响应忽略 */ }
+          reject(new Error(serverMessage || `上传失败: ${xhr.statusText} (${xhr.status})`))
         }
       }
       xhr.onerror = () => reject(new Error('网络错误'))
-      xhr.abort = () => reject(new Error('上传已取消'))
+      xhr.onabort = () => reject(new Error('上传已取消'))
       xhr.open('POST', props.uploadUrl)
+      const userStore = useUserStore()
+      if (userStore.accessToken) {
+        xhr.setRequestHeader('Authorization', `Bearer ${userStore.accessToken}`)
+      }
       xhr.send(formData)
     })
 

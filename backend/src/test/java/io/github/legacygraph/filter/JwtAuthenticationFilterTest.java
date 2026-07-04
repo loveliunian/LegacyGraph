@@ -106,4 +106,15 @@ class JwtAuthenticationFilterTest {
         verify(filterChain).doFilter(request, response);
         verify(jwtUtil, never()).validateToken(anyString());
     }
+
+    @Test
+    void testFilter_QueryTokenIgnored() throws Exception {
+        request.setParameter("token", "valid.jwt.token");
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verify(jwtUtil, never()).validateToken(anyString());
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
 }

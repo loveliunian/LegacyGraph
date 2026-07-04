@@ -174,6 +174,7 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
+import { useDebounceFn } from '@vueuse/core'
 import {
   Document,
   Search,
@@ -376,8 +377,12 @@ watch(() => props.code, () => {
   })
 })
 
-watch(searchText, () => {
+const debouncedSearch = useDebounceFn(() => {
   handleSearch()
+}, 300)
+
+watch(searchText, () => {
+  debouncedSearch()
 })
 
 onMounted(() => {

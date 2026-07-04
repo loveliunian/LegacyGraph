@@ -1,5 +1,6 @@
 package io.github.legacygraph.extractors.adapter;
 
+import io.github.legacygraph.extractors.DocumentExtractor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -25,12 +26,19 @@ class DocumentAdapterTest {
     @Mock
     private FactPersister factPersister;
 
+    @Mock
+    private DocumentExtractor documentExtractor;
+
+    private DocumentAdapter adapter() {
+        return new DocumentAdapter(factPersister, documentExtractor);
+    }
+
     /**
      * 测试 supports — 支持 md/pdf/docx/txt/rst/adoc。
      */
     @Test
     void supports_returnsTrueForSupportedDocTypes() {
-        DocumentAdapter adapter = new DocumentAdapter(factPersister);
+        DocumentAdapter adapter = adapter();
         ScanContext ctx = ScanContext.builder().build();
 
         for (String ext : new String[]{"md", "pdf", "docx", "txt", "rst", "adoc"}) {
@@ -47,7 +55,7 @@ class DocumentAdapterTest {
      */
     @Test
     void supports_returnsFalseForNonDocTypes() {
-        DocumentAdapter adapter = new DocumentAdapter(factPersister);
+        DocumentAdapter adapter = adapter();
         ScanContext ctx = ScanContext.builder().build();
 
         SourceAsset javaAsset = SourceAsset.builder()
@@ -62,7 +70,7 @@ class DocumentAdapterTest {
      */
     @Test
     void capability_returnsCorrectCapability() {
-        DocumentAdapter adapter = new DocumentAdapter(factPersister);
+        DocumentAdapter adapter = adapter();
 
         AdapterCapability cap = adapter.capability();
 
@@ -77,14 +85,15 @@ class DocumentAdapterTest {
      * 测试 extract 对空文件句柄 fail-safe。
      */
     @Test
-    void extract_invalidFile_returnsResultWithSummary() {
-        DocumentAdapter adapter = new DocumentAdapter(factPersister);
+    void extract_invalidFile_returnsResultWithSummary() throws Exception {
+        DocumentAdapter adapter = adapter();
         ScanContext ctx = ScanContext.builder().projectId("p1").versionId("v1").build();
         SourceAsset asset = SourceAsset.builder()
                 .file(tempDir.resolve("nonexistent.md"))
                 .relativePath("nonexistent.md")
                 .fileType("md")
                 .build();
+        when(documentExtractor.extractText(any())).thenThrow(new RuntimeException("missing file"));
 
         ExtractionResult result = adapter.extract(ctx, asset);
 

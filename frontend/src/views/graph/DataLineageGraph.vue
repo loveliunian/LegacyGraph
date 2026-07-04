@@ -339,10 +339,15 @@ function getSelectedTable(): TableListItem | undefined {
 }
 
 async function loadVersions() {
-  const pid = projectId.value
-  if (!pid) return
-  versions.value = await loadScanVersions(pid)
-}
+  try {
+    const pid = projectId.value
+    if (!pid) return
+    versions.value = await loadScanVersions(pid)
+  } catch (error) {
+    console.error('loadVersions error:', error)
+    ElMessage.error('操作失败')
+  }
+  }
 
 async function loadTablesFromBackend() {
   if (!projectId.value || !currentVersion.value) return
@@ -566,32 +571,47 @@ async function selectTable(id: string) {
 
   const selected = getSelectedTable()
   if (selected) {
-    await loadLineageData(selected.queryKey || selected.name)
+    try {
+      await loadLineageData(selected.queryKey || selected.name)
+    } catch (error) {
+      console.error('selectTable error:', error)
+      ElMessage.error('加载血缘数据失败')
+    }
   }
 }
 
 async function refreshGraph() {
-  if (selectedTable.value) {
-    const selected = getSelectedTable()
-    if (selected) {
-      await loadLineageData(selected.queryKey || selected.name)
+  try {
+    if (selectedTable.value) {
+      const selected = getSelectedTable()
+      if (selected) {
+        await loadLineageData(selected.queryKey || selected.name)
+      }
+    } else {
+      await loadTablesFromBackend()
     }
-  } else {
-    await loadTablesFromBackend()
+  } catch (error) {
+    console.error('refreshGraph error:', error)
+    ElMessage.error('刷新血缘图失败')
   }
 }
 
 onMounted(async () => {
-  await loadVersions()
-  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
-  const urlVersion = (route.query.version as string) || ''
-  if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
-    currentVersion.value = urlVersion
-  } else if (versions.value.length > 0) {
-    currentVersion.value = versions.value[0].id
-  }
-  if (projectId.value && currentVersion.value) {
-    await loadTablesFromBackend()
+  try {
+    await loadVersions()
+    // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+    const urlVersion = (route.query.version as string) || ''
+    if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
+      currentVersion.value = urlVersion
+    } else if (versions.value.length > 0) {
+      currentVersion.value = versions.value[0].id
+    }
+    if (projectId.value && currentVersion.value) {
+      await loadTablesFromBackend()
+    }
+  } catch (error) {
+    console.error('onMounted error:', error)
+    ElMessage.error('页面初始化失败')
   }
 })
 </script>

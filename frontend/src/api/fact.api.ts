@@ -1,4 +1,4 @@
-import { get, post } from '@/utils/request'
+import { get } from '@/utils/request'
 import type { PageResult, PageQuery } from '@/types'
 
 /**
@@ -65,7 +65,7 @@ export const factApi = {
     sourceType?: string
     minConfidence?: number
   }) => {
-    return get<PageResult<Fact>>(`/lg/projects/${projectId}/facts`, params)
+    return get<PageResult<Fact>>(`/lg/projects/${encodeURIComponent(projectId)}/facts`, params)
   },
 
   /**
@@ -75,7 +75,7 @@ export const factApi = {
    * @returns 事实详情
    */
   getFact: (projectId: string, id: string) => {
-    return get<Fact>(`/lg/projects/${projectId}/facts/${id}`)
+    return get<Fact>(`/lg/projects/${encodeURIComponent(projectId)}/facts/${encodeURIComponent(id)}`)
   },
 
   /**
@@ -85,7 +85,7 @@ export const factApi = {
    * @returns 关联节点ID列表
    */
   getRelatedNodes: (projectId: string, id: string) => {
-    return get<string[]>(`/lg/projects/${projectId}/facts/${id}/related-nodes`)
+    return get<string[]>(`/lg/projects/${encodeURIComponent(projectId)}/facts/${encodeURIComponent(id)}/related-nodes`)
   },
 
   /**
@@ -98,7 +98,7 @@ export const factApi = {
     evidenceType?: string
     keyword?: string
   }) => {
-    return get<PageResult<Evidence>>(`/lg/projects/${projectId}/evidence`, params)
+    return get<PageResult<Evidence>>(`/lg/projects/${encodeURIComponent(projectId)}/evidence`, params)
   },
 
   /**
@@ -108,49 +108,6 @@ export const factApi = {
    * @returns 证据详情，包含完整内容
    */
   getEvidence: (projectId: string, id: string) => {
-    return get<Evidence>(`/lg/projects/${projectId}/evidence/${id}`)
+    return get<Evidence>(`/lg/projects/${encodeURIComponent(projectId)}/evidence/${encodeURIComponent(id)}`)
   },
-
-  /**
-   * 从代码片段中抽取知识事实
-   * 使用LLM从给定的代码内容中抽取业务知识事实
-   * @param projectId 项目ID
-   * @param data 抽取参数，包含仓库ID、文件路径和代码内容
-   * @returns 抽取结果
-   */
-  extractCodeFacts: (projectId: string, data: {
-    repoId: string
-    filePath: string
-    content: string
-  }) => {
-    return post(`/agents/run`, {
-      agentType: 'codefact',
-      projectId,
-      variables: {
-        sourcePath: data.filePath,
-        codeContent: data.content
-      }
-    })
-  },
-
-  /**
-   * 从文档内容中抽取知识事实
-   * 使用LLM从给定的文档内容中抽取业务知识事实
-   * @param projectId 项目ID
-   * @param data 抽取参数，包含文档ID和文档内容
-   * @returns 抽取结果
-   */
-  extractDocFacts: (projectId: string, data: {
-    docId: string
-    content: string
-  }) => {
-    return post(`/agents/run`, {
-      agentType: 'docunderstanding',
-      projectId,
-      variables: {
-        sourcePath: data.docId,
-        docContent: data.content
-      }
-    })
-  }
 }

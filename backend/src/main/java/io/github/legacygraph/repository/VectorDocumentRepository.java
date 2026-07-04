@@ -97,7 +97,7 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
             }
         } catch (Exception e) {
             LOG.warn("pgvector similarity query failed for projectId={}, versionId={}: {}",
-                    projectId, versionId, e.getMessage());
+                    projectId, versionId, e.getMessage(), e);
             return java.util.Collections.emptyList();
         }
     }

@@ -310,6 +310,9 @@ import { ElMessage } from 'element-plus'
 import { Download, Connection, Link, CircleCheck, Warning, Opportunity, Star } from '@element-plus/icons-vue'
 import { graphApi, projectApi, reportApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
+import { downloadFile } from '@/utils/download'
+
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -346,14 +349,19 @@ const coverageData = ref({
 
 const getRiskTypeText = (type: string) => dictLabel('risk_type', type)
 
-const exportReport = () => {
+const exportReport = async () => {
   if (!projectId || !selectedVersion.value) {
     ElMessage.warning('请先选择版本')
     return
   }
-  const url = `/api/reports/confidence/${projectId}/${selectedVersion.value}?format=MD`
-  window.open(url, '_blank')
-  ElMessage.success('正在下载报告...')
+  const url = `${apiBaseUrl}/reports/confidence/${encodeURIComponent(projectId)}/${encodeURIComponent(selectedVersion.value)}?format=MD`
+  try {
+    await downloadFile(url)
+    ElMessage.success('报告下载完成')
+  } catch (error) {
+    console.error('exportReport error:', error)
+    ElMessage.error('报告下载失败')
+  }
 }
 
 const loadAiInsights = async () => {

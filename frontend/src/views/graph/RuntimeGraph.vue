@@ -472,9 +472,14 @@ const selectService = (id: string) => {
 }
 
 const refreshTraces = async () => {
-  await loadTraces()
-  ElMessage.success('链路已刷新')
-}
+  try {
+    await loadTraces()
+    ElMessage.success('链路已刷新')
+  } catch (error) {
+    console.error('refreshTraces error:', error)
+    ElMessage.error('操作失败')
+  }
+  }
 
 const showErrorAnalysis = () => {
   const errorNodes = services.value.filter(s => s.health === 'error')
@@ -493,7 +498,12 @@ const showErrorAnalysis = () => {
 }
 
 onMounted(async () => {
-  await loadTraces()
+  try {
+    await loadTraces()
+  } catch (error) {
+    console.error('onMounted error:', error)
+    ElMessage.error('页面初始化失败')
+  }
 })
 </script>
 

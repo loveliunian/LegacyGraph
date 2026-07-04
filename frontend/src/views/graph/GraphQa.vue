@@ -233,13 +233,16 @@ const exampleQuestions = [
   '项目的主要技术栈是什么？',
 ]
 
+import DOMPurify from 'dompurify'
+
 const renderMarkdown = (text: string) => {
   if (!text) return ''
-  return text
+  const html = text
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>')
+  return DOMPurify.sanitize(html)
 }
 
 const scrollToBottom = async () => {
@@ -340,11 +343,16 @@ const createNewConversation = async () => {
 }
 
 const switchConversation = async (convId: string) => {
-  if (currentConversationId.value === convId) return
+  try {
+    if (currentConversationId.value === convId) return
 
-  currentConversationId.value = convId
-  await loadConversationMessages(convId)
-}
+    currentConversationId.value = convId
+    await loadConversationMessages(convId)
+  } catch (error) {
+    console.error('switchConversation error:', error)
+    ElMessage.error('操作失败')
+  }
+  }
 
 const loadConversationMessages = async (convId: string) => {
   try {

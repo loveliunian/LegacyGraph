@@ -97,7 +97,7 @@ export const sourceApi = {
    * @returns 分页后的代码仓库列表
    */
   listCodeRepo: (projectId: string, params: PageQuery) => {
-    return get<PageResult<CodeRepo>>(`/lg/projects/${projectId}/sources/repos`, params)
+    return get<PageResult<CodeRepo>>(`/lg/projects/${encodeURIComponent(projectId)}/sources/repos`, params)
   },
 
   /**
@@ -107,7 +107,7 @@ export const sourceApi = {
    * @returns 创建的代码仓库信息
    */
   createCodeRepo: (projectId: string, data: Partial<CodeRepo>) => {
-    return post<CodeRepo>(`/lg/projects/${projectId}/sources/repos`, data)
+    return post<CodeRepo>(`/lg/projects/${encodeURIComponent(projectId)}/sources/repos`, data)
   },
 
   /**
@@ -118,7 +118,7 @@ export const sourceApi = {
    * @returns 更新结果
    */
   updateCodeRepo: (projectId: string, id: string, data: Partial<CodeRepo>) => {
-    return put(`/lg/projects/${projectId}/sources/repos/${id}`, data)
+    return put(`/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}`, data)
   },
 
   /**
@@ -138,7 +138,7 @@ export const sourceApi = {
    * @returns 拉取结果
    */
   pullRepo: (projectId: string, id: string) => {
-    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/repos/${id}/pull`)
+    return post<{ success: boolean; message: string }>(`/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}/pull`)
   },
 
   /**
@@ -148,7 +148,7 @@ export const sourceApi = {
    * @returns 扫描版本ID
    */
   scanRepo: (projectId: string, id: string) => {
-    return post<{ versionId: string; message: string }>(`/lg/projects/${projectId}/sources/repos/${id}/scan`)
+    return post<{ versionId: string; message: string }>(`/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}/scan`)
   },
 
   /**
@@ -158,7 +158,7 @@ export const sourceApi = {
    * @returns 测试结果，包含成功标志和消息
    */
   testRepoConnection: (projectId: string, id: string) => {
-    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/repos/${id}/test-connection`)
+    return post<{ success: boolean; message: string }>(`/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}/test-connection`)
   },
 
   /**
@@ -168,7 +168,7 @@ export const sourceApi = {
    * @returns 测试结果
    */
   testRepoUrl: (projectId: string, gitUrl: string) => {
-    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/repos/test-url`, { gitUrl })
+    return post<{ success: boolean; message: string }>(`/lg/projects/${encodeURIComponent(projectId)}/sources/repos/test-url`, { gitUrl })
   },
 
   /**
@@ -178,7 +178,7 @@ export const sourceApi = {
    * @returns 测试结果，包含成功标志和消息
    */
   testDbConnection: (projectId: string, id: string) => {
-    return post<{ success: boolean; message: string }>(`/lg/projects/${projectId}/sources/databases/${id}/test-connection`)
+    return post<{ success: boolean; message: string }>(`/lg/projects/${encodeURIComponent(projectId)}/sources/databases/${encodeURIComponent(id)}/test-connection`)
   },
 
   /**
@@ -188,7 +188,7 @@ export const sourceApi = {
    * @returns 扫描结果
    */
   scanDbSchema: (projectId: string, id: string) => {
-    return post<{ tableCount: number }>(`/lg/projects/${projectId}/sources/databases/${id}/scan-schema`)
+    return post<{ tableCount: number }>(`/lg/projects/${encodeURIComponent(projectId)}/sources/databases/${encodeURIComponent(id)}/scan-schema`)
   },
 
   /**
@@ -198,7 +198,7 @@ export const sourceApi = {
    * @returns 解析结果
    */
   parseDocument: (projectId: string, id: string) => {
-    return post<{ factCount: number; chunkCount?: number; success?: boolean; message?: string }>(`/lg/projects/${projectId}/sources/documents/${id}/parse`)
+    return post<{ factCount: number; chunkCount?: number; success?: boolean; message?: string }>(`/lg/projects/${encodeURIComponent(projectId)}/sources/documents/${encodeURIComponent(id)}/parse`)
   },
 
   /**
@@ -208,7 +208,7 @@ export const sourceApi = {
    * @returns 分页后的数据库连接列表
    */
   listDbConnections: (projectId: string, params: PageQuery) => {
-    return get<PageResult<DbConnection>>(`/lg/projects/${projectId}/sources/databases`, params)
+    return get<PageResult<DbConnection>>(`/lg/projects/${encodeURIComponent(projectId)}/sources/databases`, params)
   },
 
   /**
@@ -218,7 +218,7 @@ export const sourceApi = {
    * @returns 创建的数据库连接信息
    */
   createDbConnection: (projectId: string, data: Partial<DbConnection>) => {
-    return post<DbConnection>(`/lg/projects/${projectId}/sources/databases`, data)
+    return post<DbConnection>(`/lg/projects/${encodeURIComponent(projectId)}/sources/databases`, data)
   },
 
   /**
@@ -229,7 +229,7 @@ export const sourceApi = {
    * @returns 更新结果
    */
   updateDbConnection: (projectId: string, id: string, data: Partial<DbConnection>) => {
-    return put(`/lg/projects/${projectId}/sources/databases/${id}`, data)
+    return put(`/lg/projects/${encodeURIComponent(projectId)}/sources/databases/${encodeURIComponent(id)}`, data)
   },
 
   /**
@@ -249,7 +249,7 @@ export const sourceApi = {
    * @returns 分页后的文档列表
    */
   listDocuments: (projectId: string, params: PageQuery) => {
-    return get<PageResult<Document>>(`/lg/projects/${projectId}/sources/documents`, params)
+    return get<PageResult<Document>>(`/lg/projects/${encodeURIComponent(projectId)}/sources/documents`, params)
   },
 
   /**

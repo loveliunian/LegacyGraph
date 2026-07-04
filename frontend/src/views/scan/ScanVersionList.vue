@@ -229,7 +229,7 @@
       title="版本详情"
       width="720px"
       append-to-body
-      @opened="startDetailPolling"
+      @opened="() => currentVersion && taskStore.startPolling(currentVersion.id, projectId, DETAIL_POLL_INTERVAL)"
       @closed="stopDetailPolling">
       <template v-if="currentVersion">
         <!-- 基本信息 -->
@@ -381,10 +381,12 @@ import dayjs from 'dayjs'
 import { t } from '@/locales'
 import { scanApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
+import { useTaskStore } from '@/stores/task'
 
 const route = useRoute()
 const router = useRouter()
 const projectId = route.params.projectId as string
+const taskStore = useTaskStore()
 
 const loading = ref(false)
 const hasLoadedOnce = ref(false)
@@ -394,9 +396,8 @@ const pageSize = ref(10)
 const total = ref(0)
 const detailDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
-const detailProgress = ref<any>(null)  // 增强的进度响应
-let detailPollTimer: ReturnType<typeof setInterval> | null = null
-const DETAIL_POLL_INTERVAL = 2000  // 详情进度轮询间隔 2s
+const detailProgress = ref<any>(null)
+const DETAIL_POLL_INTERVAL = 2000
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 const POLL_INTERVAL = 100000
@@ -478,36 +479,14 @@ const goToCreate = () => {
 
 const viewDetail = (row: any) => {
   currentVersion.value = row
-  detailProgress.value = null
   detailDialogVisible.value = true
-}
-
-const loadDetailProgress = async () => {
-  if (!currentVersion.value) return
-  try {
-    const res = await scanApi.progress(projectId, currentVersion.value.id)
-    detailProgress.value = res
-    // 终态时停止轮询
-    const termStatuses = ['SUCCESS', 'FAILED', 'CANCELLED', 'COMPLETED']
-    if (res.status && termStatuses.includes(res.status)) {
-      stopDetailPolling()
-    }
-  } catch {
-    // 静默
-  }
-}
-
-const startDetailPolling = () => {
-  stopDetailPolling()
-  if (!currentVersion.value) return
-  loadDetailProgress()
-  detailPollTimer = setInterval(loadDetailProgress, DETAIL_POLL_INTERVAL)
+  // 使用 taskStore 轮询
+  taskStore.startPolling(row.id, projectId, DETAIL_POLL_INTERVAL)
 }
 
 const stopDetailPolling = () => {
-  if (detailPollTimer) {
-    clearInterval(detailPollTimer)
-    detailPollTimer = null
+  if (currentVersion.value) {
+    taskStore.stopPolling(currentVersion.value.id)
   }
 }
 

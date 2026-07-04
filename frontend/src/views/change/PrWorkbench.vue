@@ -215,9 +215,12 @@ const statusTag = (status: string) => {
   return map[status] || 'info'
 }
 
+import DOMPurify from 'dompurify'
+
 function renderMarkdown(text: string) {
   if (!text) return ''
-  return text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  const html = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  return DOMPurify.sanitize(html)
 }
 
 async function loadList() {

@@ -7,6 +7,7 @@ export const useProjectStore = defineStore('project', () => {
   const currentProjectId = ref<string | null>(localStorage.getItem('currentProjectId') || null)
   const currentProject = ref<Project | null>(null)
   const projectList = ref<Project[]>([])
+  const loading = ref(false)
 
   const hasProject = computed(() => !!currentProjectId.value)
 
@@ -19,37 +20,57 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
-  const fetchProjectList = async (params?: { keyword?: string }) => {
-    const result: any = await projectApi.list({
-      pageNum: 1,
-      pageSize: 100,
-      ...params
-    })
-    projectList.value = result.list
-    return result
+  const fetchProjectList = async (params?: { pageNum?: number; pageSize?: number; keyword?: string }) => {
+    loading.value = true
+    try {
+      const result: any = await projectApi.list({
+        pageNum: 1,
+        pageSize: 100,
+        ...params
+      })
+      projectList.value = result.list
+      return result
+    } catch (error) {
+      console.error('fetchProjectList error:', error)
+      throw error
+    } finally {
+      loading.value = false
+    }
   }
 
   const fetchCurrentProject = async () => {
-    if (currentProjectId.value) {
-      const project: any = await projectApi.detail(currentProjectId.value)
-      currentProject.value = project
-      return project
+    try {
+      if (currentProjectId.value) {
+        const project: any = await projectApi.detail(currentProjectId.value)
+        currentProject.value = project
+        return project
+      }
+      return null
+    } catch (error) {
+      console.error('fetchCurrentProject error:', error)
     }
-    return null
   }
 
   const createProject = async (data: any) => {
-    const project: any = await projectApi.create(data)
-    projectList.value.unshift(project)
-    return project
+    try {
+      const project: any = await projectApi.create(data)
+      projectList.value.unshift(project)
+      return project
+    } catch (error) {
+      console.error('createProject error:', error)
+    }
   }
 
   const deleteProject = async (projectId: string) => {
-    await projectApi.delete(projectId)
-    projectList.value = projectList.value.filter(p => p.id !== projectId)
-    if (currentProjectId.value === projectId) {
-      setCurrentProject(null)
-      currentProject.value = null
+    try {
+      await projectApi.delete(projectId)
+      projectList.value = projectList.value.filter(p => p.id !== projectId)
+      if (currentProjectId.value === projectId) {
+        setCurrentProject(null)
+        currentProject.value = null
+      }
+    } catch (error) {
+      console.error('deleteProject error:', error)
     }
   }
 
@@ -57,6 +78,7 @@ export const useProjectStore = defineStore('project', () => {
     currentProjectId,
     currentProject,
     projectList,
+    loading,
     hasProject,
     setCurrentProject,
     fetchProjectList,

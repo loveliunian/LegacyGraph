@@ -3,8 +3,10 @@ package io.github.legacygraph.service.qa;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import io.github.legacygraph.entity.SemanticCacheEntry;
 import io.github.legacygraph.repository.SemanticCacheRepository;
+import io.github.legacygraph.util.VectorUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -59,14 +61,17 @@ public class SemanticCache {
                 }
 
                 // 4. 命中，增加访问次数
-                entry.setHitCount(entry.getHitCount() + 1);
+                Integer currentHitCount = entry.getHitCount();
+                entry.setHitCount(currentHitCount != null ? currentHitCount + 1 : 1);
                 entry.setLastAccessAt(LocalDateTime.now());
                 cacheRepository.updateById(entry);
 
+                String answerText = entry.getAnswer();
+                int answerLength = answerText != null ? answerText.length() : 0;
                 log.info("Semantic cache hit: question='{}', similarity={}, answerLength={}",
                     truncate(question, 50),
                     entry.getSimilarity(),
-                    entry.getAnswer().length());
+                    answerLength);
 
                 return entry.getAnswer();
             }
@@ -90,6 +95,16 @@ public class SemanticCache {
      */
     public void put(String projectId, String question, String answer, String evidence) {
         try {
+            // M6 修复：并发写入去重 —— 先按问题文本精确去重，避免并发 cache miss 写入重复条目
+            LambdaQueryWrapper<SemanticCacheEntry> dedupWrapper = new LambdaQueryWrapper<>();
+            dedupWrapper.eq(SemanticCacheEntry::getProjectId, projectId)
+                    .eq(SemanticCacheEntry::getQuestion, question)
+                    .last("LIMIT 1");
+            if (cacheRepository.selectOne(dedupWrapper) != null) {
+                log.debug("Semantic cache skipped: duplicate question already cached for projectId={}", projectId);
+                return;
+            }
+
             // 1. 计算问题 embedding
             float[] embedding = vectorService.computeEmbedding(question);
             if (embedding == null || embedding.length == 0) {
@@ -99,7 +114,7 @@ public class SemanticCache {
             }
 
             // 2. 转为 pgvector 文本格式 "[0.1,0.2,...]"
-            String embeddingStr = floatArrayToVectorLiteral(embedding);
+            String embeddingStr = VectorUtils.floatArrayToVectorLiteral(embedding);
 
             // 3. 创建缓存条目
             SemanticCacheEntry entry = new SemanticCacheEntry();
@@ -123,28 +138,24 @@ public class SemanticCache {
         }
     }
 
-    private String floatArrayToVectorLiteral(float[] floats) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < floats.length; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(floats[i]);
-        }
-        sb.append("]");
-        return sb.toString();
-    }
-
     /**
      * 清除过期缓存
+     * L7 修复：添加 @Scheduled 定时触发，每小时执行一次
      */
+    @Scheduled(fixedRate = 3600000)
     public void evictExpired() {
-        LocalDateTime cutoff = LocalDateTime.now().minusHours(CACHE_TTL_HOURS);
-        
-        LambdaQueryWrapper<SemanticCacheEntry> wrapper = new LambdaQueryWrapper<>();
-        wrapper.lt(SemanticCacheEntry::getLastAccessAt, cutoff);
-        
-        int deleted = cacheRepository.delete(wrapper);
-        if (deleted > 0) {
-            log.info("Evicted {} expired semantic cache entries", deleted);
+        try {
+            LocalDateTime cutoff = LocalDateTime.now().minusHours(CACHE_TTL_HOURS);
+
+            LambdaQueryWrapper<SemanticCacheEntry> wrapper = new LambdaQueryWrapper<>();
+            wrapper.lt(SemanticCacheEntry::getLastAccessAt, cutoff);
+
+            int deleted = cacheRepository.delete(wrapper);
+            if (deleted > 0) {
+                log.info("Evicted {} expired semantic cache entries", deleted);
+            }
+        } catch (Exception e) {
+            log.warn("Semantic cache eviction failed: {}", e.getMessage());
         }
     }
 

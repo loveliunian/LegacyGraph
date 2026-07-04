@@ -1026,15 +1026,18 @@ const likelihoodType = (l?: string) => {
   if (l.toLowerCase().includes('medium') || l.includes('中')) return 'warning'
   return 'success'
 }
+import DOMPurify from 'dompurify'
+
 const renderMarkdown = (text?: string) => {
   if (!text) return ''
-  return text
+  const html = text
     .replace(/### (.+)/g, '<h4>$1</h4>')
     .replace(/## (.+)/g, '<h3>$1</h3>')
     .replace(/# (.+)/g, '<h2>$1</h2>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\n/g, '<br>')
+  return DOMPurify.sanitize(html)
 }
 </script>
 

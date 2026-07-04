@@ -29,7 +29,7 @@ public class NotificationController {
     /**
      * 标记通知已读
      */
-    @GetMapping("/{id}/read")
+    @PutMapping("/{id}/read")
     public Result<Void> markRead(@PathVariable String id) {
         notificationService.markRead(id);
         return Result.success();

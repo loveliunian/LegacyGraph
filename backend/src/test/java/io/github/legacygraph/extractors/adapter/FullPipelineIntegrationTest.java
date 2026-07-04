@@ -3,6 +3,7 @@ package io.github.legacygraph.extractors.adapter;
 import io.github.legacygraph.builder.FrontendGraphBuilder;
 import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.entity.Fact;
+import io.github.legacygraph.extractors.DocumentExtractor;
 import io.github.legacygraph.extractors.JavaStructureExtractor;
 import io.github.legacygraph.repository.FactRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -91,7 +92,7 @@ class FullPipelineIntegrationTest {
                 new JavaServiceCallAdapter(graphBuilder, factPersister, javaStructureExtractor),
                 new MyBatisXmlAdapter(graphBuilder, factPersister),
                 new VueFrontendAdapter(frontendGraphBuilder, factPersister),
-                new DocumentAdapter(factPersister)
+                new DocumentAdapter(factPersister, new DocumentExtractor())
         ));
 
         // 构造项目目录结构

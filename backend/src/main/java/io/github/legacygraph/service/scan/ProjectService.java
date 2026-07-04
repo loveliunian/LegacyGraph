@@ -15,6 +15,7 @@ import io.github.legacygraph.service.system.CacheService;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
  * 管理知识图谱分析项目，项目是LegacyGraph中最高级别的组织单元
  * 一个项目对应一个需要分析的遗留系统
  */
+@Slf4j
 @Service
 public class ProjectService {
 
@@ -239,26 +241,32 @@ public class ProjectService {
      * 物理删除项目及所有关联数据。
      * <p>优化：委托 ScanVersionService 批量删除版本、Neo4j 异步、项目级并行删除。</p>
      */
-    @Transactional
+    // S9 修复：移除 @Transactional，因为 CompletableFuture.runAsync 在独立线程执行，
+    // 无法共享事务上下文。改为"先删关联数据（并行），最后删项目记录"的弱一致性模型。
+    // 失败时通过日志和状态标记追踪，避免留下孤儿数据。
     public void deleteById(String id) {
         Project project = projectRepository.selectById(id);
         if (project == null) {
             throw new BusinessException(404, "项目不存在");
         }
 
-        // 1. 并行删除所有扫描版本（委托已优化的 ScanVersionService）
+        // 收集所有并行删除任务
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        List<String> failedSteps = java.util.Collections.synchronizedList(new ArrayList<>());
+
+        // 1. 并行删除所有扫描版本
         LambdaQueryWrapper<ScanVersion> versionWrapper = new LambdaQueryWrapper<>();
         versionWrapper.eq(ScanVersion::getProjectId, id);
         List<ScanVersion> versions = scanVersionRepository.selectList(versionWrapper);
-        List<CompletableFuture<Void>> versionFutures = new ArrayList<>();
         for (ScanVersion version : versions) {
-            versionFutures.add(CompletableFuture.runAsync(() ->
-                scanVersionService.deleteScanVersion(version.getId())
-            ));
-        }
-        // 等待所有版本删除完成（并行）
-        if (!versionFutures.isEmpty()) {
-            CompletableFuture.allOf(versionFutures.toArray(new CompletableFuture[0])).join();
+            futures.add(CompletableFuture.runAsync(() -> {
+                try {
+                    scanVersionService.deleteScanVersion(version.getId());
+                } catch (Exception e) {
+                    log.warn("S9: 删除扫描版本失败 versionId={}, error={}", version.getId(), e.getMessage());
+                    failedSteps.add("scan_version:" + version.getId());
+                }
+            }));
         }
 
         // 2. Neo4j 全项目图谱异步删除（不阻塞响应）
@@ -266,110 +274,163 @@ public class ProjectService {
 
         // 3. 项目级 PG 图谱
         CompletableFuture<Void> graphFuture = CompletableFuture.runAsync(() -> {
-            graphNodeRepository.delete(new QueryWrapper<GraphNode>().eq("project_id", id));
-            graphEdgeRepository.delete(new QueryWrapper<GraphEdge>().eq("project_id", id));
+            try {
+                graphNodeRepository.delete(new QueryWrapper<GraphNode>().eq("project_id", id));
+                graphEdgeRepository.delete(new QueryWrapper<GraphEdge>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除项目级PG图谱失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("graph:" + id);
+            }
         });
 
         // 4. 事实/证据（先查 ID 再批量删，避免 SQL 注入）
         CompletableFuture<Void> evidenceFuture = CompletableFuture.runAsync(() -> {
-            List<Evidence> evidenceList = evidenceRepository.selectList(
-                    new QueryWrapper<Evidence>().select("id").eq("project_id", id));
-            if (!evidenceList.isEmpty()) {
-                List<String> evidenceIds = evidenceList.stream().map(Evidence::getId).toList();
-                nodeEvidenceRepository.delete(new QueryWrapper<NodeEvidence>().in("evidence_id", evidenceIds));
-                edgeEvidenceRepository.delete(new QueryWrapper<EdgeEvidence>().in("evidence_id", evidenceIds));
+            try {
+                List<Evidence> evidenceList = evidenceRepository.selectList(
+                        new QueryWrapper<Evidence>().select("id").eq("project_id", id));
+                if (!evidenceList.isEmpty()) {
+                    List<String> evidenceIds = evidenceList.stream().map(Evidence::getId).toList();
+                    nodeEvidenceRepository.delete(new QueryWrapper<NodeEvidence>().in("evidence_id", evidenceIds));
+                    edgeEvidenceRepository.delete(new QueryWrapper<EdgeEvidence>().in("evidence_id", evidenceIds));
+                }
+                evidenceRepository.delete(new QueryWrapper<Evidence>().eq("project_id", id));
+                factRepository.delete(new QueryWrapper<Fact>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除事实/证据失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("evidence:" + id);
             }
-            evidenceRepository.delete(new QueryWrapper<Evidence>().eq("project_id", id));
-            factRepository.delete(new QueryWrapper<Fact>().eq("project_id", id));
         });
 
         // 5. 文档
         CompletableFuture<Void> docFuture = CompletableFuture.runAsync(() -> {
-            docChunkRepository.delete(new QueryWrapper<DocChunk>().eq("project_id", id));
-            documentRepository.delete(new QueryWrapper<Document>().eq("project_id", id));
+            try {
+                docChunkRepository.delete(new QueryWrapper<DocChunk>().eq("project_id", id));
+                documentRepository.delete(new QueryWrapper<Document>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除文档失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("doc:" + id);
+            }
         });
 
         // 6. 测试数据
         CompletableFuture<Void> testFuture = CompletableFuture.runAsync(() -> {
-            List<TestCase> testCases = testCaseRepository.selectList(
-                    new QueryWrapper<TestCase>().select("id").eq("project_id", id));
-            if (!testCases.isEmpty()) {
-                List<String> testCaseIds = testCases.stream().map(TestCase::getId).toList();
-                testAssertionRepository.delete(new QueryWrapper<TestAssertion>().in("test_case_id", testCaseIds));
+            try {
+                List<TestCase> testCases = testCaseRepository.selectList(
+                        new QueryWrapper<TestCase>().select("id").eq("project_id", id));
+                if (!testCases.isEmpty()) {
+                    List<String> testCaseIds = testCases.stream().map(TestCase::getId).toList();
+                    testAssertionRepository.delete(new QueryWrapper<TestAssertion>().in("test_case_id", testCaseIds));
+                }
+                testResultRepository.delete(new QueryWrapper<TestResult>().eq("project_id", id));
+                testRunRepository.delete(new QueryWrapper<TestRun>().eq("project_id", id));
+                testCaseRepository.delete(new QueryWrapper<TestCase>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除测试数据失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("test:" + id);
             }
-            testResultRepository.delete(new QueryWrapper<TestResult>().eq("project_id", id));
-            testRunRepository.delete(new QueryWrapper<TestRun>().eq("project_id", id));
-            testCaseRepository.delete(new QueryWrapper<TestCase>().eq("project_id", id));
         });
 
         // 7. 追踪/审核/报告
         CompletableFuture<Void> auditFuture = CompletableFuture.runAsync(() -> {
-            runtimeTraceRepository.delete(new QueryWrapper<RuntimeTrace>().eq("project_id", id));
-            reviewRecordRepository.delete(new QueryWrapper<ReviewRecord>().eq("project_id", id));
-            reportRepository.delete(new QueryWrapper<Report>().eq("project_id", id));
+            try {
+                runtimeTraceRepository.delete(new QueryWrapper<RuntimeTrace>().eq("project_id", id));
+                reviewRecordRepository.delete(new QueryWrapper<ReviewRecord>().eq("project_id", id));
+                reportRepository.delete(new QueryWrapper<Report>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除追踪/审核/报告失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("audit:" + id);
+            }
         });
 
         // 8. 向量/提示/本体/Agent（agent_run 引用 prompt_run，须先删 agent_run）
         CompletableFuture<Void> miscFuture = CompletableFuture.runAsync(() -> {
-            vectorDocumentRepository.delete(new QueryWrapper<VectorDocument>().eq("project_id", id));
-            agentRunRepository.delete(new QueryWrapper<AgentRun>().eq("project_id", id));
-            promptRunRepository.delete(new QueryWrapper<PromptRun>().eq("project_id", id));
-            domainOntologyTermRepository.delete(new QueryWrapper<DomainOntologyTerm>().eq("project_id", id));
-            domainOntologyRelationRepository.delete(new QueryWrapper<DomainOntologyRelation>().eq("project_id", id));
+            try {
+                vectorDocumentRepository.delete(new QueryWrapper<VectorDocument>().eq("project_id", id));
+                agentRunRepository.delete(new QueryWrapper<AgentRun>().eq("project_id", id));
+                promptRunRepository.delete(new QueryWrapper<PromptRun>().eq("project_id", id));
+                domainOntologyTermRepository.delete(new QueryWrapper<DomainOntologyTerm>().eq("project_id", id));
+                domainOntologyRelationRepository.delete(new QueryWrapper<DomainOntologyRelation>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除向量/提示/本体/Agent失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("misc:" + id);
+            }
         });
 
         // 8.1 遗漏表：AI扫描任务/证据冲突/写意图/通知/QA/语义缓存/资产快照/工具运行
         CompletableFuture<Void> extraFuture = CompletableFuture.runAsync(() -> {
-            aiScanJobRepository.delete(new QueryWrapper<AiScanJob>().eq("project_id", id));
-            evidenceConflictRepository.delete(new QueryWrapper<EvidenceConflict>().eq("project_id", id));
-            graphWriteIntentRepository.delete(new QueryWrapper<GraphWriteIntentEntity>().eq("project_id", id));
-            notificationRepository.delete(new QueryWrapper<Notification>().eq("project_id", id));
-            // QA 删除顺序：qa_feedback(FK→qa_message) → qa_message(FK→qa_conversation) → qa_conversation
-            List<QaConversation> conversations = qaConversationRepository.selectList(
-                    new QueryWrapper<QaConversation>().select("id").eq("project_id", id));
-            if (!conversations.isEmpty()) {
-                List<String> conversationIds = conversations.stream().map(QaConversation::getId).toList();
-                qaFeedbackRepository.delete(new QueryWrapper<QaFeedback>().eq("project_id", id));
-                qaMessageRepository.delete(new QueryWrapper<QaMessage>().in("conversation_id", conversationIds));
+            try {
+                aiScanJobRepository.delete(new QueryWrapper<AiScanJob>().eq("project_id", id));
+                evidenceConflictRepository.delete(new QueryWrapper<EvidenceConflict>().eq("project_id", id));
+                graphWriteIntentRepository.delete(new QueryWrapper<GraphWriteIntentEntity>().eq("project_id", id));
+                notificationRepository.delete(new QueryWrapper<Notification>().eq("project_id", id));
+                // QA 删除顺序：qa_feedback(FK→qa_message) → qa_message(FK→qa_conversation) → qa_conversation
+                List<QaConversation> conversations = qaConversationRepository.selectList(
+                        new QueryWrapper<QaConversation>().select("id").eq("project_id", id));
+                if (!conversations.isEmpty()) {
+                    List<String> conversationIds = conversations.stream().map(QaConversation::getId).toList();
+                    qaFeedbackRepository.delete(new QueryWrapper<QaFeedback>().eq("project_id", id));
+                    qaMessageRepository.delete(new QueryWrapper<QaMessage>().in("conversation_id", conversationIds));
+                }
+                qaConversationRepository.delete(new QueryWrapper<QaConversation>().eq("project_id", id));
+                semanticCacheRepository.delete(new QueryWrapper<SemanticCacheEntry>().eq("project_id", id));
+                sourceAssetSnapshotRepository.delete(new QueryWrapper<SourceAssetSnapshot>().eq("project_id", id));
+                // 先删 tool_evidence（子表，FK→tool_run），再删 tool_run（父表）
+                List<ToolRunEntity> toolRuns = toolRunRepository.selectList(
+                        new QueryWrapper<ToolRunEntity>().select("id").eq("project_id", id));
+                if (!toolRuns.isEmpty()) {
+                    List<String> toolRunIds = toolRuns.stream().map(ToolRunEntity::getId).toList();
+                    toolEvidenceRepository.delete(new QueryWrapper<ToolEvidenceEntity>().in("tool_run_id", toolRunIds));
+                }
+                toolRunRepository.delete(new QueryWrapper<ToolRunEntity>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除额外表失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("extra:" + id);
             }
-            qaConversationRepository.delete(new QueryWrapper<QaConversation>().eq("project_id", id));
-            semanticCacheRepository.delete(new QueryWrapper<SemanticCacheEntry>().eq("project_id", id));
-            sourceAssetSnapshotRepository.delete(new QueryWrapper<SourceAssetSnapshot>().eq("project_id", id));
-            // 先删 tool_evidence（子表，FK→tool_run），再删 tool_run（父表）
-            List<ToolRunEntity> toolRuns = toolRunRepository.selectList(
-                    new QueryWrapper<ToolRunEntity>().select("id").eq("project_id", id));
-            if (!toolRuns.isEmpty()) {
-                List<String> toolRunIds = toolRuns.stream().map(ToolRunEntity::getId).toList();
-                toolEvidenceRepository.delete(new QueryWrapper<ToolEvidenceEntity>().in("tool_run_id", toolRunIds));
-            }
-            toolRunRepository.delete(new QueryWrapper<ToolRunEntity>().eq("project_id", id));
         });
 
         // 9. 知识/缺口/风险
         CompletableFuture<Void> kgFuture = CompletableFuture.runAsync(() -> {
-            knowledgeClaimRepository.delete(new QueryWrapper<KnowledgeClaim>().eq("project_id", id));
-            gapTaskRepository.delete(new QueryWrapper<GapTask>().eq("project_id", id));
-            migrationRiskRepository.delete(new QueryWrapper<MigrationRisk>().eq("project_id", id));
+            try {
+                knowledgeClaimRepository.delete(new QueryWrapper<KnowledgeClaim>().eq("project_id", id));
+                gapTaskRepository.delete(new QueryWrapper<GapTask>().eq("project_id", id));
+                migrationRiskRepository.delete(new QueryWrapper<MigrationRisk>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除知识/缺口/风险失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("kg:" + id);
+            }
         });
 
         // 10. 变更管线（先查 ID 再批量删）
         CompletableFuture<Void> changeFuture = CompletableFuture.runAsync(() -> {
-            List<ChangeTask> changeTasks = changeTaskRepository.selectList(
-                    new QueryWrapper<ChangeTask>().select("id").eq("project_id", id));
-            if (!changeTasks.isEmpty()) {
-                List<String> changeTaskIds = changeTasks.stream().map(ChangeTask::getId).toList();
-                prTaskRepository.delete(new QueryWrapper<PrTask>().in("change_task_id", changeTaskIds));
-                validationGateRepository.delete(new QueryWrapper<ValidationGate>().in("change_task_id", changeTaskIds));
-                patchFileRepository.delete(new QueryWrapper<PatchFile>().in("change_task_id", changeTaskIds));
+            try {
+                List<ChangeTask> changeTasks = changeTaskRepository.selectList(
+                        new QueryWrapper<ChangeTask>().select("id").eq("project_id", id));
+                if (!changeTasks.isEmpty()) {
+                    List<String> changeTaskIds = changeTasks.stream().map(ChangeTask::getId).toList();
+                    prTaskRepository.delete(new QueryWrapper<PrTask>().in("change_task_id", changeTaskIds));
+                    validationGateRepository.delete(new QueryWrapper<ValidationGate>().in("change_task_id", changeTaskIds));
+                    patchFileRepository.delete(new QueryWrapper<PatchFile>().in("change_task_id", changeTaskIds));
+                }
+                changeTaskRepository.delete(new QueryWrapper<ChangeTask>().eq("project_id", id));
+            } catch (Exception e) {
+                log.warn("S9: 删除变更管线失败: projectId={}, error={}", id, e.getMessage());
+                failedSteps.add("change:" + id);
             }
-            changeTaskRepository.delete(new QueryWrapper<ChangeTask>().eq("project_id", id));
         });
 
         // 等待所有并行删除完成
-        CompletableFuture.allOf(graphFuture, evidenceFuture, docFuture, testFuture,
-                auditFuture, miscFuture, extraFuture, kgFuture, changeFuture).join();
+        futures.add(graphFuture);
+        futures.add(evidenceFuture);
+        futures.add(docFuture);
+        futures.add(testFuture);
+        futures.add(auditFuture);
+        futures.add(miscFuture);
+        futures.add(extraFuture);
+        futures.add(kgFuture);
+        futures.add(changeFuture);
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-        // 11. 项目级配置（可并行但依赖上面的变更管线结果）
+        // 11. 项目级配置
         codeRepoRepository.delete(new QueryWrapper<CodeRepo>().eq("project_id", id));
         dbConnectionRepository.delete(new QueryWrapper<DbConnection>().eq("project_id", id));
 
@@ -378,8 +439,15 @@ public class ProjectService {
         cacheService.evictByPrefix("graph:");
         graphCacheInvalidator.invalidateAll();
 
-        // 13. 删除项目
+        // 13. 删除项目（最后执行，确保关联数据已清理）
         projectRepository.deleteById(id);
+
+        // S9 修复：记录失败步骤，便于后续排查
+        if (!failedSteps.isEmpty()) {
+            log.warn("S9: 项目删除完成，但以下步骤失败: projectId={}, failedSteps={}", id, failedSteps);
+        } else {
+            log.info("S9: 项目删除完成: projectId={}", id);
+        }
     }
 
     /**
@@ -390,7 +458,9 @@ public class ProjectService {
         try {
             neo4jGraphDao.deleteProjectGraph(projectId);
         } catch (Exception e) {
-            // Neo4j 删除失败不影响主流程
+            // L11 修复：Neo4j 删除异常不再静默吞没，记录 warn 日志便于排查
+            log.warn("L11: Neo4j project graph deletion failed: projectId={}, error={}",
+                    projectId, e.getMessage(), e);
         }
     }
 }

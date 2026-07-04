@@ -310,13 +310,18 @@ async function loadVersions() {
 }
 
 async function showCreateDialog() {
-  await loadVersions()
-  formData.title = ''
-  formData.taskType = 'BUGFIX'
-  formData.versionId = versions.value[0]?.id || ''
-  formData.inputIssue = ''
-  dialogVisible.value = true
-}
+  try {
+    await loadVersions()
+    formData.title = ''
+    formData.taskType = 'BUGFIX'
+    formData.versionId = versions.value[0]?.id || ''
+    formData.inputIssue = ''
+    dialogVisible.value = true
+  } catch (error) {
+    console.error('showCreateDialog error:', error)
+    ElMessage.error('操作失败')
+  }
+  }
 
 async function handleCreate() {
   if (!formData.title.trim()) { ElMessage.warning('请填写任务标题'); return }

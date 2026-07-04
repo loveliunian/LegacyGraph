@@ -35,7 +35,7 @@ export const reportApi = {
    * @returns 报告列表
    */
   listReports: (projectId: string) => {
-    return get<Report[]>(`/lg/projects/${projectId}/reports/list`)
+    return get<Report[]>(`/lg/projects/${encodeURIComponent(projectId)}/reports/list`)
   },
 
   /**
@@ -45,7 +45,7 @@ export const reportApi = {
    * @returns 迁移就绪度报告
    */
   generateMigrationReport: (projectId: string) => {
-    return post<MigrationReadinessReport>(`/lg/projects/${projectId}/reports/migration-readiness/generate`)
+    return post<MigrationReadinessReport>(`/lg/projects/${encodeURIComponent(projectId)}/reports/migration-readiness/generate`)
   },
 
   /**
@@ -56,7 +56,7 @@ export const reportApi = {
    * @returns 生成结果
    */
   generateConfidenceTrend: (projectId: string, versionId: string) => {
-    return post(`/lg/projects/${projectId}/reports/confidence-trend/generate`, { versionId })
+    return post(`/lg/projects/${encodeURIComponent(projectId)}/reports/confidence-trend/generate`, { versionId })
   },
 
   /**
@@ -67,7 +67,7 @@ export const reportApi = {
    * @returns 生成结果
    */
   generateTestCoverage: (projectId: string, versionId: string) => {
-    return post(`/lg/projects/${projectId}/reports/test-coverage/generate`, { versionId })
+    return post(`/lg/projects/${encodeURIComponent(projectId)}/reports/test-coverage/generate`, { versionId })
   },
 
   /**
@@ -78,7 +78,7 @@ export const reportApi = {
    * @returns 生成结果
    */
   generateGraphQuality: (projectId: string, versionId: string) => {
-    return post(`/lg/projects/${projectId}/reports/graph-quality/generate`, { versionId })
+    return post(`/lg/projects/${encodeURIComponent(projectId)}/reports/graph-quality/generate`, { versionId })
   },
 
   /**
@@ -89,7 +89,7 @@ export const reportApi = {
    * @returns 报告文件Blob
    */
   downloadReport: (projectId: string, reportId: string, format: string) => {
-    return get<Blob>(`/lg/projects/${projectId}/reports/${reportId}/download?format=${format}`, {
+    return get<Blob>(`/lg/projects/${encodeURIComponent(projectId)}/reports/${encodeURIComponent(reportId)}/download?format=${encodeURIComponent(format)}`, {
       responseType: 'blob'
     })
   },
@@ -99,7 +99,7 @@ export const reportApi = {
    * @param projectId 项目ID
    */
   getGraphMetrics: (projectId: string) => {
-    return get(`/lg/projects/${projectId}/reports/graph-metrics`)
+    return get(`/lg/projects/${encodeURIComponent(projectId)}/reports/graph-metrics`)
   },
 
   /**
@@ -123,7 +123,7 @@ export const reportApi = {
    * @param projectId 项目ID
    */
   exportMigrationReport: (projectId: string) => {
-    return get(`/reports/migration/${projectId}`)
+    return get(`/reports/migration/${encodeURIComponent(projectId)}`)
   },
 
   /**
@@ -132,7 +132,7 @@ export const reportApi = {
    * @param versionId 扫描版本ID
    */
   exportConfidenceReport: (projectId: string, versionId: string) => {
-    return get(`/reports/confidence/${projectId}/${versionId}`)
+    return get(`/reports/confidence/${encodeURIComponent(projectId)}/${encodeURIComponent(versionId)}`)
   },
 
   /**
@@ -141,7 +141,7 @@ export const reportApi = {
    * @param versionId 扫描版本ID
    */
   exportTestCoverageReport: (projectId: string, versionId: string) => {
-    return get(`/reports/test-coverage/${projectId}/${versionId}`)
+    return get(`/reports/test-coverage/${encodeURIComponent(projectId)}/${encodeURIComponent(versionId)}`)
   },
 
   /**
@@ -150,7 +150,7 @@ export const reportApi = {
    * @param versionId 扫描版本ID
    */
   exportGraphQualityReport: (projectId: string, versionId: string) => {
-    return get(`/reports/graph-quality/${projectId}/${versionId}`)
+    return get(`/reports/graph-quality/${encodeURIComponent(projectId)}/${encodeURIComponent(versionId)}`)
   },
 
   /**
@@ -159,7 +159,7 @@ export const reportApi = {
    * @param sliceId 功能切片ID
    */
   exportFeatureSliceReport: (projectId: string, sliceId: string) => {
-    return get(`/reports/feature-slice/${projectId}/${sliceId}`)
+    return get(`/reports/feature-slice/${encodeURIComponent(projectId)}/${encodeURIComponent(sliceId)}`)
   },
 
   /**
@@ -168,6 +168,6 @@ export const reportApi = {
    * @param taskId 变更任务ID
    */
   exportChangeTaskReport: (projectId: string, taskId: string) => {
-    return get(`/reports/change-task/${projectId}/${taskId}`)
+    return get(`/reports/change-task/${encodeURIComponent(projectId)}/${encodeURIComponent(taskId)}`)
   }
 }

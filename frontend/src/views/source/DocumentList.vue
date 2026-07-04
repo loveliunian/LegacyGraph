@@ -188,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document, Guide, Files, Reading } from '@element-plus/icons-vue'
@@ -197,9 +197,13 @@ import { sourceApi } from '@/api/source.api'
 import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import { preloadDicts, dictLabel } from '@/utils/dict'
+import { useUserStore } from '@/stores/user'
+import DOMPurify from 'dompurify'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
+const userStore = useUserStore()
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
 const loading = ref(false)
 const docList = ref<any[]>([])
@@ -207,10 +211,12 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 
-const uploadUrl = `/api/lg/projects/${projectId}/sources/documents/upload`
-const uploadHeaders = {
-  Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`
-}
+const uploadUrl = computed(() => `${apiBaseUrl}/lg/projects/${encodeURIComponent(projectId)}/sources/documents/upload`)
+const uploadHeaders = computed(() => {
+  return userStore.accessToken ? { Authorization: `Bearer ${userStore.accessToken}` } : {}
+})
+const documentDownloadUrl = (docId: string) =>
+  `${apiBaseUrl}/lg/projects/${encodeURIComponent(projectId)}/sources/documents/${encodeURIComponent(docId)}/download`
 
 // 预览弹窗状态
 const previewVisible = ref(false)
@@ -320,8 +326,31 @@ const preview = (row: any) => {
   if (isMarkdownFile(row)) {
     openMarkdownPreview(row)
   } else {
-    const url = `/api/lg/projects/${projectId}/sources/documents/${row.id}/download`
-    window.open(url, '_blank')
+    // M18修复：window.open 不携带 Authorization header，改用 blob 下载 + <a> 触发
+    const url = documentDownloadUrl(row.id)
+    const headers: Record<string, string> = {}
+    if (userStore.accessToken) {
+      headers['Authorization'] = `Bearer ${userStore.accessToken}`
+    }
+    fetch(url, { headers })
+      .then(res => {
+        if (!res.ok) throw new Error(`下载失败: ${res.status}`)
+        return res.blob()
+      })
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = row.docName || 'download'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(blobUrl)
+      })
+      .catch(err => {
+        console.error('文件下载失败:', err)
+        ElMessage.error('文件下载失败')
+      })
   }
 }
 
@@ -337,8 +366,13 @@ const openMarkdownPreview = async (row: any) => {
   lastPreviewRow = row
 
   try {
-    const url = `/api/lg/projects/${projectId}/sources/documents/${row.id}/download`
-    const response = await fetch(url)
+    const url = documentDownloadUrl(row.id)
+    // S14修复：原生fetch需要手动添加认证头
+    const headers: Record<string, string> = {}
+    if (userStore.accessToken) {
+      headers['Authorization'] = `Bearer ${userStore.accessToken}`
+    }
+    const response = await fetch(url, { headers })
     if (!response.ok) {
       throw new Error(`请求失败: ${response.status} ${response.statusText}`)
     }
@@ -353,7 +387,8 @@ const openMarkdownPreview = async (row: any) => {
     }
 
     const html = marked.parse(markdown, { renderer }) as string
-    previewHtml.value = html
+    // S12补充：marked 输出也需要 DOMPurify 净化防止 XSS
+    previewHtml.value = DOMPurify.sanitize(html)
   } catch (err: any) {
     previewError.value = err.message || '加载文档失败'
   } finally {

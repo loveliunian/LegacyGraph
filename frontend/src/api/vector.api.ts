@@ -42,7 +42,7 @@ export const vectorApi = {
    * @returns 操作结果
    */
   batchUpsert: (projectId: string, documents: VectorDocument[]) => {
-    return post<void>(`/lg/vector/projects/${projectId}/upsert`, documents)
+    return post<void>(`/lg/vector/projects/${encodeURIComponent(projectId)}/upsert`, documents)
   },
 
   /**
@@ -55,7 +55,11 @@ export const vectorApi = {
    * @returns 相似的向量文档列表，按相似度降序排列
    */
   semanticSearch: (projectId: string, versionId: string, query: string, topK: number = 10, chunkType?: string) => {
-    return post<VectorDocument[]>(`/lg/vector/projects/${projectId}/search?versionId=${versionId || ''}&topK=${topK}&chunkType=${chunkType || ''}`, query)
+    return post<VectorDocument[]>(
+      `/lg/vector/projects/${projectId}/search`,
+      query,
+      { params: { versionId: versionId || '', topK, chunkType: chunkType || '' } }
+    )
   },
 
   /**
@@ -67,6 +71,6 @@ export const vectorApi = {
    * @returns 相似节点列表
    */
   findSimilarNodes: (projectId: string, versionId: string, nodeName: string, threshold: number = 0.85) => {
-    return get<GraphNode[]>(`/lg/vector/projects/${projectId}/similar-nodes`, { versionId, nodeName, threshold })
+    return get<GraphNode[]>(`/lg/vector/projects/${encodeURIComponent(projectId)}/similar-nodes`, { versionId, nodeName, threshold })
   }
 }

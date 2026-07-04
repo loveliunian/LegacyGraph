@@ -18,11 +18,12 @@ public class DocumentAdapter implements ExtractionAdapter {
 
     private static final Set<String> DOC_EXTENSIONS = Set.of("md", "pdf", "docx", "txt", "rst", "adoc");
 
+    private final DocumentExtractor documentExtractor;
     private final FactPersister factPersister;
-    private final DocumentExtractor documentExtractor = new DocumentExtractor();
 
-    public DocumentAdapter(FactPersister factPersister) {
+    public DocumentAdapter(FactPersister factPersister, DocumentExtractor documentExtractor) {
         this.factPersister = factPersister;
+        this.documentExtractor = documentExtractor;
     }
 
     @Override

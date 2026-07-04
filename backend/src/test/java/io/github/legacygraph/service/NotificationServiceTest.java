@@ -72,7 +72,7 @@ class NotificationServiceTest {
         service.markRead("n1");
 
         assertTrue(n.getRead());
-        verify(notificationRepository).updateById((Notification) n);
+        verify(notificationRepository).updateById(n);
     }
 
     @Test

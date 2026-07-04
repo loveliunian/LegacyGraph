@@ -44,16 +44,16 @@ export const promptApi = {
   listActive: () => get<PromptTemplate[]>('/lg/admin/prompts/active'),
 
   /** 获取详情 */
-  getById: (id: number) => get<PromptTemplate>(`/lg/admin/prompts/${id}`),
+  getById: (id: number) => get<PromptTemplate>(`/lg/admin/prompts/${encodeURIComponent(id)}`),
 
   /** 创建 */
   create: (data: PromptTemplate) => post<PromptTemplate>('/lg/admin/prompts', data),
 
   /** 更新（创建新版本） */
-  update: (id: number, data: PromptTemplate) => put<PromptTemplate>(`/lg/admin/prompts/${id}`, data),
+  update: (id: number, data: PromptTemplate) => put<PromptTemplate>(`/lg/admin/prompts/${encodeURIComponent(id)}`, data),
 
   /** 切换启用状态 */
-  toggleActive: (id: number) => put(`/lg/admin/prompts/${id}/toggle`),
+  toggleActive: (id: number) => put(`/lg/admin/prompts/${encodeURIComponent(id)}/toggle`),
 
   /** 删除 */
   delete: (id: number) => del(`/lg/admin/prompts/${id}`),

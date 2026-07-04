@@ -45,6 +45,9 @@ class ScanScopeResolverTest {
         assertTrue(plan.getRepos().isEmpty());
         assertTrue(plan.getDatabases().isEmpty());
         assertTrue(plan.getDocuments().isEmpty());
+        // L23 修复：补充 scanTypes 断言
+        assertTrue(plan.getScanTypes().contains("DOC_PARSE"));
+        assertEquals(1, plan.getScanTypes().size());
     }
 
     @Test
@@ -73,6 +76,8 @@ class ScanScopeResolverTest {
         DbConnection connection = new DbConnection();
         connection.setId(id);
         connection.setDbType("postgresql");
+        // L23 修复：补充 status 字段
+        connection.setStatus("READY");
         return connection;
     }
 

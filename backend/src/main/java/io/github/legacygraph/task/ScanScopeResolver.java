@@ -124,7 +124,7 @@ public class ScanScopeResolver {
                 .repos(repos)
                 .databases(databases)
                 .documents(documents)
-                .scanTypes(scopeScanTypes != null ? new HashSet<>(scopeScanTypes) : new HashSet<>())
+                .scanTypes(resolveScanTypes(scopeScanTypes))
                 .aiEnabled(aiEnabled)
                 .incremental(incremental)
                 .maxFiles(maxFiles)
@@ -132,6 +132,22 @@ public class ScanScopeResolver {
                 .maxDbTables(maxDbTables)
                 .rawScope(parseRawScope(scanScope))
                 .build();
+    }
+
+    /**
+     * 解析 scanTypes，消除空 Set 语义歧义。
+     * <ul>
+     *   <li>null 或空列表 → 扫描所有类型（默认行为）</li>
+     *   <li>非空列表 → 仅扫描指定类型</li>
+     * </ul>
+     * 避免空 Set 被误解为"不扫描任何类型"。
+     */
+    private Set<String> resolveScanTypes(List<String> scopeScanTypes) {
+        if (scopeScanTypes == null || scopeScanTypes.isEmpty()) {
+            // 空或未指定时返回所有支持的扫描类型，而非空 Set
+            return new HashSet<>(List.of("CODE_SCAN", "DB_SCAN", "DOC_SCAN"));
+        }
+        return new HashSet<>(scopeScanTypes);
     }
 
     /**

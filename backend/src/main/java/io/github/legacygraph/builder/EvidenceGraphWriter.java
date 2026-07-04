@@ -64,7 +64,15 @@ public class EvidenceGraphWriter {
      * key = "nodeType::nodeKey"，value = ReentrantLock。
      * 不同 nodeKey 的 MERGE 互不阻塞，仅相同 nodeKey 串行化。
      */
-    private final ConcurrentHashMap<String, ReentrantLock> nodeMergeLocks = new ConcurrentHashMap<>();
+    // M4 修复：使用固定大小 Striped Lock 替代 ConcurrentHashMap 动态锁，消除 unlock→remove 竞态窗口。
+    // 锁数量固定为 64 槽位，按 hash 分发，避免动态创建/销毁锁的并发问题。
+    private static final int LOCK_STRIPES = 64;
+    private final ReentrantLock[] mergeLockStripes = new ReentrantLock[LOCK_STRIPES];
+    {
+        for (int i = 0; i < LOCK_STRIPES; i++) {
+            mergeLockStripes[i] = new ReentrantLock();
+        }
+    }
 
     public EvidenceGraphWriter(Neo4jGraphDao neo4jGraphDao,
                                EvidenceRepository evidenceRepository,
@@ -122,9 +130,9 @@ public class EvidenceGraphWriter {
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
-        // 加锁：防止并发 MERGE 同一 (nodeType, nodeKey) 产生重复节点
+        // M4 修复：使用 Striped Lock 替代 ConcurrentHashMap 动态锁，消除竞态
         String lockKey = claim.getNodeType() + "::" + claim.getNodeKey();
-        ReentrantLock lock = nodeMergeLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
+        ReentrantLock lock = mergeLockStripes[Math.abs(lockKey.hashCode()) % LOCK_STRIPES];
         lock.lock();
         try {
             // 一次 MERGE 完成去重 + 创建（替代原 findNode + createNode 两次远程往返）
@@ -147,10 +155,7 @@ public class EvidenceGraphWriter {
             return merged;
         } finally {
             lock.unlock();
-            // 清理锁：如果队列中无其他等待者，移除锁对象避免内存泄漏
-            if (!lock.hasQueuedThreads()) {
-                nodeMergeLocks.remove(lockKey, lock);
-            }
+            // M4: Striped Lock 无需清理，固定槽位复用
         }
     }
 
@@ -306,6 +311,7 @@ public class EvidenceGraphWriter {
         }
         String content = ev.getContent();
         if (hasText(content)) {
+            // L1 修复：单次扫描，复用结果，避免重复调用 secretScanService.scan
             SecretScanService.SecretScanResult scan = secretScanService.scan(content);
             PrivacyLevel level;
             String policy;
@@ -317,11 +323,11 @@ public class EvidenceGraphWriter {
                 level = scan.getSuggestedLevel();
                 policy = scan.getSuggestedPolicy();
             }
-            // 命中密钥的内容必须以 redacted 落库
+            // 命中密钥的内容必须以 redacted 落库（复用 scan 结果）
             if (scan.isHasSecret() && hasText(scan.getRedacted())) {
                 ev.setContent(scan.getRedacted());
             } else if (PrivacyLevel.CONFIDENTIAL == level || PrivacyLevel.SECRET == level) {
-                ev.setContent(secretScanService.scan(content).getRedacted());
+                ev.setContent(scan.getRedacted());
             }
             ev.setPrivacyLevel(level.name());
             ev.setRedactionPolicy(policy);

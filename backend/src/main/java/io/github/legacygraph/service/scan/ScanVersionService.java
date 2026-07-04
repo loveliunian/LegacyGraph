@@ -457,8 +457,9 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
     /**
      * 删除扫描版本及其关联的所有数据（物理删除）。
      * <p>优化：批量删除扫描任务、Neo4j 异步清理、PG 表并行删除。</p>
+     * <p>S10 修复：移除 @Transactional，因为 CompletableFuture.runAsync() 在独立线程执行，
+     * 无法共享事务上下文。改为"先删关联数据（并行），最后删版本记录"的弱一致性模型。</p>
      */
-    @Transactional
     public void deleteScanVersion(String versionId) {
         ScanVersion version = scanVersionRepository.selectById(versionId);
         if (version == null) {
@@ -471,29 +472,42 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         taskWrapper.eq(ScanTask::getVersionId, versionId);
         scanTaskRepository.delete(taskWrapper);
 
-        // 2. Neo4j 子图异步删除（不阻塞 HTTP 响应，通过 self 代理确保 @Async 生效）
-        self.deleteNeo4jGraphAsync(projectId, versionId);
+        // 2. Neo4j 子图异步删除 — M14 修复：移到 PG 删除全部完成后再执行，
+        //    避免 PG 删除失败时 Neo4j 图谱已被删除导致数据不一致。
+        //    （原代码在此处直接 self.deleteNeo4jGraphAsync，与 PG 删除并行执行）
 
         // 3. PG 图谱数据并行删除（虚拟线程，I/O 密集）
         CompletableFuture<Void> graphFuture = CompletableFuture.runAsync(() -> {
-            graphNodeRepository.delete(new QueryWrapper<GraphNode>().eq("version_id", versionId));
-            graphEdgeRepository.delete(new QueryWrapper<GraphEdge>().eq("version_id", versionId));
+            try {
+                graphNodeRepository.delete(new QueryWrapper<GraphNode>().eq("version_id", versionId));
+                graphEdgeRepository.delete(new QueryWrapper<GraphEdge>().eq("version_id", versionId));
+            } catch (Exception e) {
+                log.warn("S10: 删除版本级PG图谱失败: versionId={}, error={}", versionId, e.getMessage());
+            }
         });
 
         // 4. 事实删除
-        CompletableFuture<Void> factFuture = CompletableFuture.runAsync(() ->
-            factRepository.delete(new QueryWrapper<Fact>().eq("version_id", versionId))
-        );
+        CompletableFuture<Void> factFuture = CompletableFuture.runAsync(() -> {
+            try {
+                factRepository.delete(new QueryWrapper<Fact>().eq("version_id", versionId));
+            } catch (Exception e) {
+                log.warn("S10: 删除事实数据失败: versionId={}, error={}", versionId, e.getMessage());
+            }
+        });
 
         // 5. 证据删除（先查 ID 再批量删，避免字符串拼接子查询）
         CompletableFuture<Void> evidenceFuture = CompletableFuture.runAsync(() -> {
-            List<Evidence> evidenceList = evidenceRepository.selectList(
-                    new QueryWrapper<Evidence>().select("id").eq("version_id", versionId));
-            if (!evidenceList.isEmpty()) {
-                List<String> evidenceIds = evidenceList.stream().map(Evidence::getId).toList();
-                nodeEvidenceRepository.delete(new QueryWrapper<NodeEvidence>().in("evidence_id", evidenceIds));
-                edgeEvidenceRepository.delete(new QueryWrapper<EdgeEvidence>().in("evidence_id", evidenceIds));
-                evidenceRepository.delete(new QueryWrapper<Evidence>().eq("version_id", versionId));
+            try {
+                List<Evidence> evidenceList = evidenceRepository.selectList(
+                        new QueryWrapper<Evidence>().select("id").eq("version_id", versionId));
+                if (!evidenceList.isEmpty()) {
+                    List<String> evidenceIds = evidenceList.stream().map(Evidence::getId).toList();
+                    nodeEvidenceRepository.delete(new QueryWrapper<NodeEvidence>().in("evidence_id", evidenceIds));
+                    edgeEvidenceRepository.delete(new QueryWrapper<EdgeEvidence>().in("evidence_id", evidenceIds));
+                    evidenceRepository.delete(new QueryWrapper<Evidence>().eq("version_id", versionId));
+                }
+            } catch (Exception e) {
+                log.warn("S10: 删除证据数据失败: versionId={}, error={}", versionId, e.getMessage());
             }
         });
 
@@ -501,34 +515,46 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
 
         // 7. 测试数据删除
         CompletableFuture<Void> testFuture = CompletableFuture.runAsync(() -> {
-            List<TestCase> testCases = testCaseRepository.selectList(
-                    new QueryWrapper<TestCase>().select("id").eq("version_id", versionId));
-            if (!testCases.isEmpty()) {
-                List<String> testCaseIds = testCases.stream().map(TestCase::getId).toList();
-                testAssertionRepository.delete(new QueryWrapper<TestAssertion>().in("test_case_id", testCaseIds));
+            try {
+                List<TestCase> testCases = testCaseRepository.selectList(
+                        new QueryWrapper<TestCase>().select("id").eq("version_id", versionId));
+                if (!testCases.isEmpty()) {
+                    List<String> testCaseIds = testCases.stream().map(TestCase::getId).toList();
+                    testAssertionRepository.delete(new QueryWrapper<TestAssertion>().in("test_case_id", testCaseIds));
+                }
+                testResultRepository.delete(new QueryWrapper<TestResult>().eq("version_id", versionId));
+                testRunRepository.delete(new QueryWrapper<TestRun>().eq("version_id", versionId));
+                testCaseRepository.delete(new QueryWrapper<TestCase>().eq("version_id", versionId));
+            } catch (Exception e) {
+                log.warn("S10: 删除测试数据失败: versionId={}, error={}", versionId, e.getMessage());
             }
-            testResultRepository.delete(new QueryWrapper<TestResult>().eq("version_id", versionId));
-            testRunRepository.delete(new QueryWrapper<TestRun>().eq("version_id", versionId));
-            testCaseRepository.delete(new QueryWrapper<TestCase>().eq("version_id", versionId));
         });
 
         // 8. 审计/知识/缺口/风险删除
         CompletableFuture<Void> auditFuture = CompletableFuture.runAsync(() -> {
-            runtimeTraceRepository.delete(new QueryWrapper<RuntimeTrace>().eq("version_id", versionId));
-            reviewRecordRepository.delete(new QueryWrapper<ReviewRecord>().eq("version_id", versionId));
-            knowledgeClaimRepository.delete(new QueryWrapper<KnowledgeClaim>().eq("version_id", versionId));
-            gapTaskRepository.delete(new QueryWrapper<GapTask>().eq("version_id", versionId));
-            migrationRiskRepository.delete(new QueryWrapper<MigrationRisk>().eq("version_id", versionId));
+            try {
+                runtimeTraceRepository.delete(new QueryWrapper<RuntimeTrace>().eq("version_id", versionId));
+                reviewRecordRepository.delete(new QueryWrapper<ReviewRecord>().eq("version_id", versionId));
+                knowledgeClaimRepository.delete(new QueryWrapper<KnowledgeClaim>().eq("version_id", versionId));
+                gapTaskRepository.delete(new QueryWrapper<GapTask>().eq("version_id", versionId));
+                migrationRiskRepository.delete(new QueryWrapper<MigrationRisk>().eq("version_id", versionId));
+            } catch (Exception e) {
+                log.warn("S10: 删除审计/知识/缺口/风险失败: versionId={}, error={}", versionId, e.getMessage());
+            }
         });
 
         // 等待所有并行删除完成
         CompletableFuture.allOf(graphFuture, factFuture, evidenceFuture,
                 testFuture, auditFuture).join();
 
+        // M14 修复：PG 删除全部完成后，再执行 Neo4j 异步删除，避免 PG 回滚时 Neo4j 已被删除
+        self.deleteNeo4jGraphAsync(projectId, versionId);
+
         // 9. 删除版本本身前，彻底清除所有相关缓存
         cacheService.evict(PROGRESS_KEY + versionId);
         graphCacheInvalidator.invalidateVersion(versionId);
-        cacheService.evictByPrefix("graph:node:");
+        // M15 修复：精确清除缓存，避免 evictByPrefix("graph:node:") 影响其他版本
+        cacheService.evictByPrefix("graph:node:" + projectId + ":" + versionId);
 
         scanVersionRepository.deleteById(versionId);
     }
@@ -541,8 +567,8 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         try {
             neo4jGraphDao.deleteGraph(projectId, versionId);
         } catch (Exception e) {
-            log.warn("Neo4j 子图异步删除失败: projectId={}, versionId={}, err={}",
-                    projectId, versionId, e.getMessage());
+            log.warn("Neo4j 子图异步删除失败：projectId={}, versionId={}, err={}",
+                    projectId, versionId, e.getMessage(), e);
         }
     }
 

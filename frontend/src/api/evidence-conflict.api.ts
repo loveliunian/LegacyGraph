@@ -21,6 +21,6 @@ export const evidenceConflictApi = {
   },
 
   resolve: (id: string, resolution: string) => {
-    return post<EvidenceConflict>(`/lg/evidence-conflicts/${id}/resolve`, { resolution })
+    return post<EvidenceConflict>(`/lg/evidence-conflicts/${encodeURIComponent(id)}/resolve`, { resolution })
   },
 }

@@ -79,7 +79,7 @@ export const systemApi = {
   },
 
   updateUser: (id: string, data: Partial<User>) => {
-    return put(`/lg/system/users/${id}`, data)
+    return put(`/lg/system/users/${encodeURIComponent(id)}`, data)
   },
 
   deleteUser: (id: string) => {
@@ -110,7 +110,7 @@ export const systemApi = {
 
   /** 更新字典类型 */
   updateDictType: (id: string, data: Partial<DictType>) => {
-    return put(`/lg/system/dicts/${id}`, data)
+    return put(`/lg/system/dicts/${encodeURIComponent(id)}`, data)
   },
 
   /** 删除字典类型 */
@@ -122,7 +122,7 @@ export const systemApi = {
 
   /** 获取字典类型下的所有项 */
   getDictItems: (dictId: string) => {
-    return get<DictItem[]>(`/lg/system/dicts/${dictId}/items`)
+    return get<DictItem[]>(`/lg/system/dicts/${encodeURIComponent(dictId)}/items`)
   },
 
   /** 根据字典编码获取所有项 */
@@ -144,7 +144,7 @@ export const systemApi = {
 
   /** 更新字典项 */
   updateDictItem: (id: string, data: Partial<DictItem>) => {
-    return put(`/lg/system/dicts/items/${id}`, data)
+    return put(`/lg/system/dicts/items/${encodeURIComponent(id)}`, data)
   },
 
   /** 删除字典项 */
@@ -182,7 +182,7 @@ export const systemApi = {
   },
 
   updateConfig: (id: string, data: Partial<SystemConfig>) => {
-    return put(`/lg/system/configs/${id}`, data)
+    return put(`/lg/system/configs/${encodeURIComponent(id)}`, data)
   },
 
   /**
@@ -231,6 +231,6 @@ export const systemApi = {
    * @param data 状态数据（包含 status 字段）
    */
   toggleUserStatus: (id: string, data: { status: string }) => {
-    return put(`/lg/system/users/${id}/status`, data)
+    return put(`/lg/system/users/${encodeURIComponent(id)}/status`, data)
   }
 }

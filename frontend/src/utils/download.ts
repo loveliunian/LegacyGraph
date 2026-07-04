@@ -1,17 +1,24 @@
 /**
  * 文件下载工具
  */
+import { useUserStore } from '@/stores/user'
 
 /**
  * 下载后端生成的文件（PDF/Excel）
+ * S13修复：项目使用 Bearer Token 认证，需手动添加 Authorization header
  * @param url 下载地址
  * @param filename 建议文件名
  */
 export async function downloadFile(url: string, filename?: string): Promise<void> {
   try {
+    const userStore = useUserStore()
+    const headers: Record<string, string> = {}
+    if (userStore.accessToken) {
+      headers['Authorization'] = `Bearer ${userStore.accessToken}`
+    }
     const response = await fetch(url, {
       method: 'GET',
-      credentials: 'include'
+      headers
     })
     if (!response.ok) {
       throw new Error(`Download failed: ${response.status}`)

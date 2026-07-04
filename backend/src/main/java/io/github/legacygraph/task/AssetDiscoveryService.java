@@ -200,7 +200,7 @@ public class AssetDiscoveryService {
     public List<SourceAssetSnapshot> detectDeletions(String projectId, String versionId,
                                                      Set<String> currentPaths) {
         List<SourceAssetSnapshot> deletions = new ArrayList<>();
-        List<SourceAssetSnapshot> allSnapshots = findPreviousVersionSnapshots(projectId);
+        List<SourceAssetSnapshot> allSnapshots = findPreviousVersionSnapshots(projectId, versionId);
         for (SourceAssetSnapshot snapshot : allSnapshots) {
             if (!currentPaths.contains(snapshot.getRelativePath())) {
                 snapshot.setScanStatus("DELETED");
@@ -291,12 +291,22 @@ public class AssetDiscoveryService {
         return dot < 0 ? null : name.substring(dot + 1).toLowerCase();
     }
 
+    /**
+     * M12 修复：流式计算 SHA-256，避免大文件全量读取导致 OOM。
+     * 使用 8KB 缓冲区逐块 digest，内存占用恒定。
+     */
     private String computeSha256(Path file) throws IOException {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = Files.readAllBytes(file);
-            byte[] hash = digest.digest(bytes);
-            StringBuilder hex = new StringBuilder();
+            byte[] buffer = new byte[8192];
+            try (java.io.InputStream in = Files.newInputStream(file)) {
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            byte[] hash = digest.digest();
+            StringBuilder hex = new StringBuilder(hash.length * 2);
             for (byte b : hash) hex.append(String.format("%02x", b));
             return hex.toString();
         } catch (NoSuchAlgorithmException e) {
@@ -341,10 +351,30 @@ public class AssetDiscoveryService {
         return results.isEmpty() ? null : results.get(0);
     }
 
-    private List<SourceAssetSnapshot> findPreviousVersionSnapshots(String projectId) {
+    /**
+     * M24 修复：仅查询上一个版本（按 createdAt 取最新非当前版本）的快照，
+     * 避免随着版本增多数据量线性增长。
+     * @param projectId 项目 ID
+     * @param currentVersionId 当前版本 ID（排除）
+     */
+    private List<SourceAssetSnapshot> findPreviousVersionSnapshots(String projectId, String currentVersionId) {
+        // 先找到上一个版本 ID（按 createdAt DESC，排除当前版本，取第一条的 versionId）
+        List<SourceAssetSnapshot> latest = snapshotRepository.selectList(
+                new LambdaQueryWrapper<SourceAssetSnapshot>()
+                        .eq(SourceAssetSnapshot::getProjectId, projectId)
+                        .ne(SourceAssetSnapshot::getVersionId, currentVersionId)
+                        .select(SourceAssetSnapshot::getVersionId)
+                        .orderByDesc(SourceAssetSnapshot::getCreatedAt)
+                        .last("LIMIT 1")
+        );
+        if (latest.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        String prevVersionId = latest.get(0).getVersionId();
         return snapshotRepository.selectList(
                 new LambdaQueryWrapper<SourceAssetSnapshot>()
                         .eq(SourceAssetSnapshot::getProjectId, projectId)
+                        .eq(SourceAssetSnapshot::getVersionId, prevVersionId)
         );
     }
 }

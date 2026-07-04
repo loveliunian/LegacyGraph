@@ -42,18 +42,18 @@ export interface RuntimeTraceRecord {
 export const traceApi = {
   /** 批量上报 span */
   ingest: (projectId: string, versionId: string, spans: SpanDto[]) => {
-    return post<{ ingested: number }>(`/lg/projects/${projectId}/runtime/traces`, { versionId, spans })
+    return post<{ ingested: number }>(`/lg/projects/${encodeURIComponent(projectId)}/runtime/traces`, { versionId, spans })
   },
 
   /** 获取运行时服务拓扑 */
   getTopology: (projectId: string, versionId?: string) => {
-    return get<TraceTopology>(`/lg/projects/${projectId}/runtime/topology`,
+    return get<TraceTopology>(`/lg/projects/${encodeURIComponent(projectId)}/runtime/topology`,
       versionId ? { versionId } : undefined)
   },
 
   /** 获取最近链路列表 */
   listTraces: (projectId: string, versionId?: string, limit = 50) => {
-    return get<RuntimeTraceRecord[]>(`/lg/projects/${projectId}/runtime/traces`,
+    return get<RuntimeTraceRecord[]>(`/lg/projects/${encodeURIComponent(projectId)}/runtime/traces`,
       { versionId, limit })
   },
 }

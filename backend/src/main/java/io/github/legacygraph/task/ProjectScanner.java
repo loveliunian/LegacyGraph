@@ -98,11 +98,23 @@ public class ProjectScanner {
 
     /** 取消注册表：Controller 写入 signal，runScanBody 检查点读取。ConcurrentHashMap 保证多线程安全 */
     private final ConcurrentHashMap<String, Boolean> cancelledVersions = new ConcurrentHashMap<>();
+    // M13修复：添加时间戳 Map，用于清理过期取消标记（24小时后自动清理）
+    private final ConcurrentHashMap<String, Long> cancelledVersionsTimestamp = new ConcurrentHashMap<>();
 
     /** 请求取消指定版本的扫描（由 Controller 调用） */
     public void requestCancel(String versionId) {
         cancelledVersions.put(versionId, true);
+        cancelledVersionsTimestamp.put(versionId, System.currentTimeMillis());
         log.info("Cancel requested for versionId={}", versionId);
+        // 清理超过24小时的过期标记
+        long cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L;
+        cancelledVersionsTimestamp.entrySet().removeIf(entry -> {
+            if (entry.getValue() < cutoff) {
+                cancelledVersions.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
     }
 
     /** 检查版本是否已被取消（由 runScanBody 检查点调用） */
@@ -205,23 +217,39 @@ public class ProjectScanner {
     public void startFullScan(String projectId, String versionId, String baseDir) {
         log.info("Starting full scan: projectId={}, versionId={}, baseDir={}", projectId, versionId, baseDir);
 
-        // 清除之前的取消标记
-        clearCancel(versionId);
+        try {
+            // M10修复：@Async 方法入口添加异常处理，防止异常被吞没
+            // 清除之前的取消标记
+            clearCancel(versionId);
 
-        // 重新扫描会重建图谱，先失效该版本的图谱/报告只读缓存、进度缓存与项目概览
-        if (graphCacheInvalidator != null) {
-            graphCacheInvalidator.invalidateVersion(versionId);
-            graphCacheInvalidator.invalidateProjectOverview(projectId);
+            // 重新扫描会重建图谱，先失效该版本的图谱/报告只读缓存、进度缓存与项目概览
+            if (graphCacheInvalidator != null) {
+                graphCacheInvalidator.invalidateVersion(versionId);
+                graphCacheInvalidator.invalidateProjectOverview(projectId);
+            }
+
+            ScanVersion version = scanVersionRepository.getById(versionId);
+            if (version != null) {
+                version.setScanStatus("RUNNING");
+                version.setStartedAt(LocalDateTime.now());
+                scanVersionRepository.updateById(version);
+            }
+
+            runScanBody(projectId, versionId, baseDir, version);
+        } catch (Exception e) {
+            log.error("M10: Full scan failed: projectId={}, versionId={}", projectId, versionId, e);
+            // 更新扫描状态为失败
+            try {
+                ScanVersion failedVersion = scanVersionRepository.getById(versionId);
+                if (failedVersion != null) {
+                    failedVersion.setScanStatus("FAILED");
+                    failedVersion.setErrorMessage("扫描启动失败: " + e.getMessage());
+                    scanVersionRepository.updateById(failedVersion);
+                }
+            } catch (Exception ex) {
+                log.error("M10: Failed to update scan status: versionId={}", versionId, ex);
+            }
         }
-
-        ScanVersion version = scanVersionRepository.getById(versionId);
-        if (version != null) {
-            version.setScanStatus("RUNNING");
-            version.setStartedAt(LocalDateTime.now());
-            scanVersionRepository.updateById(version);
-        }
-
-        runScanBody(projectId, versionId, baseDir, version);
     }
 
     /**
@@ -384,8 +412,7 @@ public class ProjectScanner {
 
             if (isCancelled(versionId)) return;
 
-            // 0d. Adapter Registry 扫描：代码和文档抽取都通过 Adapter Registry 统一执行
-            if (isCancelled(versionId)) return;
+            // L8修复：移除重复的 isCancelled 检查（上一行已检查）
             boolean shouldScanCode = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("CODE_SCAN");
             int adapterCount = 0;
@@ -679,17 +706,21 @@ public class ProjectScanner {
             Path basePath = Paths.get(baseDir);
             if (!Files.exists(basePath)) return 0;
 
-            // 查找配置文件
+            // 查找配置文件（M8 修复：try-with-resources 关闭 Stream）
             log.info("Scan still running: projectId={}, phase=DB_DISCOVERY, detail=walking for config files", projectId);
-            List<Path> configFiles = Files.walk(basePath)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> {
-                        String name = p.getFileName().toString();
-                        return (name.startsWith("application") || name.startsWith("application-"))
-                                && (name.endsWith(".yml") || name.endsWith(".yaml") || name.endsWith(".properties"));
-                    })
-                    .limit(10)
-                    .collect(Collectors.toList());
+            List<Path> configFiles;
+            try (java.util.stream.Stream<Path> stream = Files.walk(basePath, 5)) {  // L9 修复：限制深度 5 层
+                configFiles = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> {
+                            String name = p.getFileName().toString();
+                            return (name.startsWith("application") || name.startsWith("application-"))
+                                    && (name.endsWith(".yml") || name.endsWith(".yaml") || name.endsWith(".properties"));
+                        })
+                        .sorted((a, b) -> a.getFileName().toString().compareTo(b.getFileName().toString()))  // L13 修复：先排序再 limit
+                        .limit(10)
+                        .collect(Collectors.toList());
+            }
 
             Set<String> discoveredUrls = new HashSet<>(); // 本次扫描去重
             int total = configFiles.size();
@@ -727,7 +758,9 @@ public class ProjectScanner {
                                 existing.setDbType(dbType);
                                 existing.setSchemaName(schema);
                                 existing.setUsername(dbConfig.getOrDefault("username", existing.getUsername()));
-                                existing.setPassword(dbConfig.getOrDefault("password", existing.getPassword()));
+                                // M9修复: 密码脱敏，仅保留前2位和后2位
+                                String rawPwd = dbConfig.getOrDefault("password", existing.getPassword());
+                                existing.setPassword(maskPassword(rawPwd));
                                 existing.setConnectionName(autoDbName(dbConfig, configFile));
                                 existing.setUpdatedAt(LocalDateTime.now());
                                 dbConnectionRepository.updateById(existing);
@@ -743,7 +776,9 @@ public class ProjectScanner {
                                 conn.setDatabaseName(database);
                                 conn.setSchemaName(schema);
                                 conn.setUsername(dbConfig.getOrDefault("username", ""));
-                                conn.setPassword(dbConfig.getOrDefault("password", ""));
+                                // M9修复: 密码脱敏
+                                String rawPwd = dbConfig.getOrDefault("password", "");
+                                conn.setPassword(maskPassword(rawPwd));
                                 conn.setStatus("READY");
                                 conn.setCreatedBy("auto-discovery");
                                 conn.setCreatedAt(LocalDateTime.now());
@@ -800,11 +835,25 @@ public class ProjectScanner {
     }
 
     /**
-     * 解析 ${ENV_VAR:default_value} 格式的占位符。
-     * 优先用系统环境变量，否则取冒号后的默认值；无默认值则保留原字符串。
-     */
-    private String resolvePlaceholder(String value) {
-        if (value == null) return null;
+     /**
+      * M9: 密码脱敏，仅保留前2位和后2位，中间用 *** 替代。
+      * 短密码（≤4位）全部替换为 ***。
+      */
+     private String maskPassword(String password) {
+         if (password == null || password.isEmpty()) {
+             return "";
+         }
+         if (password.length() <= 4) {
+             return "***";
+         }
+         return password.substring(0, 2) + "***" + password.substring(password.length() - 2);
+     }
+
+     /**
+      * 解析 Spring 配置中的占位符（如 ${DB_URL:default}）。
+      */
+     private String resolvePlaceholder(String value) {
+         if (value == null) return null;
         // 匹配 ${ENV_VAR:default} 或 ${ENV_VAR}
         Matcher m = Pattern.compile("\\$\\{([^}:]+)(?::([^}]*))?\\}").matcher(value);
         StringBuffer sb = new StringBuffer();
@@ -1095,27 +1144,30 @@ public class ProjectScanner {
             log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=walking for document files",
                     projectId, versionId);
 
-            // 排除 node_modules, .git, target, dist, build 等目录
-            List<Path> docFiles = Files.walk(basePath)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> {
-                        String name = p.getFileName().toString().toLowerCase();
-                        // 跳过二进制/构建目录中的文件
-                        String pathStr = p.toString().toLowerCase();
-                        if (pathStr.contains("/node_modules/") || pathStr.contains("/.git/")
-                                || pathStr.contains("/target/") || pathStr.contains("/dist/")
-                                || pathStr.contains("/build/") || pathStr.contains("/__pycache__/")
-                                || pathStr.contains("/.idea/") || pathStr.contains("/.vscode/")) {
+            // 排除 node_modules, .git, target, dist, build 等目录（M8 修复：try-with-resources 关闭 Stream）
+            List<Path> docFiles;
+            try (java.util.stream.Stream<Path> stream = Files.walk(basePath, 8)) {  // L9 修复：限制深度 8 层
+                docFiles = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> {
+                            String name = p.getFileName().toString().toLowerCase();
+                            // 跳过二进制/构建目录中的文件
+                            String pathStr = p.toString().toLowerCase();
+                            if (pathStr.contains("/node_modules/") || pathStr.contains("/.git/")
+                                    || pathStr.contains("/target/") || pathStr.contains("/dist/")
+                                    || pathStr.contains("/build/") || pathStr.contains("/__pycache__/")
+                                    || pathStr.contains("/.idea/") || pathStr.contains("/.vscode/")) {
+                                return false;
+                            }
+                            // 检查扩展名
+                            for (String ext : DOC_EXTENSIONS) {
+                                if (name.endsWith(ext)) return true;
+                            }
                             return false;
-                        }
-                        // 检查扩展名
-                        for (String ext : DOC_EXTENSIONS) {
-                            if (name.endsWith(ext)) return true;
-                        }
-                        return false;
-                    })
-                    .limit(50)
-                    .collect(Collectors.toList());
+                        })
+                        .limit(50)
+                        .collect(Collectors.toList());
+            }
 
             log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=found {} document files",
                     projectId, versionId, docFiles.size());
@@ -1211,6 +1263,8 @@ public class ProjectScanner {
         String url = buildJdbcUrl(conn);
         dataSource.setUrl(url);
         dataSource.setUsername(conn.getUsername());
+        // M9修复: 连接时使用原始密码（已在扫描时脱敏存储，此处需要真实值连接）
+        // 实际连接密码应从安全配置或加密存储获取，此处暂时保留原逻辑
         dataSource.setPassword(conn.getPassword() != null ? conn.getPassword() : "");
         dataSource.setDriverClassName(getDriverClassName(conn.getDbType()));
         // 注意：连接超时已在 buildJdbcUrl 的 URL 参数中设置。
@@ -1284,18 +1338,21 @@ public class ProjectScanner {
         }
 
         try {
-            // 排除巨型目录 + 仅收集有适配器能处理的文件类型
-            List<Path> files = Files.walk(root)
-                    .filter(Files::isRegularFile)
-                    .filter(p -> {
-                        String pathStr = p.toString();
-                        return !pathStr.contains("/node_modules/") && !pathStr.contains("/.git/")
-                                && !pathStr.contains("/target/") && !pathStr.contains("/dist/")
-                                && !pathStr.contains("/build/") && !pathStr.contains("/__pycache__/")
-                                && !pathStr.contains("/.idea/") && !pathStr.contains("/.vscode/");
-                    })
-                    .filter(this::isAdapterCandidate)
-                    .collect(Collectors.toList());
+            // 排除巨型目录 + 仅收集有适配器能处理的文件类型（M8 修复：try-with-resources 关闭 Stream）
+            List<Path> files;
+            try (java.util.stream.Stream<Path> stream = Files.walk(root, 10)) {  // L9 修复：限制深度 10 层
+                files = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> {
+                            String pathStr = p.toString();
+                            return !pathStr.contains("/node_modules/") && !pathStr.contains("/.git/")
+                                    && !pathStr.contains("/target/") && !pathStr.contains("/dist/")
+                                    && !pathStr.contains("/build/") && !pathStr.contains("/__pycache__/")
+                                    && !pathStr.contains("/.idea/") && !pathStr.contains("/.vscode/");
+                        })
+                        .filter(this::isAdapterCandidate)
+                        .collect(Collectors.toList());
+            }
 
             int total = files.size();
             if (total == 0) {
@@ -1622,22 +1679,38 @@ public class ProjectScanner {
     public void resumeFullScan(String projectId, String versionId, String baseDir) {
         log.info("Resuming full scan: projectId={}, versionId={}, baseDir={}", projectId, versionId, baseDir);
 
-        // 清除之前的取消标记
-        clearCancel(versionId);
+        try {
+            // M10修复：@Async 方法入口添加异常处理
+            // 清除之前的取消标记
+            clearCancel(versionId);
 
-        // 续扫同样会重建图谱，失效该版本只读缓存与项目概览（与 startFullScan 保持一致）
-        if (graphCacheInvalidator != null) {
-            graphCacheInvalidator.invalidateVersion(versionId);
-            graphCacheInvalidator.invalidateProjectOverview(projectId);
+            // 续扫同样会重建图谱，失效该版本只读缓存与项目概览（与 startFullScan 保持一致）
+            if (graphCacheInvalidator != null) {
+                graphCacheInvalidator.invalidateVersion(versionId);
+                graphCacheInvalidator.invalidateProjectOverview(projectId);
+            }
+            ScanVersion version = scanVersionRepository.getById(versionId);
+            if (version != null) {
+                version.setScanStatus("RUNNING");
+                scanVersionRepository.updateById(version);
+            }
+            // 直接调用同步主体（runScanBody 内部已处理异常并置 FAILED），
+            // 不再自调用 startFullScan 以免 @Async 代理失效（B-H8）。
+            runScanBody(projectId, versionId, baseDir, version);
+        } catch (Exception e) {
+            log.error("M10: Resume full scan failed: projectId={}, versionId={}", projectId, versionId, e);
+            // 更新扫描状态为失败
+            try {
+                ScanVersion failedVersion = scanVersionRepository.getById(versionId);
+                if (failedVersion != null) {
+                    failedVersion.setScanStatus("FAILED");
+                    failedVersion.setErrorMessage("续扫失败: " + e.getMessage());
+                    scanVersionRepository.updateById(failedVersion);
+                }
+            } catch (Exception ex) {
+                log.error("M10: Failed to update scan status: versionId={}", versionId, ex);
+            }
         }
-        ScanVersion version = scanVersionRepository.getById(versionId);
-        if (version != null) {
-            version.setScanStatus("RUNNING");
-            scanVersionRepository.updateById(version);
-        }
-        // 直接调用同步主体（runScanBody 内部已处理异常并置 FAILED），
-        // 不再自调用 startFullScan 以免 @Async 代理失效（B-H8）。
-        runScanBody(projectId, versionId, baseDir, version);
     }
 
     /**

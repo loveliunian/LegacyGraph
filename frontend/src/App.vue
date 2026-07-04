@@ -18,9 +18,11 @@ function getInitialLocale() {
   return saved === 'en-US' ? en : zhCn
 }
 
-window.addEventListener('locale-changed', ((e: CustomEvent<LocaleType>) => {
+const handleLocaleChange = ((e: CustomEvent<LocaleType>) => {
   elementLocale.value = e.detail === 'en-US' ? en : zhCn
-}) as EventListener)
+}) as EventListener
+
+window.addEventListener('locale-changed', handleLocaleChange)
 </script>
 
 <style>

@@ -32,10 +32,14 @@ const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 30000,
   paramsSerializer: {
-    serialize: (params) => {
+    // L19 修复：支持数组参数（重复 key=value&key=value 格式）
+    serialize: (params: Record<string, unknown>) => {
       const searchParams = new URLSearchParams()
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
+        if (value === null || value === undefined) return
+        if (Array.isArray(value)) {
+          value.forEach(v => searchParams.append(key, String(v)))
+        } else {
           searchParams.append(key, String(value))
         }
       })
@@ -56,6 +60,11 @@ function handleUnauthorized(): void {
   userStore.clearAuth()
   // token 失效直接跳登录页，不弹框打扰用户
   window.location.href = '/login'
+
+  // M20修复：3s 后重置标志，防止页面导航被浏览器拦截后永久静默忽略 401
+  setTimeout(() => {
+    unauthorizedHandling = false
+  }, 3000)
 }
 
 /**
@@ -64,15 +73,30 @@ function handleUnauthorized(): void {
  * 刷新成功后统一重试，刷新失败则走 handleUnauthorized。
  */
 let isRefreshing = false
-let pendingRequests: Array<(token: string) => void> = []
-
-function flushPendingRequests(token: string): void {
-  pendingRequests.forEach(cb => cb(token))
-  pendingRequests = []
+interface PendingRequest {
+  retry: (token: string) => void
+  reject: (error: Error) => void
+  timeoutId: ReturnType<typeof setTimeout>
 }
 
-function rejectPendingRequests(): void {
+let pendingRequests: PendingRequest[] = []
+
+function flushPendingRequests(token: string): void {
+  const requests = pendingRequests
   pendingRequests = []
+  requests.forEach(item => {
+    clearTimeout(item.timeoutId)
+    item.retry(token)
+  })
+}
+
+function rejectPendingRequests(error = new Error('Token 刷新失败')): void {
+  const requests = pendingRequests
+  pendingRequests = []
+  requests.forEach(item => {
+    clearTimeout(item.timeoutId)
+    item.reject(error)
+  })
 }
 
 /**
@@ -149,7 +173,7 @@ request.interceptors.response.use(
         return handleTokenExpired(error.config)
       }
       ElMessage.error({
-        message: response.statusText || `请求失败 ${response.status}`,
+        message: (response.data as any)?.message || response.statusText || `请求失败 ${response.status}`,
         duration: 5000
       })
     } else {
@@ -178,11 +202,21 @@ function handleTokenExpired(config?: InternalAxiosRequestConfig): Promise<any> {
   // 已在刷新中：把当前请求挂起，等刷新完成后用新 token 重试
   if (isRefreshing) {
     return new Promise((resolve, reject) => {
-      pendingRequests.push((newToken: string) => {
-        if (config?.headers) {
-          config.headers['Authorization'] = `Bearer ${newToken}`
+      // M19修复：添加 15s 超时，防止刷新请求挂起导致队列永久阻塞
+      const timeoutId = setTimeout(() => {
+        pendingRequests = pendingRequests.filter(item => item.timeoutId !== timeoutId)
+        reject(new Error('Token 刷新超时'))
+      }, 15000)
+
+      pendingRequests.push({
+        timeoutId,
+        reject,
+        retry: (newToken: string) => {
+          if (config?.headers) {
+            config.headers['Authorization'] = `Bearer ${newToken}`
+          }
+          request(config!).then(resolve).catch(reject)
         }
-        request(config!).then(resolve).catch(reject)
       })
     })
   }
@@ -207,7 +241,7 @@ function handleTokenExpired(config?: InternalAxiosRequestConfig): Promise<any> {
     }
     return config ? request(config) : Promise.reject(new Error('缺少原始请求配置'))
   }).catch((e) => {
-    rejectPendingRequests()
+    rejectPendingRequests(e instanceof Error ? e : new Error('Token 刷新失败'))
     handleUnauthorized()
     return Promise.reject(e)
   }).finally(() => {
@@ -280,10 +314,8 @@ export function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<
 export function upload<T = any>(url: string, file: File, config?: AxiosRequestConfig): Promise<T> {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post(url, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    ...config
-  })
+  // M17修复：不手动设置 Content-Type，让 axios 自动处理 FormData 的 boundary
+  return request.post(url, formData, config)
 }
 
 /**

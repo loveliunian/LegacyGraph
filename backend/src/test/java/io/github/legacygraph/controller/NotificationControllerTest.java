@@ -60,6 +60,7 @@ class NotificationControllerTest {
         doNothing().when(notificationService).markRead("n1");
 
         Result<Void> result = controller.markRead("n1");
+        // 注：markRead 已从 @GetMapping 改为 @PutMapping，方法签名不变
 
         assertEquals(0, result.getCode());
         verify(notificationService).markRead("n1");
@@ -77,7 +78,8 @@ class NotificationControllerTest {
     void stream_registersEmitterCallbacks() {
         SseEmitter emitter = controller.stream("p1");
 
-        // 验证 emitter 已注册（回调设置不抛异常）
+        // L21 修复：验证 emitter 非 null 且已注册到 service（通过 removeEmitter 验证）
         assertNotNull(emitter);
+        verify(notificationService).registerEmitter(eq("p1"), any(SseEmitter.class));
     }
 }

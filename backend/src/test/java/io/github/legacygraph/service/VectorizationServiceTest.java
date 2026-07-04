@@ -29,16 +29,10 @@ class VectorizationServiceTest {
 
     private VectorizationService vectorizationService;
 
+    // L14 修复：使用构造函数注入替代反射，消除对内部字段名变更的脆弱依赖
     @BeforeEach
     void setUp() {
-        vectorizationService = new VectorizationService(vectorDocumentRepository);
-        try {
-            var f = VectorizationService.class.getDeclaredField("embeddingModel");
-            f.setAccessible(true);
-            f.set(vectorizationService, embeddingModel);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        vectorizationService = new VectorizationService(vectorDocumentRepository, embeddingModel);
     }
 
     @Test

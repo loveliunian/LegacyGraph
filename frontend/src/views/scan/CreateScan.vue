@@ -326,6 +326,7 @@ const scanForm = reactive({
   dbIds: [] as string[],
   docIds: [] as string[],
   scanTypes: [] as string[],
+  baseDir: '',
   incremental: true,
   enableAi: true,
   minConfidence: 0.6,
@@ -431,12 +432,19 @@ const startScan = async () => {
 
     // FULLSTACK 项目自动补全缺失的扫描类型，确保 DB 扫描和 AI 分析都能执行
     let effectiveScanTypes = [...scanForm.scanTypes]
+    let addedTypes: string[] = []
     if (hasFullstackRepo) {
       if (!effectiveScanTypes.includes('DB_SCAN')) {
         effectiveScanTypes.push('DB_SCAN')
+        addedTypes.push('DB_SCAN')
       }
       if (!effectiveScanTypes.includes('DOC_PARSE')) {
         effectiveScanTypes.push('DOC_PARSE')
+        addedTypes.push('DOC_PARSE')
+      }
+      // L20 修复：自动补全时通知用户
+      if (addedTypes.length > 0) {
+        ElMessage.info(`检测到全栈项目，已自动启用: ${addedTypes.join(', ')} 扫描`)
       }
     }
 
@@ -455,7 +463,7 @@ const startScan = async () => {
       })
     })
     const versionId = typeof res === 'string' ? res : res.id || res
-    await scanApi.start(projectId, versionId)
+    await scanApi.start(projectId, versionId, scanForm.baseDir)
     ElMessage.success('扫描任务已创建并启动')
     router.push(`/projects/${projectId}/scan-versions`)
   } catch (error) {

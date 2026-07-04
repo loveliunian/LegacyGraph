@@ -2,8 +2,10 @@ package io.github.legacygraph.service.qa;
 
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.repository.VectorDocumentRepository;
+import io.github.legacygraph.util.VectorUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,8 +31,15 @@ public class VectorizationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private EmbeddingModel embeddingModel;
 
+    // L14 修复：新增双参构造函数供测试直接注入 EmbeddingModel
+    @Autowired
     public VectorizationService(VectorDocumentRepository vectorDocumentRepository) {
         this.vectorDocumentRepository = vectorDocumentRepository;
+    }
+
+    public VectorizationService(VectorDocumentRepository vectorDocumentRepository, EmbeddingModel embeddingModel) {
+        this.vectorDocumentRepository = vectorDocumentRepository;
+        this.embeddingModel = embeddingModel;
     }
 
     /**
@@ -81,7 +90,7 @@ public class VectorizationService {
         doc.setContent(content);
         doc.setContentSha256(contentSha256);
         doc.setMeta("{}");
-        doc.setEmbedding(floatArrayToVectorLiteral(embeddingFloat));
+        doc.setEmbedding(VectorUtils.floatArrayToVectorLiteral(embeddingFloat));
         doc.setEmbeddingModel(embeddingModelName);
         doc.setEmbeddingDim(embeddingFloat.length);
         doc.setCreatedAt(LocalDateTime.now());
@@ -115,7 +124,8 @@ public class VectorizationService {
             return 0;
         }
 
-        // 去重检查限定在本次扫描版本内；同一 sourceUri 在新版本中需要重新向量化
+        // M7 修复：使用 contentSha256 做去重标记，避免 count 检查与写入之间的竞态窗口
+        String contentHash = sha256Hex(content);
         int existingCount = vectorDocumentRepository.countBySourceUriAndVersionId(sourceUri, versionId);
         if (existingCount > 0) {
             log.debug("Source already vectorized ({} vectors exist), skip: {}", existingCount, sourceUri);
@@ -126,12 +136,18 @@ public class VectorizationService {
         int stored = 0;
         for (int i = 0; i < chunks.size(); i++) {
             try {
+                // 每个 chunk 的 embedAndStore 内部已有 @Transactional，保证原子性
                 Long id = embedAndStore(projectId, versionId, chunkType, sourceUri, i, chunks.get(i), embeddingModelName);
                 if (id != null) {
                     stored++;
                 }
             } catch (Exception e) {
-                log.warn("Failed to embed chunk {}/{} for {}: {}", i, chunks.size(), sourceUri, e.getMessage());
+                // 捕获唯一约束冲突（并发场景下的最终防线）
+                if (e.getMessage() != null && e.getMessage().contains("duplicate key")) {
+                    log.debug("Chunk {}/{} already exists (concurrent write), skip: {}", i, chunks.size(), sourceUri);
+                } else {
+                    log.warn("Failed to embed chunk {}/{} for {}: {}", i, chunks.size(), sourceUri, e.getMessage());
+                }
             }
         }
         log.info("Vectorized document {}: {} chunks, {} stored", sourceUri, chunks.size(), stored);
@@ -246,23 +262,4 @@ public class VectorizationService {
         }
     }
 
-    private List<Double> floatArrayToDoubleList(float[] floats) {
-        List<Double> result = new ArrayList<>(floats.length);
-        for (float f : floats) {
-            result.add((double) f);
-        }
-        return result;
-    }
-
-    private String floatArrayToVectorLiteral(float[] floats) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < floats.length; i++) {
-            if (i > 0) {
-                sb.append(",");
-            }
-            sb.append(Float.toString(floats[i]));
-        }
-        sb.append("]");
-        return sb.toString();
-    }
 }

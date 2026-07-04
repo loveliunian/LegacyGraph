@@ -75,7 +75,9 @@ interface Notification {
 }
 
 const notifications = ref<Notification[]>([])
-let eventSource: EventSource | null = null
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+let sseController: AbortController | null = null
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
 
@@ -108,25 +110,103 @@ async function loadNotifications() {
   } catch { /* 静默降级 */ }
 }
 
-function connectSSE() {
+function handleNotificationPayload(data: string) {
+  try {
+    const n = JSON.parse(data) as Notification
+    notifications.value.unshift(n)
+    if (notifications.value.length > 50) notifications.value.pop()
+  } catch (e) {
+    console.error('Failed to parse notification:', e)
+  }
+}
+
+function parseSseEvent(rawEvent: string) {
+  const lines = rawEvent.split(/\r?\n/)
+  let eventName = 'message'
+  const dataLines: string[] = []
+
+  lines.forEach(line => {
+    if (line.startsWith('event:')) {
+      eventName = line.slice(6).trim()
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  })
+
+  if (eventName === 'notification' && dataLines.length > 0) {
+    handleNotificationPayload(dataLines.join('\n'))
+  }
+}
+
+function disconnectSSE() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  if (sseController) {
+    sseController.abort()
+    sseController = null
+  }
+}
+
+async function connectSSE() {
+  disconnectSSE()
   const userStore = useUserStore()
   const projectStore = useProjectStore()
   const projectId = projectStore.currentProjectId || 'default'
   const token = userStore.accessToken || ''
-  eventSource = new EventSource(`/api/lg/notifications/stream?projectId=${projectId}&token=${token}`)
-  
-  eventSource.addEventListener('notification', (event) => {
-    try {
-      const n = JSON.parse(event.data) as Notification
-      notifications.value.unshift(n)
-      if (notifications.value.length > 50) notifications.value.pop()
-    } catch (e) {
-      console.error('Failed to parse notification:', e)
+
+  if (!token) return
+
+  const controller = new AbortController()
+  sseController = controller
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/lg/notifications/stream?projectId=${encodeURIComponent(projectId)}`, {
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    })
+
+    if (!response.ok || !response.body) {
+      throw new Error(`SSE connection failed: ${response.status}`)
     }
-  })
-  
-  eventSource.onerror = () => {
-    console.warn('SSE connection error, will retry automatically')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (!controller.signal.aborted) {
+      const { value, done } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      let boundary = buffer.search(/\r?\n\r?\n/)
+      while (boundary >= 0) {
+        const rawEvent = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + buffer.match(/\r?\n\r?\n/)![0].length)
+        parseSseEvent(rawEvent)
+        boundary = buffer.search(/\r?\n\r?\n/)
+      }
+    }
+
+    buffer += decoder.decode()
+    if (buffer.trim()) {
+      parseSseEvent(buffer)
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      console.warn('SSE connection error, will retry automatically', error)
+    }
+  } finally {
+    if (sseController === controller) {
+      sseController = null
+    }
+    if (!controller.signal.aborted) {
+      reconnectTimer = setTimeout(connectSSE, 5000)
+    }
   }
 }
 
@@ -164,9 +244,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (eventSource) {
-    eventSource.close()
-  }
+  disconnectSSE()
 })
 </script>
 

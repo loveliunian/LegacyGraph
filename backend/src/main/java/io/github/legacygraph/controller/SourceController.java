@@ -76,6 +76,8 @@ public class SourceController {
     private final GraphCacheInvalidator graphCacheInvalidator;
     private final SourceService sourceService;
     private final VectorizationService vectorizationService;
+    private final DocumentExtractor documentExtractor;  // L3 修复：注入 Bean
+    private final java.util.concurrent.ExecutorService documentProcessingExecutor;  // M1修复：文档异步处理
 
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -101,7 +103,9 @@ public class SourceController {
                             ProjectScanner projectScanner,
                             GraphCacheInvalidator graphCacheInvalidator,
                             SourceService sourceService,
-                            VectorizationService vectorizationService) {
+                            VectorizationService vectorizationService,
+                            DocumentExtractor documentExtractor,
+                            java.util.concurrent.ExecutorService documentProcessingExecutor) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
@@ -111,6 +115,8 @@ public class SourceController {
         this.graphCacheInvalidator = graphCacheInvalidator;
         this.sourceService = sourceService;
         this.vectorizationService = vectorizationService;
+        this.documentExtractor = documentExtractor;  // L3 修复
+        this.documentProcessingExecutor = documentProcessingExecutor;  // M1修复
     }
 
     // ==================== 代码仓库 ====================
@@ -187,12 +193,17 @@ public class SourceController {
             @PathVariable String projectId,
             @Parameter(description = "创建请求参数", required = true)
             @Valid @RequestBody CreateCodeRepoRequest request) {
+        String validationError = validateRepoRequest(request);
+        if (validationError != null) {
+            return Result.error(validationError);
+        }
+
         CodeRepo repo = new CodeRepo();
         repo.setProjectId(projectId);
         repo.setRepoName(request.getRepoName());
         repo.setRepoType(request.getRepoType());
         repo.setGitUrl(request.getGitUrl());
-        repo.setBranchName(request.getBranchName() != null ? request.getBranchName() : "main");
+        repo.setBranchName(normalizeBranchName(request.getBranchName()));
         repo.setAuthType(request.getAuthType());
         repo.setUsername(request.getUsername());
         repo.setIncludePattern(request.getIncludePattern());
@@ -234,10 +245,15 @@ public class SourceController {
             return Result.error("代码仓库不存在");
         }
 
+        String validationError = validateRepoRequest(request);
+        if (validationError != null) {
+            return Result.error(validationError);
+        }
+
         repo.setRepoName(request.getRepoName());
         repo.setRepoType(request.getRepoType());
         repo.setGitUrl(request.getGitUrl());
-        repo.setBranchName(request.getBranchName());
+        repo.setBranchName(normalizeBranchName(request.getBranchName()));
         repo.setAuthType(request.getAuthType());
         repo.setUsername(request.getUsername());
         repo.setIncludePattern(request.getIncludePattern());
@@ -298,6 +314,12 @@ public class SourceController {
         CodeRepo repo = codeRepoRepository.selectById(id);
         if (repo == null || !repo.getProjectId().equals(projectId)) {
             return Result.error("代码仓库不存在");
+        }
+
+        // S1 修复：校验 Git URL 合法性，防止命令注入
+        if (!isValidGitUrl(repo.getGitUrl())) {
+            log.warn("Invalid Git URL rejected in testRepoConnection: {}", repo.getGitUrl());
+            return Result.error("Git地址格式不合法");
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -412,6 +434,16 @@ public class SourceController {
             return Result.error("代码仓库不存在");
         }
 
+        if (!isValidGitUrl(repo.getGitUrl())) {
+            log.warn("Invalid Git URL rejected in pullRepo: {}", repo.getGitUrl());
+            return Result.error("Git地址格式不合法");
+        }
+        String branchName = normalizeBranchName(repo.getBranchName());
+        if (!isValidBranchName(branchName)) {
+            log.warn("Invalid branch name rejected in pullRepo: {}", repo.getBranchName());
+            return Result.error("分支名格式不合法");
+        }
+
         repo.setStatus("PULLING");
         repo.setUpdatedAt(LocalDateTime.now());
         codeRepoRepository.updateById(repo);
@@ -431,7 +463,7 @@ public class SourceController {
             } else {
                 // Fresh shallow clone for speed: depth=1, single branch
                 pb = new ProcessBuilder("git", "clone", "--depth", "1", "--single-branch",
-                        "-b", repo.getBranchName(), repo.getGitUrl(), localPath);
+                        "-b", branchName, repo.getGitUrl(), localPath);
             }
             pb.redirectErrorStream(true);
 
@@ -725,9 +757,11 @@ public class SourceController {
 
         Map<String, Object> result = new HashMap<>();
         try {
-            // 尝试建立真实连接
+            // 尝试建立真实连接（S8 修复：try-with-resources 防止连接泄漏）
             String url = buildJdbcUrl(db);
-            java.sql.DriverManager.getConnection(url, db.getUsername(), db.getPassword()).close();
+            try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, db.getUsername(), db.getPassword())) {
+                // 连接成功
+            }
             result.put("success", true);
             result.put("message", "连接测试成功");
             log.info("Database connection test succeeded: {}", db.getConnectionName());
@@ -805,6 +839,7 @@ public class SourceController {
 
     /**
      * 构建JDBC URL
+     * S2 修复：校验 host 和 databaseName，防止 JDBC URL 注入
      */
     private String buildJdbcUrl(DbConnection db) {
         String dbType = db.getDbType();
@@ -815,6 +850,20 @@ public class SourceController {
         int port = db.getPort() != null ? db.getPort()
                 : (dbType.equalsIgnoreCase("mysql") || dbType.equalsIgnoreCase("mariadb") ? 3306 : 5432);
         String dbName = db.getDatabaseName() != null ? db.getDatabaseName() : "";
+
+        // 校验 host：只允许字母、数字、点号、连字符、冒号（IPv6）
+        if (!host.matches("^[a-zA-Z0-9.:-]+$")) {
+            throw new IllegalArgumentException("数据库主机地址格式不合法");
+        }
+        // 校验 databaseName：只允许字母、数字、下划线、连字符
+        if (!dbName.matches("^[a-zA-Z0-9_-]+$")) {
+            throw new IllegalArgumentException("数据库名称格式不合法");
+        }
+        // 校验端口范围
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("数据库端口号不合法");
+        }
+
         return switch (dbType.toLowerCase()) {
             case "postgresql" -> String.format("jdbc:postgresql://%s:%d/%s?sslmode=disable",
                     host, port, dbName);
@@ -916,6 +965,12 @@ public class SourceController {
             return Result.code(400, "文件名不能为空");
         }
 
+        // S4 修复：过滤文件名中的路径遍历字符，防止目录穿越
+        originalFileName = sanitizeFileName(originalFileName);
+        if (originalFileName.isEmpty()) {
+            return Result.code(400, "文件名不合法");
+        }
+
         String fileExtension = getFileExtension(originalFileName).toLowerCase();
         if (!ALLOWED_EXTENSIONS.contains(fileExtension)) {
             return Result.code(400, "不支持的文件类型，仅支持: " + String.join(", ", ALLOWED_EXTENSIONS));
@@ -926,6 +981,15 @@ public class SourceController {
 
         String fileName = UUID.randomUUID() + "_" + originalFileName;
         Path filePath = Paths.get(uploadDir, fileName);
+
+        // 额外安全检查：确保文件路径在预期目录内
+        Path normalizedPath = filePath.normalize();
+        Path normalizedUploadDir = Paths.get(uploadDir).normalize();
+        if (!normalizedPath.startsWith(normalizedUploadDir)) {
+            log.error("Path traversal attempt detected: {}", filePath);
+            return Result.code(400, "文件路径不合法");
+        }
+
         Files.copy(file.getInputStream(), filePath);
 
         String fileType = getFileType(fileExtension);
@@ -946,12 +1010,13 @@ public class SourceController {
         documentRepository.insert(doc);
         graphCacheInvalidator.invalidateProjectOverview(projectId);
 
-        // 上传后自动触发解析和向量化
-        try {
-            // 解析文档：抽取文本并切片
-            DocumentExtractor extractor = new DocumentExtractor();
-            java.io.File uploadedFile = filePath.toFile();
-            String text = extractor.extractText(uploadedFile);
+        // 上传后自动触发解析和向量化（M1修复：异步化，避免阻塞请求线程）
+        documentProcessingExecutor.submit(() -> {
+            try {
+                // 解析文档：抽取文本并切片（L3 修复：使用注入的 Bean）
+                DocumentExtractor extractor = this.documentExtractor;
+                java.io.File uploadedFile = filePath.toFile();
+                String text = extractor.extractText(uploadedFile);
 
             if (text != null && !text.isBlank()) {
                 doc.setParseStatus("PARSING");
@@ -975,9 +1040,7 @@ public class SourceController {
                     chunkEntities.add(docChunk);
                 }
                 if (!chunkEntities.isEmpty()) {
-                    for (io.github.legacygraph.entity.DocChunk d : chunkEntities) {
-                        docChunkRepository.insert(d);
-                    }
+                    docChunkRepository.insertBatch(chunkEntities);
                 }
 
                 // 向量化：调用 VectorizationService 对文档内容进行向量化
@@ -1004,13 +1067,13 @@ public class SourceController {
                 log.info("Document auto-parsed and vectorized: {}, {} chunks, {} vectors", 
                          doc.getDocName(), chunks.size(), vectorized);
             } else {
-                log.warn("Document extracted empty text, skip parsing: {}", doc.getDocName());
+                documentRepository.updateById(doc);
+            } catch (Exception e) {
+                log.error("Document processing failed for docId={}, error={}", doc.getId(), e.getMessage());
+                doc.setParseStatus("PARSE_FAILED");
+                documentRepository.updateById(doc);
             }
-        } catch (Exception e) {
-            doc.setParseStatus("PARSE_FAILED");
-            documentRepository.updateById(doc);
-            log.error("Auto parse/vectorize failed for document {}: {}", doc.getDocName(), e.getMessage(), e);
-        }
+        });
 
         return Result.success(doc.getId());
     }
@@ -1130,8 +1193,8 @@ public class SourceController {
                 return Result.error(doc.getErrorMessage());
             }
 
-            // 使用 DocumentExtractor 真实抽取文本并切片
-            DocumentExtractor extractor = new DocumentExtractor();
+            // 使用 DocumentExtractor 真实抽取文本并切片（L3 修复：使用注入的 Bean）
+            DocumentExtractor extractor = this.documentExtractor;
             java.io.File file = new java.io.File(doc.getFilePath());
             String text = extractor.extractText(file);
 
@@ -1153,9 +1216,7 @@ public class SourceController {
                 chunkEntities.add(docChunk);
             }
             if (!chunkEntities.isEmpty()) {
-                for (io.github.legacygraph.entity.DocChunk d : chunkEntities) {
-                    docChunkRepository.insert(d);
-                }
+                docChunkRepository.insertBatch(chunkEntities);
             }
 
             doc.setParseStatus("PARSED");
@@ -1229,9 +1290,13 @@ public class SourceController {
             String disposition = isInlinePreviewable(fileType)
                     ? "inline" : "attachment";
 
+            // S3 修复：对文件名进行 RFC 5987 编码，防止 HTTP 响应头注入
+            String encodedFileName = java.net.URLEncoder.encode(doc.getDocName(), java.nio.charset.StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
-                            disposition + "; filename=\"" + doc.getDocName() + "\"")
+                            disposition + "; filename=\"" + encodedFileName + "\"; filename*=UTF-8''" + encodedFileName)
                     .contentType(MediaType.parseMediaType(contentType))
                     .body(content);
         } catch (IOException e) {
@@ -1252,6 +1317,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "删除成功"),
             @ApiResponse(responseCode = "404", description = "文档不存在")
     })
+    @org.springframework.transaction.annotation.Transactional  // M2 修复：添加事务保护
     public Result<Void> deleteDocument(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -1288,6 +1354,22 @@ public class SourceController {
         return "mysql".equals(t) || "mariadb".equals(t);
     }
 
+    private String validateRepoRequest(CreateCodeRepoRequest request) {
+        if (request == null) {
+            return "请求参数不能为空";
+        }
+        if (!isValidGitUrl(request.getGitUrl())) {
+            log.warn("Invalid Git URL rejected in repo request: {}", request.getGitUrl());
+            return "Git地址格式不合法";
+        }
+        String branchName = normalizeBranchName(request.getBranchName());
+        if (!isValidBranchName(branchName)) {
+            log.warn("Invalid branch name rejected in repo request: {}", request.getBranchName());
+            return "分支名格式不合法";
+        }
+        return null;
+    }
+
     /**
      * 校验 Git URL 合法性，防止命令注入
      * 支持的格式：https://、http://、git@、ssh://、git://
@@ -1296,6 +1378,38 @@ public class SourceController {
         if (url == null) return false;
         // 只允许合法 Git URL 字符，排除可能用于命令注入的特殊字符（; | & ` $ ! ' " ( ) < > 空格 换行等）
         return url.matches("^(https?://|git@|ssh://|git://)[a-zA-Z0-9._~:/@%+#=-]+$");
+    }
+
+    private String normalizeBranchName(String branchName) {
+        if (branchName == null || branchName.isBlank()) {
+            return "main";
+        }
+        return branchName.trim();
+    }
+
+    private boolean isValidBranchName(String branchName) {
+        if (branchName == null || branchName.isBlank()) return false;
+        if (branchName.startsWith("-") || branchName.startsWith("/") || branchName.endsWith("/")) return false;
+        if (branchName.endsWith(".") || branchName.endsWith(".lock")) return false;
+        if (branchName.contains("..") || branchName.contains("//") || branchName.contains("@{")) return false;
+        return branchName.matches("^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,199}$");
+    }
+
+    /**
+     * S4 修复：过滤文件名中的危险字符，防止路径遍历
+     */
+    private String sanitizeFileName(String fileName) {
+        if (fileName == null) return "";
+        // 移除路径分隔符和父目录引用
+        String sanitized = fileName.replace("\\", "/");
+        int lastSlash = sanitized.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            sanitized = sanitized.substring(lastSlash + 1);
+        }
+        // 移除 .. 和其他危险字符
+        sanitized = sanitized.replaceAll("\\.\\.", "")
+                .replaceAll("[<>:\"|?*\\x00-\\x1f]", "");
+        return sanitized.trim();
     }
 
     /**

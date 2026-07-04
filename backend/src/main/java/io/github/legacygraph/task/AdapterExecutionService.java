@@ -4,6 +4,7 @@ import io.github.legacygraph.extractors.adapter.*;
 import io.github.legacygraph.entity.ScanTask;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import java.util.concurrent.Semaphore;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,13 +94,21 @@ public class AdapterExecutionService {
             }
             taskRecorder.logProgress(task, 0, total, "adapter candidate files");
 
-            // 并发处理：虚拟线程，I/O 阻塞时自动切换，充分利用 CPU
+            // M11修复：添加 Semaphore 并发限制，防止虚拟线程过多导致资源耗尽
+            final int MAX_CONCURRENT = Math.min(50, files.size()); // 最多 50 并发
+            Semaphore semaphore = new Semaphore(MAX_CONCURRENT);
             AtomicInteger visited = new AtomicInteger(0);
             AtomicInteger processed = new AtomicInteger(0);
 
             List<Callable<Void>> tasks = files.stream()
                     .<Callable<Void>>map(file -> () -> {
                         if (cancelChecker != null && cancelChecker.get()) {
+                            return null;
+                        }
+                        try {
+                            semaphore.acquire(); // 获取许可
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
                             return null;
                         }
                         try {
@@ -120,6 +129,7 @@ public class AdapterExecutionService {
                         } catch (Exception e) {
                             log.debug("Skip file {}: {}", file, e.getMessage());
                         } finally {
+                            semaphore.release(); // 释放许可
                             int v = visited.incrementAndGet();
                             if (v % getProgressLogInterval() == 0 || v == total) {
                                 taskRecorder.logProgress(task, v, total, "adapter candidate files");

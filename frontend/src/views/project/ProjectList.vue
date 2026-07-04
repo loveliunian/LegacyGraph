@@ -121,29 +121,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
-import { projectApi } from '@/api'
+import { useProjectStore } from '@/stores/project'
 import type { PageResult } from '@/types'
 import type { Project } from '@/types'
 
 const router = useRouter()
-const loading = ref(false)
+const projectStore = useProjectStore()
+const loading = computed(() => projectStore.loading)
 const createDialogVisible = ref(false)
 
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
-const pageData = ref<PageResult<Project>>({
-  list: [],
-  total: 0,
-  pageNum: 1,
-  pageSize: 20,
-  totalPages: 0
-})
+const pageData = computed<PageResult<Project>>(() => ({
+  list: projectStore.projectList,
+  total: projectStore.projectList.length,
+  pageNum: query.pageNum,
+  pageSize: query.pageSize,
+  totalPages: Math.ceil(projectStore.projectList.length / query.pageSize)
+}))
 
 const query = reactive({
   pageNum: 1,
@@ -160,14 +161,10 @@ const newProject = reactive({
 })
 
 const loadData = async () => {
-  loading.value = true
   try {
-    const data = await projectApi.list(query) as any
-    pageData.value = data
+    await projectStore.fetchProjectList(query)
   } catch (e) {
     console.error(e)
-  } finally {
-    loading.value = false
   }
 }
 
@@ -181,10 +178,9 @@ const createProject = async () => {
     return
   }
   try {
-    await projectApi.create(newProject)
+    await projectStore.createProject(newProject)
     ElMessage.success('创建成功')
     createDialogVisible.value = false
-    // 清空
     Object.assign(newProject, {
       projectCode: '',
       projectName: '',
@@ -200,19 +196,17 @@ const createProject = async () => {
 
 const deleteProject = async (id: string) => {
   try {
-    // 第一次确认
     await ElMessageBox.confirm('确认删除此项目？', '提示')
-    // 第二次确认：需要输入项目名称
     const projectName = pageData.value.list.find(p => p.id === id)?.projectName || ''
     await ElMessageBox.confirm('确认删除此项目？此操作将删除项目及其所有关联数据，包括扫描版本、图谱、文档等，且无法恢复。', '删除项目', {
       confirmButtonText: '确认删除',
       cancelButtonText: '取消',
       type: 'warning',
-      inputPattern: new RegExp(`^${projectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+      inputPattern: new RegExp(`^${projectName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`),
       inputErrorMessage: `请输入项目名称"${projectName}"以确认删除`,
       showInput: true
     })
-    await projectApi.delete(id)
+    await projectStore.deleteProject(id)
     ElMessage.success('删除成功')
     await loadData()
   } catch (e) {

@@ -10,6 +10,11 @@ spring:
   application:
     name: legacy-graph-api
 
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
   # 数据源配置（生产环境必须通过环境变量注入）
   datasource:
     url: ${POSTGRES_URL:}

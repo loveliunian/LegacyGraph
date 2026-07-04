@@ -17,8 +17,8 @@ beforeEach(() => {
   setActivePinia(createPinia())
 })
 
-// 设置环境变量
-process.env.VITE_API_BASE_URL = 'http://localhost:8080/api'
+// L17 修复：Vite 使用 import.meta.env，vitest 中需直接赋值到 import.meta.env
+import.meta.env.VITE_API_BASE_URL = 'http://localhost:8080/api'
 
 globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),

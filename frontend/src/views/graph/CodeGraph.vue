@@ -157,11 +157,16 @@ const edges = ref<GraphEdge[]>([])
 const resultList = ref<any[]>([])
 
 async function loadVersions() {
-  const pid = projectId.value
-  if (!pid) return
-  const result = await loadScanVersions(pid)
-  versions.value = result || []
-}
+  try {
+    const pid = projectId.value
+    if (!pid) return
+    const result = await loadScanVersions(pid)
+    versions.value = result || []
+  } catch (error) {
+    console.error('loadVersions error:', error)
+    ElMessage.error('操作失败')
+  }
+  }
 
 const loadExample = async () => {
   if (!projectId.value || !query.versionId) {
@@ -288,19 +293,24 @@ const handleExport = (cmd: string) => {
 }
 
 onMounted(async () => {
-  await loadVersions()
-  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
-  const urlVersion = (route.query.version as string) || ''
-  if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
-    currentVersion.value = urlVersion
-  } else if (versions.value.length > 0) {
-    currentVersion.value = versions.value[0].id
-  }
-  if (currentVersion.value) {
-    query.versionId = currentVersion.value
-  }
-  if (query.versionId && query.method) {
-    queryGraph()
+  try {
+    await loadVersions()
+    // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+    const urlVersion = (route.query.version as string) || ''
+    if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
+      currentVersion.value = urlVersion
+    } else if (versions.value.length > 0) {
+      currentVersion.value = versions.value[0].id
+    }
+    if (currentVersion.value) {
+      query.versionId = currentVersion.value
+    }
+    if (query.versionId && query.method) {
+      await queryGraph()
+    }
+  } catch (error) {
+    console.error('onMounted error:', error)
+    ElMessage.error('页面初始化失败')
   }
 })
 </script>

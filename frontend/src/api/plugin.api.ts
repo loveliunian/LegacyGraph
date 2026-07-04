@@ -22,13 +22,13 @@ export const pluginApi = {
    */
   listAll(params?: PluginQueryParams): Promise<PluginDescriptor[]> {
     const query = params?.type ? `?type=${params.type}` : ''
-    return get(`/lg/plugins${query}`)
+    return get(`/lg/plugins${encodeURIComponent(query)}`)
   },
 
   /**
    * 获取单个插件详情
    */
   get(id: string): Promise<PluginDescriptor> {
-    return get(`/lg/plugins/${id}`)
+    return get(`/lg/plugins/${encodeURIComponent(id)}`)
   }
 }

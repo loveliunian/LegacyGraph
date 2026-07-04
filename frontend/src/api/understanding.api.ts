@@ -73,7 +73,7 @@ export const understandingApi = {
    * 查询工具健康状态
    */
   getToolHealth: (projectId: string) => {
-    return get<ToolHealthResponse>(`/lg/projects/${projectId}/understanding/tool-health`)
+    return get<ToolHealthResponse>(`/lg/projects/${encodeURIComponent(projectId)}/understanding/tool-health`)
   },
 
   /**

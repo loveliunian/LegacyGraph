@@ -22,6 +22,7 @@ import org.springframework.test.annotation.Rollback;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -96,6 +97,24 @@ class SourceControllerTest {
     }
 
     @Test
+    void testCreateRepo_InvalidGitUrlRejected() throws Exception {
+        CreateCodeRepoRequest request = new CreateCodeRepoRequest();
+        request.setRepoName("evil-repo");
+        request.setRepoType("GIT");
+        request.setGitUrl("https://github.com/test/repo.git;touch/tmp/pwned");
+        request.setBranchName("main");
+        request.setAuthType("NONE");
+
+        mockMvc.perform(post("/lg/projects/{projectId}/sources/repos", testProjectId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1));
+
+        assertThat(codeRepoRepository.selectCount(new QueryWrapper<>())).isZero();
+    }
+
+    @Test
     void testGetRepo_Success() throws Exception {
         CodeRepo repo = new CodeRepo();
         repo.setProjectId(testProjectId);
@@ -140,6 +159,31 @@ class SourceControllerTest {
     }
 
     @Test
+    void testUpdateRepo_InvalidGitUrlRejectedAndKeepsOriginal() throws Exception {
+        CodeRepo repo = new CodeRepo();
+        repo.setProjectId(testProjectId);
+        repo.setRepoName("test-repo");
+        repo.setRepoType("GIT");
+        repo.setGitUrl("https://github.com/test/repo.git");
+        codeRepoRepository.insert(repo);
+
+        CreateCodeRepoRequest request = new CreateCodeRepoRequest();
+        request.setRepoName("updated-repo");
+        request.setRepoType("GIT");
+        request.setGitUrl("https://github.com/test/repo.git;touch/tmp/pwned");
+        request.setBranchName("main");
+
+        mockMvc.perform(put("/lg/projects/{projectId}/sources/repos/{id}", testProjectId, repo.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1));
+
+        CodeRepo saved = codeRepoRepository.selectById(repo.getId());
+        assertThat(saved.getGitUrl()).isEqualTo("https://github.com/test/repo.git");
+    }
+
+    @Test
     void testDeleteRepo_Success() throws Exception {
         CodeRepo repo = new CodeRepo();
         repo.setProjectId(testProjectId);
@@ -178,6 +222,24 @@ class SourceControllerTest {
         mockMvc.perform(post("/lg/projects/{projectId}/sources/repos/{id}/pull", testProjectId, repo.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").exists());
+    }
+
+    @Test
+    void testPullRepo_InvalidStoredGitUrlRejectedBeforeGit() throws Exception {
+        CodeRepo repo = new CodeRepo();
+        repo.setProjectId(testProjectId);
+        repo.setRepoName("evil-repo");
+        repo.setGitUrl("ext::sh -c 'id > /tmp/pwned'");
+        repo.setBranchName("main");
+        repo.setStatus("PENDING");
+        codeRepoRepository.insert(repo);
+
+        mockMvc.perform(post("/lg/projects/{projectId}/sources/repos/{id}/pull", testProjectId, repo.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(1));
+
+        CodeRepo saved = codeRepoRepository.selectById(repo.getId());
+        assertThat(saved.getStatus()).isEqualTo("PENDING");
     }
 
     // ==================== Database Connection Tests ====================
@@ -331,7 +393,7 @@ class SourceControllerTest {
     }
 
     @Test
-    void testParseDocument_Success() throws Exception {
+    void testParseDocument_MissingFilePathReturnsError() throws Exception {
         Document doc = new Document();
         doc.setProjectId(testProjectId);
         doc.setDocName("test-doc.md");
@@ -340,8 +402,7 @@ class SourceControllerTest {
 
         mockMvc.perform(post("/lg/projects/{projectId}/sources/documents/{id}/parse", testProjectId, doc.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
-                // factCount may not exist if parse fails, so just check code=0
+                .andExpect(jsonPath("$.code").value(1));
     }
 
     @Test

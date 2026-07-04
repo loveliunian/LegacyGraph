@@ -1,4 +1,4 @@
-import { get } from '@/utils/request'
+import { get, put } from '@/utils/request'
 
 export interface Notification {
   id: string
@@ -16,6 +16,6 @@ export const notificationApi = {
 
   /** 标记已读 */
   markRead: (id: string) => {
-    return get(`/lg/notifications/${id}/read`)
+    return put(`/lg/notifications/${encodeURIComponent(id)}/read`)
   },
 }

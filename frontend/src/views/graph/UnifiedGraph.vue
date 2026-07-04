@@ -546,11 +546,16 @@ function resetFilters() {
 }
 
 async function loadVersions() {
-  const pid = projectId.value
-  if (!pid) return
-  const result = await loadScanVersions(pid)
-  versions.value = result || []
-}
+  try {
+    const pid = projectId.value
+    if (!pid) return
+    const result = await loadScanVersions(pid)
+    versions.value = result || []
+  } catch (error) {
+    console.error('loadVersions error:', error)
+    ElMessage.error('操作失败')
+  }
+  }
 
 async function loadGraph(versionId: string) {
   if (!projectId.value || !versionId) return
@@ -599,10 +604,15 @@ function loadVersion(versionId: string) {
 }
 
 async function refreshGraph() {
-  if (currentVersion.value) {
-    await loadGraph(currentVersion.value)
-  } else {
-    ElMessage.warning('请先选择一个扫描版本')
+  try {
+    if (currentVersion.value) {
+      await loadGraph(currentVersion.value)
+    } else {
+      ElMessage.warning('请先选择一个扫描版本')
+    }
+  } catch (error) {
+    console.error('refreshGraph error:', error)
+    ElMessage.error('刷新图谱失败')
   }
 }
 
@@ -610,8 +620,8 @@ function handleNodeClick(node: Node) {
   selectedNode.value = node
 }
 
-function handleEdgeClick(edge: Edge) {
-  console.log('Edge clicked:', edge)
+function handleEdgeClick(_edge: Edge) {
+  // emit 到父组件处理
 }
 
 async function approveNode() {
@@ -713,14 +723,19 @@ function emitFocusNode(nodeId: string) {
 }
 
 onMounted(async () => {
-  await loadVersions()
-  // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
-  if (urlVersionId && versions.value.some(v => v.id === urlVersionId)) {
-    currentVersion.value = urlVersionId
-    await loadGraph(urlVersionId)
-  } else if (versions.value.length > 0) {
-    currentVersion.value = versions.value[0].id
-    await loadGraph(currentVersion.value)
+  try {
+    await loadVersions()
+    // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
+    if (urlVersionId && versions.value.some(v => v.id === urlVersionId)) {
+      currentVersion.value = urlVersionId
+      await loadGraph(urlVersionId)
+    } else if (versions.value.length > 0) {
+      currentVersion.value = versions.value[0].id
+      await loadGraph(currentVersion.value)
+    }
+  } catch (error) {
+    console.error('onMounted error:', error)
+    ElMessage.error('页面初始化失败')
   }
 })
 </script>
