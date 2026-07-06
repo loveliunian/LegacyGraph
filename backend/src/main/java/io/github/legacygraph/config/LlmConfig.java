@@ -40,19 +40,19 @@ public class LlmConfig {
     }
 
     /**
-     * Embedding 模型 — 从 DB lg_llm_provider 表读取默认提供商配置。
-     * 使用 is_default=true 的提供商，与 ChatModel 配置保持一致。
-     * 未配置默认提供商时，Bean 不创建，语义搜索静默降级。
+     * Embedding 模型 — 从 DB lg_llm_provider 表读取 Embedding 提供商配置。
+     * 使用 provider_code 包含 "embedding" 的激活提供商，与 ChatModel 配置分开。
+     * 未配置 Embedding 提供商时，Bean 不创建，语义搜索静默降级。
      */
     @Bean
     @Primary
     @Profile("!test")
     @DependsOn("flyway")
     public EmbeddingModel embeddingModel(LlmProviderService llmProviderService) {
-        LlmProvider provider = llmProviderService.getActiveDefault();
+        LlmProvider provider = llmProviderService.getEmbeddingProvider();
         if (provider == null) {
             throw new IllegalStateException(
-                    "lg_llm_provider 表中缺少默认提供商（is_default=true），Embedding 功能不可用");
+                    "lg_llm_provider 表中缺少 Embedding 提供商（provider_code 包含 'embedding'），语义搜索不可用");
         }
 
         Map<String, Object> config = provider.getApiConfig();

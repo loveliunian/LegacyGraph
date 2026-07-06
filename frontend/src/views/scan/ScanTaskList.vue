@@ -112,6 +112,23 @@
         </template>
       </el-table-column>
       <el-table-column
+        prop="graphifyStatus"
+        label="Graphify"
+        width="120"
+        align="center">
+        <template #default="{ row }">
+          <el-tag
+            v-if="row.graphifyStatus"
+            size="small"
+            :type="getGraphifyStatusType(row.graphifyStatus)">
+            {{ getGraphifyStatusText(row.graphifyStatus) }}
+          </el-tag>
+          <span
+            v-else
+            class="text-gray">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column
         prop="startTime"
         label="开始时间"
         width="180">
@@ -266,6 +283,28 @@ const getStatusType = (status: string): string => {
   return map[status] || 'info'
 }
 
+const getGraphifyStatusType = (status: string): string => {
+  const map: Record<string, string> = {
+    PENDING: 'info',
+    RUNNING: 'warning',
+    SUCCESS: 'success',
+    FAILED: 'danger',
+    ROLLED_BACK: 'info',
+  }
+  return map[status] || 'info'
+}
+
+const getGraphifyStatusText = (status: string): string => {
+  const map: Record<string, string> = {
+    PENDING: '待执行',
+    RUNNING: '运行中',
+    SUCCESS: '已导入',
+    FAILED: '失败',
+    ROLLED_BACK: '已回滚',
+  }
+  return map[status] || status
+}
+
 const goToCreate = () => {
   router.push(`/projects/${projectId}/scan-versions/create`)
 }
@@ -346,7 +385,8 @@ async function loadTaskList(page?: number) {
       edgeCount: v.edgeCount || 0,
       startTime: v.startedAt || v.createdAt,
       duration: v.duration || 0,
-      createdBy: v.createdBy || '-'
+      createdBy: v.createdBy || '-',
+      graphifyStatus: v.graphifyStatus || null
     }))
   } catch (err) {
     console.error('获取扫描任务列表失败:', err)

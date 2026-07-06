@@ -521,6 +521,33 @@ export enum GraphEdgeType {
   EXTENDS = 'EXTENDS',
 }
 
+/** 图谱数据来源类型 */
+export enum SourceType {
+  /** 代码扫描 — 静态分析 */
+  CODE_SCAN = 'CODE_SCAN',
+  /** 代码扫描 — AST 解析 */
+  CODE_AST = 'CODE_AST',
+  /** 运行时采集 */
+  RUNTIME = 'RUNTIME',
+  /** 人工录入 */
+  MANUAL = 'MANUAL',
+  /** LLM 推断 */
+  LLM_INFERRED = 'LLM_INFERRED',
+  /** Graphify AST 导入 */
+  GRAPHIFY_AST = 'GRAPHIFY_AST',
+  /** Graphify 语义分析导入 */
+  GRAPHIFY_SEMANTIC = 'GRAPHIFY_SEMANTIC',
+}
+
+/** Graphify 作业状态 */
+export enum GraphifyJobStatus {
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+  ROLLED_BACK = 'ROLLED_BACK',
+}
+
 export enum ReviewStatus {
   PENDING = 'PENDING',
   NEED_REVIEW = 'NEED_REVIEW',

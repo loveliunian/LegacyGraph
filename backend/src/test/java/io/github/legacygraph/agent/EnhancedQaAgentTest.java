@@ -174,7 +174,7 @@ class EnhancedQaAgentTest {
                 .thenReturn(List.of(claim));
         GraphRagPlan plan = GraphRagPlan.builder().needsHumanReview(false).build();
         when(plannerAgent.plan("proj-1", "订单创建涉及哪些表？", List.of(claim))).thenReturn(plan);
-        when(planExecutor.execute(eq("proj-1"), eq("v1"), anyList(), anyList(), anyList()))
+        when(planExecutor.execute(eq("proj-1"), eq("v1"), any(), any()))
                 .thenReturn(GraphRagExecutionResult.builder().build());
         when(hybridRetrievalService.retrieve(eq("proj-1"), eq("v1"), anyString(), anyList(), eq(20)))
                 .thenReturn(List.of());

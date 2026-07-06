@@ -24,6 +24,12 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
     VectorDocument findBySourceUri(String sourceUri);
 
     /**
+     * 查找项目最新的 version_id（按 created_at 降序）
+     */
+    @Select("SELECT version_id FROM lg_vector_document WHERE project_id = #{projectId} ORDER BY created_at DESC LIMIT 1")
+    String findLatestVersionId(String projectId);
+
+    /**
      * 统计某个 sourceUri 的向量化记录数
      */
     @Select("SELECT COUNT(*) FROM lg_vector_document WHERE source_uri = #{sourceUri}")

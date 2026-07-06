@@ -124,4 +124,23 @@ class KnowledgeClaimServiceTest {
         verify(repository).selectOne(any());
         verify(repository, never()).selectById(any(String.class));
     }
+
+    @Test
+    void listClaimsBySubjectsReturnsMapped() {
+        KnowledgeClaim claim = new KnowledgeClaim();
+        claim.setId("claim-1");
+        claim.setProjectId("project-1");
+        claim.setVersionId("v1");
+        claim.setSubjectKey("feature:order");
+        claim.setConfidence(BigDecimal.valueOf(0.9));
+        when(repository.selectList(any())).thenReturn(List.of(claim));
+
+        List<KnowledgeClaim> result = service.listClaimsBySubjects(
+                "project-1", "v1", List.of("feature:order", "feature:customer"),
+                "CONFIRMED", 0.5, 100);
+
+        assertEquals(1, result.size());
+        assertSame(claim, result.get(0));
+        verify(repository).selectList(any());
+    }
 }

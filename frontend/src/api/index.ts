@@ -15,6 +15,17 @@ export { auditApi } from './audit.api'
 export { notificationApi } from './notification.api'
 export { pluginApi, type PluginDescriptor } from './plugin.api'
 export { evidenceConflictApi, type EvidenceConflict } from './evidence-conflict.api'
+export { graphifyApi } from './graphify.api'
+export type {
+  GraphifyImportRequest,
+  GraphifyRunRequest,
+  GraphifyQuestionRequest,
+  GraphifyJob,
+  GraphifyDiffResult,
+  GraphifyQuestionResult,
+  GraphifyQualityResult,
+  CrossRepoImpactChain,
+} from './graphify.api'
 
 // 保留原有导出向后兼容
 import { get, post, del, put } from '@/utils/request'

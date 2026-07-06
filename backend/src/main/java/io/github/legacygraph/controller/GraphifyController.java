@@ -17,7 +17,7 @@ import java.nio.file.Path;
  */
 @Slf4j
 @RestController
-@RequestMapping("/lg/projects/{projectId}/graphify")
+@RequestMapping("/lg/projects/{projectId}")
 @RequiredArgsConstructor
 public class GraphifyController {
 
@@ -33,7 +33,7 @@ public class GraphifyController {
      * @param sourceDir 源代码目录
      * @return 导入结果
      */
-    @PostMapping("/analyze")
+    @PostMapping("/graphify/analyze")
     public Result<GraphifyImportService.ImportResult> analyzeAndImport(
             @PathVariable String projectId,
             @RequestParam String versionId,
@@ -81,13 +81,98 @@ public class GraphifyController {
     }
 
     /**
+     * POST /api/lg/projects/{projectId}/scan-versions/{versionId}/graphify/import
+     * 导入已有 Graphify graph.json。
+     */
+    @PostMapping("/scan-versions/{versionId}/graphify/import")
+    public Result<GraphifyImportService.ImportResult> importGraph(
+            @PathVariable String projectId,
+            @PathVariable String versionId,
+            @RequestBody ImportRequest request) {
+        try {
+            Path graphJsonPath = resolveGraphJsonPath(request.getProjectRoot(), request.getGraphJsonPath());
+            GraphifyImportService.ImportResult importResult =
+                    graphifyImportService.importGraph(projectId, versionId, graphJsonPath);
+            return Result.success(importResult);
+        } catch (GraphifyImportService.GraphifyImportException e) {
+            log.error("Graphify 导入失败", e);
+            return Result.error("Graphify 导入失败: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Graphify 导入处理失败", e);
+            return Result.error("Graphify 导入处理失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * POST /api/lg/projects/{projectId}/scan-versions/{versionId}/graphify/run
+     * 执行 Graphify 分析并导入生成的 graph.json。
+     */
+    @PostMapping("/scan-versions/{versionId}/graphify/run")
+    public Result<GraphifyImportService.ImportResult> runAndImport(
+            @PathVariable String projectId,
+            @PathVariable String versionId,
+            @RequestBody RunRequest request) {
+        return runAndImport(projectId, versionId, request.getProjectRoot());
+    }
+
+    private Result<GraphifyImportService.ImportResult> runAndImport(String projectId, String versionId, String sourceDir) {
+        if (sourceDir == null || sourceDir.isBlank()) {
+            return Result.error("projectRoot 不能为空");
+        }
+
+        try {
+            if (!graphifyRunner.isAvailable()) {
+                return Result.error("Graphify 工具不可用，请检查配置");
+            }
+
+            GraphifyRunResult runResult = graphifyRunner.run(Path.of(sourceDir));
+            if (!runResult.isSuccess()) {
+                String errorMsg = runResult.getStderr() != null && !runResult.getStderr().isBlank()
+                        ? runResult.getStderr()
+                        : "退出码: " + runResult.getExitCode();
+                return Result.error("Graphify 分析失败: " + errorMsg);
+            }
+
+            Path graphJsonPath = runResult.getGraphJsonPath() != null
+                    ? runResult.getGraphJsonPath()
+                    : runResult.getOutputDir().resolve("graph.json");
+            GraphifyImportService.ImportResult importResult =
+                    graphifyImportService.importGraph(projectId, versionId, graphJsonPath);
+            return Result.success(importResult);
+        } catch (GraphifyRunner.GraphifyRunException e) {
+            log.error("Graphify 运行失败", e);
+            return Result.error("Graphify 运行失败: " + e.getMessage());
+        } catch (GraphifyImportService.GraphifyImportException e) {
+            log.error("Graphify 导入失败", e);
+            return Result.error("Graphify 导入失败: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Graphify 处理失败", e);
+            return Result.error("Graphify 处理失败: " + e.getMessage());
+        }
+    }
+
+    private Path resolveGraphJsonPath(String projectRoot, String graphJsonPath) {
+        if (graphJsonPath == null || graphJsonPath.isBlank()) {
+            throw new IllegalArgumentException("graphJsonPath 不能为空");
+        }
+        Path path = Path.of(graphJsonPath);
+        if (path.isAbsolute()) {
+            return path.normalize();
+        }
+        if (projectRoot == null || projectRoot.isBlank()) {
+            throw new IllegalArgumentException("相对 graphJsonPath 需要提供 projectRoot");
+        }
+        return Path.of(projectRoot).resolve(path).normalize();
+    }
+
+    /**
      * GET /api/lg/projects/{projectId}/graphify/status
      * 检查 Graphify 工具状态。
      *
      * @param projectId 项目ID
      * @return 工具状态
      */
-    @GetMapping("/status")
+    @GetMapping("/graphify/status")
     public Result<GraphifyStatusResponse> getStatus(@PathVariable String projectId) {
         boolean available = graphifyRunner.isAvailable();
 
@@ -104,5 +189,18 @@ public class GraphifyController {
     public static class GraphifyStatusResponse {
         private final boolean available;
         private final String message;
+    }
+
+    @lombok.Data
+    public static class ImportRequest {
+        private String graphJsonPath;
+        private String projectRoot;
+    }
+
+    @lombok.Data
+    public static class RunRequest {
+        private String projectRoot;
+        private String postgresDsn;
+        private Boolean force;
     }
 }

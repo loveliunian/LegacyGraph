@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -294,6 +295,62 @@ public class Neo4jQueryRepository {
         return 0;
     }
 
+    /** 查询指定来源类型的节点 key，用于构建 Graphify 版本快照。 */
+    public Set<String> queryNodeKeysBySourceTypes(String projectId, String versionId, List<String> sourceTypes) {
+        if (sourceTypes == null || sourceTypes.isEmpty()) {
+            return Set.of();
+        }
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                    "MATCH (n) WHERE n.projectId = $projectId " +
+                    "AND ($versionId IS NULL OR n.versionId = $versionId) " +
+                    "AND n.sourceType IN $sourceTypes " +
+                    "RETURN DISTINCT coalesce(n.nodeKey, n.id) AS key " +
+                    "ORDER BY key";
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", normalizeId(versionId));
+            params.put("sourceTypes", sourceTypes);
+            Result result = session.run(cypher, params);
+            return collectStringKeys(result);
+        }
+    }
+
+    /** 查询指定来源类型的边 key，用于构建 Graphify 版本快照。 */
+    public Set<String> queryEdgeKeysBySourceTypes(String projectId, String versionId, List<String> sourceTypes) {
+        if (sourceTypes == null || sourceTypes.isEmpty()) {
+            return Set.of();
+        }
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                    "MATCH ()-[r]->() WHERE r.projectId = $projectId " +
+                    "AND ($versionId IS NULL OR r.versionId = $versionId) " +
+                    "AND r.sourceType IN $sourceTypes " +
+                    "RETURN DISTINCT coalesce(r.edgeKey, r.id) AS key " +
+                    "ORDER BY key";
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", normalizeId(versionId));
+            params.put("sourceTypes", sourceTypes);
+            Result result = session.run(cypher, params);
+            return collectStringKeys(result);
+        }
+    }
+
+    private Set<String> collectStringKeys(Result result) {
+        Set<String> keys = new LinkedHashSet<>();
+        while (result.hasNext()) {
+            org.neo4j.driver.Record record = result.next();
+            if (!record.get("key").isNull()) {
+                String key = record.get("key").asString(null);
+                if (key != null && !key.isBlank()) {
+                    keys.add(key);
+                }
+            }
+        }
+        return keys;
+    }
+
     /**
      * 查询低置信度节点（置信度 < 0.5），限制返回数量避免超时。
      */
@@ -514,5 +571,127 @@ public class Neo4jQueryRepository {
             log.warn("queryTableStats failed: {}", e.getMessage());
         }
         return result;
+    }
+
+    /**
+     * 有界无向路径查询 — 在 from/to 节点之间查找最多 maxDepth 跳的路径。
+     * <p>
+     * 关系类型经 {@link CypherCatalog#safeIdentifier} 白名单校验后内联拼接
+     * （label/type 不可参数化）；maxDepth 钳制到 [1,4]；无向遍历最大化
+     * "A 和 B 什么关系" 的召回。失败时 log 并返回空 list（与既有 queryRepo 风格一致）。
+     * </p>
+     *
+     * @param relationshipTypes 关系类型白名单（null 或空 → 全类型）
+     * @param maxDepth          最大跳数，钳制到 [1,4]
+     * @param limit             返回路径数上限
+     */
+    public List<Neo4jGraphDao.GraphPath> findPaths(String projectId, String versionId,
+                                                    String fromKey, String toKey,
+                                                    List<String> relationshipTypes,
+                                                    int maxDepth, int limit) {
+        if (fromKey == null || fromKey.isBlank() || toKey == null || toKey.isBlank()) {
+            return List.of();
+        }
+        int depth = Math.max(1, Math.min(4, maxDepth));
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+
+        // 关系类型白名单校验 + 拼接；空列表 → 裸 *1..depth（全类型）
+        StringBuilder relSpec = new StringBuilder();
+        if (relationshipTypes != null) {
+            for (String t : relationshipTypes) {
+                if (t == null || t.isBlank()) continue;
+                String safe = CypherCatalog.safeIdentifier(t.trim(), "relType");
+                if (relSpec.length() > 0) {
+                    relSpec.append("|");
+                }
+                relSpec.append(safe);
+            }
+        }
+        if (relSpec.length() > 0) {
+            relSpec.insert(0, ":");
+        }
+        relSpec.append("*1..").append(depth);
+
+        String cypher =
+                "MATCH p = (from {projectId: $projectId, versionId: $versionId, nodeKey: $fromKey})" +
+                "-[" + relSpec + "]-" +
+                "(to {projectId: $projectId, versionId: $versionId, nodeKey: $toKey}) " +
+                "WHERE from.id <> to.id " +
+                "RETURN p, nodes(p) AS ns, relationships(p) AS rs " +
+                "LIMIT $limit";
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("projectId", projectId);
+        params.put("versionId", normalizeId(versionId));
+        params.put("fromKey", fromKey);
+        params.put("toKey", toKey);
+        params.put("limit", (long) safeLimit);
+
+        List<Neo4jGraphDao.GraphPath> paths = new ArrayList<>();
+        try (Session session = neo4jDriver.session()) {
+            Result result = session.run(cypher, params);
+            while (result.hasNext()) {
+                org.neo4j.driver.Record record = result.next();
+                List<org.neo4j.driver.types.Node> neoNodes =
+                        record.get("ns").asList(v -> v.asNode());
+                List<org.neo4j.driver.types.Relationship> neoRels =
+                        record.get("rs").asList(v -> v.asRelationship());
+                if (neoNodes.isEmpty()) continue;
+
+                List<GraphNode> graphNodes = new ArrayList<>(neoNodes.size());
+                for (org.neo4j.driver.types.Node neoNode : neoNodes) {
+                    graphNodes.add(recordToNode(neoNode));
+                }
+
+                // relationTypes = distinct rel.type()（保序）
+                Set<String> relTypeSet = new LinkedHashSet<>();
+                for (org.neo4j.driver.types.Relationship rel : neoRels) {
+                    relTypeSet.add(rel.type());
+                }
+
+                // 边：按路径顺序，用 relationship 的 start/end elementId 对齐真实方向
+                List<GraphEdge> graphEdges = new ArrayList<>(neoRels.size());
+                for (int i = 0; i < neoRels.size(); i++) {
+                    org.neo4j.driver.types.Relationship rel = neoRels.get(i);
+                    org.neo4j.driver.types.Node n0 = neoNodes.get(i);
+                    org.neo4j.driver.types.Node n1 = neoNodes.get(i + 1);
+                    String relStart = rel.startNodeElementId();
+                    org.neo4j.driver.types.Node edgeFrom =
+                            relStart.equals(n0.elementId()) ? n0 : n1;
+                    org.neo4j.driver.types.Node edgeTo =
+                            relStart.equals(n0.elementId()) ? n1 : n0;
+                    graphEdges.add(recordToEdge(rel, edgeFrom, edgeTo));
+                }
+
+                GraphNode first = graphNodes.get(0);
+                GraphNode last = graphNodes.get(graphNodes.size() - 1);
+
+                // confidence = path 上节点 confidence 的 min（保守）
+                BigDecimal pathConf = null;
+                for (GraphNode n : graphNodes) {
+                    if (n.getConfidence() != null) {
+                        if (pathConf == null || n.getConfidence().compareTo(pathConf) < 0) {
+                            pathConf = n.getConfidence();
+                        }
+                    }
+                }
+
+                paths.add(new Neo4jGraphDao.GraphPath(
+                        graphNodes,
+                        graphEdges,
+                        new ArrayList<>(relTypeSet),
+                        first.getSourcePath(),
+                        first.getStartLine(),
+                        first.getEndLine(),
+                        pathConf,
+                        first.getNodeKey(),
+                        last.getNodeKey()
+                ));
+            }
+        } catch (Exception e) {
+            log.warn("findPaths failed for {} -> {}: {}", fromKey, toKey, e.getMessage());
+            return List.of();
+        }
+        return paths;
     }
 }

@@ -17,7 +17,7 @@ import io.github.legacygraph.service.qa.VectorizationService;
  * 需要 Ollama bge-m3 在 localhost:11434 运行
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@ActiveProfiles("default")
+@ActiveProfiles("test")
 class VectorizationIntegrationTest {
 
     @Autowired(required = false)

@@ -15,6 +15,7 @@ import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.DocChunkRepository;
+import io.github.legacygraph.repository.VectorDocumentRepository;
 import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 import io.github.legacygraph.service.scan.ScanVersionService;
 import io.github.legacygraph.service.scan.SourceService;
@@ -71,6 +72,7 @@ public class SourceController {
     private final DbConnectionRepository dbConnectionRepository;
     private final DocumentRepository documentRepository;
     private final DocChunkRepository docChunkRepository;
+    private final VectorDocumentRepository vectorDocumentRepository;
     private final ScanVersionService scanVersionService;
     private final ProjectScanner projectScanner;
     private final GraphCacheInvalidator graphCacheInvalidator;
@@ -99,6 +101,7 @@ public class SourceController {
                             DbConnectionRepository dbConnectionRepository,
                             DocumentRepository documentRepository,
                             DocChunkRepository docChunkRepository,
+                            VectorDocumentRepository vectorDocumentRepository,
                             ScanVersionService scanVersionService,
                             ProjectScanner projectScanner,
                             GraphCacheInvalidator graphCacheInvalidator,
@@ -110,6 +113,7 @@ public class SourceController {
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
         this.docChunkRepository = docChunkRepository;
+        this.vectorDocumentRepository = vectorDocumentRepository;
         this.scanVersionService = scanVersionService;
         this.projectScanner = projectScanner;
         this.graphCacheInvalidator = graphCacheInvalidator;
@@ -1046,9 +1050,16 @@ public class SourceController {
                 // 向量化：调用 VectorizationService 对文档内容进行向量化
                 int vectorized = 0;
                 if (vectorizationService != null && vectorizationService.isAvailable()) {
+                    String effectiveVersionId = doc.getVersionId();
+                    if (effectiveVersionId == null || effectiveVersionId.isBlank()) {
+                        effectiveVersionId = vectorDocumentRepository.findLatestVersionId(projectId);
+                        if (effectiveVersionId == null) {
+                            effectiveVersionId = "default";
+                        }
+                    }
                     vectorized = vectorizationService.embedDocument(
                         projectId,
-                        doc.getVersionId() != null ? doc.getVersionId() : "default",
+                        effectiveVersionId,
                         "DOC",
                         doc.getFilePath(),
                         text,

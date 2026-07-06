@@ -133,6 +133,51 @@ public class KnowledgeClaimService {
     }
 
     /**
+     * 按 subjectKey 精准查询 Claim（GraphRAG Claim 查询专用）。
+     * <p>
+     * 与 {@link #listClaims} 的区别：以 subjectKey 集合为驱动，DB 层用 IN 过滤，
+     * 同时支持 status / minConfidence 精度过滤。供 GraphRagPlanExecutor 把
+     * ClaimQuery 的 status / minConfidence 直接下推到 DB，避免全量召回后内存过滤。
+     * </p>
+     *
+     * @param subjectKeys   主体标识集合（非空时 IN 过滤；空集合返回空列表）
+     * @param status        状态过滤（PENDING_CONFIRM / CONFIRMED / ...），null 忽略
+     * @param minConfidence 最低置信度阈值，null 忽略
+     */
+    public List<KnowledgeClaim> listClaimsBySubjects(String projectId, String versionId,
+                                                     List<String> subjectKeys,
+                                                     String status, Double minConfidence,
+                                                     int limit) {
+        if (subjectKeys == null || subjectKeys.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> normalizedKeys = subjectKeys.stream()
+                .filter(k -> k != null && !k.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
+        if (normalizedKeys.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        LambdaQueryWrapper<KnowledgeClaim> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(KnowledgeClaim::getProjectId, projectId);
+        if (versionId != null && !versionId.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getVersionId, versionId);
+        }
+        wrapper.in(KnowledgeClaim::getSubjectKey, normalizedKeys);
+        if (status != null && !status.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getStatus, status);
+        }
+        if (minConfidence != null) {
+            wrapper.ge(KnowledgeClaim::getConfidence, BigDecimal.valueOf(minConfidence));
+        }
+        wrapper.orderByDesc(KnowledgeClaim::getConfidence);
+        wrapper.last("LIMIT " + normalizedLimit(limit));
+
+        return claimRepository.selectList(wrapper);
+    }
+
+    /**
      * 按版本统计各类 Claim 数量。
      */
     public Map<String, Long> countClaimsByStatus(String projectId, String versionId) {

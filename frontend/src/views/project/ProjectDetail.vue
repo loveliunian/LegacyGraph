@@ -142,6 +142,17 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
       ]
     },
     {
+      index: 'graphify',
+      label: 'Graphify 融合',
+      icon: markRaw(Connection),
+      items: [
+        { label: '作业中心', path: `${basePath}/graphify/jobs` },
+        { label: '版本差异', path: `${basePath}/graphify/diff` },
+        { label: '质量仪表盘', path: `${basePath}/graphify/quality` },
+        { label: '跨仓影响', path: `${basePath}/graphify/cross-repo-impact` }
+      ]
+    },
+    {
       index: 'evidence',
       label: '证据与审核',
       icon: markRaw(DocumentChecked),

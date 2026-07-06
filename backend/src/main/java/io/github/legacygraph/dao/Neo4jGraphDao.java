@@ -5,6 +5,7 @@ import io.github.legacygraph.entity.GraphNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -62,6 +63,22 @@ public class Neo4jGraphDao {
     /** 批量写入边 */
     public record BatchEdgeUpsert(String fromNodeId, String toNodeId, String edgeType,
                                    String edgeKey, Map<String, Object> properties) {}
+
+    /** Graphify 子图删除结果。 */
+    public record GraphifyDeleteResult(long nodeCount, long edgeCount) {}
+
+    /**
+     * 有界路径查询返回的单条路径。
+     * <p>
+     * 携带完整 nodes/edges（满足"返回节点、边"），同时附带轻量结构字段
+     * （relationTypes / sourcePath / startLine / endLine / confidence / fromKey / toKey），
+     * 供 executor 折叠为 EvidenceCard 而无需再次遍历全量对象。
+     * </p>
+     */
+    public record GraphPath(List<GraphNode> nodes, List<GraphEdge> edges,
+                             List<String> relationTypes, String sourcePath,
+                             Integer startLine, Integer endLine,
+                             BigDecimal confidence, String fromKey, String toKey) {}
 
     // ==================== 查询方法 → QueryRepository ====================
 
@@ -122,12 +139,35 @@ public class Neo4jGraphDao {
         return queryRepo.findNeighborNodeIds(projectId, nodeId);
     }
 
+    /**
+     * 有界无向路径查询 — 在 from/to 节点之间查找最多 maxDepth 跳的路径。
+     *
+     * @param relationshipTypes 关系类型白名单（空列表 → 全类型）
+     * @param maxDepth          最大跳数（repository 内钳制到 [1,4]）
+     * @param limit             返回路径数上限
+     */
+    public List<GraphPath> findPaths(String projectId, String versionId,
+                                      String fromKey, String toKey,
+                                      List<String> relationshipTypes,
+                                      int maxDepth, int limit) {
+        return queryRepo.findPaths(projectId, versionId, fromKey, toKey,
+                relationshipTypes, maxDepth, limit);
+    }
+
     public Optional<GraphEdge> findEdgeById(String edgeId) {
         return queryRepo.findEdgeById(edgeId);
     }
 
     public long countEdges(String projectId, String versionId, String status) {
         return queryRepo.countEdges(projectId, versionId, status);
+    }
+
+    public Set<String> queryNodeKeysBySourceTypes(String projectId, String versionId, List<String> sourceTypes) {
+        return queryRepo.queryNodeKeysBySourceTypes(projectId, versionId, sourceTypes);
+    }
+
+    public Set<String> queryEdgeKeysBySourceTypes(String projectId, String versionId, List<String> sourceTypes) {
+        return queryRepo.queryEdgeKeysBySourceTypes(projectId, versionId, sourceTypes);
     }
 
     public List<GraphNode> queryLowConfidenceNodes(String projectId, int limit) {
@@ -265,6 +305,21 @@ public class Neo4jGraphDao {
 
     public void deleteNode(String projectId, String versionId, String nodeId) {
         adminRepo.deleteNode(projectId, versionId, nodeId);
+    }
+
+    /** 按 sourcePath 删除指定版本中来自某个源文件的所有节点（用于增量删除）。 */
+    public int deleteNodesBySourcePath(String projectId, String versionId, String sourcePath) {
+        return adminRepo.deleteNodesBySourcePath(projectId, versionId, sourcePath);
+    }
+
+    /** 批量按 sourcePath 列表删除节点（用于增量删除场景）。 */
+    public int deleteNodesBySourcePaths(String projectId, String versionId, java.util.List<String> sourcePaths) {
+        return adminRepo.deleteNodesBySourcePaths(projectId, versionId, sourcePaths);
+    }
+
+    public GraphifyDeleteResult deleteGraphifyClaims(String projectId, String versionId) {
+        long[] result = adminRepo.deleteGraphifyClaims(projectId, versionId);
+        return new GraphifyDeleteResult(result[0], result[1]);
     }
 
     // ==================== Schema → SchemaRepository ====================

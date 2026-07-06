@@ -15,7 +15,7 @@ public class GraphifyProperties {
     /**
      * 是否启用 Graphify 集成
      */
-    private boolean enabled = true;
+    private boolean enabled = false;
 
     /**
      * Graphify CLI 可执行文件路径

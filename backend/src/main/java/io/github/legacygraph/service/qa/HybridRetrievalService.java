@@ -31,12 +31,14 @@ public class HybridRetrievalService {
     public List<VectorDocument> retrieve(String projectId, String versionId, 
                                          String query, List<String> queryVariants,
                                          int topK) {
+        // 统一解析 versionId，确保所有检索路径使用相同的 versionId
+        String effectiveVersionId = resolveVersionId(projectId, versionId);
         Map<String, VectorDocument> merged = new LinkedHashMap<>();
 
         // 1. 向量检索（主查询）
         try {
             List<VectorDocument> vectorResults = vectorRetrievalService.semanticSearch(
-                projectId, versionId, query, topK, null
+                projectId, effectiveVersionId, query, topK, null
             );
             for (VectorDocument doc : vectorResults) {
                 merged.putIfAbsent(doc.getId().toString(), doc);
@@ -50,7 +52,7 @@ public class HybridRetrievalService {
             for (String variant : queryVariants) {
                 try {
                     List<VectorDocument> variantResults = vectorRetrievalService.semanticSearch(
-                        projectId, versionId, variant, topK / 2, null
+                        projectId, effectiveVersionId, variant, topK / 2, null
                     );
                     for (VectorDocument doc : variantResults) {
                         merged.putIfAbsent(doc.getId().toString(), doc);
@@ -63,7 +65,7 @@ public class HybridRetrievalService {
 
         // 3. 关键词检索（补充向量检索遗漏）
         try {
-            List<VectorDocument> keywordResults = keywordSearch(projectId, versionId, query, topK / 2);
+            List<VectorDocument> keywordResults = keywordSearch(projectId, effectiveVersionId, query, topK / 2);
             for (VectorDocument doc : keywordResults) {
                 merged.putIfAbsent(doc.getId().toString(), doc);
             }
@@ -107,5 +109,24 @@ public class HybridRetrievalService {
         wrapper.last("LIMIT " + topK);
         
         return vectorDocumentRepository.selectList(wrapper);
+    }
+
+    /**
+     * 解析 versionId：如果为空则查找项目最新版本
+     */
+    private String resolveVersionId(String projectId, String versionId) {
+        if (versionId != null && !versionId.isBlank()) {
+            return versionId;
+        }
+        try {
+            String latestVersionId = vectorDocumentRepository.findLatestVersionId(projectId);
+            if (latestVersionId != null) {
+                log.debug("Resolved to latest versionId: {} for project: {}", latestVersionId, projectId);
+                return latestVersionId;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve latest versionId for project: {}", projectId, e);
+        }
+        return versionId;
     }
 }

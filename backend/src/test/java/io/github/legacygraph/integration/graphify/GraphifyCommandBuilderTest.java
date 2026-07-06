@@ -16,7 +16,7 @@ class GraphifyCommandBuilderTest {
     void testBuildAnalyzeCommand() {
         GraphifyProperties props = new GraphifyProperties();
         props.setExecutable("graphify");
-        props.setExtraArgs(List.of("--verbose"));
+        props.setExtraArgs(List.of("--no-viz", "--timing"));
 
         GraphifyCommandBuilder builder = new GraphifyCommandBuilder(props);
 
@@ -26,14 +26,15 @@ class GraphifyCommandBuilderTest {
         List<String> command = builder.buildAnalyzeCommand(sourceDir, outputDir);
 
         assertNotNull(command);
-        assertEquals(7, command.size()); // executable + analyze + --source + path + --output + path + --verbose
+        assertEquals(5, command.size()); // executable + extract + source path + extra args
         assertEquals("graphify", command.get(0));
-        assertEquals("analyze", command.get(1));
-        assertEquals("--source", command.get(2));
-        assertTrue(command.get(3).contains("/tmp/source"));
-        assertEquals("--output", command.get(4));
-        assertTrue(command.get(5).contains("/tmp/output"));
-        assertEquals("--verbose", command.get(6));
+        assertEquals("extract", command.get(1));
+        assertTrue(command.get(2).contains("/tmp/source"));
+        assertEquals("--no-viz", command.get(3));
+        assertEquals("--timing", command.get(4));
+        assertFalse(command.contains("analyze"));
+        assertFalse(command.contains("--source"));
+        assertFalse(command.contains("--output"));
     }
 
     @Test
@@ -50,9 +51,9 @@ class GraphifyCommandBuilderTest {
         List<String> command = builder.buildAnalyzeCommand(sourceDir, outputDir);
 
         assertNotNull(command);
-        assertEquals(8, command.size()); // 6 base + 2 extra
-        assertEquals("--verbose", command.get(6));
-        assertEquals("--debug", command.get(7));
+        assertEquals(5, command.size()); // executable + extract + source path + 2 extra
+        assertEquals("--verbose", command.get(3));
+        assertEquals("--debug", command.get(4));
     }
 
     @Test

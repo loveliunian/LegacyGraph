@@ -38,12 +38,9 @@ public class GraphifyCommandBuilder {
         // 1. 可执行文件
         command.add(properties.getExecutable());
 
-        // 2. 基本参数
-        command.add("analyze");
-        command.add("--source");
+        // 2. Graphify 0.9.x exposes `extract <path>` for headless extraction.
+        command.add("extract");
         command.add(sourceDir.toAbsolutePath().toString());
-        command.add("--output");
-        command.add(outputDir.toAbsolutePath().toString());
 
         // 3. 额外参数
         if (properties.getExtraArgs() != null && !properties.getExtraArgs().isEmpty()) {

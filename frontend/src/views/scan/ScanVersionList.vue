@@ -229,7 +229,6 @@
       title="版本详情"
       width="720px"
       append-to-body
-      @opened="() => currentVersion && taskStore.startPolling(currentVersion.id, projectId, DETAIL_POLL_INTERVAL)"
       @closed="stopDetailPolling">
       <template v-if="currentVersion">
         <!-- 基本信息 -->
@@ -279,7 +278,7 @@
           </div>
           <div class="phase-list">
             <div
-              v-for="(phase, idx) in (detailProgress?.tasks || [])"
+              v-for="(phase, idx) in allPhases"
               :key="phase.taskType"
               class="phase-item"
               :class="{
@@ -381,12 +380,10 @@ import dayjs from 'dayjs'
 import { t } from '@/locales'
 import { scanApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
-import { useTaskStore } from '@/stores/task'
 
 const route = useRoute()
 const router = useRouter()
 const projectId = route.params.projectId as string
-const taskStore = useTaskStore()
 
 const loading = ref(false)
 const hasLoadedOnce = ref(false)
@@ -398,6 +395,7 @@ const detailDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
 const detailProgress = ref<any>(null)
 const DETAIL_POLL_INTERVAL = 2000
+let detailPollTimer: ReturnType<typeof setInterval> | null = null
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 const POLL_INTERVAL = 100000
@@ -405,6 +403,27 @@ const POLL_INTERVAL = 100000
 const hasRunningTasks = computed(() =>
   versionList.value.some(v => v.status === 'RUNNING')
 )
+
+// 所有环节定义（兜底，API 未返回时也能展示全部 PENDING 状态）
+const ALL_PHASES = [
+  { taskType: 'DB_DISCOVERY', phaseName: '数据库连接发现' },
+  { taskType: 'PATH_DISCOVERY', phaseName: '前后端路径检测' },
+  { taskType: 'DOC_DISCOVERY', phaseName: '文档自动发现' },
+  { taskType: 'ADAPTER_SCAN', phaseName: '代码结构抽取' },
+  { taskType: 'DATABASE_SCAN', phaseName: '数据库元数据扫描' },
+  { taskType: 'GRAPH_BUILD', phaseName: '知识图谱构建' },
+  { taskType: 'AI_ORCHESTRATION', phaseName: 'AI 智能分析' }
+]
+
+/** 合并 API 返回的 tasks 与全量环节定义，确保所有环节始终展示 */
+const allPhases = computed(() => {
+  const apiTasks = detailProgress.value?.tasks || []
+  const taskMap = new Map<string, any>()
+  for (const t of apiTasks) {
+    taskMap.set(t.taskType, t)
+  }
+  return ALL_PHASES.map(p => taskMap.get(p.taskType) || { ...p, status: 'PENDING' })
+})
 
 // 文本截断，超出长度加 ...
 const truncateText = (text: string, maxLen: number): string => {
@@ -477,17 +496,33 @@ const goToCreate = () => {
   router.push(`/projects/${projectId}/scan-versions/create`)
 }
 
+const fetchDetailProgress = async () => {
+  if (!currentVersion.value) return
+  try {
+    const result = await scanApi.progress(projectId, currentVersion.value.id) as any
+    detailProgress.value = result
+  } catch (err) {
+    console.error('获取扫描进度失败:', err)
+  }
+}
+
 const viewDetail = (row: any) => {
   currentVersion.value = row
   detailDialogVisible.value = true
-  // 使用 taskStore 轮询
-  taskStore.startPolling(row.id, projectId, DETAIL_POLL_INTERVAL)
+  detailProgress.value = null
+  // 立即获取一次进度
+  fetchDetailProgress()
+  // 启动轮询
+  if (detailPollTimer) clearInterval(detailPollTimer)
+  detailPollTimer = setInterval(fetchDetailProgress, DETAIL_POLL_INTERVAL)
 }
 
 const stopDetailPolling = () => {
-  if (currentVersion.value) {
-    taskStore.stopPolling(currentVersion.value.id)
+  if (detailPollTimer) {
+    clearInterval(detailPollTimer)
+    detailPollTimer = null
   }
+  detailProgress.value = null
 }
 
 const compareWithPrevious = (row: any) => {

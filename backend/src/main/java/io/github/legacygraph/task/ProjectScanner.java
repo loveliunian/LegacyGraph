@@ -16,6 +16,7 @@ import io.github.legacygraph.entity.Document;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
+import io.github.legacygraph.entity.SourceAssetSnapshot;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
 import io.github.legacygraph.extractors.adapter.ExtractionResult;
@@ -1522,6 +1523,14 @@ public class ProjectScanner {
         var deletions = assetDiscoveryService.detectDeletions(projectId, versionId, currentPaths);
         if (deletions != null && !deletions.isEmpty()) {
             log.info("Asset discovery detected {} deleted assets for versionId={}", deletions.size(), versionId);
+            // 实际执行 Neo4j 节点删除：按 sourcePath 批量删除
+            List<String> deletedPaths = deletions.stream()
+                    .map(SourceAssetSnapshot::getRelativePath)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            int deletedNodes = neo4jGraphDao.deleteNodesBySourcePaths(projectId, versionId, deletedPaths);
+            log.info("Incremental deletion completed: projectId={}, versionId={}, deletedAssets={}, deletedNeo4jNodes={}",
+                    projectId, versionId, deletedPaths.size(), deletedNodes);
         }
         return processed;
     }

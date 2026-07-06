@@ -24,6 +24,7 @@ public class GraphifyImportService {
     private final GraphifyGraphParser parser;
     private final GraphifyCanonicalMapper mapper;
     private final EvidenceGraphWriter writer;
+    private final GraphifyCompatibilityService compatibilityService;
 
     /**
      * 导入 Graphify graph.json。
@@ -39,6 +40,25 @@ public class GraphifyImportService {
         List<String> warnings = new ArrayList<>();
 
         try {
+            // 0. 兼容性检查
+            log.info("开始兼容性检查: {}", graphJsonPath);
+            String jsonContent = java.nio.file.Files.readString(graphJsonPath);
+            GraphifyCompatibilityReport compatibilityReport = compatibilityService.inspect(jsonContent);
+            
+            if (!compatibilityReport.isCanImport()) {
+                String errorMsg = String.format("兼容性检查失败: 缺失字段=%s, 不支持字段=%s",
+                        compatibilityReport.getMissingRequiredFields(),
+                        compatibilityReport.getUnsupportedTopLevelFields());
+                log.error(errorMsg);
+                throw new GraphifyImportException(errorMsg);
+            }
+            
+            log.info("兼容性检查通过: schemaVersion={}, nodes={}, edges={}",
+                    compatibilityReport.getSchemaVersion(),
+                    compatibilityReport.getNodeCount(),
+                    compatibilityReport.getEdgeCount());
+            warnings.addAll(compatibilityReport.getWarnings());
+
             // 1. 解析 graph.json
             log.info("开始解析 Graphify graph.json: {}", graphJsonPath);
             GraphifyGraphParser.ParseResult parseResult = parser.parse(graphJsonPath);

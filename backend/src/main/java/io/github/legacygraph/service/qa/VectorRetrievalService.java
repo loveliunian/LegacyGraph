@@ -79,7 +79,7 @@ public class VectorRetrievalService {
      */
     @Transactional
     public void batchUpsertVectors(String projectId, String versionId, List<VectorDocument> documents) {
-        String effectiveVersionId = effectiveVersionId(versionId);
+        String effectiveVersionId = resolveVersionId(projectId, versionId);
         log.info("Batch upserting {} vectors for projectId={}, versionId={}", documents.size(), projectId, effectiveVersionId);
         for (VectorDocument doc : documents) {
             if (doc.getContent() != null && !doc.getContent().isBlank()) {
@@ -101,7 +101,7 @@ public class VectorRetrievalService {
      */
     public List<VectorDocument> semanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
         log.info("Semantic search: projectId={}, query={}, topK={}", projectId, query, topK);
-        String effectiveVersionId = effectiveVersionId(versionId);
+        String effectiveVersionId = resolveVersionId(projectId, versionId);
 
         // 缓存优先：相同 (project, version, query, topK, chunkType) 复用
         if (cacheService != null) {
@@ -143,7 +143,7 @@ public class VectorRetrievalService {
      */
     public List<GraphNode> findSimilarNodes(String projectId, String versionId, String searchText, double similarityThreshold) {
         log.info("Find similar nodes: projectId={}, searchText={}, threshold={}", projectId, searchText, similarityThreshold);
-        String effectiveVersionId = effectiveVersionId(versionId);
+        String effectiveVersionId = resolveVersionId(projectId, versionId);
 
         if (embeddingModel == null) {
             log.debug("EmbeddingModel not available (SILICONFLOW_API_KEY not set)");
@@ -232,7 +232,20 @@ public class VectorRetrievalService {
         }
     }
 
-    private String effectiveVersionId(String versionId) {
-        return versionId != null && !versionId.isBlank() ? versionId : "default";
+    /**
+     * 解析 versionId：为空时自动查找该项目最新的 version_id
+     */
+    private String resolveVersionId(String projectId, String versionId) {
+        if (versionId != null && !versionId.isBlank()) return versionId;
+        try {
+            String latest = vectorDocumentRepository.findLatestVersionId(projectId);
+            if (latest != null) {
+                log.debug("Auto-resolved versionId for project {}: {}", projectId, latest);
+                return latest;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve latest versionId for project {}: {}", projectId, e.getMessage());
+        }
+        return "default";
     }
 }

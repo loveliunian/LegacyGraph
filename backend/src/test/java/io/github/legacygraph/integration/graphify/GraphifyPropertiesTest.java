@@ -13,7 +13,7 @@ class GraphifyPropertiesTest {
     void testDefaultValues() {
         GraphifyProperties props = new GraphifyProperties();
 
-        assertTrue(props.isEnabled());
+        assertFalse(props.isEnabled());
         assertEquals("graphify", props.getExecutable());
         assertEquals(300, props.getTimeoutSeconds());
         assertEquals(500_000, props.getMaxOutputBytes());

@@ -21,9 +21,15 @@ import static org.mockito.Mockito.verify;
  */
 class GraphifyImportServiceTest {
 
+    private GraphifyImportService buildService(EvidenceGraphWriter writer) {
+        GraphifyGraphParser parser = new GraphifyGraphParser();
+        GraphifyCanonicalMapper mapper = new GraphifyCanonicalMapper(new ObjectMapper());
+        GraphifyCompatibilityService compatibilityService = new GraphifyCompatibilityService();
+        return new GraphifyImportService(parser, mapper, writer, compatibilityService);
+    }
+
     @Test
     void importsValidGraph(@TempDir Path tempDir) throws IOException, GraphifyImportService.GraphifyImportException {
-        // 准备测试数据
         Path graphJson = tempDir.resolve("graph.json");
         Files.writeString(graphJson, """
                 {
@@ -37,24 +43,17 @@ class GraphifyImportServiceTest {
                 }
                 """);
 
-        // Mock 依赖
-        GraphifyGraphParser parser = new GraphifyGraphParser();
-        GraphifyCanonicalMapper mapper = new GraphifyCanonicalMapper(new ObjectMapper());
         EvidenceGraphWriter writer = mock(EvidenceGraphWriter.class);
+        GraphifyImportService service = buildService(writer);
 
-        GraphifyImportService service = new GraphifyImportService(parser, mapper, writer);
-
-        // 执行导入
         GraphifyImportService.ImportResult result = service.importGraph("proj1", "v1", graphJson);
 
-        // 验证结果
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getProcessedNodes()).isEqualTo(1);
         assertThat(result.getProcessedEdges()).isEqualTo(1);
         assertThat(result.getEvidenceCount()).isEqualTo(2); // 1 node + 1 edge
         assertThat(result.getWarnings()).isEmpty();
 
-        // 验证 writer 被调用
         verify(writer, times(1)).writeIntent(any());
     }
 
@@ -63,35 +62,34 @@ class GraphifyImportServiceTest {
         Path graphJson = tempDir.resolve("graph.json");
         Files.writeString(graphJson, "not valid json");
 
-        GraphifyGraphParser parser = new GraphifyGraphParser();
-        GraphifyCanonicalMapper mapper = new GraphifyCanonicalMapper(new ObjectMapper());
         EvidenceGraphWriter writer = mock(EvidenceGraphWriter.class);
-
-        GraphifyImportService service = new GraphifyImportService(parser, mapper, writer);
+        GraphifyImportService service = buildService(writer);
 
         assertThatThrownBy(() -> service.importGraph("proj1", "v1", graphJson))
                 .isInstanceOf(GraphifyImportService.GraphifyImportException.class)
-                .hasMessageContaining("解析失败");
+                .hasMessageContaining("兼容性检查失败");
     }
 
     @Test
-    void rejectsWrongFileName(@TempDir Path tempDir) throws IOException {
-        Path wrongFile = tempDir.resolve("wrong.json");
-        Files.writeString(wrongFile, "{}");
+    void rejectsPayloadMissingNodes(@TempDir Path tempDir) throws IOException {
+        Path graphJson = tempDir.resolve("graph.json");
+        Files.writeString(graphJson, """
+                {
+                  "links": [{"source": "a", "target": "b", "relation": "calls"}]
+                }
+                """);
 
-        GraphifyGraphParser parser = new GraphifyGraphParser();
-        GraphifyCanonicalMapper mapper = new GraphifyCanonicalMapper(new ObjectMapper());
         EvidenceGraphWriter writer = mock(EvidenceGraphWriter.class);
+        GraphifyImportService service = buildService(writer);
 
-        GraphifyImportService service = new GraphifyImportService(parser, mapper, writer);
-
-        assertThatThrownBy(() -> service.importGraph("proj1", "v1", wrongFile))
+        assertThatThrownBy(() -> service.importGraph("proj1", "v1", graphJson))
                 .isInstanceOf(GraphifyImportService.GraphifyImportException.class)
-                .hasMessageContaining("文件名必须是 graph.json");
+                .hasMessageContaining("兼容性检查失败")
+                .hasMessageContaining("nodes");
     }
 
     @Test
-    void handlesEmptyEdges(@TempDir Path tempDir) throws IOException, GraphifyImportService.GraphifyImportException {
+    void rejectsPayloadWithoutLinksOrEdges(@TempDir Path tempDir) throws IOException {
         Path graphJson = tempDir.resolve("graph.json");
         Files.writeString(graphJson, """
                 {
@@ -99,17 +97,12 @@ class GraphifyImportServiceTest {
                 }
                 """);
 
-        GraphifyGraphParser parser = new GraphifyGraphParser();
-        GraphifyCanonicalMapper mapper = new GraphifyCanonicalMapper(new ObjectMapper());
         EvidenceGraphWriter writer = mock(EvidenceGraphWriter.class);
+        GraphifyImportService service = buildService(writer);
 
-        GraphifyImportService service = new GraphifyImportService(parser, mapper, writer);
-
-        GraphifyImportService.ImportResult result = service.importGraph("proj1", "v1", graphJson);
-
-        assertThat(result.isSuccess()).isTrue();
-        assertThat(result.getProcessedNodes()).isEqualTo(1);
-        assertThat(result.getProcessedEdges()).isEqualTo(0);
-        assertThat(result.getWarnings()).contains("links 和 edges 都为空，仅导入孤立节点");
+        assertThatThrownBy(() -> service.importGraph("proj1", "v1", graphJson))
+                .isInstanceOf(GraphifyImportService.GraphifyImportException.class)
+                .hasMessageContaining("兼容性检查失败")
+                .hasMessageContaining("links 或 edges");
     }
 }

@@ -156,6 +156,25 @@
 
           <div class="filter-section">
             <div class="filter-title">
+              <el-icon><Document /></el-icon>
+              数据来源
+            </div>
+            <el-checkbox-group v-model="selectedSourceTypes">
+              <div
+                v-for="type in sourceTypes"
+                :key="type.value"
+                class="filter-item">
+                <el-checkbox :value="type.value">
+                  <span>{{ type.label }}</span>
+                </el-checkbox>
+              </div>
+            </el-checkbox-group>
+          </div>
+
+          <el-divider />
+
+          <div class="filter-section">
+            <div class="filter-title">
               <el-icon><CircleCheck /></el-icon>
               审核状态
             </div>
@@ -365,6 +384,7 @@ const defaultVisibleStatusGroups = ['approved', 'pending']
 const currentVersion = ref<string>('')
 const minConfidence = ref(urlMinConfidence ?? 0.5)
 const selectedNodeTypes = ref<string[]>([])
+const selectedSourceTypes = ref<string[]>([])
 const selectedReviewStatus = ref<string[]>([...defaultVisibleStatusGroups])
 const selectedNode = ref<Node | null>(null)
 const evidenceDrawerVisible = ref(false)
@@ -382,6 +402,16 @@ const nodeTypes = [
   { value: 'Mapper', label: 'Mapper', color: '#909399' },
   { value: 'SqlStatement', label: 'SQL语句', color: '#f56c6c' },
   { value: 'Table', label: '数据库表', color: '#f78989' }
+]
+
+const sourceTypes = [
+  { value: 'CODE_SCAN', label: '代码扫描' },
+  { value: 'CODE_AST', label: 'AST 解析' },
+  { value: 'RUNTIME', label: '运行时' },
+  { value: 'MANUAL', label: '人工录入' },
+  { value: 'LLM_INFERRED', label: 'LLM 推断' },
+  { value: 'GRAPHIFY_AST', label: 'Graphify AST' },
+  { value: 'GRAPHIFY_SEMANTIC', label: 'Graphify 语义' },
 ]
 
 interface GraphNodeData {
@@ -435,11 +465,13 @@ const filteredNodes = computed((): InternalNode[] => {
     const confidence = data.confidence || 0
     const status = normalizeStatusGroup(data.status)
     const type = data.type
+    const sourceType = data.sourceType
 
     if (confidence < minConfidence.value) return false
     // 状态过滤：未设置状态(null/undefined)的节点默认可见
     if (status && selectedReviewStatus.value.length > 0 && !selectedReviewStatus.value.includes(status)) return false
     if (selectedNodeTypes.value.length > 0 && !selectedNodeTypes.value.includes(type)) return false
+    if (selectedSourceTypes.value.length > 0 && sourceType && !selectedSourceTypes.value.includes(sourceType as string)) return false
 
     return true
   })
@@ -540,6 +572,7 @@ function normalizeStatusGroup(status?: string): string {
 
 function resetFilters() {
   selectedNodeTypes.value = []
+  selectedSourceTypes.value = []
   minConfidence.value = 0.5
   selectedReviewStatus.value = [...defaultVisibleStatusGroups]
   ElMessage.success('筛选条件已重置')

@@ -16,27 +16,44 @@
 
 ## 部署架构
 
-当前仓库的部署方式是：
+当前仓库的部署方式（`deploy/docker-compose.yml` 启动四个服务）：
 
-```text
-User Browser
-  -> frontend Nginx container :80
-      -> static Vue files
-      -> /api/* proxy to backend:8080
-  -> backend Spring Boot container :8080
-      -> external PostgreSQL
-      -> external Neo4j
-      -> external Redis
-      -> external MinIO
-      -> external LLM Provider
+```mermaid
+graph TB
+    subgraph "Docker 服务"
+        FE["frontend<br/>nginx:alpine :80"]
+        BE["backend<br/>eclipse-temurin:21-jre :8080"]
+        Prom["Prometheus :9090"]
+        Graf["Grafana :3001"]
+    end
+    subgraph "外部基础设施"
+        PG[("PostgreSQL 15+<br/>+ pgvector")]
+        NEO[("Neo4j 5.x")]
+        RED[("Redis 7.x")]
+        MIN[("MinIO")]
+        LLM["LLM Provider"]
+        GFY["Graphify CLI<br/>(可选,宿主机)"]
+    end
+    Browser["User Browser"] --> FE
+    FE -->|"/api/* → backend:8080"| BE
+    BE --> PG
+    BE --> NEO
+    BE --> RED
+    BE --> MIN
+    BE --> LLM
+    BE -.可选.-> GFY
+    BE -."/actuator/prometheus".-> Prom
+    Prom --> Graf
 ```
 
-`deploy/docker-compose.yml` 只构建和启动：
+`deploy/docker-compose.yml` 构建和启动：
 
-- `legacygraph-backend`
-- `legacygraph-frontend`
+- `legacygraph-backend`（端口 `${BACKEND_PORT:-8080}`）
+- `legacygraph-frontend`（端口 `${FRONTEND_PORT:-80}`）
+- `lg-prometheus`（端口 `9090`，采集后端 metrics）
+- `lg-grafana`（端口 `3001`，仪表盘配置在 `deploy/monitoring/`）
 
-PostgreSQL、Neo4j、Redis、MinIO 均使用外部服务，连接信息通过 `deploy/.env` 注入。
+PostgreSQL、Neo4j、Redis、MinIO、LLM Provider 均使用外部服务，连接信息通过 `deploy/.env` 注入。Graphify CLI 为可选宿主机依赖，需在运行后端的环境上单独安装 `graphify` 可执行文件并设置 `legacygraph.graphify.enabled=true`。
 
 ---
 
@@ -54,15 +71,16 @@ PostgreSQL、Neo4j、Redis、MinIO 均使用外部服务，连接信息通过 `d
 | 软件 | 版本 | 用途 |
 |------|------|------|
 | Docker | 20.10+ | 构建和运行容器 |
-| Docker Compose | 2.x | 前后端编排 |
+| Docker Compose | 2.x | 应用与监控编排 |
 | JDK | 21+ | 本地或裸机后端运行 |
-| Maven | 3.8+ | 本地后端构建 |
-| Node.js | 20+ | 本地前端构建 |
+| Maven | 3.8+ | 本地后端构建（Docker 使用 3.9.9） |
+| Node.js | 20+ | 本地前端构建（Docker 使用 22-alpine） |
 | PostgreSQL | 15+ | 主数据库 |
 | pgvector | 与 PostgreSQL 匹配 | 向量能力 |
 | Neo4j | 5.x | 图数据库 |
 | Redis | 7.x | 缓存和 JWT 黑名单 |
 | MinIO | 当前稳定版 | 文件存储 |
+| Graphify CLI | 可选 | 外部代码图谱分析（`legacygraph.graphify.enabled=true` 时需要） |
 
 ---
 
@@ -143,6 +161,27 @@ docker run -d \
 mc alias set legacygraph http://<MINIO_HOST>:9000 <access-key> <secret-key>
 mc mb legacygraph/legacy-graph
 ```
+
+### Graphify CLI（可选）
+
+Graphify 是外部代码图谱分析 CLI，仅在使用 Graphify 集成时需要。在后端运行环境安装 `graphify` 可执行文件，并确认可被后端进程调用：
+
+```bash
+graphify --version    # 验证可用
+```
+
+在 `application.yml` 或环境变量启用：
+
+```yaml
+legacygraph:
+  graphify:
+    enabled: true
+    executable: graphify          # 或绝对路径
+    work-dir-whitelist:           # 生产环境必须配置允许的工作目录
+      - /data/repos
+```
+
+未启用时，Graphify 相关接口会返回禁用错误，不影响其他功能。
 
 ---
 
@@ -234,38 +273,17 @@ docker compose up --build -d
 classpath:db/migration
 ```
 
-当前脚本：
+当前脚本（V1–V36，共 36 个）：
 
-- `V1__initial_schema.sql`
-- `V2__llm_provider_deepseek.sql`
-- `V3__fix_schema_gaps.sql`
-- `V4__add_deleted_columns.sql`
-- `V5__create_missing_tables.sql`
-- `V6__add_privacy_and_agent_run.sql`
-- `V7__fix_prompt_run_column_types.sql`
-- `V8__init_dict_seed_data.sql`
-- `V9__create_change_task_tables.sql`
-- `V10__dedup_evidence.sql`
-- `V11__fix_llm_provider_api_config.sql`
-- `V12__seed_prompt_templates.sql`
-- `V13__add_scan_version_stats.sql`
-- `V14__add_change_task_version.sql`
-- `V15__create_knowledge_claim_gap_task.sql`
-- `V16__create_domain_ontology.sql`
-- `V17__switch_embedding_to_siliconflow.sql`
-- `V18__fix_prompt_output_schema.sql`
-- `V19__switch_embedding_to_ollama.sql`
-- `V20__create_source_asset_snapshot.sql`
-- `V21__create_graph_write_intent.sql`
-- `V22__create_tool_run_tables.sql`
-- `V23__rebuild_vector_document.sql`
-- `V24__add_scan_task_progress.sql`
-- `V25__add_dict_items.sql`
-- `V26__fix_scan_task_progress.sql`
-- `V27__add_db_connection_schema_fp.sql`
-- `V28__create_ai_scan_job.sql`
-- `V29__create_qa_tables.sql`
-- `V30__create_semantic_cache.sql`
+- `V1__initial_schema.sql` ~ `V12__seed_prompt_templates.sql`
+- `V13__scan_version_stats_cache.sql`、`V14__change_task_version_column.sql`、`V15__knowledge_claim_and_gap_task.sql`、`V16__domain_ontology.sql`
+- `V17__switch_embedding_to_siliconflow.sql`、`V18__fix_prompt_output_schemas.sql`、`V19__switch_embedding_to_local_ollama.sql`
+- `V20__source_asset_snapshot.sql`、`V21__graph_write_intent_outbox.sql`、`V22__understanding_tool_runs.sql`、`V23__fix_vector_document_schema.sql`
+- `V24__scan_task_progress.sql`、`V25__seed_doc_parse_status_dict.sql`、`V26__repair_scan_task_progress_columns.sql`、`V27__db_schema_fingerprint.sql`
+- `V28__ai_scan_job.sql`、`V29__qa_conversation_tables.sql`、`V30__semantic_cache.sql`
+- `V31__outbox_enhance.sql`、`V32__ai_scan_job_current_step.sql`、`V33__unify_table_prefix.sql`、`V34__notifications.sql`、`V35__evidence_conflicts.sql`、`V36__seed_qa_agent_prompt_templates.sql`
+
+完整清单与说明见 [数据库设计文档](数据库设计文档.md#flyway-迁移版本)。`V33` 将 `sys_*` 表统一为 `lg_sys_*`、`migration_risk` 为 `lg_migration_risk`。
 
 ### 初始化验证
 
@@ -275,7 +293,7 @@ FROM flyway_schema_history
 ORDER BY installed_rank;
 ```
 
-应看到 `V1` 到 `V30` 且 `success = true`。
+应看到 `V1` 到 `V36` 且 `success = true`。
 
 检查核心表：
 
@@ -436,7 +454,7 @@ curl http://localhost:8080/api/v3/api-docs
 ### 数据库
 
 ```sql
-SELECT count(*) FROM sys_user;
+SELECT count(*) FROM lg_sys_user;
 SELECT count(*) FROM lg_llm_provider;
 SELECT count(*) FROM lg_prompt_template;
 ```
@@ -601,6 +619,7 @@ mc mirror legacygraph/legacy-graph ./backup/legacy-graph
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 3.0 | 2026-07-06 | 部署架构补充 Prometheus/Grafana 可观测性栈（compose 现启动 4 个服务）；迁移版本补齐至 V36（V31–V36）；新增 Graphify CLI 可选外部依赖；部署架构图改为 Mermaid |
 | 2.0 | 2026-07-03 | 新增 V6-V30 迁移版本（25 个新脚本）；更新 Flyway 版本检查范围 |
 | 1.2 | 2026-07-01 | 修正图谱存储描述：Neo4j 查询替换 PostgreSQL `lg_graph_node`/`lg_graph_edge` |
 | 1.1 | 2026-06-30 | 按当前 Dockerfile、Compose、Flyway、前端代理和外部依赖部署方式更新 |

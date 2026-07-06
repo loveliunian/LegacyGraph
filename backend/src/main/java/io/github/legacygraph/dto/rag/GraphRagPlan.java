@@ -131,6 +131,9 @@ public class GraphRagPlan {
         /** 来源类型过滤（CODE / DOC / DB / AI / TEST / RUNTIME） */
         private String sourceType;
 
+        /** 状态过滤（PENDING_CONFIRM / CONFIRMED / CONFLICTED / REJECTED / STALE），null 表示不过滤 */
+        private String status;
+
         /** 最低置信度阈值（0.0 ~ 1.0） */
         @Builder.Default
         private double minConfidence = 0.5;

@@ -255,6 +255,30 @@ const routes: RouteRecordRaw[] = [
             meta: { title: '图谱对比' }
           },
           {
+            path: 'graphify/jobs',
+            name: 'GraphifyJobs',
+            component: () => import('@/views/graphify/GraphifyJobCenterView.vue'),
+            meta: { title: 'Graphify 作业中心' }
+          },
+          {
+            path: 'graphify/diff',
+            name: 'GraphifyDiff',
+            component: () => import('@/views/graphify/GraphifyDiffView.vue'),
+            meta: { title: 'Graphify 版本差异' }
+          },
+          {
+            path: 'graphify/quality',
+            name: 'GraphifyQuality',
+            component: () => import('@/views/graphify/GraphifyQualityDashboard.vue'),
+            meta: { title: 'Graphify 质量仪表盘' }
+          },
+          {
+            path: 'graphify/cross-repo-impact',
+            name: 'GraphifyCrossRepoImpact',
+            component: () => import('@/views/graphify/CrossRepositoryImpactView.vue'),
+            meta: { title: '跨仓影响分析' }
+          },
+          {
             path: 'agents/history',
             name: 'AgentHistory',
             component: () => import('@/views/agent/AgentHistory.vue'),

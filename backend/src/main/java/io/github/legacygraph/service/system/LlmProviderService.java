@@ -98,6 +98,19 @@ public class LlmProviderService {
     }
 
     /**
+     * 获取 Embedding 提供商（查找 provider_code 包含 "embedding" 的激活提供商）
+     */
+    @Cacheable(cacheNames = "llm-provider-default", key = "'embedding'")
+    public LlmProvider getEmbeddingProvider() {
+        List<LlmProvider> all = llmProviderRepository.findAll();
+        return all.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getIsActive()))
+                .filter(p -> p.getProviderCode() != null && p.getProviderCode().toLowerCase().contains("embedding"))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
      * 保存或更新提供商配置
      */
     @Transactional

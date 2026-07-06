@@ -136,32 +136,10 @@ public class EnhancedQaAgent {
                     if (plan != null && !plan.isNeedsHumanReview()) {
                         sendEvent(emitter, "thinking", Map.of("stage", "executing_graph_rag"));
                         try {
-                            List<String> claimSubjects = plan.getClaimQueries() != null
-                                ? plan.getClaimQueries().stream()
-                                    .map(GraphRagPlan.ClaimQuery::getSubjectKey)
-                                    .filter(Objects::nonNull)
-                                    .distinct()
-                                    .collect(Collectors.toList())
-                                : Collections.emptyList();
-
-                            List<String> pathFromKeys = plan.getPathQueries() != null
-                                ? plan.getPathQueries().stream()
-                                    .map(GraphRagPlan.PathQuery::getStartNodeFilter)
-                                    .filter(Objects::nonNull)
-                                    .distinct()
-                                    .collect(Collectors.toList())
-                                : Collections.emptyList();
-
-                            List<String> pathToKeys = plan.getPathQueries() != null
-                                ? plan.getPathQueries().stream()
-                                    .map(GraphRagPlan.PathQuery::getEndNodeFilter)
-                                    .filter(Objects::nonNull)
-                                    .distinct()
-                                    .collect(Collectors.toList())
-                                : Collections.emptyList();
-
                             GraphRagExecutionResult result = planExecutor.execute(
-                                projectId, versionId, claimSubjects, pathFromKeys, pathToKeys
+                                projectId, versionId,
+                                plan.getClaimQueries(),
+                                plan.getPathQueries()
                             );
                             graphRagCards = result.getAllCards() != null
                                 ? result.getAllCards()
@@ -195,16 +173,10 @@ public class EnhancedQaAgent {
 
             // 10. 构建证据列表（含 GraphRAG 证据卡）
             List<EvidenceItem> evidences = buildEvidenceList(docs, graphNodes);
-            // 追加 GraphRAG 证据卡
+            // 追加 GraphRAG 证据卡（结构化映射：claimId/nodeKey/行号/relationTypes/confidence）
             for (GraphRagEvidenceCard card : graphRagCards) {
                 if (evidences.size() >= 20) break;
-                evidences.add(EvidenceItem.fromGraphNode(
-                    card.getNodeKey(),
-                    card.getNodeKey(),
-                    card.getSourceType() != null ? card.getSourceType() : "GRAPH_RAG",
-                    null,
-                    card.getExcerpt()
-                ));
+                evidences.add(EvidenceItem.fromGraphRagCard(card));
             }
             sendEvent(emitter, "evidence", Map.of("items", evidences));
 
@@ -238,32 +210,44 @@ public class EnhancedQaAgent {
                 @Override
                 public void onComplete(String fullText) {
                     try {
+                        // 尝试从 JSON 格式响应中提取 answer 字段（outputSchema 模板会要求 LLM 输出 JSON）
+                        String displayText = fullText;
+                        try {
+                            var jsonNode = objectMapper.readTree(fullText);
+                            if (jsonNode.has("answer")) {
+                                displayText = jsonNode.get("answer").asText();
+                            }
+                        } catch (Exception ignored) {
+                            // 非 JSON 格式，使用原始文本
+                        }
+
                         stageTimings.put("llm_generate", System.currentTimeMillis() - generateStart);
                         
-                        // 保存助手消息
+                        // 保存助手消息（使用提取后的纯文本回答）
                         String evidencesJson = objectMapper.writeValueAsString(evidences);
                         var assistantMessage = conversationManager.saveAssistantMessage(
-                            conversation.getId(), fullText, evidencesJson, 0.8
+                            conversation.getId(), displayText, evidencesJson, 0.8
                         );
                         
                         // 更新对话标题
                         conversationManager.updateConversationTitle(conversation.getId());
 
                         // 写入语义缓存
-                        if (fullText != null && !fullText.isBlank()) {
-                            semanticCache.put(projectId, question, fullText, evidencesJson);
+                        if (displayText != null && !displayText.isBlank()) {
+                            semanticCache.put(projectId, question, displayText, evidencesJson);
                         }
 
                         // 记录端到端延迟
                         long totalLatency = System.currentTimeMillis() - totalStart;
                         log.info("QA 端到端延迟: {}ms, 各阶段: {}", totalLatency, stageTimings);
 
-                        // 发送完成事件
+                        // 发送完成事件（包含提取后的 answer，前端直接用）
                         Map<String, Object> completeData = new HashMap<>();
                         completeData.put("conversationId", conversation.getId());
                         completeData.put("messageId", assistantMessage != null ? assistantMessage.getId() : UUID.randomUUID().toString());
                         completeData.put("confidence", 0.8);
                         completeData.put("evidences", evidences);
+                        completeData.put("answer", displayText);
                         completeData.put("latencyMs", totalLatency);
                         completeData.put("stageTimings", stageTimings);
                         sendEvent(emitter, "complete", completeData);
@@ -428,7 +412,11 @@ public class EnhancedQaAgent {
     }
 
     /**
-     * 追加 GraphRAG 查询结果到上下文
+     * 追加 GraphRAG 查询结果到上下文（结构化块，给 LLM grounding）。
+     * <p>
+     * 每张 card 输出 sourceType / nodeKey / claimId / sourcePath:lines /
+     * relationTypes / confidence / status / excerpt，让 LLM 引用结构化事实而非自由文本。
+     * </p>
      */
     private String appendGraphRagContext(String currentContext, List<GraphRagEvidenceCard> cards, GraphRagPlan plan) {
         if (cards == null || cards.isEmpty()) {
@@ -444,13 +432,31 @@ public class EnhancedQaAgent {
 
         for (int i = 0; i < Math.min(10, cards.size()); i++) {
             GraphRagEvidenceCard card = cards.get(i);
-            ctx.append("- [").append(card.getSourceType()).append("] ")
-               .append(card.getNodeKey());
-            if (card.getExcerpt() != null) {
-                ctx.append(": ").append(card.getExcerpt());
+            ctx.append("[").append(i + 1).append("] sourceType=").append(card.getSourceType())
+               .append(" | nodeKey=").append(card.getNodeKey());
+            if (card.getClaimId() != null && !card.getClaimId().isBlank()) {
+                ctx.append(" | claimId=").append(card.getClaimId());
+            }
+            if (card.getSourcePath() != null && !card.getSourcePath().isBlank()) {
+                ctx.append(" | sourcePath=").append(card.getSourcePath());
+                if (card.getStartLine() != null) {
+                    ctx.append(":").append(card.getStartLine());
+                    if (card.getEndLine() != null) {
+                        ctx.append("-").append(card.getEndLine());
+                    }
+                }
+            }
+            if (card.getRelationTypes() != null && !card.getRelationTypes().isEmpty()) {
+                ctx.append(" | relationTypes=").append(String.join(",", card.getRelationTypes()));
             }
             if (card.getConfidence() != null) {
-                ctx.append(" (置信度: ").append(card.getConfidence()).append(")");
+                ctx.append(" | confidence=").append(card.getConfidence());
+            }
+            if (card.getStatus() != null && !card.getStatus().isBlank()) {
+                ctx.append(" | status=").append(card.getStatus());
+            }
+            if (card.getExcerpt() != null && !card.getExcerpt().isBlank()) {
+                ctx.append("\n    excerpt: ").append(card.getExcerpt());
             }
             ctx.append("\n");
         }

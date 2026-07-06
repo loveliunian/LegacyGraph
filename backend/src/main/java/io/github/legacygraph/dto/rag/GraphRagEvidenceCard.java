@@ -43,4 +43,12 @@ public class GraphRagEvidenceCard {
 
     /** 状态 */
     private String status;
+
+    /** 路径上出现的关系类型（distinct），来自路径查询 */
+    @Builder.Default
+    private List<String> relationTypes = new ArrayList<>();
+
+    /** 路径经过的节点 key 序列，来自路径查询 */
+    @Builder.Default
+    private List<String> pathNodeKeys = new ArrayList<>();
 }

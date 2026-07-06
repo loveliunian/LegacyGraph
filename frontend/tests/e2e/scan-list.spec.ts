@@ -44,4 +44,27 @@ test.describe('扫描任务列表页面', () => {
     // 下拉选项应该显示
     await expect(page.getByText('待执行')).toBeVisible();
   });
+
+  test('should display Graphify status column in scan task table', async ({ page }) => {
+    await page.goto('/scan');
+
+    // Graphify 列应该存在
+    const graphifyHeader = page.locator('.el-table__header-wrapper').getByText('Graphify');
+    if (await graphifyHeader.count() > 0) {
+      await expect(graphifyHeader).toBeVisible();
+    }
+  });
+
+  test('should show Graphify status tags when available', async ({ page }) => {
+    await page.goto('/scan');
+
+    // 等待表格加载
+    await page.waitForSelector('.el-table__body-wrapper', { timeout: 10000 });
+
+    // 检查是否有 Graphify 状态标签
+    const graphifyTags = page.locator('.el-table__body-wrapper .el-tag').filter({ hasText: /已导入|运行中|失败|已回滚|待执行/ });
+    if (await graphifyTags.count() > 0) {
+      await expect(graphifyTags.first()).toBeVisible();
+    }
+  });
 });

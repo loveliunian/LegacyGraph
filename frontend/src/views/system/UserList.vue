@@ -44,10 +44,10 @@
         :data="list"
         :loading="loading"
         :total="total"
-        :page-num="pagination.pageNum"
+        :page="pagination.pageNum"
         :page-size="pagination.pageSize"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
+        @update:page-size="handleSizeChange"
+        @update:page="handleCurrentChange"
       >
         <el-table-column
           prop="id"

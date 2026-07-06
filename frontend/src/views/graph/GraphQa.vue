@@ -288,13 +288,15 @@ const handleSend = async () => {
             currentConversationId.value = data.conversationId
           }
 
+          // 优先使用后端提取的 answer（纯文本），避免显示原始 JSON
+          const finalContent = data.answer || streamingContent.value
           const evidences = data.evidences || streamingEvidences.value || []
           const confidence = data.confidence
           const messageId = data.messageId
 
           messages.value.push({
             role: 'assistant',
-            content: streamingContent.value,
+            content: finalContent,
             confidence,
             evidences,
             messageId,

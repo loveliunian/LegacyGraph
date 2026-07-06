@@ -187,9 +187,16 @@ legacygraph:
         kind: CLI
         path: repomix
   graphify:
-    enabled: true
+    enabled: false
     executable: graphify
-    timeout-seconds: 300
+    timeout-seconds: 900
+    max-output-bytes: 500000
+    output-dir-name: graphify-out
+    keep-temp-files: false
+    work-dir-whitelist: []
+    extra-args:
+      - --no-viz
+      - --timing
 
 legacy-graph:
   scan:
@@ -205,11 +212,6 @@ legacy-graph:
   ai:
     # LLM 超时时间 (秒)
     llm-timeout: 120
-    max-output-bytes: 500000
-    output-dir-name: graphify-out
-    keep-temp-files: false
-    work-dir-whitelist: []
-    extra-args: []
 
   # Agent 配置
   agent:
