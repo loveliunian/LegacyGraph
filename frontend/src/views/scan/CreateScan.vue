@@ -140,6 +140,14 @@
                   </div>
                 </el-checkbox>
               </el-col>
+              <el-col :span="12">
+                <el-checkbox value="GRAPHIFY_ANALYZE">
+                  <div class="scan-type-item">
+                    <span class="type-name">Graphify 分析</span>
+                    <span class="type-desc">调用外部 Graphify 工具进行代码分析，生成调用图和依赖关系</span>
+                  </div>
+                </el-checkbox>
+              </el-col>
             </el-row>
           </el-checkbox-group>
         </div>

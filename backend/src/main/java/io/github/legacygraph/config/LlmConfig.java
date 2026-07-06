@@ -40,20 +40,19 @@ public class LlmConfig {
     }
 
     /**
-     * Embedding 模型 — 从 DB lg_llm_provider 表 openai-embedding 记录读取配置。
-     * 当前使用硅基流动 SiliconFlow（BAAI/bge-large-zh-v1.5，1024维）。
-     * 未配置 openai-embedding 记录时，Bean 不创建，语义搜索静默降级。
+     * Embedding 模型 — 从 DB lg_llm_provider 表读取默认提供商配置。
+     * 使用 is_default=true 的提供商，与 ChatModel 配置保持一致。
+     * 未配置默认提供商时，Bean 不创建，语义搜索静默降级。
      */
     @Bean
     @Primary
-    @ConditionalOnMissingBean(EmbeddingModel.class)
     @Profile("!test")
     @DependsOn("flyway")
     public EmbeddingModel embeddingModel(LlmProviderService llmProviderService) {
-        LlmProvider provider = llmProviderService.getByCode("openai-embedding");
+        LlmProvider provider = llmProviderService.getActiveDefault();
         if (provider == null) {
             throw new IllegalStateException(
-                    "lg_llm_provider 表中缺少 openai-embedding 记录，Embedding 功能不可用");
+                    "lg_llm_provider 表中缺少默认提供商（is_default=true），Embedding 功能不可用");
         }
 
         Map<String, Object> config = provider.getApiConfig();
@@ -62,7 +61,7 @@ public class LlmConfig {
         // 解析环境变量占位符 ${VAR} 或 ${VAR:default}
         apiKey = io.github.legacygraph.service.system.LlmProviderService.resolveEnvPlaceholders(apiKey);
         if (apiKey.isBlank()) {
-            throw new IllegalStateException("openai-embedding 的 api_key 为空");
+            throw new IllegalStateException("默认提供商的 api_key 为空");
         }
 
         var httpClient = SpringAiOpenAiHttpClient.builder()

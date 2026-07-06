@@ -1068,7 +1068,8 @@ public class SourceController {
                          doc.getDocName(), chunks.size(), vectorized);
             } else {
                 documentRepository.updateById(doc);
-            } catch (Exception e) {
+            }
+        } catch (Exception e) {
                 log.error("Document processing failed for docId={}, error={}", doc.getId(), e.getMessage());
                 doc.setParseStatus("PARSE_FAILED");
                 documentRepository.updateById(doc);

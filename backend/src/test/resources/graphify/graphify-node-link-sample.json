@@ -1,0 +1,12 @@
+{
+  "directed": true,
+  "nodes": [
+    {"id": "src_user_controller", "label": "UserController", "file_type": "code", "source_file": "backend/src/main/java/demo/UserController.java", "source_location": "L12", "community": 1, "community_name": "User API"},
+    {"id": "src_user_service", "label": "UserService", "file_type": "code", "source_file": "backend/src/main/java/demo/UserService.java", "source_location": "L20"}
+  ],
+  "links": [
+    {"source": "src_user_controller", "target": "src_user_service", "relation": "calls", "confidence": "EXTRACTED", "source_file": "backend/src/main/java/demo/UserController.java", "source_location": "L33"}
+  ],
+  "hyperedges": [],
+  "built_at_commit": "31211a0e7c512d63972b4f0438877d3777ae0e85"
+}

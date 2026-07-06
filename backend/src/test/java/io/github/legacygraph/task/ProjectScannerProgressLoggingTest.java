@@ -90,7 +90,9 @@ class ProjectScannerProgressLoggingTest {
                 dbSchemaAnalysisAgent,
                 extractionAdapterRegistry,
                 null,  // scanTaskRecorder
-                null   // adapterExecutionService
+                null,  // adapterExecutionService
+                null,  // graphifyRunner
+                null   // graphifyImportService
         );
 
         scanner.startFullScan(projectId, versionId, tempDir.toString());
@@ -105,7 +107,7 @@ class ProjectScannerProgressLoggingTest {
                 .anyMatch(message -> message.contains("Scan task started") && message.contains("ADAPTER_SCAN"));
         assertThat(messages)
                 .anyMatch(message -> message.contains("Scan still running")
-                        && message.contains("CODE_SCAN")
+                        && message.contains("ADAPTER_SCAN")
                         && message.contains("Adapter Registry"));
     }
 }

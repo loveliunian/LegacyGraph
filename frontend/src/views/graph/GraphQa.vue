@@ -356,9 +356,8 @@ const switchConversation = async (convId: string) => {
 
 const loadConversationMessages = async (convId: string) => {
   try {
-    const res = await qaApi.getMessages(convId)
-    const msgs = res.data || []
-    messages.value = mapQaHistoryMessages(msgs)
+    const msgs = await qaApi.getMessages(convId)
+    messages.value = mapQaHistoryMessages(msgs || [])
     scrollToBottom()
   } catch (err) {
     console.error('Failed to load messages:', err)
@@ -383,8 +382,8 @@ const deleteConversation = async (convId: string) => {
 
 const refreshConversations = async () => {
   try {
-    const res = await qaApi.listConversations(projectId)
-    conversations.value = res.data || []
+    const data = await qaApi.listConversations(projectId)
+    conversations.value = data || []
   } catch (err) {
     console.error('Failed to load conversations:', err)
   }

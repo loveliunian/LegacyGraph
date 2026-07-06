@@ -116,7 +116,7 @@ minio:
 
 # JWT 配置
 jwt:
-  secret: ${JWT_SECRET:}
+  secret: ${JWT_SECRET:legacygraph-dev-secret-key-2024-very-long-for-jwt-hmac}
   expiration: 86400000
 
 # 日志配置
@@ -186,6 +186,10 @@ legacygraph:
         enabled: false
         kind: CLI
         path: repomix
+  graphify:
+    enabled: true
+    executable: graphify
+    timeout-seconds: 300
 
 legacy-graph:
   scan:
@@ -201,6 +205,11 @@ legacy-graph:
   ai:
     # LLM 超时时间 (秒)
     llm-timeout: 120
+    max-output-bytes: 500000
+    output-dir-name: graphify-out
+    keep-temp-files: false
+    work-dir-whitelist: []
+    extra-args: []
 
   # Agent 配置
   agent:

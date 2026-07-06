@@ -1,0 +1,1 @@
+{"nodes": [{"id": "deploy_prometheus_prod_config", "label": "Prometheus \u751f\u4ea7\u73af\u5883\u6293\u53d6\u914d\u7f6e\uff08\u95f4\u9694 15s\uff0c\u5e26 app/env \u6807\u7b7e\uff09", "file_type": "code", "source_file": "deploy/prometheus.yml", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

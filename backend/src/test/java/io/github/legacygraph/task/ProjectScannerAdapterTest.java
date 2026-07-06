@@ -70,7 +70,9 @@ class ProjectScannerAdapterTest {
                 dbSchemaAnalysisAgent,
                 adapterRegistry,
                 null,  // scanTaskRecorder
-                null   // adapterExecutionService
+                null,  // adapterExecutionService
+                null,  // graphifyRunner
+                null   // graphifyImportService
         );
 
         int processed = scanner.scanAssetsWithAdapters("project-1", "v1",
@@ -113,7 +115,9 @@ class ProjectScannerAdapterTest {
                 dbSchemaAnalysisAgent,
                 adapterRegistry,
                 null,  // scanTaskRecorder
-                null   // adapterExecutionService
+                null,  // adapterExecutionService
+                null,  // graphifyRunner
+                null   // graphifyImportService
         );
         scanner.setScanPlanningServices(null, assetDiscoveryService);
 

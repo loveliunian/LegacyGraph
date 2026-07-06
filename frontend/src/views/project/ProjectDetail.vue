@@ -130,7 +130,7 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
     },
     {
       index: 'graph',
-      label: '图谱与问答',
+      label: '图谱管理',
       icon: markRaw(Connection),
       items: [
         { label: '统一图谱', path: `${basePath}/graph/unified` },

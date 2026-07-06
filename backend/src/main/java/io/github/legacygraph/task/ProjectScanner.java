@@ -21,6 +21,9 @@ import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
 import io.github.legacygraph.extractors.adapter.ExtractionResult;
 import io.github.legacygraph.extractors.adapter.ScanContext;
 import io.github.legacygraph.extractors.adapter.SourceAsset;
+import io.github.legacygraph.integration.graphify.GraphifyImportService;
+import io.github.legacygraph.integration.graphify.GraphifyRunner;
+import io.github.legacygraph.integration.graphify.GraphifyRunResult;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
@@ -81,6 +84,8 @@ public class ProjectScanner {
     private final DatabaseMetadataScanService databaseMetadataScanService;
     private final ScanTaskRecorder scanTaskRecorder;
     private final AdapterExecutionService adapterExecutionService;
+    private final GraphifyRunner graphifyRunner;
+    private final GraphifyImportService graphifyImportService;
     private ScanScopeResolver scanScopeResolver;
     private AssetDiscoveryService assetDiscoveryService;
 
@@ -161,11 +166,14 @@ public class ProjectScanner {
                          DbSchemaAnalysisAgent dbSchemaAnalysisAgent,
                          ExtractionAdapterRegistry extractionAdapterRegistry,
                          ScanTaskRecorder scanTaskRecorder,
-                         AdapterExecutionService adapterExecutionService) {
+                         AdapterExecutionService adapterExecutionService,
+                         GraphifyRunner graphifyRunner,
+                         GraphifyImportService graphifyImportService) {
         this(scanVersionRepository, scanTaskRepository, factRepository, dbConnectionRepository,
                 codeRepoRepository, documentRepository, graphBuilder, frontendGraphBuilder,
                 neo4jGraphDao, objectMapper, aiScanOrchestrator, dbSchemaAnalysisAgent,
-                extractionAdapterRegistry, new DatabaseMetadataScanService(graphBuilder), scanTaskRecorder, adapterExecutionService);
+                extractionAdapterRegistry, new DatabaseMetadataScanService(graphBuilder), scanTaskRecorder, 
+                adapterExecutionService, graphifyRunner, graphifyImportService);
     }
 
     @Autowired
@@ -184,7 +192,9 @@ public class ProjectScanner {
 	                         ExtractionAdapterRegistry extractionAdapterRegistry,
 	                         DatabaseMetadataScanService databaseMetadataScanService,
 	                         ScanTaskRecorder scanTaskRecorder,
-	                         AdapterExecutionService adapterExecutionService) {
+	                         AdapterExecutionService adapterExecutionService,
+	                         GraphifyRunner graphifyRunner,
+	                         GraphifyImportService graphifyImportService) {
 	                         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
         this.factRepository = factRepository;
@@ -201,6 +211,8 @@ public class ProjectScanner {
         this.databaseMetadataScanService = databaseMetadataScanService;
         this.scanTaskRecorder = scanTaskRecorder;
         this.adapterExecutionService = adapterExecutionService;
+        this.graphifyRunner = graphifyRunner;
+        this.graphifyImportService = graphifyImportService;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -498,6 +510,42 @@ public class ProjectScanner {
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=skipped (DB_SCAN not in scanTypes)",
                         projectId, versionId);
+            }
+
+            // 4b. Graphify 外部工具集成（可选）
+            if (isCancelled(versionId)) return;
+            boolean shouldRunGraphify = scopeScanTypes == null || scopeScanTypes.isEmpty()
+                    || scopeScanTypes.contains("GRAPHIFY_ANALYZE");
+            if (shouldRunGraphify && baseDir != null && !baseDir.isBlank()) {
+                try {
+                    log.info("Scan still running: projectId={}, versionId={}, phase=GRAPHIFY_ANALYZE, detail=starting Graphify analysis",
+                            projectId, versionId);
+                    ScanTask graphifyTask = createTask(projectId, versionId, "GRAPHIFY_ANALYZE", "Graphify 代码分析");
+                    
+                    if (graphifyRunner.isAvailable()) {
+                        GraphifyRunResult runResult = graphifyRunner.run(Path.of(baseDir));
+                        if (runResult.isSuccess() && runResult.getGraphJsonPath() != null) {
+                            GraphifyImportService.ImportResult importResult = 
+                                    graphifyImportService.importGraph(projectId, versionId, runResult.getGraphJsonPath());
+                            completeTask(graphifyTask, 
+                                    String.format("Graphify analyzed %d nodes, %d edges", 
+                                            importResult.getProcessedNodes(), importResult.getProcessedEdges()),
+                                    null);
+                            log.info("Graphify analysis completed: {} nodes, {} edges", 
+                                    importResult.getProcessedNodes(), importResult.getProcessedEdges());
+                        } else {
+                            String errorMsg = runResult.getStderr() != null && !runResult.getStderr().isBlank()
+                                    ? runResult.getStderr() : "Exit code: " + runResult.getExitCode();
+                            completeTask(graphifyTask, "Graphify analysis failed", errorMsg);
+                            log.warn("Graphify analysis failed: {}", errorMsg);
+                        }
+                    } else {
+                        completeTask(graphifyTask, "Graphify not available", null);
+                        log.info("Graphify tool not available, skipping");
+                    }
+                } catch (Exception e) {
+                    log.warn("Graphify analysis failed (non-blocking): {}", e.getMessage());
+                }
             }
 
             // 5. 图谱已由各 Builder 在扫描过程中直写 Neo4j，无需额外同步步骤

@@ -1,6 +1,7 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -32,7 +33,8 @@ public class SemanticCacheEntry {
     /** 问题 embedding（pgvector 文本格式 "[0.1,0.2,...]"，用于向量检索） */
     private String questionEmbedding;
 
-    /** 相似度分数（查询时填充） */
+    /** 相似度分数（查询时填充，非数据库列） */
+    @TableField(exist = false)
     private Double similarity;
 
     /** 命中次数 */

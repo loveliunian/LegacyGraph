@@ -155,13 +155,13 @@ export const qaApi = {
   },
 
   /** 列出对话 */
-  listConversations: (projectId: string) => {
-    return get(`/qa/conversations?projectId=${encodeURIComponent(projectId)}`) as Promise<{ data: QaConversation[] }>
+  listConversations: (projectId: string): Promise<QaConversation[]> => {
+    return get(`/qa/conversations?projectId=${encodeURIComponent(projectId)}`)
   },
 
   /** 获取对话消息 */
-  getMessages: (conversationId: string) => {
-    return get(`/qa/conversations/${encodeURIComponent(conversationId)}/messages`) as Promise<{ data: QaMessage[] }>
+  getMessages: (conversationId: string): Promise<QaMessage[]> => {
+    return get(`/qa/conversations/${encodeURIComponent(conversationId)}/messages`)
   },
 
   /** 删除对话 */

@@ -53,8 +53,7 @@ public class DocumentExtractor {
      * PDFBox 支持从 InputStream 加载，无需一次性读取全部字节。
      */
     private String extractPdf(File file) throws IOException {
-        try (InputStream is = new FileInputStream(file);
-             PDDocument document = Loader.loadPDF(is.readAllBytes())) {
+        try (PDDocument document = Loader.loadPDF(file)) {
             PDFTextStripper stripper = new PDFTextStripper();
             return stripper.getText(document);
         }

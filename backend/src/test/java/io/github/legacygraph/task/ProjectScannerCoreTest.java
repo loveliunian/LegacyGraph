@@ -49,7 +49,9 @@ class ProjectScannerCoreTest {
                 null,  // dbSchemaAnalysisAgent
                 null,  // extractionAdapterRegistry
                 null,  // scanTaskRecorder
-                null   // adapterExecutionService
+                null,  // adapterExecutionService
+                null,  // graphifyRunner
+                null   // graphifyImportService
         ));
     }
 

@@ -34,7 +34,7 @@ class VectorizationIntegrationTest {
         }
 
         if (!vectorizationService.isAvailable()) {
-            System.out.println("⚠ EmbeddingModel 不可用（lg_llm_provider 缺少 openai-embedding 记录或 Ollama 未运行），跳过集成测试");
+            System.out.println("⚠ EmbeddingModel 不可用（lg_llm_provider 缺少默认提供商或 Ollama 未运行），跳过集成测试");
             return;
         }
 
