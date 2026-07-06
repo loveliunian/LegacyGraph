@@ -5,17 +5,22 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import io.github.legacygraph.dto.plugin.ExternalPluginDescriptor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
  * 插件注册中心（P3-1）
  * 统一管理 Scanner/Agent/Tool/GraphView 四类插件的注册与发现。
  * 所有插件通过 Spring Bean 自动注册，支持运行时查询和按类型过滤。
+ * 支持运行时动态注册外部 MCP/HTTP 插件（04 阶段4）。
  */
+@Slf4j
 @Component
 public class PluginRegistry {
 
     private final Map<String, PluginDescriptor> plugins = new ConcurrentHashMap<>();
+    private final Map<String, ExternalPluginDescriptor> externalPlugins = new ConcurrentHashMap<>();
 
     /**
      * 注册插件
@@ -52,6 +57,30 @@ public class PluginRegistry {
      */
     public PluginDescriptor get(String id) {
         return plugins.get(id);
+    }
+
+    /**
+     * 动态注册外部插件（MCP/HTTP）。落地 04 阶段4：插件动态加载。
+     */
+    public PluginDescriptor registerExternal(ExternalPluginDescriptor ext) {
+        PluginType type = PluginType.valueOf(ext.getPluginType().toUpperCase());
+        Map<String, String> metadata = new java.util.HashMap<>();
+        if (ext.getMcpEndpoint() != null) metadata.put("mcpEndpoint", ext.getMcpEndpoint());
+        if (ext.getProtocol() != null) metadata.put("protocol", ext.getProtocol());
+        if (ext.getAuth() != null) metadata.put("auth", ext.getAuth());
+        PluginDescriptor descriptor = new PluginDescriptor(
+                ext.getId(), ext.getName(), ext.getDescription(), type, "1.0.0", metadata);
+        register(descriptor);
+        externalPlugins.put(ext.getId(), ext);
+        log.info("Registered external plugin: {} ({})", ext.getId(), ext.getMcpEndpoint());
+        return descriptor;
+    }
+
+    /**
+     * 获取外部插件描述符。
+     */
+    public ExternalPluginDescriptor getExternal(String id) {
+        return externalPlugins.get(id);
     }
 
     /**

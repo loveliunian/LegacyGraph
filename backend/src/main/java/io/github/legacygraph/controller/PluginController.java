@@ -1,10 +1,14 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.dto.plugin.ExternalPluginDescriptor;
 import io.github.legacygraph.plugin.PluginRegistry;
 import io.github.legacygraph.plugin.PluginRegistry.PluginDescriptor;
 import io.github.legacygraph.plugin.PluginRegistry.PluginType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,5 +46,15 @@ public class PluginController {
     @GetMapping("/{id}")
     public PluginDescriptor get(@PathVariable String id) {
         return registry.get(id);
+    }
+
+    /**
+     * 动态注册外部插件（MCP/HTTP）。落地 04 阶段4：插件动态加载。
+     * §11.2 安全加固：高危操作需要 ADMIN 角色
+     */
+    @PostMapping("/register")
+    @PreAuthorize("hasRole('ADMIN')")
+    public PluginDescriptor register(@RequestBody ExternalPluginDescriptor external) {
+        return registry.registerExternal(external);
     }
 }

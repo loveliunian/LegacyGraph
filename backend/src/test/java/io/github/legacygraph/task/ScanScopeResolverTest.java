@@ -65,6 +65,37 @@ class ScanScopeResolverTest {
         assertEquals(List.of("doc-1"), plan.getDocuments().stream().map(d -> d.getDocId()).toList());
     }
 
+    @Test
+    void resolve_absentScanTypesDefaultsToNativeInputsOnly() {
+        when(codeRepoRepository.selectList(any())).thenReturn(List.of(codeRepo("repo-1")));
+        when(dbConnectionRepository.selectList(any())).thenReturn(List.of(dbConnection("db-1")));
+        when(documentRepository.selectList(any())).thenReturn(List.of(document("doc-1")));
+        ScanScopeResolver resolver = new ScanScopeResolver(
+                codeRepoRepository, dbConnectionRepository, documentRepository, objectMapper);
+
+        ResolvedScanPlan plan = resolver.resolve("project-1", "version-1", "{}");
+
+        assertTrue(plan.getScanTypes().contains("CODE_SCAN"));
+        assertTrue(plan.getScanTypes().contains("DB_SCAN"));
+        assertTrue(plan.getScanTypes().contains("DOC_PARSE"));
+        assertEquals(3, plan.getScanTypes().size());
+    }
+
+    @Test
+    void resolve_legacyDocScanAliasMapsToDocParse() {
+        lenient().when(codeRepoRepository.selectList(any())).thenReturn(List.of());
+        lenient().when(dbConnectionRepository.selectList(any())).thenReturn(List.of());
+        lenient().when(documentRepository.selectList(any())).thenReturn(List.of());
+        ScanScopeResolver resolver = new ScanScopeResolver(
+                codeRepoRepository, dbConnectionRepository, documentRepository, objectMapper);
+
+        ResolvedScanPlan plan = resolver.resolve("project-1", "version-1",
+                "{\"scanTypes\":[\"DOC_SCAN\"]}");
+
+        assertTrue(plan.getScanTypes().contains("DOC_PARSE"));
+        assertEquals(1, plan.getScanTypes().size());
+    }
+
     private CodeRepo codeRepo(String id) {
         CodeRepo repo = new CodeRepo();
         repo.setId(id);

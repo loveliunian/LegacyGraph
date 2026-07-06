@@ -289,6 +289,12 @@ const routes: RouteRecordRaw[] = [
             name: 'EvidenceConflict',
             component: () => import('@/views/workbench/EvidenceConflict.vue'),
             meta: { title: '证据冲突处理' }
+          },
+          {
+            path: 'system-overview',
+            name: 'SystemOverviewWorkbench',
+            component: () => import('@/views/workbench/SystemOverviewWorkbench.vue'),
+            meta: { title: '系统关系总览' }
           }
         ]
       },

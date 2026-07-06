@@ -47,6 +47,10 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/actuator/**").authenticated()
+                        // §11.2 安全加固：高危操作需要 ADMIN 角色
+                        .requestMatchers("/lg/plugins/register").hasRole("ADMIN")
+                        .requestMatchers("/lg/system-overview/ingest").hasRole("ADMIN")
+                        .requestMatchers("/lg/system-overview/clear").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.access.intercept.AuthorizationFilter.class);

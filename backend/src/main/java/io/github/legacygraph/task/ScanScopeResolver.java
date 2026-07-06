@@ -146,7 +146,7 @@ public class ScanScopeResolver {
         if (scopeScanTypes == null || scopeScanTypes.isEmpty()) {
             // 空或未指定时返回所有支持的扫描类型，而非空 Set
             // 注意：文档扫描统一使用 DOC_PARSE（与 AssetDiscoveryService / ProjectScanner 一致）
-            return new HashSet<>(List.of("CODE_SCAN", "DB_SCAN", "DOC_PARSE", "GRAPHIFY_ANALYZE"));
+            return new HashSet<>(List.of("CODE_SCAN", "DB_SCAN", "DOC_PARSE"));
         }
         // 兼容旧别名：DOC_SCAN → DOC_PARSE
         Set<String> resolved = new HashSet<>();

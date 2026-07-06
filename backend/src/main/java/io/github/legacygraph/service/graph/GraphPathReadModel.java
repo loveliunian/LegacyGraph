@@ -51,6 +51,8 @@ public class GraphPathReadModel {
                 if (visited.contains(edge.getFromNodeId()) && !visited.contains(edge.getToNodeId())) {
                     nextIds.add(edge.getToNodeId());
                     visited.add(edge.getToNodeId());
+                    // 记录边信息，保持调用链路完整
+                    chain.edges.add(toEdgeInfo(edge));
                 }
             }
             // 批量加载本跳所有节点，替代逐条 findNodeById

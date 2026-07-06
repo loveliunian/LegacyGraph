@@ -361,8 +361,8 @@ class ProjectScannerFullFlowTest {
                 "应创建 DOC_DISCOVERY 任务");
         assertTrue(createdTaskTypes.contains("ADAPTER_SCAN"),
                 "应创建 ADAPTER_SCAN 任务");
-        assertTrue(createdTaskTypes.contains("GRAPHIFY_ANALYZE"),
-                "应创建 GRAPHIFY_ANALYZE 任务（Graphify 可用时）");
+        assertFalse(createdTaskTypes.contains("GRAPHIFY_ANALYZE"),
+                "默认扫描不应隐式触发 Graphify，Graphify 必须由 scanTypes 显式选择");
         assertTrue(createdTaskTypes.contains("GRAPH_BUILD"),
                 "应创建 GRAPH_BUILD 任务");
 
@@ -370,10 +370,10 @@ class ProjectScannerFullFlowTest {
         // adapterRegistry.selectAdapter 至少被调用（遍历了 Java、XML、Vue 文件）
         verify(adapterRegistry, atLeastOnce()).selectAdapter(any(), any());
 
-        // ===== 验证 4: Graphify Runner 被调用 =====
-        verify(graphifyRunner).isAvailable();
-        verify(graphifyRunner).run(any(Path.class));
-        verify(graphifyImportService).importGraph(eq(PROJECT_ID), eq(VERSION_ID), any());
+        // ===== 验证 4: 默认不调用 Graphify Runner =====
+        verify(graphifyRunner, never()).isAvailable();
+        verify(graphifyRunner, never()).run(any(Path.class));
+        verify(graphifyImportService, never()).importGraph(eq(PROJECT_ID), eq(VERSION_ID), any());
 
         // ===== 验证 6: Neo4j 图谱统计被调用 =====
         verify(neo4jGraphDao, atLeastOnce()).countNodes(PROJECT_ID, VERSION_ID, null);
@@ -425,7 +425,7 @@ class ProjectScannerFullFlowTest {
     @Test
     void fullScanFlow_graphifyUnavailable_shouldStillSucceed() throws Exception {
         // Graphify 不可用时的完整流程
-        when(graphifyRunner.isAvailable()).thenReturn(false);
+        lenient().when(graphifyRunner.isAvailable()).thenReturn(false);
 
         ScanVersion version = new ScanVersion();
         version.setId(VERSION_ID);
@@ -460,6 +460,56 @@ class ProjectScannerFullFlowTest {
         // Graphify run 不应被调用
         verify(graphifyRunner, never()).run(any());
         verify(graphifyImportService, never()).importGraph(anyString(), anyString(), any());
+    }
+
+    @Test
+    void fullScanFlow_explicitGraphifyFailureCompletesGraphifyTask() throws Exception {
+        ScanVersion version = new ScanVersion();
+        version.setId(VERSION_ID);
+        version.setProjectId(PROJECT_ID);
+        version.setScanStatus("PENDING");
+        version.setScanScope("{\"scanTypes\":[\"CODE_SCAN\",\"GRAPHIFY_ANALYZE\"]}");
+
+        lenient().when(scanVersionRepository.getById(VERSION_ID)).thenReturn(version);
+        lenient().when(scanVersionRepository.updateById(any(ScanVersion.class))).thenReturn(1);
+        lenient().when(codeRepoRepository.selectList(any())).thenReturn(List.of());
+        lenient().when(dbConnectionRepository.selectList(any())).thenReturn(List.of());
+        lenient().when(documentRepository.selectList(any())).thenReturn(List.of());
+
+        List<ScanTask> createdTasks = new ArrayList<>();
+        when(scanTaskRepository.insert(any(ScanTask.class))).thenAnswer(inv -> {
+            ScanTask t = inv.getArgument(0);
+            createdTasks.add(t);
+            return 1;
+        });
+
+        var factChain = mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class);
+        lenient().when(factRepository.lambdaQuery()).thenReturn(factChain);
+        lenient().when(factChain.eq(any(), any())).thenReturn(factChain);
+        lenient().when(factChain.count()).thenReturn(0L);
+
+        var taskChain = mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class);
+        lenient().when(scanTaskRepository.lambdaQuery()).thenReturn(taskChain);
+        lenient().when(taskChain.eq(any(), any())).thenReturn(taskChain);
+        lenient().when(taskChain.list()).thenReturn(createdTasks);
+
+        when(graphifyRunner.isAvailable()).thenReturn(true);
+        when(graphifyRunner.run(any(Path.class)))
+                .thenThrow(new GraphifyRunner.GraphifyRunException("graphify crashed"));
+
+        Method runScanBody = ProjectScanner.class.getDeclaredMethod(
+                "runScanBody", String.class, String.class, String.class, ScanVersion.class);
+        runScanBody.setAccessible(true);
+        runScanBody.invoke(scanner, PROJECT_ID, VERSION_ID, tempDir.toString(), version);
+
+        ScanTask graphifyTask = createdTasks.stream()
+                .filter(t -> "GRAPHIFY_ANALYZE".equals(t.getTaskType()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("FAILED", graphifyTask.getTaskStatus());
+        assertEquals("graphify crashed", graphifyTask.getErrorMessage());
+        assertEquals("SUCCESS", version.getScanStatus(),
+                "Graphify 是非阻塞阶段，失败不应拖垮原生扫描");
     }
 
     @Test

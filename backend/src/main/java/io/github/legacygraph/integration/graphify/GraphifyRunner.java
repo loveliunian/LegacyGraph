@@ -165,6 +165,9 @@ public class GraphifyRunner {
      * @return 是否可用
      */
     public boolean isAvailable() {
+        if (!properties.isEnabled()) {
+            return false;
+        }
         try {
             List<String> command = commandBuilder.buildVersionCommand();
             CliProcessRunner runner = new CliProcessRunner(Set.of());

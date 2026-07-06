@@ -1,13 +1,15 @@
 package io.github.legacygraph.service.graph;
 
+import io.github.legacygraph.builder.EvidenceGraphWriter;
+import io.github.legacygraph.config.GraphWriteConfig;
 import io.github.legacygraph.dto.claim.ClaimCompileIssue;
 import io.github.legacygraph.dto.claim.CompileOptions;
 import io.github.legacygraph.dto.claim.CompiledGraphProjection;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.KnowledgeClaim;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -24,10 +26,19 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class KnowledgeCompiler {
 
     private final KnowledgeClaimService claimService;
+    private final EvidenceGraphWriter evidenceGraphWriter;
+    private final GraphWriteConfig graphWriteConfig;
+
+    public KnowledgeCompiler(KnowledgeClaimService claimService,
+                             @Lazy EvidenceGraphWriter evidenceGraphWriter,
+                             GraphWriteConfig graphWriteConfig) {
+        this.claimService = claimService;
+        this.evidenceGraphWriter = evidenceGraphWriter;
+        this.graphWriteConfig = graphWriteConfig;
+    }
 
     /**
      * 谓词到图谱边类型的映射。
@@ -58,7 +69,39 @@ public class KnowledgeCompiler {
         claims = filterClaims(claims, options);
         log.info("KnowledgeCompiler: compiling {} claims (after filter) for versionId={}", claims.size(), versionId);
 
-        return compileClaims(claims, options);
+        CompiledGraphProjection projection = compileClaims(claims, options);
+        if (!options.isDryRun()) {
+            writeProjection(projection);
+        }
+        return projection;
+    }
+
+    /**
+     * 将编译后的投影实际写入 Neo4j（non-dryRun 模式）。
+     * <p>
+     * 落地 04 阶段3：Claim 编译切主链路。direct/shadow 模式下 dryRun=true 不触发；
+     * claim-compiler 模式下 dryRun=false 触发实际写图。
+     * </p>
+     */
+    private void writeProjection(CompiledGraphProjection projection) {
+        int nodes = 0, edges = 0;
+        for (GraphNodeClaim nodeClaim : projection.getNodeClaims()) {
+            try {
+                evidenceGraphWriter.upsertNode(nodeClaim);
+                nodes++;
+            } catch (Exception e) {
+                log.warn("Failed to write node claim {}: {}", nodeClaim.getNodeKey(), e.getMessage());
+            }
+        }
+        for (GraphEdgeClaim edgeClaim : projection.getEdgeClaims()) {
+            try {
+                evidenceGraphWriter.upsertEdge(edgeClaim);
+                edges++;
+            } catch (Exception e) {
+                log.warn("Failed to write edge claim {}: {}", edgeClaim.getEdgeKey(), e.getMessage());
+            }
+        }
+        log.info("KnowledgeCompiler wrote projection: {} nodes, {} edges", nodes, edges);
     }
 
     /**

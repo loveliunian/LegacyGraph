@@ -113,18 +113,17 @@ public class AdapterExecutionService {
                         }
                         try {
                             SourceAsset asset = toSourceAsset(root, file);
-                            var adapter = adapterRegistry.selectAdapter(context, asset);
-                            if (adapter.isEmpty()) {
-                                return null;
-                            }
-                            try {
-                                ExtractionResult result = adapter.get().extract(context, asset);
-                                if (result != null) {
-                                    processed.addAndGet(Math.max(0, result.getProcessedAssets()));
+                            var adapters = adapterRegistry.selectAdapters(context, asset);
+                            for (ExtractionAdapter adapter : adapters) {
+                                try {
+                                    ExtractionResult result = adapter.extract(context, asset);
+                                    if (result != null) {
+                                        processed.addAndGet(Math.max(0, result.getProcessedAssets()));
+                                    }
+                                } catch (Exception e) {
+                                    log.warn("Adapter {} failed for {}: {}",
+                                            adapter.capability().getName(), asset.getRelativePath(), e.getMessage());
                                 }
-                            } catch (Exception e) {
-                                log.warn("Adapter {} failed for {}: {}",
-                                        adapter.get().capability().getName(), asset.getRelativePath(), e.getMessage());
                             }
                         } catch (Exception e) {
                             log.debug("Skip file {}: {}", file, e.getMessage());
@@ -201,11 +200,17 @@ public class AdapterExecutionService {
                                 && assetDiscoveryService.isIncrementalSkip(asset, context.getProjectId(), context.getVersionId())) {
                             return null;
                         }
-                        var adapter = adapterRegistry.selectAdapter(context, asset);
-                        if (adapter.isPresent()) {
-                            ExtractionResult result = adapter.get().extract(context, asset);
-                            if (result != null) {
-                                processed.addAndGet(Math.max(0, result.getProcessedAssets()));
+                        var adapters = adapterRegistry.selectAdapters(context, asset);
+                        for (var adapter : adapters) {
+                            try {
+                                ExtractionResult result = adapter.extract(context, asset);
+                                if (result != null) {
+                                    processed.addAndGet(Math.max(0, result.getProcessedAssets()));
+                                }
+                            } catch (Exception ex) {
+                                log.warn("Adapter {} failed for asset {}: {}",
+                                        adapter.capability().getName(),
+                                        asset.getRelativePath(), ex.getMessage());
                             }
                         }
                     } catch (Exception ex) {

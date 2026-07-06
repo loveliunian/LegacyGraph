@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import io.github.legacygraph.service.change.ChangeReportService;
+import io.github.legacygraph.service.systemoverview.SystemOverviewService;
 import io.github.legacygraph.service.report.ReportExportService;
 import io.github.legacygraph.service.report.ReportingService;
 import io.github.legacygraph.service.report.ScanResearchReportService;
@@ -37,11 +38,14 @@ class ReportExportServiceTest {
     @Mock
     private CodeUnderstandingReportService codeUnderstandingReportService;
 
+    @Mock
+    private SystemOverviewService systemOverviewService;
+
     private ReportExportService reportExportService;
 
     @BeforeEach
     void setUp() {
-        reportExportService = new ReportExportService(objectMapper, reportingService, changeReportService, scanResearchReportService, codeUnderstandingReportService);
+        reportExportService = new ReportExportService(objectMapper, reportingService, changeReportService, scanResearchReportService, codeUnderstandingReportService, systemOverviewService);
     }
 
     @Test

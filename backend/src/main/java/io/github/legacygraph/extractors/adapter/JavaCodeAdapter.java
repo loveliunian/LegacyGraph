@@ -4,6 +4,7 @@ import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.extractors.JavaControllerExtractor;
 import io.github.legacygraph.extractors.JavaStructureExtractor;
+import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.model.ApiFact;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -33,6 +34,7 @@ public class JavaCodeAdapter implements ExtractionAdapter {
     private final GraphBuilder graphBuilder;
     private final JavaControllerExtractor controllerExtractor = new JavaControllerExtractor();
     private final JavaStructureExtractor structureExtractor;
+    private final ServiceCallExtractor callExtractor = new ServiceCallExtractor();
 
     public JavaCodeAdapter(GraphBuilder graphBuilder, JavaStructureExtractor structureExtractor) {
         this.graphBuilder = graphBuilder;
@@ -80,13 +82,24 @@ public class JavaCodeAdapter implements ExtractionAdapter {
                     context.getProjectId(), context.getVersionId(),
                     apiFacts, asset.getRelativePath());
 
+            // 提取 Controller 方法到 Service/Mapper 的 CALLS 边
+            List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(file.toFile());
+            int callEdgeCount = 0;
+            if (!calls.isEmpty()) {
+                graphBuilder.buildServiceCallGraph(
+                        context.getProjectId(), context.getVersionId(), calls);
+                callEdgeCount = (int) calls.stream()
+                        .filter(c -> c.getTargetClass() != null)
+                        .count();
+            }
+
             return ExtractionResult.builder()
                     .processedAssets(1)
                     .nodeCount(structureNodes.size() + nodes.size())
-                    .edgeCount(apiFacts.size() * 3)
+                    .edgeCount(apiFacts.size() * 3 + callEdgeCount)
                     .evidenceCount(structureNodes.size() + nodes.size())
-                    .summary(String.format("Java controller: %d structure nodes, %d APIs extracted",
-                            structureNodes.size(), apiFacts.size()))
+                    .summary(String.format("Java controller: %d structure nodes, %d APIs, %d calls extracted",
+                            structureNodes.size(), apiFacts.size(), callEdgeCount))
                     .build();
 
         } catch (IOException e) {

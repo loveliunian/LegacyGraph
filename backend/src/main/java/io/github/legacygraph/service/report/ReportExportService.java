@@ -7,6 +7,7 @@ import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.data.MutableDataSet;
 import io.github.legacygraph.dto.report.*;
 import io.github.legacygraph.service.change.ChangeReportService;
+import io.github.legacygraph.service.systemoverview.SystemOverviewService;
 import io.github.legacygraph.understanding.CodeUnderstandingReportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,17 +38,20 @@ public class ReportExportService {
     private final ChangeReportService changeReportService;
     private final ScanResearchReportService scanResearchReportService;
     private final CodeUnderstandingReportService codeUnderstandingReportService;
+    private final SystemOverviewService systemOverviewService;
 
     public ReportExportService(ObjectMapper objectMapper,
                                @Lazy ReportingService reportingService,
                                ChangeReportService changeReportService,
                                ScanResearchReportService scanResearchReportService,
-                               CodeUnderstandingReportService codeUnderstandingReportService) {
+                               CodeUnderstandingReportService codeUnderstandingReportService,
+                               SystemOverviewService systemOverviewService) {
         this.objectMapper = objectMapper;
         this.reportingService = reportingService;
         this.changeReportService = changeReportService;
         this.scanResearchReportService = scanResearchReportService;
         this.codeUnderstandingReportService = codeUnderstandingReportService;
+        this.systemOverviewService = systemOverviewService;
     }
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -64,7 +68,8 @@ public class ReportExportService {
         CHANGE_TASK("变更任务说明"),
         SCAN_RESEARCH("资料扫描与图谱构建研究报告"),
         CODE_UNDERSTANDING("代码理解报告"),
-        GRAPH_BUILD_DETAIL("图谱构建详情报告");
+        GRAPH_BUILD_DETAIL("图谱构建详情报告"),
+        SYSTEM_OVERVIEW("系统关系总览报告");
 
         private final String displayName;
 
@@ -111,6 +116,7 @@ public class ReportExportService {
             case CODE_UNDERSTANDING -> codeUnderstandingReportService.generateMarkdown(
                     projectId, null, null, null);
             case GRAPH_BUILD_DETAIL -> generateGraphBuildDetailMarkdown(projectId, versionId);
+            case SYSTEM_OVERVIEW -> systemOverviewService.generateMarkdown(projectId, versionId);
             case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
                     reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };
@@ -130,6 +136,7 @@ public class ReportExportService {
             case CODE_UNDERSTANDING -> codeUnderstandingReportService.generateMarkdown(
                     projectId, null, null, null);
             case GRAPH_BUILD_DETAIL -> generateGraphBuildDetailMarkdown(projectId, versionId);
+            case SYSTEM_OVERVIEW -> systemOverviewService.generateMarkdown(projectId, versionId);
             case FEATURE_SLICE, CHANGE_TASK -> throw new IllegalArgumentException(
                     reportType + " 是范围级报告，请使用 exportScopedReport(projectId, scopeId, ...)");
         };
@@ -178,7 +185,7 @@ public class ReportExportService {
                 case CONFIDENCE_TREND -> createConfidenceTrendExcel(workbook, projectId, versionId, headerStyle, dataStyle);
                 case TEST_COVERAGE -> createTestCoverageExcel(workbook, projectId, versionId, headerStyle, dataStyle);
                 case GRAPH_QUALITY -> createGraphQualityExcel(workbook, projectId, versionId, headerStyle, dataStyle);
-                case FEATURE_SLICE, CHANGE_TASK, SCAN_RESEARCH, CODE_UNDERSTANDING, GRAPH_BUILD_DETAIL -> throw new IllegalArgumentException(
+                case FEATURE_SLICE, CHANGE_TASK, SCAN_RESEARCH, CODE_UNDERSTANDING, GRAPH_BUILD_DETAIL, SYSTEM_OVERVIEW -> throw new IllegalArgumentException(
                         reportType + " 暂不支持 Excel 导出，请使用 MD 或 PDF");
             }
 

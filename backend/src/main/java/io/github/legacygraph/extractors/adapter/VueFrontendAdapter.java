@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -21,7 +22,7 @@ import java.util.Set;
 @Component
 public class VueFrontendAdapter implements ExtractionAdapter {
 
-    private static final Set<String> FRONTEND_EXTENSIONS = Set.of("vue", "jsx", "tsx");
+    private static final Set<String> FRONTEND_EXTENSIONS = Set.of("vue", "jsx", "tsx", "ts", "js");
 
     private final FrontendGraphBuilder frontendGraphBuilder;
     private final FactPersister factPersister;
@@ -67,6 +68,34 @@ public class VueFrontendAdapter implements ExtractionAdapter {
                 frontendGraphBuilder.buildFrontendGraph(
                         context.getProjectId(), context.getVersionId(), pages, asset.getRelativePath());
             }
+            // 抽取按钮（仅对 .vue 文件）
+            if (asset.getFileType().equalsIgnoreCase("vue")) {
+                List<FrontendPageFact.FrontendButton> buttons = apiExtractor.extractButtonsFromVue(asset.getFile());
+                if (buttons != null && !buttons.isEmpty()) {
+                    // 将按钮关联到页面
+                    for (FrontendPageFact page : pages) {
+                        page.setButtons(buttons);
+                    }
+                    for (FrontendPageFact.FrontendButton button : buttons) {
+                        drafts.add(FactPersister.FactDraft.builder()
+                                .projectId(context.getProjectId())
+                                .versionId(context.getVersionId())
+                                .sourceType("FRONTEND_AST")
+                                .factType("FRONTEND_BUTTON")
+                                .factKey(button.getText() + "#" + button.getLineNumber())
+                                .factName(button.getText())
+                                .sourcePath(asset.getRelativePath())
+                                .startLine(button.getLineNumber())
+                                .endLine(button.getLineNumber())
+                                .data(button)
+                                .confidence(BigDecimal.ONE)
+                                .status("EXTRACTED")
+                                .build());
+                        count++;
+                    }
+                }
+            }
+            
             List<FrontendPageFact.FrontendApiCall> apiCalls = apiExtractor.extractFromFile(asset.getFile());
             if (apiCalls != null && !apiCalls.isEmpty()) {
                 for (FrontendPageFact.FrontendApiCall api : apiCalls) {
@@ -104,8 +133,8 @@ public class VueFrontendAdapter implements ExtractionAdapter {
     public AdapterCapability capability() {
         return AdapterCapability.builder()
                 .name("VueFrontendAdapter")
-                .languages(Set.of("javascript"))
-                .frameworks(Set.of("vue", "react"))
+                .languages(Set.of("javascript", "typescript"))
+                .frameworks(Set.of("vue", "react", "angular"))
                 .fileTypes(FRONTEND_EXTENSIONS)
                 .aiEnhanced(false)
                 .priority(40)

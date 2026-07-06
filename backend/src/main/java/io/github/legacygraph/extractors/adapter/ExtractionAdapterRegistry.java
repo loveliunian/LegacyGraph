@@ -31,19 +31,20 @@ public class ExtractionAdapterRegistry {
     }
 
     /**
-     * 为指定资产选择合适的适配器。
-     *
+     * 为指定资产选择所有匹配的适配器。
+     * 
      * @param context 扫描上下文
      * @param asset   源资产
-     * @return 匹配的适配器，无匹配时返回 Optional.empty()
+     * @return 所有匹配的适配器列表，无匹配时返回空列表
      */
-    public Optional<ExtractionAdapter> selectAdapter(ScanContext context, SourceAsset asset) {
+    public List<ExtractionAdapter> selectAdapters(ScanContext context, SourceAsset asset) {
+        List<ExtractionAdapter> matched = new ArrayList<>();
         for (ExtractionAdapter adapter : adapters) {
             if (adapter.supports(context, asset)) {
-                return Optional.of(adapter);
+                matched.add(adapter);
             }
         }
-        return Optional.empty();
+        return matched;
     }
 
     /**

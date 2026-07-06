@@ -92,16 +92,44 @@ public class GraphQueryService {
         if (chain == null || chain.nodes == null || chain.nodes.isEmpty()) {
             return List.of();
         }
-        List<Map<String, Object>> response = new ArrayList<>();
-        for (var node : chain.nodes) {
-            Map<String, Object> m = new HashMap<>();
+
+        // 构建节点列表（Neo4j 格式：含 labels + properties，兼容前端解析）
+        List<Map<String, Object>> nodesList = chain.nodes.stream().map(node -> {
+            Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", node.id());
-            m.put("type", node.type());
-            m.put("name", node.name());
-            m.put("displayName", node.displayName());
-            response.add(m);
+            m.put("labels", List.of(node.type()));
+            m.put("properties", Map.of(
+                "nodeName", node.name() != null ? node.name() : "",
+                "displayName", node.displayName() != null ? node.displayName() : node.name(),
+                "label", node.displayName() != null ? node.displayName() : "",
+                "confidence", node.confidence()
+            ));
+            return m;
+        }).toList();
+
+        // 构建边列表（前端兼容 source/target 格式）
+        Set<String> edgeKeys = new LinkedHashSet<>();
+        List<Map<String, Object>> edgesList = new ArrayList<>();
+        if (chain.edges != null) {
+            for (var edge : chain.edges) {
+                String key = edge.source() + "->" + edge.target();
+                if (edgeKeys.add(key)) {
+                    Map<String, Object> e = new LinkedHashMap<>();
+                    e.put("id", edge.id());
+                    e.put("type", edge.type());
+                    e.put("label", edge.type());
+                    e.put("source", edge.source());
+                    e.put("target", edge.target());
+                    edgesList.add(e);
+                }
+            }
         }
-        return response;
+
+        // 返回单个路径对象，包含 nodes 和 edges
+        Map<String, Object> pathMap = new LinkedHashMap<>();
+        pathMap.put("nodes", nodesList);
+        pathMap.put("edges", edgesList);
+        return List.of(pathMap);
     }
 
     /**

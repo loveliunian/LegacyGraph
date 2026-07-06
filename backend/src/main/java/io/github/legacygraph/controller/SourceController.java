@@ -1011,7 +1011,9 @@ public class SourceController {
             @Parameter(description = "上传的文件", required = true)
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "文档类型，可选")
-            @RequestParam(value = "docType", required = false) String docType) throws IOException {
+            @RequestParam(value = "docType", required = false) String docType,
+            @Parameter(description = "扫描版本ID，可选")
+            @RequestParam(value = "versionId", required = false) String versionId) throws IOException {
 
         if (file.isEmpty()) {
             return Result.code(400, "文件不能为空");
@@ -1037,7 +1039,7 @@ public class SourceController {
             return Result.code(400, "不支持的文件类型，仅支持: " + String.join(", ", ALLOWED_EXTENSIONS));
         }
 
-        String uploadDir = System.getProperty("java.io.tmpdir") + "/legacygraph/uploads/" + projectId;
+        String uploadDir = Paths.get(System.getProperty("user.home"), ".legacygraph", "uploads", projectId).toString();
         Files.createDirectories(Paths.get(uploadDir));
 
         String fileName = UUID.randomUUID() + "_" + originalFileName;
@@ -1057,6 +1059,7 @@ public class SourceController {
 
         Document doc = new Document();
         doc.setProjectId(projectId);
+        doc.setVersionId(versionId);
         doc.setDocName(originalFileName);
         doc.setDocType(docType != null ? docType : "GENERAL");
         doc.setFileType(fileType);

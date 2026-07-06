@@ -224,6 +224,16 @@ public class ProjectScanner {
     }
 
     /**
+     * M3 修复：KnowledgeCompiler 注入（扫描完成后触发 Claim 编译）。
+     * <p>
+     * 使用 {@code @Autowired(required = false)} 避免启动依赖循环。
+     * 扫描主流程完成后调用 {@code knowledgeCompiler.compile()} 将 Claim 投影回图谱。
+     * </p>
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.graph.KnowledgeCompiler knowledgeCompiler;
+
+    /**
      * 异步启动完整扫描流程
      */
     @Async
@@ -414,7 +424,8 @@ public class ProjectScanner {
                 ScanTask docDiscoveryTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
                 int docCount = attachPlanDocuments(projectId, versionId, resolvedPlan);
                 if (baseDir != null && !baseDir.isBlank()) {
-                    docCount += discoverDocuments(projectId, versionId, baseDir, docDiscoveryTask);
+                    int maxDocs = resolvedPlan != null ? resolvedPlan.getMaxDocs() : 50;
+                    docCount += discoverDocuments(projectId, versionId, baseDir, docDiscoveryTask, maxDocs);
                 }
                 completeTask(docDiscoveryTask, "Discovered " + docCount + " documents", null);
                 log.info("Auto-discovered {} documents", docCount);
@@ -467,9 +478,12 @@ public class ProjectScanner {
                     logTaskProgress(dbTask, 0, dbConnections.size(), "database connections");
                     for (DbConnection conn : dbConnections) {
                         if (isCancelled(versionId)) break;
+                        // === 自动纠偏：dbType 与 port 不匹配时修正 ===
+                        autoCorrectDbTypeAndPort(conn);
                         try {
                             DataSource dataSource = createDataSource(conn);
-                            totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn);
+                            int maxDbTables = resolvedPlan != null ? resolvedPlan.getMaxDbTables() : 0;
+                            totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn, maxDbTables);
                         } catch (Exception e) {
                             log.warn("Failed to scan database connection id={} host={}:{}/{} dbType={}: {}",
                                     conn.getId(), conn.getHost(), conn.getPort(),
@@ -523,13 +537,13 @@ public class ProjectScanner {
 
             // 4b. Graphify 外部工具集成（可选）
             if (isCancelled(versionId)) return;
-            boolean shouldRunGraphify = scopeScanTypes == null || scopeScanTypes.isEmpty()
-                    || scopeScanTypes.contains("GRAPHIFY_ANALYZE");
+            boolean shouldRunGraphify = scopeScanTypes != null && scopeScanTypes.contains("GRAPHIFY_ANALYZE");
             if (shouldRunGraphify && baseDir != null && !baseDir.isBlank()) {
+                ScanTask graphifyTask = null;
                 try {
                     log.info("Scan still running: projectId={}, versionId={}, phase=GRAPHIFY_ANALYZE, detail=starting Graphify analysis",
                             projectId, versionId);
-                    ScanTask graphifyTask = createTask(projectId, versionId, "GRAPHIFY_ANALYZE", "Graphify 代码分析");
+                    graphifyTask = createTask(projectId, versionId, "GRAPHIFY_ANALYZE", "Graphify 代码分析");
                     
                     if (graphifyRunner.isAvailable()) {
                         GraphifyRunResult runResult = graphifyRunner.run(Path.of(baseDir));
@@ -554,12 +568,13 @@ public class ProjectScanner {
                     }
                 } catch (Exception e) {
                     log.warn("Graphify analysis failed (non-blocking): {}", e.getMessage());
+                    if (graphifyTask != null) {
+                        completeTask(graphifyTask, "Graphify analysis failed", e.getMessage());
+                    }
                 }
-            } else {
+            } else if (shouldRunGraphify) {
                 ScanTask skippedGraphifyTask = createTask(projectId, versionId, "GRAPHIFY_ANALYZE", "Graphify 代码分析");
-                String reason = (baseDir == null || baseDir.isBlank())
-                        ? "项目未配置源码目录，已跳过" : "未选择 Graphify 扫描类型，已跳过";
-                completeTask(skippedGraphifyTask, reason, null, "SKIPPED");
+                completeTask(skippedGraphifyTask, "项目未配置源码目录，已跳过", null, "SKIPPED");
             }
 
             // 5. 图谱已由各 Builder 在扫描过程中直写 Neo4j，无需额外同步步骤
@@ -1213,7 +1228,7 @@ public class ProjectScanner {
      * 写入 filePath（绝对路径）、versionId，使自动发现文档可解析。
      * @return 发现的文档数量
      */
-    private int discoverDocuments(String projectId, String versionId, String baseDir, ScanTask task) {
+    private int discoverDocuments(String projectId, String versionId, String baseDir, ScanTask task, int maxDocs) {
         if (baseDir == null) return 0;
         int count = 0;
         try {
@@ -1249,11 +1264,12 @@ public class ProjectScanner {
 
             // 记录实际发现的总数（截断前）
             int discoveredDocCount = allDocFiles.size();
-            List<Path> docFiles = allDocFiles.stream().limit(50).collect(Collectors.toList());
+            int docLimit = maxDocs > 0 ? maxDocs : Integer.MAX_VALUE;
+            List<Path> docFiles = allDocFiles.stream().limit(docLimit).collect(Collectors.toList());
             
             if (discoveredDocCount > docFiles.size()) {
-                log.info("DOC discovery: found {} document files, processing {} (limited to 50)",
-                        discoveredDocCount, docFiles.size());
+                log.info("DOC discovery: found {} document files, processing {} (limited to maxDocs={})",
+                        discoveredDocCount, docFiles.size(), maxDocs);
             }
 
             log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=found {} document files",
@@ -1388,6 +1404,45 @@ public class ProjectScanner {
         };
     }
 
+    /**
+     * 自动纠偏：当 dbType 与 port 明显不匹配时修正。
+     * <ul>
+     *   <li>POSTGRESQL + 3306 → 修正为 MYSQL，port 保持 3306</li>
+     *   <li>MYSQL/MARIADB + 5432 → 修正为 POSTGRESQL，port 保持 5432</li>
+     * </ul>
+     * 修正后同步写回 DB 记录，避免下次扫描重复纠偏。
+     */
+    private void autoCorrectDbTypeAndPort(DbConnection conn) {
+        if (conn == null || conn.getDbType() == null) return;
+        String dbType = conn.getDbType().toUpperCase();
+        Integer port = conn.getPort();
+        String corrected = null;
+        Integer correctedPort = null;
+
+        if ("POSTGRESQL".equals(dbType) && port != null && port == 3306) {
+            corrected = "MYSQL";
+            correctedPort = 3306;
+        } else if (("MYSQL".equals(dbType) || "MARIADB".equals(dbType)) && port != null && port == 5432) {
+            corrected = "POSTGRESQL";
+            correctedPort = 5432;
+        }
+
+        if (corrected != null) {
+            log.warn("自动纠偏: connection={}, 原配置 dbType={}, port={} → 修正为 dbType={}, port={}",
+                    conn.getConnectionName(), conn.getDbType(), port, corrected, correctedPort);
+            conn.setDbType(corrected);
+            conn.setPort(correctedPort);
+            // 同步写回 DB
+            if (dbConnectionRepository != null) {
+                try {
+                    dbConnectionRepository.updateById(conn);
+                } catch (Exception e) {
+                    log.warn("纠偏后写回 DB 失败: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
     // ==================== 代码扫描 ====================
 
     int scanAssetsWithAdapters(String projectId, String versionId,
@@ -1468,20 +1523,22 @@ public class ProjectScanner {
                             semaphore.acquire();
                             try {
                                 SourceAsset asset = toSourceAsset(root, file);
-                                var adapter = extractionAdapterRegistry.selectAdapter(context, asset);
-                                if (adapter.isEmpty()) {
+                                var adapters = extractionAdapterRegistry.selectAdapters(context, asset);
+                                if (adapters.isEmpty()) {
                                     return null;
                                 }
-                                try {
-                                    ExtractionResult result = adapter.get().extract(context, asset);
-                                    if (result != null && result.getProcessedAssets() > 0) {
-                                        processed.addAndGet(result.getProcessedAssets());
-                                    } else {
-                                        processed.incrementAndGet();
+                                for (ExtractionAdapter adapter : adapters) {
+                                    try {
+                                        ExtractionResult result = adapter.extract(context, asset);
+                                        if (result != null && result.getProcessedAssets() > 0) {
+                                            processed.addAndGet(result.getProcessedAssets());
+                                        } else {
+                                            processed.incrementAndGet();
+                                        }
+                                    } catch (Exception e) {
+                                        log.warn("Adapter {} failed for {}: {}",
+                                                adapter.capability().getName(), asset.getRelativePath(), e.getMessage());
                                     }
-                                } catch (Exception e) {
-                                    log.warn("Adapter {} failed for {}: {}",
-                                            adapter.get().capability().getName(), asset.getRelativePath(), e.getMessage());
                                 }
                             } catch (Exception e) {
                                 log.debug("Skip file {}: {}", file, e.getMessage());
@@ -1544,13 +1601,18 @@ public class ProjectScanner {
                             && assetDiscoveryService.isIncrementalSkip(asset, projectId, versionId)) {
                         continue;
                     }
-                    var adapter = extractionAdapterRegistry.selectAdapter(context, asset);
-                    if (adapter.isPresent()) {
-                        ExtractionResult result = adapter.get().extract(context, asset);
-                        if (result != null && result.getProcessedAssets() > 0) {
-                            processed += result.getProcessedAssets();
-                        } else {
-                            processed++;
+                    var adapters = extractionAdapterRegistry.selectAdapters(context, asset);
+                    for (ExtractionAdapter adapter : adapters) {
+                        try {
+                            ExtractionResult result = adapter.extract(context, asset);
+                            if (result != null && result.getProcessedAssets() > 0) {
+                                processed += result.getProcessedAssets();
+                            } else {
+                                processed++;
+                            }
+                        } catch (Exception ex) {
+                            log.warn("Adapter {} failed for {}: {}",
+                                    adapter.capability().getName(), asset.getRelativePath(), ex.getMessage());
                         }
                     }
                 } catch (Exception e) {
@@ -1580,6 +1642,26 @@ public class ProjectScanner {
             log.info("Incremental deletion completed: projectId={}, versionId={}, deletedAssets={}, deletedNeo4jNodes={}",
                     projectId, versionId, deletedPaths.size(), deletedNodes);
         }
+        
+        // M3 修复：扫描完成后触发 KnowledgeCompiler 编译 Claim 到图谱
+        if (knowledgeCompiler != null) {
+            try {
+                log.info("Triggering KnowledgeCompiler after adapter scan: projectId={}, versionId={}", 
+                        projectId, versionId);
+                var compileOptions = io.github.legacygraph.dto.claim.CompileOptions.builder()
+                        .dryRun(false)  // 实际写入图谱
+                        .includePending(false)  // 只编译 CONFIRMED 状态
+                        .build();
+                var projection = knowledgeCompiler.compile(projectId, versionId, compileOptions);
+                log.info("KnowledgeCompiler completed: {} nodes, {} edges, {} issues", 
+                        projection.getNodeClaims().size(), 
+                        projection.getEdgeClaims().size(),
+                        projection.getIssues().size());
+            } catch (Exception e) {
+                log.warn("KnowledgeCompiler failed after scan, continuing: {}", e.getMessage());
+            }
+        }
+        
         return processed;
     }
 
@@ -1676,6 +1758,11 @@ public class ProjectScanner {
 
     public int scanDatabaseMetadata(String projectId, String versionId, DataSource dataSource, DbConnection connection) {
         return databaseMetadataScanService.scan(projectId, versionId, dataSource, connection);
+    }
+
+    public int scanDatabaseMetadata(String projectId, String versionId, DataSource dataSource,
+                                    DbConnection connection, int maxTables) {
+        return databaseMetadataScanService.scan(projectId, versionId, dataSource, connection, maxTables);
     }
 
     // ==================== 工具方法 ====================

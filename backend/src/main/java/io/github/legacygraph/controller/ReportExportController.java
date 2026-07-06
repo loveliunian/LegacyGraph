@@ -137,6 +137,22 @@ public class ReportExportController {
     }
 
     /**
+     * 导出系统关系总览报告（SYSTEM_OVERVIEW）。
+     * 业务/功能/代码/数据四层关系总览，对齐 doc/系统关系总览/02。
+     */
+    @GetMapping("/system-overview/{projectId}/{versionId}")
+    public ResponseEntity<byte[]> exportSystemOverviewReport(
+            @PathVariable String projectId,
+            @PathVariable String versionId,
+            @RequestParam(defaultValue = "MD") String format) {
+
+        ReportExportService.ExportFormat exportFormat = parseFormat(format);
+        byte[] data = reportExportService.exportReport(
+                projectId, versionId, ReportExportService.ReportType.SYSTEM_OVERVIEW, exportFormat);
+        return buildResponse(data, "系统关系总览报告", exportFormat);
+    }
+
+    /**
      * 导出代码理解报告（CODE_UNDERSTANDING）。
      * <p>
      * 基于外部工具证据（MCP/CLI/本地代码索引）和扫描增强结果，

@@ -49,5 +49,8 @@ public class BuiltinPluginRegistrar {
         registry.register(new PluginDescriptor("business-graph-view", "业务图谱视图", "业务实体与流程可视化", PluginType.GRAPH_VIEW));
         registry.register(new PluginDescriptor("unified-graph-view", "统一图谱视图", "多图层融合展示", PluginType.GRAPH_VIEW));
         registry.register(new PluginDescriptor("lineage-graph-view", "数据血缘视图", "数据流向与依赖关系", PluginType.GRAPH_VIEW));
+        // System Overview 插件（04 阶段2）
+        registry.register(new PluginDescriptor("system-overview-scanner", "系统关系总览扫描器", "业务/功能/代码/数据四层关系投影", PluginType.SCANNER));
+        registry.register(new PluginDescriptor("system-overview-view", "系统关系总览视图", "四层关系可视化与链路下钻", PluginType.GRAPH_VIEW));
     }
 }

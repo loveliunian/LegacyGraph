@@ -40,7 +40,7 @@ class JavaStructureExtractorTest {
         assertEquals("com.demo", classInfo.getPackageName());
         assertEquals("com.demo.OrderService", classInfo.getQualifiedName());
         assertEquals(2, classInfo.getMethods().size());
-        assertEquals("com.demo.OrderService.create", classInfo.getMethods().get(0).getQualifiedName());
-        assertEquals("com.demo.OrderService.cancel", classInfo.getMethods().get(1).getQualifiedName());
+        assertEquals("com.demo.OrderService.create()", classInfo.getMethods().get(0).getQualifiedName());
+        assertEquals("com.demo.OrderService.cancel(String)", classInfo.getMethods().get(1).getQualifiedName());
     }
 }

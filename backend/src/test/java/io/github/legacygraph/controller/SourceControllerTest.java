@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -403,6 +404,31 @@ class SourceControllerTest {
         mockMvc.perform(post("/lg/projects/{projectId}/sources/documents/{id}/parse", testProjectId, doc.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(1));
+    }
+
+    @Test
+    void testUploadDocument_WithVersionIdPersistsVersion() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "requirements.md",
+                "text/markdown",
+                "# Requirements\nBuild graph.".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        mockMvc.perform(multipart("/lg/projects/{projectId}/sources/documents/upload", testProjectId)
+                        .file(file)
+                        .param("docType", "REQUIREMENT")
+                        .param("versionId", "version-doc-001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        Document saved = documentRepository.selectList(
+                        new QueryWrapper<Document>().eq("project_id", testProjectId))
+                .stream()
+                .filter(doc -> "requirements.md".equals(doc.getDocName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(saved.getVersionId()).isEqualTo("version-doc-001");
+        assertThat(saved.getFilePath()).doesNotStartWith(System.getProperty("java.io.tmpdir"));
     }
 
     @Test

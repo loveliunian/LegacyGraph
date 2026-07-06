@@ -32,7 +32,7 @@ public class CliToolConfig {
      * @return CliProcessRunner 实例
      */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(CliProcessRunner.class)
     public CliProcessRunner cliProcessRunner() {
         final Set<String> whitelist = workDirWhitelist != null
                 ? new HashSet<>(workDirWhitelist)
@@ -46,7 +46,7 @@ public class CliToolConfig {
      * @return CliCommandPolicy 实例
      */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(CliCommandPolicy.class)
     public CliCommandPolicy cliCommandPolicy() {
         final Set<String> whitelist = workDirWhitelist != null
                 ? new HashSet<>(workDirWhitelist)

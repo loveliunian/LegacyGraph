@@ -501,7 +501,24 @@ public class Neo4jWriteRepository {
                     "UNWIND $rows AS row " +
                     "MERGE (n:%s {projectId: row.projectId, versionId: row.versionId, nodeKey: row.nodeKey}) " +
                     "ON CREATE SET n = row " +
-                    "ON MATCH SET n.updatedAt = row.updatedAt " +
+                    "ON MATCH SET n.nodeType = row.nodeType, " +
+                    "n.nodeName = row.nodeName, " +
+                    "n.displayName = row.displayName, " +
+                    "n.description = row.description, " +
+                    "n.sourceType = row.sourceType, " +
+                    "n.sourcePath = row.sourcePath, " +
+                    "n.startLine = row.startLine, " +
+                    "n.endLine = row.endLine, " +
+                    "n.confidence = row.confidence, " +
+                    "n.status = row.status, " +
+                    "n.properties = row.properties, " +
+                    "n.scanType = row.scanType, " +
+                    "n.className = row.className, " +
+                    "n.verifiedScore = row.verifiedScore, " +
+                    "n.runtimeVerified = row.runtimeVerified, " +
+                    "n.lastSeenAt = row.lastSeenAt, " +
+                    "n.traceCount = row.traceCount, " +
+                    "n.updatedAt = row.updatedAt " +
                     "RETURN count(n) AS cnt", label);
 
             Result result = session.run(cypher, Map.of("rows", rows));
@@ -550,7 +567,13 @@ public class Neo4jWriteRepository {
                     "MATCH (to {id: row.toId}) " +
                     "MERGE (from)-[r:%s {projectId: row.projectId, versionId: row.versionId, edgeKey: row.edgeKey}]->(to) " +
                     "ON CREATE SET r = row " +
-                    "ON MATCH SET r.updatedAt = row.updatedAt " +
+                    "ON MATCH SET r.sourceType = row.sourceType, " +
+                    "r.confidence = row.confidence, " +
+                    "r.status = row.status, " +
+                    "r.properties = row.properties, " +
+                    "r.evidenceIds = row.evidenceIds, " +
+                    "r.relationStatus = row.relationStatus, " +
+                    "r.updatedAt = row.updatedAt " +
                     "RETURN count(r) AS cnt", edgeType);
 
             Result result = session.run(cypher, Map.of("rows", rows));

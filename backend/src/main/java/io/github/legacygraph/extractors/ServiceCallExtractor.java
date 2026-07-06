@@ -88,12 +88,31 @@ public class ServiceCallExtractor {
 
                 // 遍历所有方法，抽取方法调用
                 for (MethodDeclaration method : clazz.getMethods()) {
-                    String callerMethod = method.getNameAsString();
+                    String methodName = method.getNameAsString();
+                    // 生成参数签名，与 JavaStructureExtractor 保持一致
+                    String paramSignature = method.getParameters().stream()
+                            .map(p -> {
+                                String type = p.getType().asString();
+                                int genericIdx = type.indexOf('<');
+                                if (genericIdx > 0) {
+                                    type = type.substring(0, genericIdx);
+                                }
+                                int dotIdx = type.lastIndexOf('.');
+                                if (dotIdx > 0) {
+                                    type = type.substring(dotIdx + 1);
+                                }
+                                return type;
+                            })
+                            .reduce((a, b) -> a + ", " + b)
+                            .orElse("");
+                    String callerMethod = methodName + "(" + paramSignature + ")";
+                    
                     method.findAll(MethodCallExpr.class).forEach(methodCall -> {
                         String calledMethod = methodCall.getNameAsString();
                         CallRelation rel = new CallRelation(className, callerMethod, calledMethod);
                         rel.setSourcePath(filePath);
                         rel.setLineNumber(methodCall.getBegin().map(p -> p.line).orElse(null));
+                        rel.setCallerMethodSignature(callerMethod);  // 已包含签名
 
                         // 尝试解析目标：检查方法调用的 scope（如 mapper.findById → mapper 是注入的 MapperUser）
                         methodCall.getScope().ifPresent(scope -> {
@@ -193,12 +212,14 @@ public class ServiceCallExtractor {
     @lombok.AllArgsConstructor
     public static class CallRelation {
         private final String callerClass;
-        private final String callerMethod;
-        private final String calledMethod;
+        private final String callerMethod;  // 方法名（不含参数）
+        private final String calledMethod;   // 被调用方法名（不含参数）
         private String targetClass;
         private String targetMethod;
         private String sourcePath;
         private Integer lineNumber;
+        private String callerMethodSignature;  // 调用方完整签名 methodName(paramType1, paramType2)
+        private String calledMethodSignature;  // 被调用方完整签名（如果能解析到）
 
         public CallRelation(String callerClass, String callerMethod, String calledMethod) {
             this.callerClass = callerClass;
@@ -208,6 +229,8 @@ public class ServiceCallExtractor {
             this.targetMethod = null;
             this.sourcePath = null;
             this.lineNumber = null;
+            this.callerMethodSignature = null;
+            this.calledMethodSignature = null;
         }
     }
 }

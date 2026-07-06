@@ -213,4 +213,38 @@ class DatabaseMetadataScanServiceTest {
         // 即使 fingerprint 相同也重建图谱（保证数据一致性）
         verify(graphBuilder, times(1)).buildDatabaseGraph(any(), any(), anyList());
     }
+
+    @Test
+    void testScan_WithMaxTables_LimitsTablesBeforeGraphBuild() throws Exception {
+        ResultSet emptyColumns = mock(ResultSet.class);
+        ResultSet emptyPrimaryKeys = mock(ResultSet.class);
+
+        when(mockDataSource.getConnection()).thenReturn(mockConnection);
+        when(mockConnection.getMetaData()).thenReturn(mockMetaData);
+        when(mockMetaData.getDatabaseProductName()).thenReturn("PostgreSQL");
+        when(mockMetaData.getTables(any(), any(), any(), any())).thenReturn(mockTablesResultSet);
+        when(mockTablesResultSet.next()).thenReturn(true, true, true, false);
+        when(mockTablesResultSet.getString("TABLE_CAT")).thenReturn(null);
+        when(mockTablesResultSet.getString("TABLE_SCHEM")).thenReturn("public");
+        when(mockTablesResultSet.getString("TABLE_NAME")).thenReturn("t1", "t2", "t3");
+        when(mockMetaData.getColumns(any(), any(), anyString(), anyString())).thenReturn(emptyColumns);
+        when(emptyColumns.next()).thenReturn(false);
+        when(mockMetaData.getPrimaryKeys(any(), any(), anyString())).thenReturn(emptyPrimaryKeys);
+        when(emptyPrimaryKeys.next()).thenReturn(false);
+        when(databaseConstraintExtractor.extractForeignKeys(mockDataSource, null, "public")).thenReturn(List.of());
+        when(databaseConstraintExtractor.extractIndexes(mockDataSource, null, "public")).thenReturn(List.of());
+
+        DbConnection connection = new DbConnection();
+        connection.setId("db-1");
+        connection.setProjectId("proj-1");
+        connection.setSchemaName("public");
+        connection.setDbType("postgresql");
+
+        int count = databaseMetadataScanService.scan("proj-1", "v1", mockDataSource, connection, 2);
+
+        assertEquals(2, count);
+        verify(graphBuilder).buildDatabaseGraph(eq("proj-1"), eq("v1"), argThat((List<TableMetadata> tables) ->
+                tables.size() == 2
+                        && tables.stream().map(TableMetadata::getTableName).toList().equals(List.of("t1", "t2"))));
+    }
 }

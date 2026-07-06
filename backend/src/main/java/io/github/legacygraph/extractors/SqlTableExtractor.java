@@ -41,6 +41,7 @@ public class SqlTableExtractor {
     /**
      * 解析SQL，提取表读写关系。
      * 对 MyBatis 动态 SQL 片段做预处理：清洗占位符，包装不完整片段后重试。
+     * JSqlParser 失败时回退到正则提取。
      */
     public SqlTableResult extractTables(String sql) {
         SqlTableResult result = new SqlTableResult();
@@ -62,9 +63,10 @@ public class SqlTableExtractor {
         }
 
         if (statement == null) {
-            log.debug("Failed to parse SQL (first 100 chars): {}", 
+            // JSqlParser 失败，回退到正则提取
+            log.debug("JSqlParser failed, using regex fallback (first 100 chars): {}", 
                     sql.substring(0, Math.min(sql.length(), 100)).replace('\n', ' '));
-            return result;
+            return extractTablesWithRegex(cleaned);
         }
 
         classifyStatement(statement, result);
@@ -241,5 +243,91 @@ public class SqlTableExtractor {
             default:
                 return "READS";
         }
+    }
+
+    /**
+     * 正则回退提取：当 JSqlParser 无法解析时使用
+     */
+    private SqlTableResult extractTablesWithRegex(String sql) {
+        SqlTableResult result = new SqlTableResult();
+        String upper = sql.toUpperCase();
+
+        // 判断SQL类型
+        if (upper.startsWith("SELECT")) {
+            result.setSqlType("SELECT");
+        } else if (upper.startsWith("INSERT")) {
+            result.setSqlType("INSERT");
+        } else if (upper.startsWith("UPDATE")) {
+            result.setSqlType("UPDATE");
+        } else if (upper.startsWith("DELETE")) {
+            result.setSqlType("DELETE");
+        }
+
+        // 提取 FROM 后的表名
+        Pattern fromPattern = Pattern.compile("\\bFROM\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher fromMatcher = fromPattern.matcher(sql);
+        while (fromMatcher.find()) {
+            String tableName = fromMatcher.group(1);
+            if (!isReservedWord(tableName)) {
+                result.getReadTables().add(tableName);
+            }
+        }
+
+        // 提取 JOIN 后的表名
+        Pattern joinPattern = Pattern.compile("\\bJOIN\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher joinMatcher = joinPattern.matcher(sql);
+        while (joinMatcher.find()) {
+            String tableName = joinMatcher.group(1);
+            if (!isReservedWord(tableName)) {
+                result.getJoinTables().add(tableName);
+                result.getReadTables().add(tableName); // JOIN 表也是读表
+            }
+        }
+
+        // 提取 INSERT INTO 后的表名
+        Pattern insertPattern = Pattern.compile("\\bINSERT\\s+INTO\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher insertMatcher = insertPattern.matcher(sql);
+        while (insertMatcher.find()) {
+            String tableName = insertMatcher.group(1);
+            if (!isReservedWord(tableName)) {
+                result.getWriteTables().add(tableName);
+            }
+        }
+
+        // 提取 UPDATE 后的表名
+        Pattern updatePattern = Pattern.compile("\\bUPDATE\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher updateMatcher = updatePattern.matcher(sql);
+        while (updateMatcher.find()) {
+            String tableName = updateMatcher.group(1);
+            if (!isReservedWord(tableName)) {
+                result.getWriteTables().add(tableName);
+            }
+        }
+
+        // 提取 DELETE FROM 后的表名
+        Pattern deletePattern = Pattern.compile("\\bDELETE\\s+FROM\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher deleteMatcher = deletePattern.matcher(sql);
+        while (deleteMatcher.find()) {
+            String tableName = deleteMatcher.group(1);
+            if (!isReservedWord(tableName)) {
+                result.getWriteTables().add(tableName);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 判断是否为SQL保留词
+     */
+    private boolean isReservedWord(String word) {
+        Set<String> reserved = Set.of(
+            "SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "IN", "EXISTS",
+            "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "ON", "AS", "SET",
+            "INSERT", "INTO", "VALUES", "UPDATE", "DELETE", "CREATE", "DROP",
+            "ALTER", "TABLE", "INDEX", "VIEW", "ORDER", "BY", "GROUP", "HAVING",
+            "LIMIT", "OFFSET", "UNION", "ALL", "DISTINCT", "NULL", "TRUE", "FALSE"
+        );
+        return reserved.contains(word.toUpperCase());
     }
 }

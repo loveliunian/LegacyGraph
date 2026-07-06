@@ -137,16 +137,23 @@ public class SystemOverviewIngestService {
      * <ul>
      *   <li>BusinessDomain CONTAINS Feature（业务域包含能力）</li>
      *   <li>Feature IMPLEMENTED_BY Controller（能力由 Controller 实现）</li>
+     *   <li>ApiEndpoint HANDLED_BY Controller（API 由 Controller 处理）</li>
+     *   <li>Controller IMPLEMENTED_BY Service（Controller 委托 Service）</li>
      *   <li>Feature USES Service（能力使用代码模块）</li>
-     *   <li>Service READS Table（代码模块读表，仅 lg_ 表）</li>
+     *   <li>Service READS Table（代码模块读表）</li>
+     *   <li>Service WRITES Table（代码模块写表）</li>
+     *   <li>BusinessDomain MAPS_TO Table（业务域映射到表）</li>
      * </ul>
-     * 确定性映射默认 sourceType=CODE、confidence=0.85 → CONFIRMED（对齐 KnowledgeClaimService.computeStatus）。
+     * <p>
+     * 谨慎口径：DOC 来源或 AI 抽取默认 PENDING_CONFIRM；
+     * 仅 CODE 来源 + confidence ≥ 0.85 才自动 CONFIRMED（对齐 KnowledgeClaimService.computeStatus）。
+     * </p>
      */
     private List<KnowledgeClaimDraft> toClaims(String projectId, String versionId, RelationRow row) {
         List<KnowledgeClaimDraft> drafts = new ArrayList<>();
-        String source = notBlank(row.getSourceType()) ? row.getSourceType() : "CODE";
+        String source = notBlank(row.getSourceType()) ? row.getSourceType() : "DOC";
         double conf = row.getConfidence() != null ? row.getConfidence()
-                : ("CODE".equals(source) ? 0.85 : 0.5);
+                : ("CODE".equals(source) ? 0.85 : 0.6);
         BigDecimal confidence = BigDecimal.valueOf(conf);
 
         String domain = row.getBusinessDomain();
@@ -162,17 +169,45 @@ public class SystemOverviewIngestService {
             drafts.add(draft(projectId, versionId, "Feature", capability, "IMPLEMENTED_BY",
                     "Controller", row.getController(), source, confidence));
         }
-        // 3. Feature USES Service
+        // 3. ApiEndpoint HANDLED_BY Controller（API 路径→Controller 处理）
+        if (notBlank(row.getApiPath()) && notBlank(row.getController())) {
+            drafts.add(draft(projectId, versionId, "ApiEndpoint", row.getApiPath(), "HANDLED_BY",
+                    "Controller", row.getController(), source, confidence));
+        }
+        // 4. Controller IMPLEMENTED_BY Service（Controller 委托 Service 实现）
+        if (notBlank(row.getController()) && notBlank(row.getCodeModule())) {
+            drafts.add(draft(projectId, versionId, "Controller", row.getController(), "HANDLED_BY",
+                    "Service", row.getCodeModule(), source, confidence));
+        }
+        // 5. Feature USES Service
         if (notBlank(capability) && notBlank(row.getCodeModule())) {
             drafts.add(draft(projectId, versionId, "Feature", capability, "USES",
                     "Service", row.getCodeModule(), source, confidence));
         }
-        // 4. Service READS Table（仅 lg_ 表，跳过 Neo4j 等非 PG 存储）
+        // 6. Service READS/WRTIES Table
         if (notBlank(row.getCodeModule()) && notBlank(row.getDataTables())) {
             for (String t : row.getDataTables().split(",")) {
                 String table = t.trim();
+                if (table.isEmpty() || table.startsWith("Neo4j") || table.startsWith("Redis")
+                        || table.startsWith("MinIO")) {
+                    continue; // 跳过非 PG 存储
+                }
+                // READS：所有表
+                drafts.add(draft(projectId, versionId, "Service", row.getCodeModule(), "READS",
+                        "Table", table, source, confidence));
+                // WRITES：非快照/日志类表（排除纯读表如 lg_sys_operation_log）
+                if (!table.endsWith("_log") && !table.endsWith("_snapshot")) {
+                    drafts.add(draft(projectId, versionId, "Service", row.getCodeModule(), "WRITES",
+                            "Table", table, source, confidence));
+                }
+            }
+        }
+        // 7. BusinessDomain MAPS_TO Table（业务对象→表）
+        if (notBlank(domain) && notBlank(row.getDataTables())) {
+            for (String t : row.getDataTables().split(",")) {
+                String table = t.trim();
                 if (table.startsWith("lg_")) {
-                    drafts.add(draft(projectId, versionId, "Service", row.getCodeModule(), "READS",
+                    drafts.add(draft(projectId, versionId, "BusinessDomain", domain, "MAPS_TO",
                             "Table", table, source, confidence));
                 }
             }

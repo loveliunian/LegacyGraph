@@ -16,7 +16,9 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -47,10 +49,15 @@ public class DatabaseMetadataScanService {
 
     public int scan(String projectId, String versionId, DataSource dataSource, String schema, String dbType) {
         return scan(projectId, versionId, dataSource, schema, dbType,
-                Collections.emptyList(), Collections.emptyList(), null);
+                Collections.emptyList(), Collections.emptyList(), null, 0);
     }
 
     public int scan(String projectId, String versionId, DataSource dataSource, DbConnection connection) {
+        return scan(projectId, versionId, dataSource, connection, 0);
+    }
+
+    public int scan(String projectId, String versionId, DataSource dataSource,
+                    DbConnection connection, int maxTables) {
         if (connection == null) {
             return scan(projectId, versionId, dataSource, null, null);
         }
@@ -59,14 +66,16 @@ public class DatabaseMetadataScanService {
                 connection.getDbType(),
                 parsePatterns(connection.getIncludeTables()),
                 parsePatterns(connection.getExcludeTables()),
-                connection);
+                connection,
+                maxTables);
     }
 
     private int scan(String projectId, String versionId, DataSource dataSource,
                      String schema, String dbType,
                      List<String> includeTables,
                      List<String> excludeTables,
-                     DbConnection connection) {
+                     DbConnection connection,
+                     int maxTables) {
         String effectiveSchema = (schema != null && !schema.isBlank()) ? schema : "public";
         boolean isMySql = "mysql".equalsIgnoreCase(dbType) || "mariadb".equalsIgnoreCase(dbType);
         log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=extracting schema {} (raw: {}, dbType: {}, isMySql: {})",
@@ -78,24 +87,29 @@ public class DatabaseMetadataScanService {
             var filteredTables = tables.stream()
                     .filter(table -> shouldScanTable(table.getTableName(), includeTables, excludeTables))
                     .toList();
-            String fingerprint = computeSchemaFingerprint(filteredTables);
+            var limitedTables = limitTables(filteredTables, maxTables);
+            Set<String> scannedTableNames = limitedTables.stream()
+                    .map(TableMetadata::getTableName)
+                    .collect(Collectors.toCollection(HashSet::new));
+            String fingerprint = computeSchemaFingerprint(limitedTables);
             if (connection != null && fingerprint.equals(connection.getSchemaFingerprint())) {
-                updateConnectionScanSnapshot(connection, filteredTables.size(), fingerprint);
+                updateConnectionScanSnapshot(connection, limitedTables.size(), fingerprint);
                 log.info("DB schema unchanged, but still rebuilding graph for consistency: connectionId={}, schema={}, tables={}",
-                        connection.getId(), effectiveSchema, filteredTables.size());
+                        connection.getId(), effectiveSchema, limitedTables.size());
                 // 即使 fingerprint 相同也重建图谱，确保数据一致性
             } else {
                 log.info("DB schema changed or first scan, rebuilding graph: connectionId={}, schema={}, tables={}",
-                        connection != null ? connection.getId() : "null", effectiveSchema, filteredTables.size());
+                        connection != null ? connection.getId() : "null", effectiveSchema, limitedTables.size());
             }
             
-            graphBuilder.buildDatabaseGraph(projectId, versionId, filteredTables);
+            graphBuilder.buildDatabaseGraph(projectId, versionId, limitedTables);
             buildConstraintGraph(projectId, versionId, dataSource, effectiveSchema, isMySql,
-                    includeTables, excludeTables);
-            updateConnectionScanSnapshot(connection, filteredTables.size(), fingerprint);
-            log.info("Extracted {} tables from database schema {} ({} filtered out)",
-                    filteredTables.size(), effectiveSchema, tables.size() - filteredTables.size());
-            return filteredTables.size();
+                    includeTables, excludeTables, scannedTableNames);
+            updateConnectionScanSnapshot(connection, limitedTables.size(), fingerprint);
+            log.info("Extracted {} tables from database schema {} ({} filtered out, {} limited out)",
+                    limitedTables.size(), effectiveSchema, tables.size() - filteredTables.size(),
+                    filteredTables.size() - limitedTables.size());
+            return limitedTables.size();
         } catch (Exception e) {
             log.error("Failed to extract database metadata for schema {}", effectiveSchema, e);
             return 0;
@@ -112,6 +126,15 @@ public class DatabaseMetadataScanService {
                                       String effectiveSchema, boolean isMySql,
                                       List<String> includeTables,
                                       List<String> excludeTables) {
+        buildConstraintGraph(projectId, versionId, dataSource, effectiveSchema, isMySql,
+                includeTables, excludeTables, Set.of());
+    }
+
+    private void buildConstraintGraph(String projectId, String versionId, DataSource dataSource,
+                                      String effectiveSchema, boolean isMySql,
+                                      List<String> includeTables,
+                                      List<String> excludeTables,
+                                      Set<String> scannedTableNames) {
         try {
             // === 自动检测实际数据库类型，避免配置错误导致约束抽取失败 ===
             boolean actualIsMySql = isMySql;
@@ -132,10 +155,13 @@ public class DatabaseMetadataScanService {
                     .stream()
                     .filter(fk -> shouldScanTable(fk.getFkTableName(), includeTables, excludeTables)
                             && shouldScanTable(fk.getPkTableName(), includeTables, excludeTables))
+                    .filter(fk -> shouldKeepConstraintTable(fk.getFkTableName(), scannedTableNames)
+                            && shouldKeepConstraintTable(fk.getPkTableName(), scannedTableNames))
                     .toList();
             var indexes = databaseConstraintExtractor.extractIndexes(dataSource, catalog, schemaPattern)
                     .stream()
                     .filter(index -> shouldScanTable(index.getTableName(), includeTables, excludeTables))
+                    .filter(index -> shouldKeepConstraintTable(index.getTableName(), scannedTableNames))
                     .toList();
             graphBuilder.buildDatabaseConstraintGraph(projectId, versionId, effectiveSchema, foreignKeys, indexes);
             log.info("Extracted {} foreign keys and {} index entries from database schema {}",
@@ -145,6 +171,20 @@ public class DatabaseMetadataScanService {
             // 不静默：记录到扫描任务状态，让前端可见
             throw new RuntimeException("数据库约束提取失败: schema=" + effectiveSchema + ", 错误=" + e.getMessage(), e);
         }
+    }
+
+    private static List<TableMetadata> limitTables(List<TableMetadata> tables, int maxTables) {
+        if (tables == null || tables.isEmpty()) {
+            return List.of();
+        }
+        if (maxTables <= 0 || tables.size() <= maxTables) {
+            return tables;
+        }
+        return tables.stream().limit(maxTables).toList();
+    }
+
+    private static boolean shouldKeepConstraintTable(String tableName, Set<String> scannedTableNames) {
+        return scannedTableNames == null || scannedTableNames.isEmpty() || scannedTableNames.contains(tableName);
     }
 
     /**

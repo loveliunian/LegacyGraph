@@ -3,7 +3,6 @@ package io.github.legacygraph.model;
 import lombok.Data;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * API抽取结果事实
@@ -17,6 +16,7 @@ public class ApiFact {
     private String controllerClass;
     private String controllerPackage;
     private String methodName;
+    private String methodSignature;  // methodName(paramType1, paramType2) - 与 JavaStructureExtractor 对齐
     private List<ApiParameter> requestParams;
     private ApiParameter requestBody;
     private String responseType;

@@ -90,9 +90,28 @@ public class JavaStructureExtractor {
 
             for (MethodDeclaration method : clazz.getMethods()) {
                 String methodName = method.getNameAsString();
+                // 生成参数签名: (String, int, User)
+                String paramSignature = method.getParameters().stream()
+                        .map(p -> {
+                            String type = p.getType().asString();
+                            // 简化泛型: List<String> -> List
+                            int genericIdx = type.indexOf('<');
+                            if (genericIdx > 0) {
+                                type = type.substring(0, genericIdx);
+                            }
+                            // 取简单类名: java.util.List -> List
+                            int dotIdx = type.lastIndexOf('.');
+                            if (dotIdx > 0) {
+                                type = type.substring(dotIdx + 1);
+                            }
+                            return type;
+                        })
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse("");
+                String methodSignature = methodName + "(" + paramSignature + ")";
                 classInfo.getMethods().add(new JavaMethodInfo(
                         methodName,
-                        qualifiedName + "." + methodName,
+                        qualifiedName + "." + methodSignature,
                         method.getBegin().map(p -> p.line).orElse(null),
                         method.getEnd().map(p -> p.line).orElse(null)
                 ));

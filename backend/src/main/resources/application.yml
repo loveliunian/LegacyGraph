@@ -186,8 +186,11 @@ legacygraph:
         enabled: false
         kind: CLI
         path: repomix
+  graph:
+    # 写图模式：direct(直接写图) / shadow(双轨对比) / claim-compiler(Claim编译写图)
+    write-mode: direct
   graphify:
-    enabled: true
+    enabled: false
     executable: graphify
     timeout-seconds: 900
     max-output-bytes: 500000

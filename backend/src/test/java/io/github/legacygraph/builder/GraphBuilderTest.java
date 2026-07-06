@@ -7,6 +7,7 @@ import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.extractors.DatabaseMetadataExtractor;
 import io.github.legacygraph.extractors.JavaStructureExtractor;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
 import io.github.legacygraph.model.MapperSqlFact;
@@ -164,5 +165,42 @@ class GraphBuilderTest {
         verify(writer, times(2)).upsertEdge(edgeCaptor.capture());
         assertTrue(edgeCaptor.getAllValues().stream()
                 .allMatch(e -> EdgeType.CONTAINS.name().equals(e.getEdgeType())));
+    }
+
+    @Test
+    void buildDatabaseGraph_putsColumnMetadataIntoNodeProperties() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
+        DatabaseMetadataExtractor.ColumnMetadata column = new DatabaseMetadataExtractor.ColumnMetadata();
+        column.setColumnName("status");
+        column.setDataType("12");
+        column.setTypeName("varchar");
+        column.setColumnSize(32);
+        column.setNullable(false);
+        column.setColumnDefault("'NEW'");
+        column.setColumnComment("订单状态");
+        column.setPrimaryKey(false);
+        column.setSemanticType("status");
+
+        DatabaseMetadataExtractor.TableMetadata table = new DatabaseMetadataExtractor.TableMetadata();
+        table.setTableSchema("public");
+        table.setTableName("orders");
+        table.setTableComment("订单表");
+        table.setColumns(List.of(column));
+
+        graphBuilder.buildDatabaseGraph("project-1", "v1", List.of(table));
+
+        var nodeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeNodesBatch(nodeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphNode> nodes = nodeCaptor.getValue();
+        GraphNode statusColumn = nodes.stream()
+                .filter(node -> "public.orders.status".equals(node.getNodeKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertNotNull(statusColumn.getProperties());
+        assertTrue(statusColumn.getProperties().contains("\"nullable\":false"));
+        assertTrue(statusColumn.getProperties().contains("\"columnDefault\":\"'NEW'\""));
+        assertTrue(statusColumn.getProperties().contains("\"semanticType\":\"status\""));
     }
 }

@@ -71,7 +71,11 @@ public class MyBatisXmlAdapter implements ExtractionAdapter {
         int slash = Math.max(relativePath.lastIndexOf('/'), relativePath.lastIndexOf('\\'));
         if (slash >= 0) name = relativePath.substring(slash + 1);
         return name.endsWith("Mapper.xml")
+                || name.endsWith("Dao.xml")
+                || name.endsWith("Repository.xml")
                 || (name.contains("Mapper") && name.endsWith(".xml"))
-                || (name.contains("mapper") && name.endsWith(".xml"));
+                || (name.contains("mapper") && name.endsWith(".xml"))
+                || (name.contains("Dao") && name.endsWith(".xml"))
+                || (name.contains("Repository") && name.endsWith(".xml"));
     }
 }

@@ -7,10 +7,12 @@ public enum EdgeType {
 
     CONTAINS("包含"),
     IMPLEMENTED_BY("由...实现"),
+    IMPLEMENTS("实现"),
     USES("使用"),
     HAS_RULE("拥有规则"),
     EXPOSED_BY("由...暴露"),
     REQUIRES_PERMISSION("需要权限"),
+    REQUIRES("需要"),
     CALLS("调用"),
     HANDLED_BY("由...处理"),
     EXECUTES("执行"),
