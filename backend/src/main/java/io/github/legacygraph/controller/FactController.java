@@ -9,6 +9,7 @@ import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.FactExtractionResult;
+import io.github.legacygraph.dto.ManualFactRequest;
 import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.Evidence;
@@ -274,6 +275,57 @@ public class FactController {
             }
         }
         return Result.success(result);
+    }
+
+    // ==================== 手动创建业务事实接口（不依赖AI） ====================
+
+    @PostMapping("/facts/manual")
+    @Operation(summary = "手动创建业务事实", description = "不依赖AI，手动创建业务域/流程/对象/规则事实并落图")
+    public Result<DocUnderstandingAgent.BusinessFactExtraction> createManualBusinessFacts(
+            @PathVariable String projectId,
+            @RequestBody ManualFactRequest request) {
+        
+        // 版本绑定保障：如果指定了 versionId 则使用，否则自动获取最新版本
+        String versionId = request.getVersionId();
+        if (!StringUtils.hasText(versionId)) {
+            versionId = resolveLatestVersionId(projectId);
+            if (!StringUtils.hasText(versionId)) {
+                return Result.error("项目没有可用的扫描版本，请先创建版本");
+            }
+        }
+
+        // 构建业务事实对象
+        DocUnderstandingAgent.BusinessFactExtraction facts = new DocUnderstandingAgent.BusinessFactExtraction();
+        facts.setBusinessDomains(request.getDomains() != null ? request.getDomains() : List.of());
+        facts.setBusinessProcesses(request.getProcesses() != null ? request.getProcesses() : List.of());
+        facts.setBusinessObjects(request.getObjects() != null ? request.getObjects() : List.of());
+        facts.setBusinessRules(request.getRules() != null ? request.getRules() : List.of());
+
+        int factCount = facts.getBusinessDomains().size()
+                + facts.getBusinessProcesses().size()
+                + facts.getBusinessObjects().size()
+                + facts.getBusinessRules().size();
+
+        if (factCount == 0) {
+            return Result.error("未提供任何业务事实数据");
+        }
+
+        try {
+            // 使用 MANUAL_FACT 来源类型，标记为手动创建
+            businessGraphBuilder.buildBusinessGraph(projectId, versionId, facts, null, 
+                    io.github.legacygraph.common.SourceType.MANUAL_FACT.name());
+            log.info("Manual business facts created: projectId={}, versionId={}, factCount={}", 
+                    projectId, versionId, factCount);
+
+            // 自动触发功能到代码实现的映射
+            businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
+            log.info("Feature-to-code mapping completed: projectId={}, versionId={}", projectId, versionId);
+
+            return Result.success(facts);
+        } catch (Exception e) {
+            log.error("Failed to create manual business facts: projectId={}", projectId, e);
+            return Result.error("创建业务事实失败: " + e.getMessage());
+        }
     }
 
     /**

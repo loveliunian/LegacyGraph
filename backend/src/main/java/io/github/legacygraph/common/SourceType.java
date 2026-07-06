@@ -18,7 +18,8 @@ public enum SourceType {
     AI_INFERENCE("AI推断"),
     TEST_EXECUTION("测试执行"),
     RUNTIME_TRACE("运行时链路"),
-    MANUAL_CONFIRM("人工确认");
+    MANUAL_CONFIRM("人工确认"),
+    MANUAL_FACT("手动事实");
 
     private final String description;
 

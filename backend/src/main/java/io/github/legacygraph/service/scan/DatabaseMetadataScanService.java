@@ -127,7 +127,9 @@ public class DatabaseMetadataScanService {
             log.info("Extracted {} foreign keys and {} index entries from database schema {}",
                     foreignKeys.size(), indexes.size(), effectiveSchema);
         } catch (Exception e) {
-            log.warn("Failed to extract database constraints for schema {}: {}", effectiveSchema, e.getMessage());
+            log.error("Failed to extract database constraints for schema {}: {}", effectiveSchema, e.getMessage(), e);
+            // 不静默：记录到扫描任务状态，让前端可见
+            throw new RuntimeException("数据库约束提取失败: schema=" + effectiveSchema + ", 错误=" + e.getMessage(), e);
         }
     }
 

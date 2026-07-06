@@ -352,13 +352,26 @@ public class GraphBuilder {
                 if (fk.getFkName() != null && !fk.getFkName().isBlank()) {
                     edgeKey = edgeKey + "#" + fk.getFkName();
                 }
-                createEdge(projectId, versionId,
-                        fkTable.getId(), pkTable.getId(),
-                        EdgeType.REFERENCES.name(),
-                        edgeKey,
-                        SourceType.DB_METADATA.name(),
-                        BigDecimal.ONE,
-                        NodeStatus.CONFIRMED);
+                // 增强语义：外键级联规则写入 properties
+                String fkProperties = String.format(
+                        "{\"fkName\":\"%s\",\"pkColumn\":\"%s\",\"fkColumn\":\"%s\",\"updateRule\":\"%s\",\"deleteRule\":\"%s\"}",
+                        fk.getFkName() != null ? fk.getFkName() : "",
+                        fk.getPkColumnName() != null ? fk.getPkColumnName() : "",
+                        fk.getFkColumnName() != null ? fk.getFkColumnName() : "",
+                        cascadeRuleToString(fk.getUpdateRule()),
+                        cascadeRuleToString(fk.getDeleteRule()));
+                writer.upsertEdge(GraphEdgeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .fromNodeId(fkTable.getId())
+                        .toNodeId(pkTable.getId())
+                        .edgeType(EdgeType.REFERENCES.name())
+                        .edgeKey(edgeKey)
+                        .sourceType(SourceType.DB_METADATA.name())
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .properties(fkProperties)
+                        .build());
             }
         }
 
@@ -545,6 +558,21 @@ public class GraphBuilder {
      */
     public static String normalizeApiKey(String httpMethod, String path) {
         return httpMethod.toUpperCase() + " " + normalizePath(path);
+    }
+
+    /**
+     * 将 JDBC DatabaseMetaData 的级联规则常量转为可读字符串。
+     * @see java.sql.DatabaseMetaData#importedKeyCascade
+     */
+    private static String cascadeRuleToString(short rule) {
+        return switch (rule) {
+            case java.sql.DatabaseMetaData.importedKeyCascade -> "CASCADE";
+            case java.sql.DatabaseMetaData.importedKeySetNull -> "SET_NULL";
+            case java.sql.DatabaseMetaData.importedKeySetDefault -> "SET_DEFAULT";
+            case java.sql.DatabaseMetaData.importedKeyRestrict -> "RESTRICT";
+            case java.sql.DatabaseMetaData.importedKeyNoAction -> "NO_ACTION";
+            default -> "UNKNOWN";
+        };
     }
 
     /**

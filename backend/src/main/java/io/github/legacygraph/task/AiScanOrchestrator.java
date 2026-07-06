@@ -23,7 +23,9 @@ import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.ReviewRecord;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.TestCase;
+import io.github.legacygraph.builder.EvidenceGraphWriter;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.AiScanJobRepository;
@@ -100,6 +102,8 @@ public class AiScanOrchestrator {
     private final GapFinderService gapFinderService;
     /** 扫描后代码理解增强器 — 对扫描结果中的关键符号执行深入的代码理解 */
     private final ScanUnderstandingEnhancer scanUnderstandingEnhancer;
+    /** 统一图谱写入器 — Claim/Evidence/Intent 写图主路径 */
+    private final EvidenceGraphWriter evidenceGraphWriter;
 
     /** 文档/代码向量化服务 — 将文档和代码内容嵌入到 pgvector 供语义检索 */
     private final VectorizationService vectorizationService;
@@ -162,6 +166,7 @@ public class AiScanOrchestrator {
                               KnowledgeClaimService knowledgeClaimService,
                               GapFinderService gapFinderService,
                               ScanUnderstandingEnhancer scanUnderstandingEnhancer,
+                              EvidenceGraphWriter evidenceGraphWriter,
                               VectorizationService vectorizationService,
                               @Qualifier("scanDurationTimer") Timer scanDurationTimer,
                               @Qualifier("agentCallCounter") Counter agentCallCounter,
@@ -184,6 +189,7 @@ public class AiScanOrchestrator {
         this.knowledgeClaimService = knowledgeClaimService;
         this.gapFinderService = gapFinderService;
         this.scanUnderstandingEnhancer = scanUnderstandingEnhancer;
+        this.evidenceGraphWriter = evidenceGraphWriter;
         this.vectorizationService = vectorizationService;
         this.scanDurationTimer = scanDurationTimer;
         this.agentCallCounter = agentCallCounter;
@@ -342,6 +348,15 @@ public class AiScanOrchestrator {
                 futures.add(CompletableFuture.runAsync(() -> {
                     String content = readDocContent(doc);
                     if (content == null || content.isBlank()) {
+                        // P2 修复：文件读取失败时也更新状态为 FAILED，避免永远卡在 DISCOVERED
+                        doc.setParseStatus("FAILED");
+                        doc.setErrorMessage("无法读取文档内容：文件不存在或为空");
+                        doc.setUpdatedAt(java.time.LocalDateTime.now());
+                        try {
+                            documentRepository.updateById(doc);
+                        } catch (Exception e) {
+                            log.warn("Failed to update doc status to FAILED: {}", doc.getId(), e);
+                        }
                         return;
                     }
                     // 向量化文档内容（fire-and-forget：不阻塞 LLM 调用线程）
@@ -357,8 +372,23 @@ public class AiScanOrchestrator {
                         buildBusinessGraph(projectId, versionId, doc, extraction);
                         upsertClaimDrafts(projectId, versionId,
                                 docUnderstandingAgent.toClaimDrafts(projectId, versionId, extraction, doc.getFilePath()));
+                        // P2 修复：抽取成功后更新状态为 PARSED
+                        doc.setParseStatus("PARSED");
+                        doc.setFactCount(count);
+                        doc.setParsedAt(java.time.LocalDateTime.now());
+                        doc.setUpdatedAt(java.time.LocalDateTime.now());
+                        documentRepository.updateById(doc);
                     } catch (Exception e) {
                         log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
+                        // P2 修复：抽取失败时更新状态为 FAILED
+                        doc.setParseStatus("FAILED");
+                        doc.setErrorMessage(e.getMessage());
+                        doc.setUpdatedAt(java.time.LocalDateTime.now());
+                        try {
+                            documentRepository.updateById(doc);
+                        } catch (Exception updateEx) {
+                            log.warn("Failed to update doc status to FAILED: {}", doc.getId(), updateEx);
+                        }
                     }
                 }, docExtractExecutor));
             }
@@ -748,29 +778,22 @@ public class AiScanOrchestrator {
         }
 
         String edgeKey = "ai-feature:" + mapping.getPageKey() + "->" + mapping.getApiKey();
-        // 去重：已存在则直接返回
-        Optional<GraphEdge> existing = neo4jGraphDao.findEdge(projectId, versionId,
-                page.getId(), api.getId(), EdgeType.CALLS.name(), edgeKey);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
 
-        GraphEdge edge = new GraphEdge();
-        edge.setId(UUID.randomUUID().toString());
-        edge.setProjectId(projectId);
-        edge.setVersionId(versionId);
-        edge.setFromNodeId(page.getId());
-        edge.setToNodeId(api.getId());
-        edge.setEdgeType(EdgeType.CALLS.name());
-        edge.setEdgeKey(edgeKey);
-        edge.setSourceType("AI_FEATURE_MAPPING");
-        edge.setConfidence(BigDecimal.valueOf(normalizeConfidence(mapping.getConfidence())));
-        edge.setStatus("PENDING_CONFIRM");
-        edge.setProperties(objectMapper.writeValueAsString(mapping));
-        edge.setCreatedAt(LocalDateTime.now());
-        edge.setUpdatedAt(LocalDateTime.now());
-        neo4jGraphDao.createEdge(edge);
-        return edge;
+        // 统一走 EvidenceGraphWriter：去重 + 证据继承 + 状态裁决
+        GraphEdgeClaim claim = GraphEdgeClaim.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .fromNodeId(page.getId())
+                .toNodeId(api.getId())
+                .edgeType(EdgeType.CALLS.name())
+                .edgeKey(edgeKey)
+                .sourceType("AI_FEATURE_MAPPING")
+                .confidence(BigDecimal.valueOf(normalizeConfidence(mapping.getConfidence())))
+                .status("PENDING_CONFIRM")
+                .properties(objectMapper.writeValueAsString(mapping))
+                .build();
+
+        return evidenceGraphWriter.upsertEdge(claim);
     }
 
     // ==================== AI_TEST_GENERATE ====================
@@ -1010,16 +1033,18 @@ public class AiScanOrchestrator {
 
     private String readDocContent(Document doc) {
         if (doc.getFilePath() == null || doc.getFilePath().isBlank()) {
+            log.warn("readDocContent: filePath is null/blank for doc {} ({})", doc.getId(), doc.getDocName());
             return null;
         }
         try {
             Path filePath = Path.of(doc.getFilePath());
             if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
+                log.warn("readDocContent: file not found or not regular: {} (doc={})", doc.getFilePath(), doc.getId());
                 return null;
             }
             return documentContentService.readText(doc.getFilePath());
         } catch (Exception e) {
-            log.debug("Failed to read doc content {}: {}", doc.getFilePath(), e.getMessage());
+            log.warn("readDocContent: failed to read {}: {}", doc.getFilePath(), e.getMessage());
             return null;
         }
     }

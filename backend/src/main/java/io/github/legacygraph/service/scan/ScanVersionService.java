@@ -130,6 +130,84 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 || "SKIPPED".equals(status);
     }
 
+    /** AI 阶段聚合结果：把所有 AI_* 子任务归纳为 AI_ORCHESTRATION 阶段的单一状态。 */
+    private static final class AiPhaseAggregate {
+        String status;
+        int total;
+        int completed;
+        LocalDateTime startedAt;
+        LocalDateTime finishedAt;
+    }
+
+    /**
+     * 聚合所有 AI_* 子任务（AI_DOC_EXTRACT / AI_CODE_EXTRACT / AI_FEATURE_MAPPING 等），
+     * 归纳为 AI_ORCHESTRATION 阶段的整体状态。
+     * <ul>
+     *   <li>任一子任务 RUNNING → 阶段 RUNNING</li>
+     *   <li>否则任一 FAILED → 阶段 FAILED</li>
+     *   <li>否则全部为完成态（SUCCESS/WARNING/SKIPPED）→ 任一 WARNING 则 WARNING，全 SKIPPED 则 SKIPPED，否则 SUCCESS</li>
+     *   <li>否则（存在 PENDING 等）→ RUNNING</li>
+     * </ul>
+     * @return 无任何 AI_* 子任务时返回 null（由调用方回退到 PENDING 展示）
+     */
+    private AiPhaseAggregate aggregateAiSubtasks(List<ScanTask> tasks) {
+        List<ScanTask> aiTasks = new ArrayList<>();
+        for (ScanTask t : tasks) {
+            String type = t.getTaskType();
+            if (type != null && type.startsWith("AI_") && !"AI_ORCHESTRATION".equals(type)) {
+                aiTasks.add(t);
+            }
+        }
+        if (aiTasks.isEmpty()) {
+            return null;
+        }
+
+        boolean anyRunning = false;
+        boolean anyFailed = false;
+        boolean anyWarning = false;
+        boolean allSkipped = true;
+        boolean allTerminal = true;
+        int completed = 0;
+        LocalDateTime minStarted = null;
+        LocalDateTime maxFinished = null;
+
+        for (ScanTask t : aiTasks) {
+            String s = t.getTaskStatus();
+            if ("RUNNING".equals(s)) anyRunning = true;
+            if ("FAILED".equals(s)) anyFailed = true;
+            if ("WARNING".equals(s)) anyWarning = true;
+            if (!"SKIPPED".equals(s)) allSkipped = false;
+            if (isCompletedTaskStatus(s)) {
+                completed++;
+            } else {
+                allTerminal = false;
+            }
+            if (t.getStartedAt() != null && (minStarted == null || t.getStartedAt().isBefore(minStarted))) {
+                minStarted = t.getStartedAt();
+            }
+            if (t.getFinishedAt() != null && (maxFinished == null || t.getFinishedAt().isAfter(maxFinished))) {
+                maxFinished = t.getFinishedAt();
+            }
+        }
+
+        AiPhaseAggregate agg = new AiPhaseAggregate();
+        agg.total = aiTasks.size();
+        agg.completed = completed;
+        agg.startedAt = minStarted;
+        if (anyRunning) {
+            agg.status = "RUNNING";
+        } else if (anyFailed) {
+            agg.status = "FAILED";
+        } else if (allTerminal) {
+            agg.status = allSkipped ? "SKIPPED" : (anyWarning ? "WARNING" : "SUCCESS");
+            agg.finishedAt = maxFinished;
+        } else {
+            // 存在 PENDING 等未开始子任务，视为进行中
+            agg.status = "RUNNING";
+        }
+        return agg;
+    }
+
     private static String generateVersionNo() {
         String datePart = LocalDateTime.now().format(VERSION_DATE_FMT);
         String randPart = Integer.toHexString(ThreadLocalRandom.current().nextInt(0x10000));
@@ -232,6 +310,31 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
             ScanProgressResponse.TaskProgress tp = new ScanProgressResponse.TaskProgress();
             tp.setTaskType(phase.getTaskType());
             tp.setPhaseName(phase.getPhaseName());
+
+            // AI_ORCHESTRATION 阶段特殊处理：AI 实际运行时不会创建 task_type=AI_ORCHESTRATION 的任务，
+            // 而是创建 AI_DOC_EXTRACT / AI_CODE_EXTRACT / AI_FEATURE_MAPPING 等子任务。
+            // 若无直接的 AI_ORCHESTRATION 任务（仅 enableAi=false 跳过时才有），则聚合这些子任务的状态，
+            // 避免该阶段在 AI 已成功运行的情况下仍显示为 PENDING（"未完成"）。
+            if (task == null && "AI_ORCHESTRATION".equals(phase.getTaskType())) {
+                AiPhaseAggregate agg = aggregateAiSubtasks(tasks);
+                if (agg != null) {
+                    tp.setStatus(agg.status);
+                    tp.setFactCount(0);
+                    tp.setTotalItems(agg.total);
+                    tp.setProcessedItems(agg.completed);
+                    tp.setStartedAt(agg.startedAt);
+                    tp.setFinishedAt(agg.finishedAt);
+                    tp.setEstimatedSecondsRemaining(-1L);
+                    if (isCompletedTaskStatus(agg.status)) {
+                        completedTasks++;
+                    }
+                    if ("RUNNING".equals(agg.status) && currentPhaseIndex < 0) {
+                        currentPhaseIndex = phase.getOrder();
+                    }
+                    taskProgressList.add(tp);
+                    continue;
+                }
+            }
 
             if (task != null) {
                 tp.setStatus(task.getTaskStatus());
