@@ -156,7 +156,8 @@ public class AdapterExecutionService {
      * 对已发现的资产列表执行并发扫描抽取（取代 ProjectScanner 中的顺序循环）。
      *
      * @param context              扫描上下文
-     * @param assets               已发现的资产列表
+     * @param assets               已发现的资产列表（可能被截断）
+     * @param discoveredCount      实际发现的资产总数（截断前，用于进度统计）
      * @param task                 关联的子任务（用于进度记录）
      * @param cancelChecker        取消检查器（可空）
      * @param incremental          是否增量模式（跳过未变更资产）
@@ -165,6 +166,7 @@ public class AdapterExecutionService {
      */
     public int executeDiscoveredAssets(ScanContext context,
                                        List<SourceAsset> assets,
+                                       int discoveredCount,
                                        ScanTask task,
                                        java.util.function.Supplier<Boolean> cancelChecker,
                                        boolean incremental,
@@ -175,7 +177,9 @@ public class AdapterExecutionService {
         }
 
         int total = assets.size();
-        taskRecorder.logProgress(task, 0, total, "adapter candidate files", null);
+        // 使用实际发现的总数作为进度统计的 totalItems
+        int progressTotal = discoveredCount > 0 ? discoveredCount : total;
+        taskRecorder.logProgress(task, 0, progressTotal, "adapter candidate files", null);
         int maxConcurrency = Math.max(1, Integer.getInteger("legacy-graph.scan.adapter-concurrency", 8));
         Semaphore semaphore = new Semaphore(maxConcurrency);
         AtomicInteger visited = new AtomicInteger(0);
@@ -210,7 +214,7 @@ public class AdapterExecutionService {
                     } finally {
                         semaphore.release();
                         int done = visited.incrementAndGet();
-                        taskRecorder.logProgress(task, done, total, "adapter candidate files", null);
+                        taskRecorder.logProgress(task, done, progressTotal, "adapter candidate files", null);
                     }
                     return null;
                 })

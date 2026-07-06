@@ -73,6 +73,7 @@ public class DatabaseMetadataScanService {
                 projectId, versionId, effectiveSchema, schema, dbType, isMySql);
         DatabaseMetadataExtractor extractor = new DatabaseMetadataExtractor();
         try {
+            // extractFromSchema 内部会自动检测并修正 isMySql
             var tables = extractor.extractFromSchema(dataSource, effectiveSchema, isMySql);
             var filteredTables = tables.stream()
                     .filter(table -> shouldScanTable(table.getTableName(), includeTables, excludeTables))
@@ -112,8 +113,21 @@ public class DatabaseMetadataScanService {
                                       List<String> includeTables,
                                       List<String> excludeTables) {
         try {
-            String catalog = isMySql ? effectiveSchema : null;
-            String schemaPattern = isMySql ? null : effectiveSchema;
+            // === 自动检测实际数据库类型，避免配置错误导致约束抽取失败 ===
+            boolean actualIsMySql = isMySql;
+            try (var conn = dataSource.getConnection()) {
+                String productName = conn.getMetaData().getDatabaseProductName();
+                if (productName != null) {
+                    String lower = productName.toLowerCase();
+                    actualIsMySql = lower.contains("mysql") || lower.contains("mariadb");
+                    if (actualIsMySql != isMySql) {
+                        log.warn("buildConstraintGraph: 数据库类型自动检测与配置不一致! JDBC报告: {} (isMySql={}), 配置标记: isMySql={}, 以JDBC为准",
+                                productName, actualIsMySql, isMySql);
+                    }
+                }
+            }
+            String catalog = actualIsMySql ? effectiveSchema : null;
+            String schemaPattern = actualIsMySql ? null : effectiveSchema;
             var foreignKeys = databaseConstraintExtractor.extractForeignKeys(dataSource, catalog, schemaPattern)
                     .stream()
                     .filter(fk -> shouldScanTable(fk.getFkTableName(), includeTables, excludeTables)

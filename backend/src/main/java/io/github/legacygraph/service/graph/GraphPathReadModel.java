@@ -116,11 +116,18 @@ public class GraphPathReadModel {
                 String edgeType = edge.getEdgeType();
                 // 从已访问节点出发的正向边（fromNodeId 已访问，toNodeId 未访问）
                 if (relatedVisited.contains(edge.getFromNodeId()) && !relatedVisited.contains(edge.getToNodeId())) {
-                    // 只收集 Table 类型的关联节点
+                    // 收集 Table 类型的关联节点（REFERENCES/JOINS）
                     if ("REFERENCES".equalsIgnoreCase(edgeType) || "JOINS".equalsIgnoreCase(edgeType)) {
                         relatedIds.add(edge.getToNodeId());
                         relatedVisited.add(edge.getToNodeId());
                         // 记录边
+                        chain.edges.add(toEdgeInfo(edge));
+                    }
+                    // 补充：SqlStatement 通过 READS/WRITES 访问的表（SQL-mediated 隐式关联）
+                    else if ("READS".equalsIgnoreCase(edgeType) || "WRITES".equalsIgnoreCase(edgeType)) {
+                        // 如果当前已访问节点是 SqlStatement，则收集它访问的 Table
+                        relatedIds.add(edge.getToNodeId());
+                        relatedVisited.add(edge.getToNodeId());
                         chain.edges.add(toEdgeInfo(edge));
                     }
                 }
@@ -138,6 +145,42 @@ public class GraphPathReadModel {
                 List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(relatedIds);
                 for (GraphNode n : nodes) {
                     chain.nodes.add(toInfo(n));
+                }
+            }
+        }
+
+        // 补充：如果反向遍历没有找到上游（SqlStatement 缺失），尝试通过共享访问推断隐式关联
+        // 查找所有访问过当前表的 SqlStatement，然后收集它们访问的其他表
+        if (chain.nodes.size() <= 1) {
+            log.debug("Table {} has minimal upstream impact, attempting implicit association inference", tableName);
+            Set<String> implicitTableIds = new HashSet<>();
+            
+            // 找到所有通过 READS/WRITES 访问当前表的 SqlStatement
+            Set<String> sqlStatementIds = new HashSet<>();
+            for (GraphEdge edge : allEdges) {
+                if (("READS".equalsIgnoreCase(edge.getEdgeType()) || "WRITES".equalsIgnoreCase(edge.getEdgeType()))
+                        && target.get().getId().equals(edge.getToNodeId())) {
+                    sqlStatementIds.add(edge.getFromNodeId());
+                }
+            }
+            
+            // 收集这些 SqlStatement 访问的其他表
+            for (GraphEdge edge : allEdges) {
+                if (("READS".equalsIgnoreCase(edge.getEdgeType()) || "WRITES".equalsIgnoreCase(edge.getEdgeType()))
+                        && sqlStatementIds.contains(edge.getFromNodeId())
+                        && !target.get().getId().equals(edge.getToNodeId())) {
+                    implicitTableIds.add(edge.getToNodeId());
+                }
+            }
+            
+            // 添加隐式关联的表
+            if (!implicitTableIds.isEmpty()) {
+                List<GraphNode> implicitTables = neo4jGraphDao.findNodesByIds(new ArrayList<>(implicitTableIds));
+                for (GraphNode n : implicitTables) {
+                    if ("Table".equals(n.getNodeType()) && !relatedVisited.contains(n.getId())) {
+                        chain.nodes.add(toInfo(n));
+                        relatedVisited.add(n.getId());
+                    }
                 }
             }
         }

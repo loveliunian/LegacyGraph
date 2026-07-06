@@ -216,15 +216,15 @@
               v-for="scan in recentScans"
               :key="scan.id"
               :timestamp="formatTime(scan.createdAt)"
-              :type="getScanStatusType(scan.status)"
+              :type="getScanStatusType(scan.scanStatus)"
             >
               <div class="scan-item">
-                <div class="scan-name">{{ scan.taskName }}</div>
-                <div class="scan-type">{{ scan.taskType }}</div>
+                <div class="scan-name">{{ scan.versionNo }}</div>
+                <div class="scan-type">{{ scan.branchName }}</div>
                 <el-tag
                   size="small"
-                  :type="getScanStatusType(scan.status)">
-                  {{ getScanStatusText(scan.status) }}
+                  :type="getScanStatusType(scan.scanStatus)">
+                  {{ getScanStatusText(scan.scanStatus) }}
                 </el-tag>
               </div>
             </el-timeline-item>

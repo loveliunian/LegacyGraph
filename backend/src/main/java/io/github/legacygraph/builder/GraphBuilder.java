@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -277,6 +278,17 @@ public class GraphBuilder {
         List<GraphNode> allNodes = new ArrayList<>();
         List<GraphEdge> allEdges = new ArrayList<>();
 
+        // 构建表名映射，用于启发式推断
+        Map<String, String> tableNameToKey = new HashMap<>();
+        for (var tableMeta : tables) {
+            String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
+            tableNameToKey.put(tableMeta.getTableName().toLowerCase(), tableKey);
+            // 也存储不带 schema 的映射
+            tableNameToKey.put(tableMeta.getTableName().toLowerCase(), tableKey);
+        }
+
+        // 第一遍：创建所有表节点和字段节点
+        Map<String, GraphNode> tableNodes = new HashMap<>();
         for (var tableMeta : tables) {
             String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
             String tableId = UUID.randomUUID().toString();
@@ -288,6 +300,7 @@ public class GraphBuilder {
                     SourceType.DB_METADATA.name(), null, BigDecimal.ONE, NodeStatus.CONFIRMED,
                     "DATABASE_SCAN");
             allNodes.add(tableNode);
+            tableNodes.put(tableKey, tableNode);
 
             // 字段节点 + HAS_COLUMN 边
             for (var colMeta : tableMeta.getColumns()) {
@@ -307,21 +320,52 @@ public class GraphBuilder {
                         EdgeType.HAS_COLUMN.name(),
                         tableKey + "->has_column->" + colKey,
                         SourceType.DB_METADATA.name(), BigDecimal.ONE, NodeStatus.CONFIRMED));
+            }
+        }
 
-                // 推断外键：Table→Table REFERENCES 边（保留逐条处理，量少且需查引用表）
+        // 第二遍：创建 REFERENCES 边（真实外键 + 启发式推断）
+        int realFkCount = 0, inferredFkCount = 0;
+        for (var tableMeta : tables) {
+            String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
+            GraphNode tableNode = tableNodes.get(tableKey);
+
+            for (var colMeta : tableMeta.getColumns()) {
+                // 1. 真实外键约束
                 if (Boolean.TRUE.equals(colMeta.getForeignKey()) && colMeta.getReferencedTableName() != null) {
                     String refTableKey = tableMeta.getTableSchema() != null
                             ? tableMeta.getTableSchema() + "." + colMeta.getReferencedTableName()
                             : colMeta.getReferencedTableName();
-                    GraphNode refTable = findOrCreateTableNode(projectId, versionId, colMeta.getReferencedTableName());
+                    GraphNode refTable = tableNodes.get(refTableKey);
+                    if (refTable == null) {
+                        refTable = findOrCreateTableNode(projectId, versionId, colMeta.getReferencedTableName());
+                    }
                     String fkEdgeKey = tableKey + "->references->" + refTableKey + "." + colMeta.getColumnName();
                     createEdge(projectId, versionId,
-                            tableId, refTable.getId(),
+                            tableNode.getId(), refTable.getId(),
                             EdgeType.REFERENCES.name(),
                             fkEdgeKey,
                             SourceType.DB_METADATA.name(),
                             BigDecimal.valueOf(0.9),
                             NodeStatus.CONFIRMED);
+                    realFkCount++;
+                }
+                // 2. 启发式推断：列名模式 {table}_id, {table}Id, parent_id
+                else if (!Boolean.TRUE.equals(colMeta.getForeignKey())) {
+                    String inferredTable = inferReferencedTable(colMeta.getColumnName(), tableMeta.getTableName(), tableNameToKey);
+                    if (inferredTable != null) {
+                        GraphNode refTable = tableNodes.get(inferredTable);
+                        if (refTable != null) {
+                            String fkEdgeKey = tableKey + "->references->" + inferredTable + "." + colMeta.getColumnName();
+                            allEdges.add(buildEdge(projectId, versionId,
+                                    tableNode.getId(), refTable.getId(),
+                                    EdgeType.REFERENCES.name(),
+                                    fkEdgeKey,
+                                    SourceType.DB_METADATA.name(),
+                                    BigDecimal.valueOf(0.7),  // 较低置信度表示启发式
+                                    NodeStatus.PENDING_CONFIRM));
+                            inferredFkCount++;
+                        }
+                    }
                 }
             }
         }
@@ -329,8 +373,45 @@ public class GraphBuilder {
         // 批量写入所有节点和边
         int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
         int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
-        log.info("Batch merged DB graph: {} nodes, {} edges (projectId={}, versionId={})",
-                nodeCount, edgeCount, projectId, versionId);
+        log.info("Batch merged DB graph: {} nodes, {} edges (real FK: {}, inferred FK: {}, projectId={}, versionId={})",
+                nodeCount, edgeCount, realFkCount, inferredFkCount, projectId, versionId);
+    }
+
+    /**
+     * 启发式推断：根据列名模式推断引用的表名。
+     * 模式：{table}_id, {table}Id, parent_id（自引用）
+     */
+    private String inferReferencedTable(String columnName, String currentTableName, Map<String, String> tableNameToKey) {
+        if (columnName == null) return null;
+        String colLower = columnName.toLowerCase();
+
+        // 模式 1: parent_id → 自引用
+        if (colLower.equals("parent_id") || colLower.equals("parentid")) {
+            return tableNameToKey.get(currentTableName.toLowerCase());
+        }
+
+        // 模式 2: {table}_id
+        if (colLower.endsWith("_id") && colLower.length() > 3) {
+            String inferredName = colLower.substring(0, colLower.length() - 3);
+            // 查找匹配的表名（忽略大小写）
+            for (var entry : tableNameToKey.entrySet()) {
+                if (entry.getKey().equals(inferredName)) {
+                    return entry.getValue();
+                }
+            }
+        }
+
+        // 模式 3: {table}Id (camelCase)
+        if (colLower.endsWith("id") && colLower.length() > 2 && Character.isLowerCase(colLower.charAt(colLower.length() - 3))) {
+            String inferredName = colLower.substring(0, colLower.length() - 2);
+            for (var entry : tableNameToKey.entrySet()) {
+                if (entry.getKey().equals(inferredName)) {
+                    return entry.getValue();
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

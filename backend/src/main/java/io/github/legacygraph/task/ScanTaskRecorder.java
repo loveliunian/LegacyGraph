@@ -61,7 +61,8 @@ public class ScanTaskRecorder {
         try {
             task.setOutputSummary(objectMapper.writeValueAsString(summary));
         } catch (Exception e) {
-            task.setOutputSummary("\"" + summary.replace("\"", "\\\"") + "\"");
+            // 先转义反斜杠，再转义双引号（顺序不能颠倒，否则会二次转义）
+            task.setOutputSummary("\"" + summary.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
         }
         task.setErrorMessage(error);
         task.setTaskStatus(error == null ? "SUCCESS" : "FAILED");
@@ -90,7 +91,8 @@ public class ScanTaskRecorder {
                 task.setOutputSummary(objectMapper.writeValueAsString(summary));
             }
         } catch (Exception e) {
-            task.setOutputSummary("\"" + (summary != null ? summary.replace("\"", "\\\"") : "") + "\"");
+            // 先转义反斜杠，再转义双引号（顺序不能颠倒，否则会二次转义）
+            task.setOutputSummary("\"" + (summary != null ? summary.replace("\\", "\\\\").replace("\"", "\\\"") : "") + "\"");
         }
         task.setErrorMessage(error);
         task.setTaskStatus(terminalStatus != null ? terminalStatus

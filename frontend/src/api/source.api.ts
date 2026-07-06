@@ -270,5 +270,18 @@ export const sourceApi = {
    */
   deleteDocument: (projectId: string, id: string) => {
     return del(`/lg/projects/${projectId}/sources/documents/${id}`)
+  },
+
+  /**
+   * 浏览服务器目录
+   * @param projectId 项目ID
+   * @param path 目录路径，为空则返回用户主目录
+   * @returns 目录列表
+   */
+  browseDirectory: (projectId: string, path?: string) => {
+    return get<{ currentPath: string; parentPath: string | null; entries: Array<{ name: string; path: string; isDirectory: boolean }> }>(
+      `/lg/projects/${encodeURIComponent(projectId)}/sources/browse-directory`,
+      path ? { path } : {}
+    )
   }
 }

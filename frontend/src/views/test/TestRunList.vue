@@ -145,16 +145,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useProjectStore } from '@/stores/project'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { testRunApi } from '@/api'
 import StatusTag from '@/components/common/StatusTag.vue'
 import type { TestRun } from '@/types'
 import { ElMessage } from 'element-plus'
 
+const route = useRoute()
 const router = useRouter()
-const projectStore = useProjectStore()
+const projectId = computed(() => route.params.projectId as string)
 
 const loading = ref(false)
 const list = ref<any[]>([])
@@ -189,10 +189,9 @@ function hasFailed(row: TestRun) {
 }
 
 async function loadData() {
-  const projectId = projectStore.currentProjectId as string
   loading.value = true
   try {
-    const result = await testRunApi.listTestRuns(projectId, {
+    const result = await testRunApi.listTestRuns(projectId.value, {
       pageNum: pagination.value.pageNum,
       pageSize: pagination.value.pageSize,
       status: filterParams.value.status,
@@ -225,14 +224,12 @@ function handleCurrentChange(page: number) {
 }
 
 function goToDetail(runId: string) {
-  const projectId = projectStore.currentProjectId as string
-  router.push(`/projects/${projectId}/test-runs/${runId}`)
+  router.push(`/projects/${projectId.value}/test-runs/${runId}`)
 }
 
 async function rerunFailed(runId: string) {
-  const projectId = projectStore.currentProjectId as string
   try {
-    await testRunApi.rerunFailed(projectId, runId)
+    await testRunApi.rerunFailed(projectId.value, runId)
     ElMessage.success('已重新触发失败用例执行')
     loadData()
   } catch (error) {
@@ -242,9 +239,8 @@ async function rerunFailed(runId: string) {
 }
 
 async function cancelRun(runId: string) {
-  const projectId = projectStore.currentProjectId as string
   try {
-    await testRunApi.cancelRun(projectId, runId)
+    await testRunApi.cancelRun(projectId.value, runId)
     ElMessage.success('测试运行已取消')
     loadData()
   } catch (error) {

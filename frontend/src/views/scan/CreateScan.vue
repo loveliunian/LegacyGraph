@@ -1,10 +1,6 @@
 <template>
-  <div class="create-scan">
-    <div class="page-header">
-      <h3>新建扫描任务</h3>
-    </div>
-
-    <el-card class="step-card">
+  <div class="create-scan-dialog">
+    <el-card class="step-card" shadow="never">
       <el-steps
         :active="currentStep"
         align-center
@@ -310,17 +306,18 @@
 </template>
 
 <script setup lang="ts">
-// F-H1: get(...sources/...) → sourceApi 方法
-
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { scanApi, sourceApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
-const route = useRoute()
-const router = useRouter()
-const projectId = route.params.projectId as string
+const props = defineProps<{
+  projectId: string
+}>()
+
+const emit = defineEmits<{
+  success: [versionId: string]
+}>()
 
 const currentStep = ref(0)
 const submitting = ref(false)
@@ -374,7 +371,6 @@ const canProceed = () => {
   return true
 }
 
-// 全选状态计算
 const repoIdsAllSelected = computed(() =>
   repoList.value.length > 0 && scanForm.repoIds.length === repoList.value.length
 )
@@ -385,7 +381,6 @@ const docIdsAllSelected = computed(() =>
   docList.value.length > 0 && scanForm.docIds.length === docList.value.length
 )
 
-// 全选/取消全选切换
 const toggleSelectAll = (type: 'repo' | 'db' | 'doc') => {
   if (type === 'repo') {
     if (repoIdsAllSelected.value) {
@@ -430,15 +425,29 @@ const nextStep = () => {
   }
 }
 
+const resetForm = () => {
+  currentStep.value = 0
+  const now = new Date()
+  scanForm.taskName = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} 全量扫描`
+  scanForm.repoIds = []
+  scanForm.dbIds = []
+  scanForm.docIds = []
+  scanForm.scanTypes = []
+  scanForm.baseDir = ''
+  scanForm.incremental = true
+  scanForm.enableAi = true
+  scanForm.minConfidence = 0.6
+  scanForm.overwriteGraph = false
+  scanForm.autoGenerateTestCase = true
+}
+
 const startScan = async () => {
   submitting.value = true
   try {
-    // 检测是否选择了 FULLSTACK 类型仓库
     const hasFullstackRepo = repoList.value.some(
       r => scanForm.repoIds.includes(r.id) && r.repoType === 'FULLSTACK'
     )
 
-    // FULLSTACK 项目自动补全缺失的扫描类型，确保 DB 扫描和 AI 分析都能执行
     let effectiveScanTypes = [...scanForm.scanTypes]
     let addedTypes: string[] = []
     if (hasFullstackRepo) {
@@ -450,16 +459,14 @@ const startScan = async () => {
         effectiveScanTypes.push('DOC_PARSE')
         addedTypes.push('DOC_PARSE')
       }
-      // L20 修复：自动补全时通知用户
       if (addedTypes.length > 0) {
         ElMessage.info(`检测到全栈项目，已自动启用: ${addedTypes.join(', ')} 扫描`)
       }
     }
 
-    const res: any = await scanApi.create(projectId, {
+    const res: any = await scanApi.create(props.projectId, {
       versionNo: scanForm.taskName.replace(/[\s-]/g, '_'),
       branchName: 'main',
-      // 将 AI 开关随 scanScope 传递给后端扫描后编排器
       scanScope: JSON.stringify({
         scanTypes: effectiveScanTypes,
         repoIds: scanForm.repoIds,
@@ -471,9 +478,10 @@ const startScan = async () => {
       })
     })
     const versionId = typeof res === 'string' ? res : res.id || res
-    await scanApi.start(projectId, versionId, scanForm.baseDir)
+    await scanApi.start(props.projectId, versionId, scanForm.baseDir)
     ElMessage.success('扫描任务已创建并启动')
-    router.push(`/projects/${projectId}/scan-versions`)
+    emit('success', versionId)
+    resetForm()
   } catch (error) {
     ElMessage.error('创建失败')
   } finally {
@@ -481,18 +489,12 @@ const startScan = async () => {
   }
 }
 
-onMounted(async () => {
-  // 预加载字典数据
-  preloadDicts(['repo_type', 'scan_type'])
-
-  const now = new Date()
-  scanForm.taskName = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} 全量扫描`
-
+const loadSources = async () => {
   try {
     const [reposRes, dbsRes, docsRes] = await Promise.all([
-      sourceApi.listCodeRepo(projectId, { pageNum: 1, pageSize: 100 }),
-      sourceApi.listDbConnections(projectId, { pageNum: 1, pageSize: 100 }),
-      sourceApi.listDocuments(projectId, { pageNum: 1, pageSize: 100 })
+      sourceApi.listCodeRepo(props.projectId, { pageNum: 1, pageSize: 100 }),
+      sourceApi.listDbConnections(props.projectId, { pageNum: 1, pageSize: 100 }),
+      sourceApi.listDocuments(props.projectId, { pageNum: 1, pageSize: 100 })
     ])
     repoList.value = (reposRes.list || reposRes || []).map((r: any) => ({
       id: r.id,
@@ -512,32 +514,29 @@ onMounted(async () => {
   } catch (err) {
     console.error('获取数据源列表失败:', err)
   }
+}
+
+onMounted(async () => {
+  preloadDicts(['repo_type', 'scan_type'])
+  resetForm()
+  await loadSources()
 })
 </script>
 
 <style scoped>
-.create-scan {
+.create-scan-dialog {
   padding: 0;
 }
 
-.page-header {
-  margin-bottom: 20px;
-}
-
-.page-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-}
-
 .step-card {
-  padding: 24px;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 .step-content {
-  min-height: 400px;
-  padding: 32px 0;
+  min-height: 320px;
+  padding: 24px 0;
 }
 
 .step-panel h4 {
@@ -594,7 +593,7 @@ onMounted(async () => {
 }
 
 .config-form {
-  max-width: 800px;
+  max-width: 700px;
 }
 
 .form-tip {

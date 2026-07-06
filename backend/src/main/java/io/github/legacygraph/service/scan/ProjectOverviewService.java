@@ -63,6 +63,7 @@ public class ProjectOverviewService {
             ProjectOverviewResponse.ScanVersionItem item = new ProjectOverviewResponse.ScanVersionItem();
             item.setId(v.getId());
             item.setVersionNo(v.getVersionNo());
+            item.setBranchName(v.getBranchName());
             item.setScanStatus(v.getScanStatus());
             item.setCreatedAt(v.getCreatedAt() != null ? v.getCreatedAt().toString() : null);
             return item;

@@ -81,12 +81,6 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'menu.scanVersions' }
           },
           {
-            path: 'scan-versions/create',
-            name: 'CreateScan',
-            component: () => import('@/views/scan/CreateScan.vue'),
-            meta: { title: '新建扫描' }
-          },
-          {
             path: 'graph/code',
             name: 'CodeGraph',
             component: () => import('@/views/graph/CodeGraph.vue'),
@@ -277,6 +271,12 @@ const routes: RouteRecordRaw[] = [
             name: 'GraphifyCrossRepoImpact',
             component: () => import('@/views/graphify/CrossRepositoryImpactView.vue'),
             meta: { title: '跨仓影响分析' }
+          },
+          {
+            path: 'knowledge',
+            name: 'KnowledgeWorkbench',
+            component: () => import('@/views/workbench/KnowledgeWorkbench.vue'),
+            meta: { title: '知识工作台' }
           },
           {
             path: 'agents/history',

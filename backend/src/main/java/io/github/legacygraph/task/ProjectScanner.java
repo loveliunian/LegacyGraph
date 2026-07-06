@@ -421,6 +421,8 @@ public class ProjectScanner {
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=skipped (DOC_PARSE not in scanTypes)",
                         projectId, versionId);
+                ScanTask skippedDocTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
+                completeTask(skippedDocTask, "未选择文档扫描类型，已跳过", null, "SKIPPED");
             }
 
             if (isCancelled(versionId)) return;
@@ -446,6 +448,8 @@ public class ProjectScanner {
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=skipped (CODE_SCAN/DOC_PARSE not in scanTypes)",
                         projectId, versionId);
+                ScanTask skippedAdapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
+                completeTask(skippedAdapterTask, "未选择代码/文档扫描类型，已跳过", null, "SKIPPED");
             }
 
             // 4. 扫描所有已配置数据库的元数据（按 scope 过滤）
@@ -507,10 +511,14 @@ public class ProjectScanner {
                 } else {
                     log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=no READY database connections found for project",
                             projectId, versionId);
+                    ScanTask skippedDbTask = createTask(projectId, versionId, "DATABASE_SCAN", "数据库元数据扫描");
+                    completeTask(skippedDbTask, "项目未配置可用的数据库连接，已跳过", null, "SKIPPED");
                 }
             } else {
                 log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=skipped (DB_SCAN not in scanTypes)",
                         projectId, versionId);
+                ScanTask skippedDbTask = createTask(projectId, versionId, "DATABASE_SCAN", "数据库元数据扫描");
+                completeTask(skippedDbTask, "未选择数据库扫描类型，已跳过", null, "SKIPPED");
             }
 
             // 4b. Graphify 外部工具集成（可选）
@@ -541,12 +549,17 @@ public class ProjectScanner {
                             log.warn("Graphify analysis failed: {}", errorMsg);
                         }
                     } else {
-                        completeTask(graphifyTask, "Graphify not available", null);
+                        completeTask(graphifyTask, "Graphify not available", null, "SKIPPED");
                         log.info("Graphify tool not available, skipping");
                     }
                 } catch (Exception e) {
                     log.warn("Graphify analysis failed (non-blocking): {}", e.getMessage());
                 }
+            } else {
+                ScanTask skippedGraphifyTask = createTask(projectId, versionId, "GRAPHIFY_ANALYZE", "Graphify 代码分析");
+                String reason = (baseDir == null || baseDir.isBlank())
+                        ? "项目未配置源码目录，已跳过" : "未选择 Graphify 扫描类型，已跳过";
+                completeTask(skippedGraphifyTask, reason, null, "SKIPPED");
             }
 
             // 5. 图谱已由各 Builder 在扫描过程中直写 Neo4j，无需额外同步步骤
@@ -757,9 +770,9 @@ public class ProjectScanner {
 
             // 查找配置文件（M8 修复：try-with-resources 关闭 Stream）
             log.info("Scan still running: projectId={}, phase=DB_DISCOVERY, detail=walking for config files", projectId);
-            List<Path> configFiles;
+            List<Path> allConfigFiles;
             try (java.util.stream.Stream<Path> stream = Files.walk(basePath, 5)) {  // L9 修复：限制深度 5 层
-                configFiles = stream
+                allConfigFiles = stream
                         .filter(Files::isRegularFile)
                         .filter(p -> {
                             String name = p.getFileName().toString();
@@ -767,19 +780,29 @@ public class ProjectScanner {
                                     && (name.endsWith(".yml") || name.endsWith(".yaml") || name.endsWith(".properties"));
                         })
                         .sorted((a, b) -> a.getFileName().toString().compareTo(b.getFileName().toString()))  // L13 修复：先排序再 limit
-                        .limit(10)
                         .collect(Collectors.toList());
+            }
+
+            // 记录实际发现的总数（截断前）
+            int discoveredCount = allConfigFiles.size();
+            List<Path> configFiles = allConfigFiles.stream().limit(10).collect(Collectors.toList());
+            
+            if (discoveredCount > configFiles.size()) {
+                log.info("DB discovery: found {} config files, processing {} (limited to 10)",
+                        discoveredCount, configFiles.size());
             }
 
             Set<String> discoveredUrls = new HashSet<>(); // 本次扫描去重
             int total = configFiles.size();
-            scanTaskRecorder.logProgress(task, 0, total, "config files", null);
+            // 使用实际发现的总数作为进度统计的 totalItems
+            int progressTotal = discoveredCount > 0 ? discoveredCount : total;
+            scanTaskRecorder.logProgress(task, 0, progressTotal, "config files", null);
 
             int idx = 0;
             for (Path configFile : configFiles) {
                 try {
                     idx++;
-                    scanTaskRecorder.logProgress(task, idx, total, "config files", configFile.getFileName().toString());
+                    scanTaskRecorder.logProgress(task, idx, progressTotal, "config files", configFile.getFileName().toString());
                     String content = Files.readString(configFile);
                     Map<String, String> dbConfig = extractDatasourceConfig(content, configFile.getFileName().toString());
                     if (dbConfig != null && !dbConfig.isEmpty()) {
@@ -803,7 +826,13 @@ public class ProjectScanner {
                             );
 
                             if (existing != null) {
-                                // 更新已有连接
+                                // 手动配置的连接不允许被自动发现覆盖
+                                if ("MANUAL".equals(existing.getSource())) {
+                                    log.info("Skipping auto-update for manually configured DB connection: {} (id={})", 
+                                            existing.getConnectionName(), existing.getId());
+                                    continue;
+                                }
+                                // 更新已有连接（仅自动发现的连接）
                                 existing.setDbType(dbType);
                                 existing.setSchemaName(schema);
                                 existing.setUsername(dbConfig.getOrDefault("username", existing.getUsername()));
@@ -829,6 +858,7 @@ public class ProjectScanner {
                                 String rawPwd = dbConfig.getOrDefault("password", "");
                                 conn.setPassword(maskPassword(rawPwd));
                                 conn.setStatus("READY");
+                                conn.setSource("AUTO_DISCOVERED");
                                 conn.setCreatedBy("auto-discovery");
                                 conn.setCreatedAt(LocalDateTime.now());
                                 conn.setUpdatedAt(LocalDateTime.now());
@@ -1194,9 +1224,9 @@ public class ProjectScanner {
                     projectId, versionId);
 
             // 排除 node_modules, .git, target, dist, build 等目录（M8 修复：try-with-resources 关闭 Stream）
-            List<Path> docFiles;
+            List<Path> allDocFiles;
             try (java.util.stream.Stream<Path> stream = Files.walk(basePath, 8)) {  // L9 修复：限制深度 8 层
-                docFiles = stream
+                allDocFiles = stream
                         .filter(Files::isRegularFile)
                         .filter(p -> {
                             String name = p.getFileName().toString().toLowerCase();
@@ -1214,8 +1244,16 @@ public class ProjectScanner {
                             }
                             return false;
                         })
-                        .limit(50)
                         .collect(Collectors.toList());
+            }
+
+            // 记录实际发现的总数（截断前）
+            int discoveredDocCount = allDocFiles.size();
+            List<Path> docFiles = allDocFiles.stream().limit(50).collect(Collectors.toList());
+            
+            if (discoveredDocCount > docFiles.size()) {
+                log.info("DOC discovery: found {} document files, processing {} (limited to 50)",
+                        discoveredDocCount, docFiles.size());
             }
 
             log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=found {} document files",
@@ -1223,13 +1261,15 @@ public class ProjectScanner {
 
             Path relativeRoot = basePath.toAbsolutePath();
             int total = docFiles.size();
-            scanTaskRecorder.logProgress(task, 0, total, "document files", null);
+            // 使用实际发现的总数作为进度统计的 totalItems
+            int progressTotal = discoveredDocCount > 0 ? discoveredDocCount : total;
+            scanTaskRecorder.logProgress(task, 0, progressTotal, "document files", null);
             int idx = 0;
             for (Path docFile : docFiles) {
                 if (isCancelled(versionId)) break;
                 try {
                     idx++;
-                    scanTaskRecorder.logProgress(task, idx, total, "document files", docFile.getFileName().toString());
+                    scanTaskRecorder.logProgress(task, idx, progressTotal, "document files", docFile.getFileName().toString());
                     String relativePath;
                     try {
                         relativePath = relativeRoot.relativize(docFile.toAbsolutePath()).toString();
@@ -1471,14 +1511,22 @@ public class ProjectScanner {
                                                  ScanContext context,
                                                  ResolvedScanPlan plan,
                                                  ScanTask task) {
-        List<SourceAsset> assets = assetDiscoveryService.discoverAssets(plan);
+        AssetDiscoveryService.DiscoveryResult discoveryResult = assetDiscoveryService.discoverAssets(plan);
+        List<SourceAsset> assets = discoveryResult.getAssets();
+        int discoveredCount = discoveryResult.getDiscoveredCount();
+
+        // 记录实际发现的总数（截断前）
+        if (discoveredCount > assets.size()) {
+            log.info("Asset discovery: found {} files, processing {} (limited by maxFiles={})",
+                    discoveredCount, assets.size(), plan.getMaxFiles());
+        }
 
         // 使用并发 Adapter 执行器（替换原顺序 for 循环）
         // 若 adapterExecutionService 为 null（测试环境），回退到直调 adapter registry
         int processed;
         if (adapterExecutionService != null) {
             processed = adapterExecutionService.executeDiscoveredAssets(
-                    context, assets, task,
+                    context, assets, discoveredCount, task,
                     () -> isCancelled(versionId),
                     plan.isIncremental(),
                     assetDiscoveryService);
@@ -1659,18 +1707,23 @@ public class ProjectScanner {
     }
 
     private void completeTask(ScanTask task, String summary, String error) {
+        completeTask(task, summary, error, null);
+    }
+
+    private void completeTask(ScanTask task, String summary, String error, String terminalStatus) {
         if (scanTaskRecorder != null) {
-            scanTaskRecorder.completeTask(task, summary, error);
+            scanTaskRecorder.completeTask(task, summary, error, terminalStatus);
             return;
         }
         // fallback: 测试环境
         try {
             task.setOutputSummary(objectMapper.writeValueAsString(summary));
         } catch (Exception e) {
-            task.setOutputSummary("\"" + summary.replace("\"", "\\\"") + "\"");
+            // 先转义反斜杠，再转义双引号（顺序不能颠倒，否则会二次转义）
+            task.setOutputSummary("\"" + summary.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
         }
         task.setErrorMessage(error);
-        task.setTaskStatus(error == null ? "SUCCESS" : "FAILED");
+        task.setTaskStatus(terminalStatus != null ? terminalStatus : (error == null ? "SUCCESS" : "FAILED"));
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);

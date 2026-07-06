@@ -52,6 +52,17 @@
         label="Schema"
         width="120" />
       <el-table-column
+        label="来源"
+        width="100">
+        <template #default="{ row }">
+          <el-tag
+            size="small"
+            :type="row.source === 'MANUAL' ? 'primary' : 'info'">
+            {{ row.source === 'MANUAL' ? '手动' : '自动' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
         prop="username"
         label="用户名"
         width="120" />

@@ -226,27 +226,9 @@ class SystemControllerTest {
 
     @Test
     void testGetAllUsers() throws Exception {
-        SysUser user1 = new SysUser();
-        user1.setUsername("user1");
-        user1.setPassword(passwordEncoder.encode("password123"));
-        user1.setNickname("User 1");
-        user1.setStatus("ACTIVE");
-        user1.setCreatedAt(LocalDateTime.now());
-        user1.setUpdatedAt(LocalDateTime.now());
-        sysUserRepository.insert(user1);
-
-        SysUser user2 = new SysUser();
-        user2.setUsername("user2");
-        user2.setPassword(passwordEncoder.encode("password123"));
-        user2.setNickname("User 2");
-        user2.setStatus("ACTIVE");
-        user2.setCreatedAt(LocalDateTime.now());
-        user2.setUpdatedAt(LocalDateTime.now());
-        sysUserRepository.insert(user2);
-
-        mockMvc.perform(get("/lg/system/users/all"))
+        // /lg/system/users/all 已下线（与 /lg/system/users/list 重复）；list 端点已由 testListUsers 覆盖
+        mockMvc.perform(get("/lg/system/users/list"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.length()").value(2));
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

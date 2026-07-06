@@ -30,7 +30,7 @@ class AssetDiscoveryServiceTest {
 
         ResolvedScanPlan plan = planWithRepo(Set.of("DOC_PARSE"));
 
-        List<String> paths = service.discoverAssets(plan).stream()
+        List<String> paths = service.discoverAssets(plan).getAssets().stream()
                 .map(SourceAsset::getRelativePath)
                 .toList();
 
@@ -59,7 +59,7 @@ class AssetDiscoveryServiceTest {
                 .rawScope(Map.of())
                 .build();
 
-        List<String> paths = service.discoverAssets(plan).stream()
+        List<String> paths = service.discoverAssets(plan).getAssets().stream()
                 .map(SourceAsset::getRelativePath)
                 .toList();
 

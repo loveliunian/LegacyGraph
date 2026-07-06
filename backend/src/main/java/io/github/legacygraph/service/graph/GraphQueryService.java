@@ -602,6 +602,26 @@ public class GraphQueryService {
         return versionId != null ? versionId.replace("-", "") : null;
     }
 
+    // ==================== API 节点列表（代码图谱查询联动） ====================
+
+    /**
+     * 获取指定版本下所有 ApiEndpoint 节点（用于代码图谱页面方法下拉选择）。
+     * 返回轻量字段：id, nodeKey, displayName, nodeName。
+     */
+    public List<Map<String, Object>> getApiEndpoints(String projectId, String versionId) {
+        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        List<GraphNode> nodes = neo4jGraphDao.queryNodes(
+                projectId, normalizedVersionId, "ApiEndpoint", null, null, null, 0);
+        return nodes.stream().map(node -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", node.getId());
+            m.put("nodeKey", node.getNodeKey());
+            m.put("displayName", node.getDisplayName() != null ? node.getDisplayName() : node.getNodeKey());
+            m.put("nodeName", node.getNodeName());
+            return m;
+        }).toList();
+    }
+
     // ==================== 漂移队列 ====================
 
     /**

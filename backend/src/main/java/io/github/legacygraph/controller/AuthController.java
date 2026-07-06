@@ -7,6 +7,7 @@ import io.github.legacygraph.dto.LoginRequest;
 import io.github.legacygraph.dto.LoginResponse;
 import io.github.legacygraph.entity.SysUser;
 import io.github.legacygraph.repository.SysUserRepository;
+import io.github.legacygraph.service.system.AuthSessionService;
 import io.github.legacygraph.service.system.TokenBlacklistService;
 import io.github.legacygraph.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -36,19 +38,23 @@ public class AuthController {
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
+    private final AuthSessionService authSessionService;
 
     /**
      * 构造函数注入
      * @param userRepository 用户数据访问层
      * @param jwtUtil JWT工具
      * @param tokenBlacklistService JWT 登出黑名单服务
+     * @param authSessionService 认证会话服务（Redis 存储登录信息）
      */
     public AuthController(SysUserRepository userRepository, JwtUtil jwtUtil,
-                          TokenBlacklistService tokenBlacklistService) {
+                          TokenBlacklistService tokenBlacklistService,
+                          AuthSessionService authSessionService) {
         this.userRepository = userRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.jwtUtil = jwtUtil;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.authSessionService = authSessionService;
     }
 
     /**
@@ -124,6 +130,9 @@ public class AuthController {
                 userInfo
         );
 
+        // 将登录会话信息存入 Redis
+        authSessionService.saveSession(accessToken, refreshToken, userInfo, Duration.ofSeconds(7200));
+
         return Result.success(response);
     }
 
@@ -134,11 +143,14 @@ public class AuthController {
      * @return 成功结果
      */
     @PostMapping("/logout")
-    @Operation(summary = "用户登出", description = "将当前令牌加入黑名单，使其在过期前立即失效")
+    @Operation(summary = "用户登出", description = "将当前令牌加入黑名单，并清除 Redis 中的会话信息")
     @Log(value = "用户登出", type = Log.OperationType.LOGOUT)
     public Result<Void> logout(@RequestHeader(value = "Authorization", required = false) String token) {
         if (token != null && token.startsWith("Bearer ")) {
-            tokenBlacklistService.blacklist(token.substring(7));
+            String jwt = token.substring(7);
+            tokenBlacklistService.blacklist(jwt);
+            // 清除 Redis 中的会话信息
+            authSessionService.removeSession(jwt);
         }
         return Result.success();
     }
@@ -249,6 +261,9 @@ public class AuthController {
                 7200L,
                 userInfo
         );
+
+        // 刷新会话信息到 Redis
+        authSessionService.saveSession(accessToken, newRefreshToken, userInfo, Duration.ofSeconds(7200));
 
         return ResponseEntity.ok(Result.success(response));
     }

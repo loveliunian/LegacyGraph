@@ -93,7 +93,7 @@ class ProjectScannerAdapterTest {
                 .fileType("java")
                 .assetKind("CODE")
                 .build();
-        when(assetDiscoveryService.discoverAssets(any())).thenReturn(java.util.List.of(discoveredAsset));
+        when(assetDiscoveryService.discoverAssets(any())).thenReturn(new AssetDiscoveryService.DiscoveryResult(1, java.util.List.of(discoveredAsset)));
         when(adapterRegistry.selectAdapter(any(), any())).thenReturn(Optional.of(adapter));
         when(adapter.extract(any(), any())).thenReturn(ExtractionResult.builder()
                 .processedAssets(1)

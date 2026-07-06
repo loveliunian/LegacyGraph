@@ -40,6 +40,12 @@ public class DbConnection {
 
     private String status;
 
+    /**
+     * 连接来源：MANUAL（手动配置）/ AUTO_DISCOVERED（自动发现）。
+     * 手动配置的连接不会被自动发现覆盖。
+     */
+    private String source;
+
     private Integer tableCount;
 
     private LocalDateTime lastScanTime;

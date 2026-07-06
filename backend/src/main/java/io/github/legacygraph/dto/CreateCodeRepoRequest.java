@@ -15,7 +15,6 @@ public class CreateCodeRepoRequest {
     @NotBlank(message = "仓库类型不能为空")
     private String repoType;
 
-    @NotBlank(message = "Git地址不能为空")
     @Pattern(regexp = "^(http|https|git)://.*$", message = "Git地址格式不正确")
     private String gitUrl;
 
@@ -44,4 +43,10 @@ public class CreateCodeRepoRequest {
      * 全栈项目-前端子路径 (仅 repoType=FULLSTACK 时使用)
      */
     private String frontendSubPath;
+
+    /**
+     * 本地代码路径（可选）。
+     * 如果指定，扫描时直接使用该路径，无需从 Git 拉取。
+     */
+    private String localPath;
 }

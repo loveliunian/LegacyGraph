@@ -25,8 +25,9 @@ public final class ScanPhaseRegistry {
         register("DOC_DISCOVERY", "文档自动发现", 2);
         register("ADAPTER_SCAN", "代码结构抽取", 3);
         register("DATABASE_SCAN", "数据库元数据扫描", 4);
-        register("GRAPH_BUILD", "知识图谱构建", 5);
-        register("AI_ORCHESTRATION", "AI 智能分析", 6);
+        register("GRAPHIFY_ANALYZE", "Graphify 代码分析", 5);
+        register("GRAPH_BUILD", "知识图谱构建", 6);
+        register("AI_ORCHESTRATION", "AI 智能分析", 7);
     }
 
     private static void register(String taskType, String phaseName, int order) {

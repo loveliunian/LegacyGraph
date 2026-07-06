@@ -333,6 +333,19 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                     }
                     taskProgressList.add(tp);
                     continue;
+                } else {
+                    // 无 AI 子任务：若版本已终态则标记为 SKIPPED，否则保持 PENDING
+                    String versionStatus = version.getScanStatus();
+                    if ("SUCCESS".equals(versionStatus) || "FAILED".equals(versionStatus) || "CANCELLED".equals(versionStatus)) {
+                        tp.setStatus("SKIPPED");
+                        tp.setFactCount(0);
+                        tp.setTotalItems(0);
+                        tp.setProcessedItems(0);
+                        tp.setEstimatedSecondsRemaining(-1L);
+                        completedTasks++;
+                        taskProgressList.add(tp);
+                        continue;
+                    }
                 }
             }
 

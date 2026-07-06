@@ -123,6 +123,54 @@ public class SourceController {
         this.documentProcessingExecutor = documentProcessingExecutor;  // M1修复
     }
 
+    /**
+     * 浏览服务器目录（用于本地路径选择）
+     * @param path 要浏览的目录路径，为空则返回用户主目录
+     * @return 目录列表，包含名称、路径、是否目录
+     */
+    @GetMapping("/browse-directory")
+    @Operation(summary = "浏览服务器目录", description = "浏览服务器上的目录，用于选择本地代码路径")
+    public Result<Map<String, Object>> browseDirectory(
+            @Parameter(description = "目录路径")
+            @RequestParam(required = false) String path) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            Path dirPath;
+            if (path == null || path.isBlank()) {
+                dirPath = Paths.get(System.getProperty("user.home"));
+            } else {
+                dirPath = Paths.get(path);
+            }
+
+            if (!Files.exists(dirPath) || !Files.isDirectory(dirPath)) {
+                return Result.error("目录不存在或不是目录");
+            }
+
+            result.put("currentPath", dirPath.toAbsolutePath().toString());
+            result.put("parentPath", dirPath.getParent() != null ? dirPath.getParent().toAbsolutePath().toString() : null);
+
+            List<Map<String, Object>> entries = new java.util.ArrayList<>();
+            try (var stream = Files.list(dirPath)) {
+                stream
+                    .filter(Files::isDirectory)
+                    .filter(p -> !p.getFileName().toString().startsWith("."))
+                    .sorted()
+                    .limit(100)
+                    .forEach(p -> {
+                        Map<String, Object> entry = new HashMap<>();
+                        entry.put("name", p.getFileName().toString());
+                        entry.put("path", p.toAbsolutePath().toString());
+                        entry.put("isDirectory", true);
+                        entries.add(entry);
+                    });
+            }
+            result.put("entries", entries);
+            return Result.success(result);
+        } catch (java.io.IOException e) {
+            return Result.error("读取目录失败: " + e.getMessage());
+        }
+    }
+
     // ==================== 代码仓库 ====================
 
     /**
@@ -214,6 +262,10 @@ public class SourceController {
         repo.setExcludePattern(request.getExcludePattern());
         repo.setBackendSubPath(request.getBackendSubPath());
         repo.setFrontendSubPath(request.getFrontendSubPath());
+        // 本地代码路径：如果用户指定则使用，否则自动生成
+        if (request.getLocalPath() != null && !request.getLocalPath().isBlank()) {
+            repo.setLocalPath(request.getLocalPath());
+        }
         repo.setStatus("PENDING");
         repo.setCreatedBy("currentUser");
         repo.setCreatedAt(LocalDateTime.now());
@@ -264,6 +316,10 @@ public class SourceController {
         repo.setExcludePattern(request.getExcludePattern());
         repo.setBackendSubPath(request.getBackendSubPath());
         repo.setFrontendSubPath(request.getFrontendSubPath());
+        // 本地代码路径：如果用户指定则使用，否则自动生成
+        if (request.getLocalPath() != null && !request.getLocalPath().isBlank()) {
+            repo.setLocalPath(request.getLocalPath());
+        }
         repo.setUpdatedAt(LocalDateTime.now());
 
         codeRepoRepository.updateById(repo);
@@ -658,6 +714,7 @@ public class SourceController {
         db.setIncludeTables(request.getIncludeTables());
         db.setExcludeTables(request.getExcludeTables());
         db.setStatus("PENDING");
+        db.setSource("MANUAL");
         db.setCreatedBy("currentUser");
         db.setCreatedAt(LocalDateTime.now());
         db.setUpdatedAt(LocalDateTime.now());
@@ -1370,14 +1427,18 @@ public class SourceController {
         if (request == null) {
             return "请求参数不能为空";
         }
-        if (!isValidGitUrl(request.getGitUrl())) {
-            log.warn("Invalid Git URL rejected in repo request: {}", request.getGitUrl());
-            return "Git地址格式不合法";
-        }
-        String branchName = normalizeBranchName(request.getBranchName());
-        if (!isValidBranchName(branchName)) {
-            log.warn("Invalid branch name rejected in repo request: {}", request.getBranchName());
-            return "分支名格式不合法";
+        // 有 localPath 时，gitUrl / branch 不强制必填
+        boolean hasLocalPath = request.getLocalPath() != null && !request.getLocalPath().isBlank();
+        if (!hasLocalPath) {
+            if (!isValidGitUrl(request.getGitUrl())) {
+                log.warn("Invalid Git URL rejected in repo request: {}", request.getGitUrl());
+                return "Git地址格式不合法（或填写本地路径）";
+            }
+            String branchName = normalizeBranchName(request.getBranchName());
+            if (!isValidBranchName(branchName)) {
+                log.warn("Invalid branch name rejected in repo request: {}", request.getBranchName());
+                return "分支名格式不合法";
+            }
         }
         return null;
     }

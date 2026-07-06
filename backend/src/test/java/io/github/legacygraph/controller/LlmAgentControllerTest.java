@@ -115,34 +115,6 @@ class LlmAgentControllerTest {
     }
 
     @Test
-    void testGetMergeCandidates_Success() throws Exception {
-        mockMvc.perform(get("/agents/graph/merge/candidates")
-                        .param("projectId", "project-1")
-                        .param("nodeType", "ENTITY"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
-    }
-
-    @Test
-    void testDecideMerge_NodesNotFound() throws Exception {
-        mockMvc.perform(post("/agents/graph/merge/decide")
-                        .param("projectId", "project-1")
-                        .param("nodeAId", "node-1")
-                        .param("nodeBId", "node-2"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(1));
-    }
-
-    @Test
-    void testExecuteMerge_Success() throws Exception {
-        mockMvc.perform(post("/agents/graph/merge/execute")
-                        .param("projectId", "project-1")
-                        .param("targetNodeId", "target-1")
-                        .param("mergeNodeId", "merge-1"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
     void testGenerateTests_Success() throws Exception {
         io.github.legacygraph.agent.TestCaseAgent.TestGenerationRequest request =
                 new io.github.legacygraph.agent.TestCaseAgent.TestGenerationRequest();

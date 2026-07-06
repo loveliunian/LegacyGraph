@@ -63,6 +63,7 @@ public class ProjectOverviewResponse {
     public static class ScanVersionItem {
         private String id;
         private String versionNo;
+        private String branchName;
         private String scanStatus;
         private String createdAt;
     }

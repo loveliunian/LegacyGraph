@@ -8,10 +8,12 @@ import io.github.legacygraph.agent.CodeFactAgent;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
+import io.github.legacygraph.builder.EvidenceGraphWriter;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
+import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
@@ -69,6 +71,7 @@ class AiScanOrchestratorTest {
     @Mock private KnowledgeClaimService knowledgeClaimService;
     @Mock private GapFinderService gapFinderService;
     @Mock private ScanUnderstandingEnhancer scanUnderstandingEnhancer;
+    @Mock private EvidenceGraphWriter evidenceGraphWriter;
     @Mock private VectorizationService vectorizationService;
     @Mock private io.micrometer.core.instrument.Timer scanDurationTimer;
     @Mock private io.micrometer.core.instrument.Counter agentCallCounter;
@@ -86,7 +89,7 @@ class AiScanOrchestratorTest {
                 documentRepository, factRepository,
                 reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
                 featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper(),
-                knowledgeClaimService, gapFinderService, scanUnderstandingEnhancer, vectorizationService,
+                knowledgeClaimService, gapFinderService, scanUnderstandingEnhancer, evidenceGraphWriter, vectorizationService,
                 scanDurationTimer, agentCallCounter, graphNodeCounter, graphEdgeCounter);
         lenient().when(gapFinderService.scanGaps(anyString(), anyString()))
                 .thenReturn(GapFinderService.GapScanResult.builder()
@@ -378,17 +381,20 @@ class AiScanOrchestratorTest {
         FeatureMappingAgent.MappingResult result = new FeatureMappingAgent.MappingResult();
         result.setMappings(List.of(mapping));
         when(featureMappingAgent.mapFeatures(any())).thenReturn(result);
+        GraphEdge persistedEdge = new GraphEdge();
+        persistedEdge.setId("edge-1");
+        when(evidenceGraphWriter.upsertEdge(any(GraphEdgeClaim.class))).thenReturn(persistedEdge);
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
-        ArgumentCaptor<GraphEdge> edgeCaptor = ArgumentCaptor.forClass(GraphEdge.class);
-        verify(neo4jGraphDao).createEdge(edgeCaptor.capture());
-        GraphEdge edge = edgeCaptor.getValue();
-        assertEquals(page.getId(), edge.getFromNodeId());
-        assertEquals(api.getId(), edge.getToNodeId());
-        assertEquals(EdgeType.CALLS.name(), edge.getEdgeType());
-        assertEquals("AI_FEATURE_MAPPING", edge.getSourceType());
-        assertEquals("PENDING_CONFIRM", edge.getStatus());
+        ArgumentCaptor<GraphEdgeClaim> claimCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
+        verify(evidenceGraphWriter).upsertEdge(claimCaptor.capture());
+        GraphEdgeClaim claim = claimCaptor.getValue();
+        assertEquals(page.getId(), claim.getFromNodeId());
+        assertEquals(api.getId(), claim.getToNodeId());
+        assertEquals(EdgeType.CALLS.name(), claim.getEdgeType());
+        assertEquals("AI_FEATURE_MAPPING", claim.getSourceType());
+        assertEquals("PENDING_CONFIRM", claim.getStatus());
 
         ArgumentCaptor<ReviewRecord> reviewCaptor = ArgumentCaptor.forClass(ReviewRecord.class);
         verify(reviewRecordRepository).insert(reviewCaptor.capture());

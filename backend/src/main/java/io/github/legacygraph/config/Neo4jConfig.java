@@ -36,6 +36,8 @@ public class Neo4jConfig {
                 .withConnectionLivenessCheckTimeout(5, TimeUnit.MINUTES)
                 // 泄漏检测：获取连接超过30s未归还则告警
                 .withLeakedSessionsLogging()
+                // 启用驱动指标（健康检查连接池状态需要）
+                .withDriverMetrics()
                 .build();
         return GraphDatabase.driver(uri, AuthTokens.basic(username, password), config);
     }

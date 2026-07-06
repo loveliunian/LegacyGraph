@@ -551,9 +551,15 @@ public class Neo4jQueryRepository {
                 "OPTIONAL MATCH (t)-[hc:HAS_COLUMN]->(:Column) " +
                 "WHERE hc.projectId = $projectId AND hc.versionId = $versionId " +
                 "WITH t, count(hc) AS colCnt " +
+                // 直接关联：REFERENCES 边
                 "OPTIONAL MATCH (t)-[ref1:REFERENCES]-(:Table) " +
                 "WHERE ref1.projectId = $projectId AND ref1.versionId = $versionId " +
-                "RETURN t.id AS nodeId, colCnt, count(ref1) AS relCnt";
+                "WITH t, colCnt, count(DISTINCT ref1) AS refCnt " +
+                // 隐式关联：通过 SqlStatement 共享访问（READS/WRITES 同一 SQL 的其他表）
+                "OPTIONAL MATCH (t)<-[:READS|WRITES]-(sql:SqlStatement)-[:READS|WRITES]->(otherTable:Table) " +
+                "WHERE sql.projectId = $projectId AND sql.versionId = $versionId " +
+                "AND otherTable <> t AND otherTable.projectId = $projectId AND otherTable.versionId = $versionId " +
+                "RETURN t.id AS nodeId, colCnt, refCnt, count(DISTINCT otherTable) AS implicitCnt";
         Map<String, long[]> result = new HashMap<>();
         try (Session session = neo4jDriver.session()) {
             Result rs = session.run(cypher, Map.of(
@@ -562,9 +568,12 @@ public class Neo4jQueryRepository {
                     "nodeIds", nodeIds));
             while (rs.hasNext()) {
                 org.neo4j.driver.Record rec = rs.next();
+                long refCnt = rec.get("refCnt").asLong();
+                long implicitCnt = rec.get("implicitCnt").asLong();
+                // 关联数 = 直接 REFERENCES + 隐式 SQL 共享（去重）
                 result.put(rec.get("nodeId").asString(), new long[]{
                         rec.get("colCnt").asLong(),
-                        rec.get("relCnt").asLong()
+                        refCnt + implicitCnt
                 });
             }
         } catch (Exception e) {

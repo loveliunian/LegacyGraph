@@ -1,12 +1,12 @@
 <template>
   <div class="repo-list">
     <div class="page-header">
-      <h3>代码仓库配置</h3>
+      <h3>代码配置</h3>
       <el-button
         type="primary"
         @click="showCreateDialog">
         <el-icon><Plus /></el-icon>
-        添加仓库
+        添加代码
       </el-button>
     </div>
 
@@ -139,7 +139,7 @@
     <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId ? '修改代码仓库' : '添加代码仓库'"
+      :title="editingId ? '修改代码' : '添加代码'"
       width="620px">
       <el-form
         :model="repoForm"
@@ -161,27 +161,31 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item
-          label="Git地址"
-          required>
+          label="Git地址">
           <div style="display: flex; gap: 8px; width: 100%;">
             <el-input
               v-model="repoForm.gitUrl"
               placeholder="https://github.com/xxx/xxx.git"
+              :disabled="!!repoForm.localPath"
               style="flex: 1;" />
             <el-button
               type="success"
               :loading="testingUrl"
+              :disabled="!!repoForm.localPath"
               @click="testRepoUrl">
               测试连接
             </el-button>
           </div>
+          <div v-if="repoForm.localPath" style="color: #909399; font-size: 12px; margin-top: 4px;">
+            已填写本地路径，无需Git地址
+          </div>
         </el-form-item>
         <el-form-item
-          label="分支"
-          required>
+          label="分支">
           <el-input
             v-model="repoForm.branch"
-            placeholder="main / master" />
+            placeholder="main / master"
+            :disabled="!!repoForm.localPath" />
         </el-form-item>
         <!-- 全栈项目：分别指定前后端子路径 -->
         <template v-if="repoForm.repoType === 'FULLSTACK'">
@@ -196,10 +200,27 @@
               placeholder="frontend / web / client" />
           </el-form-item>
         </template>
+        <el-form-item label="本地路径">
+          <div style="display: flex; gap: 8px; width: 100%;">
+            <el-input
+              v-model="repoForm.localPath"
+              placeholder="点击右侧按钮选择文件夹"
+              readonly
+              style="flex: 1;" />
+            <el-button type="primary" @click="openFolderPicker">
+              <el-icon><FolderOpened /></el-icon>
+              选择
+            </el-button>
+            <el-button
+              v-if="repoForm.localPath"
+              @click="clearLocalPath">
+              清除
+            </el-button>
+          </div>
+        </el-form-item>
         <el-form-item
-          label="认证方式"
-          required>
-          <el-radio-group v-model="repoForm.authType">
+          label="认证方式">
+          <el-radio-group v-model="repoForm.authType" :disabled="!!repoForm.localPath">
             <el-radio label="NONE">无需认证</el-radio>
             <el-radio label="TOKEN">Token</el-radio>
             <el-radio label="USER_PASSWORD">用户名密码</el-radio>
@@ -253,11 +274,55 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 文件夹选择器弹窗 -->
+    <el-dialog
+      v-model="folderPickerVisible"
+      title="选择文件夹"
+      width="520px"
+      append-to-body>
+      <div class="folder-picker">
+        <div class="folder-picker-path">
+          <el-button
+            v-if="pickerParentPath"
+            link
+            type="primary"
+            @click="navigateToFolder(pickerParentPath)">
+            ⬆ 返回上级
+          </el-button>
+          <span class="current-path">{{ pickerCurrentPath }}</span>
+        </div>
+        <el-table
+          v-loading="pickerLoading"
+          :data="pickerEntries"
+          highlight-current-row
+          @current-change="onFolderSelect"
+          style="width: 100%"
+          max-height="360">
+          <el-table-column label="文件夹">
+            <template #default="{ row }">
+              <div
+                style="cursor: pointer; display: flex; align-items: center; gap: 6px;"
+                @dblclick="navigateToFolder(row.path)">
+                <el-icon><FolderOpened /></el-icon>
+                <span>{{ row.name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="folderPickerVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!pickerSelectedPath" @click="confirmFolderPick">
+          选择当前目录
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, FolderOpened } from '@element-plus/icons-vue'
@@ -266,7 +331,7 @@ import { sourceApi } from '@/api/source.api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
 
 const route = useRoute()
-const projectId = route.params.projectId as string
+const projectId = computed(() => route.params.projectId as string)
 
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -290,9 +355,67 @@ const repoForm = reactive({
   password: '',
   backendSubPath: '',
   frontendSubPath: '',
+  localPath: '',
   includePattern: '',
   excludePattern: ''
 })
+
+/** 本地路径变化时清空Git相关字段 */
+const onLocalPathChange = () => {
+  if (repoForm.localPath) {
+    repoForm.gitUrl = ''
+    repoForm.branch = ''
+    repoForm.authType = 'NONE'
+    repoForm.token = ''
+    repoForm.username = ''
+    repoForm.password = ''
+  }
+}
+
+const clearLocalPath = () => {
+  repoForm.localPath = ''
+}
+
+// ---- 文件夹选择器 ----
+const folderPickerVisible = ref(false)
+const pickerLoading = ref(false)
+const pickerCurrentPath = ref('')
+const pickerParentPath = ref<string | null>(null)
+const pickerEntries = ref<Array<{ name: string; path: string; isDirectory: boolean }>>([])
+const pickerSelectedPath = ref('')
+
+const openFolderPicker = async () => {
+  folderPickerVisible.value = true
+  pickerSelectedPath.value = ''
+  await navigateToFolder(repoForm.localPath || '')
+}
+
+const navigateToFolder = async (path: string) => {
+  pickerLoading.value = true
+  pickerSelectedPath.value = ''
+  try {
+    const res = await sourceApi.browseDirectory(projectId.value, path || undefined)
+    if (res) {
+      pickerCurrentPath.value = res.currentPath
+      pickerParentPath.value = res.parentPath
+      pickerEntries.value = res.entries || []
+    }
+  } catch {
+    ElMessage.error('读取目录失败')
+  } finally {
+    pickerLoading.value = false
+  }
+}
+
+const onFolderSelect = (row: { name: string; path: string } | null) => {
+  pickerSelectedPath.value = row ? row.path : ''
+}
+
+const confirmFolderPick = () => {
+  repoForm.localPath = pickerSelectedPath.value || pickerCurrentPath.value
+  onLocalPathChange()
+  folderPickerVisible.value = false
+}
 
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
@@ -323,6 +446,7 @@ const resetForm = () => {
     password: '',
     backendSubPath: '',
     frontendSubPath: '',
+    localPath: '',
     includePattern: '',
     excludePattern: ''
   })
@@ -346,38 +470,52 @@ const showEditDialog = (row: any) => {
     password: '',
     backendSubPath: row.backendSubPath || '',
     frontendSubPath: row.frontendSubPath || '',
+    localPath: row.localPath || '',
     includePattern: row.includePattern || '',
     excludePattern: row.excludePattern || ''
   })
   dialogVisible.value = true
 }
 
-const buildPayload = () => ({
-  repoName: repoForm.repoName,
-  repoType: repoForm.repoType,
-  gitUrl: repoForm.gitUrl,
-  branchName: repoForm.branch,
-  authType: repoForm.authType,
-  username: repoForm.authType === 'USER_PASSWORD' ? repoForm.username : undefined,
-  token: repoForm.authType === 'TOKEN' ? repoForm.token : undefined,
-  backendSubPath: repoForm.repoType === 'FULLSTACK' ? repoForm.backendSubPath || undefined : undefined,
-  frontendSubPath: repoForm.repoType === 'FULLSTACK' ? repoForm.frontendSubPath || undefined : undefined,
-  includePattern: repoForm.includePattern || undefined,
-  excludePattern: repoForm.excludePattern || undefined
-})
+const buildPayload = () => {
+  const hasLocalPath = !!repoForm.localPath
+  
+  return {
+    repoName: repoForm.repoName,
+    repoType: repoForm.repoType,
+    gitUrl: hasLocalPath ? undefined : repoForm.gitUrl,
+    branchName: hasLocalPath ? undefined : repoForm.branch,
+    authType: hasLocalPath ? undefined : repoForm.authType,
+    username: repoForm.authType === 'USER_PASSWORD' ? repoForm.username : undefined,
+    token: repoForm.authType === 'TOKEN' ? repoForm.token : undefined,
+    backendSubPath: repoForm.repoType === 'FULLSTACK' ? repoForm.backendSubPath || undefined : undefined,
+    frontendSubPath: repoForm.repoType === 'FULLSTACK' ? repoForm.frontendSubPath || undefined : undefined,
+    localPath: repoForm.localPath || undefined,
+    includePattern: repoForm.includePattern || undefined,
+    excludePattern: repoForm.excludePattern || undefined
+  }
+}
 
 const saveRepo = async () => {
-  if (!repoForm.repoName || !repoForm.gitUrl || !repoForm.branch) {
-    ElMessage.warning('请填写必填项')
+  if (!repoForm.repoName) {
+    ElMessage.warning('请填写仓库名称')
+    return
+  }
+  if (!repoForm.localPath && !repoForm.gitUrl) {
+    ElMessage.warning('请填写本地路径或Git地址（至少填写一个）')
+    return
+  }
+  if (!repoForm.localPath && !repoForm.branch) {
+    ElMessage.warning('请填写分支名称')
     return
   }
   try {
     const payload = buildPayload()
     if (editingId.value) {
-      await sourceApi.updateCodeRepo(projectId, editingId.value, payload)
+      await sourceApi.updateCodeRepo(projectId.value, editingId.value, payload)
       ElMessage.success('修改成功')
     } else {
-      await sourceApi.createCodeRepo(projectId, payload)
+      await sourceApi.createCodeRepo(projectId.value, payload)
       ElMessage.success('添加成功')
     }
     dialogVisible.value = false
@@ -396,7 +534,7 @@ const testRepoUrl = async () => {
   }
   testingUrl.value = true
   try {
-    const res = await sourceApi.testRepoUrl(projectId, url)
+    const res = await sourceApi.testRepoUrl(projectId.value, url)
     if (res?.success) {
       ElMessage.success('连接成功')
     } else {
@@ -413,7 +551,7 @@ const pullRepo = async (row: any) => {
   try {
     ElMessage.info('开始拉取代码...')
     row.status = 'PULLING'
-    await sourceApi.pullRepo(projectId, row.id)
+    await sourceApi.pullRepo(projectId.value, row.id)
     row.status = 'READY'
     row.lastPullTime = new Date().toISOString()
     ElMessage.success('拉取完成')
@@ -427,7 +565,7 @@ const scanRepo = async (row: any) => {
   try {
     ElMessage.info('开始扫描代码...')
     row.status = 'SCANNING'
-    const res = await sourceApi.scanRepo(projectId, row.id)
+    const res = await sourceApi.scanRepo(projectId.value, row.id)
     row.lastScanTime = new Date().toISOString()
     row.status = 'READY'
     ElMessage.success('扫描已启动: ' + (res?.message || ''))
@@ -444,7 +582,7 @@ const deleteRepo = async (row: any) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await sourceApi.deleteCodeRepo(projectId, row.id)
+    await sourceApi.deleteCodeRepo(projectId.value, row.id)
     ElMessage.success('删除成功')
     await loadRepoList()
   } catch {
@@ -456,7 +594,7 @@ const loadRepoList = async (page?: number) => {
   if (page) pageNum.value = page
   loading.value = true
   try {
-    const result = await sourceApi.listCodeRepo(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
+    const result = await sourceApi.listCodeRepo(projectId.value, { pageNum: pageNum.value, pageSize: pageSize.value })
     repoList.value = result.list
     total.value = result.total
   } catch {

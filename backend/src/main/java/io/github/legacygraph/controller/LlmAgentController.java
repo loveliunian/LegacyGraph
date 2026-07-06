@@ -118,62 +118,6 @@ public class LlmAgentController {
     }
 
     /**
-     * 获取图谱合并候选对
-     */
-    @GetMapping("/graph/merge/candidates")
-    @Operation(summary = "获取合并候选对", description = "根据相似度算法查找可能需要合并的重复节点对")
-    public Result<List<GraphMergeService.MergeCandidate>> getMergeCandidates(
-            @Parameter(description = "项目ID", required = true)
-            @RequestParam String projectId,
-            @Parameter(description = "节点类型", required = true)
-            @RequestParam String nodeType) {
-        List<GraphMergeService.MergeCandidate> candidates =
-                graphMergeService.findMergeCandidates(projectId, nodeType);
-        return Result.ok(candidates);
-    }
-
-    /**
-     * LLM决策两个节点是否应该合并
-     */
-    @PostMapping("/graph/merge/decide")
-    @Operation(summary = "LLM决策节点合并", description = "调用大语言模型分析两个节点的语义，判断是否应该合并")
-    public Result<GraphMergeDecision> decideMerge(
-            @Parameter(description = "项目ID", required = true)
-            @RequestParam String projectId,
-            @Parameter(description = "第一个节点ID", required = true)
-            @RequestParam String nodeAId,
-            @Parameter(description = "第二个节点ID", required = true)
-            @RequestParam String nodeBId) {
-        GraphNode nodeA = neo4jGraphDao.findNodeById(nodeAId).orElse(null);
-        GraphNode nodeB = neo4jGraphDao.findNodeById(nodeBId).orElse(null);
-        if (nodeA == null || nodeB == null) {
-            return Result.badRequest("Node not found");
-        }
-
-        AgentConfigProperties.MergeConfig cfg = agentConfig.getMerge();
-        GraphMergeDecision decision = graphMergeAgent.decideMerge(projectId, nodeA, nodeB,
-                cfg.getNameWeight(), cfg.getSemanticWeight(), cfg.getStructWeight(),
-                cfg.getNeighborWeight(), cfg.getEvidenceWeight());
-        return Result.ok(decision);
-    }
-
-    /**
-     * 执行节点合并
-     */
-    @PostMapping("/graph/merge/execute")
-    @Operation(summary = "执行节点合并", description = "将源节点合并到目标节点，源节点标记为删除")
-    public Result<Void> executeMerge(
-            @Parameter(description = "项目ID", required = true)
-            @RequestParam String projectId,
-            @Parameter(description = "目标节点ID，保留", required = true)
-            @RequestParam String targetNodeId,
-            @Parameter(description = "待合并节点ID，合并后删除", required = true)
-            @RequestParam String mergeNodeId) {
-        graphMergeService.executeMerge(projectId, targetNodeId, mergeNodeId);
-        return Result.ok();
-    }
-
-    /**
      * 根据功能节点生成测试用例
      */
     @PostMapping("/tests/generate")

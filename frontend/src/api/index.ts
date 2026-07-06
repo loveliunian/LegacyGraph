@@ -185,6 +185,16 @@ export const graphApi = {
   },
 
   /**
+   * 获取指定版本下所有 ApiEndpoint 节点（代码图谱查询页面方法下拉联动）
+   * @param projectId 项目ID
+   * @param versionId 扫描版本ID
+   * @returns ApiEndpoint 节点列表
+   */
+  getApiEndpoints: (projectId: string, versionId: string) => {
+    return get(`/lg/projects/${encodeURIComponent(projectId)}/graph/api-endpoints`, { versionId })
+  },
+
+  /**
    * 查询表影响范围
    * 分析哪些API和模块依赖指定的数据库表，用于评估变更影响
    * @param projectId 项目ID

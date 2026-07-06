@@ -17,18 +17,32 @@ export interface GraphifyQuestionRequest {
   maxEvidence?: number
 }
 
+export interface GraphifyCreateJobRequest {
+  versionId: string
+  projectRoot: string
+  branchName?: string
+  sourceCommit?: string
+}
+
 export interface GraphifyJob {
-  id: string
+  jobId: string
   projectId: string
   versionId: string
-  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'ROLLED_BACK'
-  progress?: number
-  errorMessage?: string
-  nodeCount?: number
-  edgeCount?: number
+  projectRoot?: string
+  branchName?: string
+  sourceCommit?: string
+  graphifyVersion?: string
+  attempt?: number
+  maxAttempts?: number
+  createdAt?: string
   startedAt?: string
   finishedAt?: string
-  createdAt: string
+  errorMessage?: string
+  status: 'QUEUED' | 'RUNNING' | 'IMPORTED' | 'FAILED' | 'CANCELLED'
+  importedNodes?: number
+  importedEdges?: number
+  importedEvidence?: number
+  compatibilityReportId?: string
 }
 
 export interface GraphifyDiffResult {
@@ -82,6 +96,15 @@ export const graphifyApi = {
   },
   getJobs(projectId: string) {
     return get(`/lg/projects/${projectId}/graphify/jobs`)
+  },
+  createJob(projectId: string, data: GraphifyCreateJobRequest) {
+    return post(`/lg/projects/${projectId}/graphify/jobs`, data)
+  },
+  getJob(projectId: string, jobId: string) {
+    return get(`/lg/projects/${projectId}/graphify/jobs/${jobId}`)
+  },
+  cancelJob(projectId: string, jobId: string) {
+    return post(`/lg/projects/${projectId}/graphify/jobs/${jobId}/cancel`, {})
   },
   retryJob(projectId: string, jobId: string) {
     return post(`/lg/projects/${projectId}/graphify/jobs/${jobId}/retry`, {})

@@ -280,6 +280,20 @@ public class GraphQueryController {
     }
 
     /**
+     * 获取指定版本下所有 ApiEndpoint 节点（代码图谱查询页面方法下拉联动）
+     */
+    @GetMapping("/graph/api-endpoints")
+    @Operation(summary = "获取API端点列表", description = "查询指定版本的所有ApiEndpoint节点，用于代码图谱查询页面方法下拉联动")
+    public Result<List<Map<String, Object>>> getApiEndpoints(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam(required = false) String versionId) {
+        List<Map<String, Object>> result = graphQueryService.getApiEndpoints(projectId, versionId);
+        return Result.success(result);
+    }
+
+    /**
      * 获取项目扫描版本列表（分页）
      * 查询项目的所有扫描版本，用于选择展示哪个版本的图谱
      * @param projectId 项目ID

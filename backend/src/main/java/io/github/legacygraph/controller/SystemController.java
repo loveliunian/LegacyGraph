@@ -93,13 +93,6 @@ public class SystemController {
         return Result.success(user);
     }
 
-    @GetMapping("/users/all")
-    @Operation(summary = "获取所有用户列表")
-    public Result<List<SysUser>> listAllUsers() {
-        List<SysUser> users = sysUserService.listAll();
-        return Result.success(users);
-    }
-
     @PostMapping("/users")
     @Operation(summary = "创建用户")
     @Log(value = "创建用户", type = Log.OperationType.CREATE)

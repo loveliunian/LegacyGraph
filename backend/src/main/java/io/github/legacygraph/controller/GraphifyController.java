@@ -1,6 +1,8 @@
 package io.github.legacygraph.controller;
 
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.eval.GraphifyQualityResult;
+import io.github.legacygraph.eval.GraphifyQualityService;
 import io.github.legacygraph.integration.graphify.GraphifyImportService;
 import io.github.legacygraph.integration.graphify.GraphifyRunner;
 import io.github.legacygraph.integration.graphify.GraphifyRunResult;
@@ -23,6 +25,7 @@ public class GraphifyController {
 
     private final GraphifyRunner graphifyRunner;
     private final GraphifyImportService graphifyImportService;
+    private final GraphifyQualityService graphifyQualityService;
 
     /**
      * POST /api/lg/projects/{projectId}/graphify/analyze
@@ -182,6 +185,21 @@ public class GraphifyController {
                 .build();
 
         return Result.success(response);
+    }
+
+    /**
+     * GET /api/lg/projects/{projectId}/graphify/quality
+     * 查询 Graphify 导入质量评估（Benchmark 结果 + Release Gate 状态）。
+     *
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID，可选；为空时取项目最新扫描版本
+     * @return 质量评估结果
+     */
+    @GetMapping("/graphify/quality")
+    public Result<GraphifyQualityResult> getQuality(
+            @PathVariable String projectId,
+            @RequestParam(required = false) String versionId) {
+        return Result.success(graphifyQualityService.getQuality(projectId, versionId));
     }
 
     @lombok.Builder

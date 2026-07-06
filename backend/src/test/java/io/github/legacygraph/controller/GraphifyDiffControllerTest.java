@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.graphify.GraphifyDiff;
 import io.github.legacygraph.graphify.GraphifyDiffService;
@@ -7,7 +8,6 @@ import io.github.legacygraph.graphify.GraphifyImportJob;
 import io.github.legacygraph.graphify.GraphifyImportJobRepository;
 import io.github.legacygraph.graphify.GraphifyImportSnapshotService;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,14 +39,14 @@ class GraphifyDiffControllerTest {
         GraphifyImportSnapshotService snapshotService = new GraphifyImportSnapshotService(repository, graphDao);
         GraphifyDiffController controller = new GraphifyDiffController(new GraphifyDiffService(), snapshotService);
 
-        ResponseEntity<GraphifyDiff> response = controller.diff("proj-1", "ver-1", "ver-2");
+        Result<GraphifyDiff> response = controller.diff("proj-1", "ver-1", "ver-2");
 
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().addedNodes()).containsExactly("node:B");
-        assertThat(response.getBody().removedNodes()).isEmpty();
-        assertThat(response.getBody().addedEdges()).containsExactly("edge:B>C");
-        assertThat(response.getBody().removedEdges()).isEmpty();
-        assertThat(response.getBody().driftType()).isEqualTo(GraphifyDiff.DriftType.SOURCE_CODE_CHANGE);
+        assertThat(response.getData()).isNotNull();
+        assertThat(response.getData().addedNodes()).containsExactly("node:B");
+        assertThat(response.getData().removedNodes()).isEmpty();
+        assertThat(response.getData().addedEdges()).containsExactly("edge:B>C");
+        assertThat(response.getData().removedEdges()).isEmpty();
+        assertThat(response.getData().driftType()).isEqualTo(GraphifyDiff.DriftType.SOURCE_CODE_CHANGE);
     }
 
     private GraphifyImportJob importedJob(String jobId,

@@ -55,7 +55,13 @@ public class DatabaseMetadataExtractor {
 
     /**
      * 从指定schema抽取所有表元数据。
-     * @param isMySql 是否为 MySQL/MariaDB
+     * <p>
+     * <b>自动检测实际数据库类型</b>，不再依赖外部传入的 isMySql 参数，
+     * 避免因 DbConnection.dbType 配置错误（如 PG 标记成 MySQL）导致 getTables 返回空。
+     * </p>
+     *
+     * @param schema  建议的 schema 名（PG 用 public，MySQL 可传 null）
+     * @param isMySql 仅作 fallback 参考，实际以 JDBC 连接自报的 DatabaseProductName 为准
      */
     public List<TableMetadata> extractFromSchema(DataSource dataSource, String schema, boolean isMySql) throws SQLException {
         List<TableMetadata> tables = new ArrayList<>();
@@ -63,10 +69,22 @@ public class DatabaseMetadataExtractor {
         try (Connection conn = dataSource.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
 
+            // === 自动检测实际数据库类型 ===
+            String productName = metaData.getDatabaseProductName();
+            boolean actualIsMySql = detectIsMySql(productName, conn);
+            if (actualIsMySql != isMySql) {
+                log.warn("数据库类型自动检测与配置不一致! JDBC报告: {} (isMySql={}), 配置标记: isMySql={}, 以JDBC为准",
+                        productName, actualIsMySql, isMySql);
+            }
+            isMySql = actualIsMySql;
+
             // MySQL/MariaDB：catalog = database name，schema = null
             // PostgreSQL：catalog = null，schema = schema name
             String catalog = isMySql ? conn.getCatalog() : null;
             String schemaPattern = isMySql ? null : schema;
+
+            log.info("Extracting tables: productName={}, isMySql={}, catalog={}, schemaPattern={}",
+                    productName, isMySql, catalog, schemaPattern);
 
             // 获取所有表
             ResultSet tablesRs = metaData.getTables(
@@ -100,8 +118,67 @@ public class DatabaseMetadataExtractor {
             }
 
             tablesRs.close();
+
+            // === Fallback：如果第一次查不到表，尝试另一组参数 ===
+            if (tables.isEmpty()) {
+                log.warn("首次 getTables 返回空 (catalog={}, schemaPattern={})，尝试 fallback 查询", catalog, schemaPattern);
+                tables.addAll(fallbackExtract(metaData, conn, schema, isMySql));
+            }
         }
 
+        log.info("Extracted {} tables from database (isMySql={})", tables.size(), isMySql);
+        return tables;
+    }
+
+    /**
+     * 根据 JDBC DatabaseProductName 自动检测是否为 MySQL/MariaDB。
+     * 判断逻辑：productName 包含 "MySQL" 或 "MariaDB"（不区分大小写），
+     * 或者连接能成功获取 catalog 但 schema 为 null。
+     */
+    private boolean detectIsMySql(String productName, Connection conn) {
+        if (productName == null) return false;
+        String lower = productName.toLowerCase();
+        return lower.contains("mysql") || lower.contains("mariadb");
+    }
+
+    /**
+     * Fallback：如果按 isMySql 方式查不到表，用相反方式再查一次。
+     * 典型场景：配置标记为 PG 但实际是 MySQL，或反之。
+     */
+    private List<TableMetadata> fallbackExtract(DatabaseMetaData metaData, Connection conn,
+                                                 String schema, boolean originalIsMySql) throws SQLException {
+        List<TableMetadata> tables = new ArrayList<>();
+        // 用相反的参数重试
+        boolean fallbackIsMySql = !originalIsMySql;
+        String catalog = fallbackIsMySql ? conn.getCatalog() : null;
+        String schemaPattern = fallbackIsMySql ? null : schema;
+
+        log.info("Fallback extract: isMySql={}, catalog={}, schemaPattern={}", fallbackIsMySql, catalog, schemaPattern);
+
+        ResultSet tablesRs = metaData.getTables(catalog, schemaPattern, "%", new String[]{"TABLE"});
+        while (tablesRs.next()) {
+            TableMetadata table = new TableMetadata();
+            table.setTableCatalog(tablesRs.getString("TABLE_CAT"));
+            table.setTableSchema(tablesRs.getString("TABLE_SCHEM"));
+            table.setTableName(tablesRs.getString("TABLE_NAME"));
+            table.setTableComment(fallbackIsMySql
+                    ? getMySqlTableComment(conn, conn.getCatalog(), table.getTableName())
+                    : getTableComment(conn, schema, table.getTableName()));
+
+            List<ColumnMetadata> columns = extractColumns(metaData, conn, catalog, schema, table.getTableName(), fallbackIsMySql);
+            table.setColumns(columns);
+            identifyPrimaryKeys(metaData, conn, catalog, schema, table.getTableName(), columns);
+            semanticRecognize(columns);
+            tables.add(table);
+        }
+        tablesRs.close();
+
+        if (!tables.isEmpty()) {
+            log.warn("Fallback 成功! 用 isMySql={} 找到 {} 张表，说明 dbType 配置有误，请修正 DbConnection 记录",
+                    fallbackIsMySql, tables.size());
+        } else {
+            log.error("Fallback 也返回空表，可能 JDBC 连接本身有问题或 schema 名不对");
+        }
         return tables;
     }
 

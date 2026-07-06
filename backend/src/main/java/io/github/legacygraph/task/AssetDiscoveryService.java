@@ -6,6 +6,8 @@ import io.github.legacygraph.dto.scan.ResolvedScanPlan;
 import io.github.legacygraph.entity.SourceAssetSnapshot;
 import io.github.legacygraph.extractors.adapter.SourceAsset;
 import io.github.legacygraph.repository.SourceAssetSnapshotRepository;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -44,8 +46,9 @@ public class AssetDiscoveryService {
 
     /**
      * 发现代码和文档资产。
+     * @return 发现结果，包含实际总数和截断后的资产列表
      */
-    public List<SourceAsset> discoverAssets(ResolvedScanPlan plan) {
+    public DiscoveryResult discoverAssets(ResolvedScanPlan plan) {
         Map<String, SourceAsset> assets = new LinkedHashMap<>();
         boolean scanCode = shouldScanType(plan, "CODE_SCAN");
         boolean scanDocs = shouldScanType(plan, "DOC_PARSE");
@@ -68,7 +71,23 @@ public class AssetDiscoveryService {
             }
         }
 
-        return limitAssets(new ArrayList<>(assets.values()), plan);
+        List<SourceAsset> allAssets = new ArrayList<>(assets.values());
+        int discoveredCount = allAssets.size();
+        List<SourceAsset> limitedAssets = limitAssets(allAssets, plan);
+        
+        return new DiscoveryResult(discoveredCount, limitedAssets);
+    }
+    
+    /**
+     * 资产发现结果
+     */
+    @Data
+    @AllArgsConstructor
+    public static class DiscoveryResult {
+        /** 实际发现的资产总数（截断前） */
+        private final int discoveredCount;
+        /** 截断后的资产列表（用于实际处理） */
+        private final List<SourceAsset> assets;
     }
 
     private void addExplicitDocumentAssets(ResolvedScanPlan plan, Map<String, SourceAsset> assets) {

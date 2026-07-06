@@ -1,6 +1,7 @@
 package io.github.legacygraph.controller;
 
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.eval.GraphifyQualityService;
 import io.github.legacygraph.integration.graphify.GraphifyImportService;
 import io.github.legacygraph.integration.graphify.GraphifyRunResult;
 import io.github.legacygraph.integration.graphify.GraphifyRunner;
@@ -20,7 +21,7 @@ class GraphifyControllerTest {
     void importGraphUsesScanVersionEndpointPayload() throws Exception {
         GraphifyRunner runner = mock(GraphifyRunner.class);
         GraphifyImportService importService = mock(GraphifyImportService.class);
-        GraphifyController controller = new GraphifyController(runner, importService);
+        GraphifyController controller = new GraphifyController(runner, importService, mock(GraphifyQualityService.class));
         GraphifyImportService.ImportResult importResult = GraphifyImportService.ImportResult.builder()
                 .success(true)
                 .processedNodes(2)
@@ -47,7 +48,7 @@ class GraphifyControllerTest {
     void runUsesScanVersionEndpointAndImportsGeneratedGraphJson() throws Exception {
         GraphifyRunner runner = mock(GraphifyRunner.class);
         GraphifyImportService importService = mock(GraphifyImportService.class);
-        GraphifyController controller = new GraphifyController(runner, importService);
+        GraphifyController controller = new GraphifyController(runner, importService, mock(GraphifyQualityService.class));
         when(runner.isAvailable()).thenReturn(true);
         when(runner.run(Path.of("/repo"))).thenReturn(GraphifyRunResult.builder()
                 .success(true)

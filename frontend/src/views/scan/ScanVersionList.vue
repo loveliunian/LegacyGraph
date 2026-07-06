@@ -223,6 +223,20 @@
       v-if="versionList.length === 0 && !loading"
       description="暂无扫描版本" />
 
+    <!-- 新建扫描对话框 -->
+    <el-dialog
+      v-model="createDialogVisible"
+      title="新建扫描任务"
+      width="850px"
+      append-to-body
+      :close-on-click-modal="false"
+      @closed="resetCreateForm">
+      <CreateScan
+        v-if="createDialogVisible"
+        :project-id="projectId"
+        @success="onCreated" />
+    </el-dialog>
+
     <!-- 版本详情对话框 -->
     <el-dialog
       v-model="detailDialogVisible"
@@ -380,6 +394,7 @@ import dayjs from 'dayjs'
 import { t } from '@/locales'
 import { scanApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
+import CreateScan from '@/views/scan/CreateScan.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -392,6 +407,7 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const detailDialogVisible = ref(false)
+const createDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
 const detailProgress = ref<any>(null)
 const DETAIL_POLL_INTERVAL = 2000
@@ -493,7 +509,16 @@ const getStatusText = (status: string): string => dictLabel('scan_status', statu
 const getStageText = (stage: string): string => dictLabel('scan_stage', stage)
 
 const goToCreate = () => {
-  router.push(`/projects/${projectId}/scan-versions/create`)
+  createDialogVisible.value = true
+}
+
+const onCreated = () => {
+  createDialogVisible.value = false
+  loadVersionList()
+}
+
+const resetCreateForm = () => {
+  // 关闭弹窗时 CreateScan 组件会通过 v-if 销毁重建，无需手动重置
 }
 
 const fetchDetailProgress = async () => {

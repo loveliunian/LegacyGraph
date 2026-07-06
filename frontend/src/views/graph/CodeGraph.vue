@@ -25,25 +25,42 @@
         :inline="true"
         :model="query"
         class="demo-form-inline">
-        <el-form-item label="版本ID">
-          <el-input
+        <el-form-item label="版本">
+          <el-select
             v-model="query.versionId"
-            placeholder="扫描版本ID"
-            style="width: 200px" />
+            placeholder="请选择版本"
+            filterable
+            style="width: 300px"
+            @change="onVersionChange">
+            <el-option
+              v-for="v in versions"
+              :key="v.id"
+              :label="formatVersionLabel(v)"
+              :value="v.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="方法">
-          <el-input
+          <el-select
             v-model="query.method"
-            placeholder="例如: TicketController.dispatch"
-            style="width: 300px" />
+            placeholder="请选择 API 方法"
+            filterable
+            :loading="methodsLoading"
+            style="width: 400px"
+            :disabled="!query.versionId">
+            <el-option
+              v-for="m in methods"
+              :key="m.nodeKey"
+              :label="m.displayName"
+              :value="m.nodeKey" />
+          </el-select>
         </el-form-item>
         <el-form-item>
           <el-button
             type="primary"
+            :disabled="!query.versionId || !query.method"
             @click="queryGraph">
             查询
           </el-button>
-          <el-button @click="loadExample">加载示例</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -141,14 +158,22 @@ interface GraphEdge {
   label: string
 }
 
+interface ApiEndpoint {
+  id: string
+  nodeKey: string
+  displayName: string
+  nodeName: string
+}
+
 const route = useRoute()
 const projectId = computed(() => route.params.projectId as string)
-const currentVersion = ref<string>('')
 const versions = ref<any[]>([])
+const methods = ref<ApiEndpoint[]>([])
+const methodsLoading = ref(false)
 
 const query = reactive({
-  versionId: currentVersion.value || '',
-  method: (route.query.api as string) || (route.query.method as string) || ''
+  versionId: '',
+  method: ''
 })
 
 const graphData = ref<any>(null)
@@ -156,6 +181,14 @@ const nodes = ref<GraphNode[]>([])
 const edges = ref<GraphEdge[]>([])
 const resultList = ref<any[]>([])
 
+/** 格式化版本下拉标签 */
+function formatVersionLabel(v: any): string {
+  const name = v.versionName || v.versionNo || v.id
+  const status = v.scanStatus ? ` [${v.scanStatus}]` : ''
+  return `${name}${status}`
+}
+
+/** 加载扫描版本列表 */
 async function loadVersions() {
   try {
     const pid = projectId.value
@@ -164,23 +197,39 @@ async function loadVersions() {
     versions.value = result || []
   } catch (error) {
     console.error('loadVersions error:', error)
-    ElMessage.error('操作失败')
+    ElMessage.error('加载版本列表失败')
   }
-  }
+}
 
-const loadExample = async () => {
-  if (!projectId.value || !query.versionId) {
-    ElMessage.warning('缺少项目ID或版本ID')
+/** 加载指定版本下的 ApiEndpoint 列表 */
+async function loadMethods(versionId: string) {
+  if (!versionId) {
+    methods.value = []
     return
   }
-  if (!query.method) {
-    ElMessage.info('请先输入 API 方法名（如 /api/user/login）再点击示例查询')
-    return
+  methodsLoading.value = true
+  try {
+    const result = await graphApi.getApiEndpoints(projectId.value, versionId)
+    methods.value = (Array.isArray(result) ? result : []) as ApiEndpoint[]
+  } catch (error) {
+    console.error('loadMethods error:', error)
+    methods.value = []
+    ElMessage.error('加载方法列表失败')
+  } finally {
+    methodsLoading.value = false
   }
-  if (query.method) {
-    await queryGraph()
-  } else {
-    ElMessage.info('当前版本未找到可用于示例查询的 API 节点')
+}
+
+/** 版本切换时：清空方法选择，重新加载方法列表 */
+function onVersionChange(versionId: string) {
+  query.method = ''
+  methods.value = []
+  graphData.value = null
+  nodes.value = []
+  edges.value = []
+  resultList.value = []
+  if (versionId) {
+    loadMethods(versionId)
   }
 }
 
@@ -190,7 +239,7 @@ const queryGraph = async () => {
     return
   }
   if (!query.versionId || !query.method) {
-    ElMessage.warning('请输入版本ID和方法名')
+    ElMessage.warning('请选择版本和方法')
     return
   }
   try {
@@ -199,6 +248,7 @@ const queryGraph = async () => {
     processGraphData(data)
   } catch (e) {
     console.error(e)
+    ElMessage.error('查询调用链失败')
   }
 }
 
@@ -297,16 +347,21 @@ onMounted(async () => {
     await loadVersions()
     // 优先使用 URL 参数指定的版本，否则自动选择第一个版本
     const urlVersion = (route.query.version as string) || ''
+    let selectedVersion = ''
     if (urlVersion && versions.value.some(v => v.id === urlVersion)) {
-      currentVersion.value = urlVersion
+      selectedVersion = urlVersion
     } else if (versions.value.length > 0) {
-      currentVersion.value = versions.value[0].id
+      selectedVersion = versions.value[0].id
     }
-    if (currentVersion.value) {
-      query.versionId = currentVersion.value
-    }
-    if (query.versionId && query.method) {
-      await queryGraph()
+    if (selectedVersion) {
+      query.versionId = selectedVersion
+      await loadMethods(selectedVersion)
+      // URL 参数中带了方法名，自动选中并查询
+      const urlMethod = (route.query.api as string) || (route.query.method as string) || ''
+      if (urlMethod && methods.value.some(m => m.nodeKey === urlMethod)) {
+        query.method = urlMethod
+        await queryGraph()
+      }
     }
   } catch (error) {
     console.error('onMounted error:', error)

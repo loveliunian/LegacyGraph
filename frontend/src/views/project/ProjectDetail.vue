@@ -76,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, markRaw, type Component } from 'vue'
+import { computed, markRaw, watch, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   DataBoard,
@@ -98,6 +98,15 @@ const taskStore = useTaskStore()
 const projectId = computed(() => route.params.projectId as string)
 
 const currentProject = computed(() => projectStore.currentProject)
+
+// 进入项目详情或切换项目时，同步当前项目并拉取详情（用于面包屑、侧边栏等展示）
+watch(projectId, (id) => {
+  if (id) {
+    projectStore.setCurrentProject(id)
+    projectStore.fetchCurrentProject()
+  }
+}, { immediate: true })
+
 const runningTasksCount = computed(() => taskStore.runningTasks.length)
 
 interface ProjectMenuItem {
@@ -125,7 +134,6 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
         { label: '数据库连接', path: `${basePath}/databases` },
         { label: '文档资料', path: `${basePath}/documents` },
         { label: '扫描版本', path: `${basePath}/scan-versions` },
-        { label: '新建扫描', path: `${basePath}/scan-versions/create` }
       ]
     },
     {
@@ -158,6 +166,7 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
       icon: markRaw(DocumentChecked),
       items: [
         { label: '证据工作台', path: `${basePath}/workbench` },
+        { label: '知识工作台', path: `${basePath}/knowledge` },
         { label: '事实列表', path: `${basePath}/facts` },
         { label: '证据检索', path: `${basePath}/evidence` },
         { label: '审核队列', path: `${basePath}/reviews` },

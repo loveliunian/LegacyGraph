@@ -81,6 +81,7 @@ CREATE TABLE lg_db_connection (
     include_tables  TEXT,
     exclude_tables  TEXT,
     status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
+    source          VARCHAR(32) DEFAULT 'MANUAL',
     table_count     INT,
     last_scan_time  TIMESTAMP,
     schema_fingerprint VARCHAR(128),
