@@ -454,6 +454,7 @@ const formatTime = (time: string) => {
 
 const formatDuration = (seconds: number) => {
   if (!seconds || seconds <= 0) return '-'
+  if (seconds < 1) return '<1s'
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
@@ -461,7 +462,7 @@ const formatDuration = (seconds: number) => {
 
 const formatPhaseDuration = (startedAt?: string, finishedAt?: string) => {
   if (!startedAt || !finishedAt) return '-'
-  const seconds = dayjs(finishedAt).diff(dayjs(startedAt), 'second')
+  const seconds = dayjs(finishedAt).diff(dayjs(startedAt), 'second', true)
   return formatDuration(seconds)
 }
 

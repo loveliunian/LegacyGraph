@@ -52,5 +52,22 @@ export const llmApi = {
   /** 删除提供商 */
   delete: (code: string) => {
     return del<void>(`/llm/providers/${code}`)
+  },
+
+  /** 测试提供商连通性（区分 chat / embedding 两类模型） */
+  test: (code: string) => {
+    return post<LlmProviderTestResult>(`/llm/providers/${encodeURIComponent(code)}/test`)
   }
+}
+
+/** 提供商测试结果 */
+export interface LlmProviderTestResult {
+  providerCode: string
+  modelId: string
+  type: 'chat' | 'embedding'
+  success: boolean
+  message: string
+  latencyMs: number
+  responseSnippet?: string
+  vectorDim?: number
 }

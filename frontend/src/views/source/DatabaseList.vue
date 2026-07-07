@@ -105,7 +105,7 @@
       </el-table-column>
       <el-table-column
         label="操作"
-        width="220"
+        width="280"
         fixed="right">
         <template #default="{ row }">
           <el-button
@@ -114,6 +114,13 @@
             size="small"
             @click="testConnection(row)">
             测试连接
+          </el-button>
+          <el-button
+            type="warning"
+            link
+            size="small"
+            @click="editDb(row)">
+            编辑
           </el-button>
           <el-button
             type="success"
@@ -153,7 +160,7 @@
 
     <el-dialog
       v-model="createDialogVisible"
-      title="添加数据库连接"
+      :title="dialogMode === 'create' ? '添加数据库连接' : '编辑数据库连接'"
       width="600px">
       <el-form
         :model="dbForm"
@@ -244,7 +251,7 @@
         <el-button @click="createDialogVisible = false">取消</el-button>
         <el-button
           type="primary"
-          @click="createDb">
+          @click="saveDb">
           保存
         </el-button>
       </template>
@@ -266,6 +273,8 @@ const projectId = route.params.projectId as string
 
 const loading = ref(false)
 const createDialogVisible = ref(false)
+const dialogMode = ref<'create' | 'edit'>('create')
+const editingId = ref<string | null>(null)
 const dbList = ref<any[]>([])
 
 const pageNum = ref(1)
@@ -301,6 +310,8 @@ const getStatusType = (status: string): string => {
 const getStatusText = (status: string) => dictLabel('db_status', status)
 
 const showCreateDialog = () => {
+  dialogMode.value = 'create'
+  editingId.value = null
   Object.assign(dbForm, {
     connectionName: '',
     dbType: 'POSTGRESQL',
@@ -316,26 +327,49 @@ const showCreateDialog = () => {
   createDialogVisible.value = true
 }
 
-const createDb = async () => {
+const editDb = (row: any) => {
+  dialogMode.value = 'edit'
+  editingId.value = row.id
+  Object.assign(dbForm, {
+    connectionName: row.connectionName || '',
+    dbType: row.dbType || 'POSTGRESQL',
+    host: row.host || 'localhost',
+    port: row.port || 5432,
+    database: row.databaseName || '',
+    schema: row.schemaName || 'public',
+    username: row.username || '',
+    password: row.password || '',
+    includeTables: row.includeTables || '',
+    excludeTables: row.excludeTables || ''
+  })
+  createDialogVisible.value = true
+}
+
+const saveDb = async () => {
   if (!dbForm.connectionName || !dbForm.host || !dbForm.database || !dbForm.username) {
     ElMessage.warning('请填写必填项')
     return
   }
+  const payload = {
+    connectionName: dbForm.connectionName,
+    dbType: dbForm.dbType,
+    host: dbForm.host,
+    port: dbForm.port,
+    databaseName: dbForm.database,
+    schemaName: dbForm.schema || undefined,
+    username: dbForm.username,
+    password: dbForm.password,
+    includeTables: dbForm.includeTables || undefined,
+    excludeTables: dbForm.excludeTables || undefined
+  }
   try {
-    const payload = {
-      connectionName: dbForm.connectionName,
-      dbType: dbForm.dbType,
-      host: dbForm.host,
-      port: dbForm.port,
-      databaseName: dbForm.database,
-      schemaName: dbForm.schema || undefined,
-      username: dbForm.username,
-      password: dbForm.password,
-      includeTables: dbForm.includeTables || undefined,
-      excludeTables: dbForm.excludeTables || undefined
+    if (dialogMode.value === 'create') {
+      await sourceApi.createDbConnection(projectId, payload)
+      ElMessage.success('添加成功')
+    } else {
+      await sourceApi.updateDbConnection(projectId, editingId.value!, payload)
+      ElMessage.success('更新成功')
     }
-    await sourceApi.createDbConnection(projectId, payload)
-    ElMessage.success('添加成功')
     createDialogVisible.value = false
     await loadDbList()
   } catch {

@@ -6,6 +6,7 @@ import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.entity.AiScanJob;
 import io.github.legacygraph.repository.AiScanJobRepository;
 import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
+import io.github.legacygraph.service.systemoverview.SystemOverviewIngestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +28,7 @@ public class AiScanJobWorker {
     private final ProjectScanner projectScanner;
     private final io.github.legacygraph.repository.ScanVersionRepository scanVersionRepository;
     private SystemOverviewDocumentService systemOverviewDocumentService;
+    private SystemOverviewIngestService systemOverviewIngestService;
 
     public AiScanJobWorker(AiScanJobRepository aiScanJobRepository,
                            AiScanOrchestrator aiScanOrchestrator,
@@ -43,6 +45,11 @@ public class AiScanJobWorker {
     @Autowired(required = false)
     void setSystemOverviewDocumentService(SystemOverviewDocumentService systemOverviewDocumentService) {
         this.systemOverviewDocumentService = systemOverviewDocumentService;
+    }
+
+    @Autowired(required = false)
+    void setSystemOverviewIngestService(SystemOverviewIngestService systemOverviewIngestService) {
+        this.systemOverviewIngestService = systemOverviewIngestService;
     }
 
     /**
@@ -126,6 +133,17 @@ public class AiScanJobWorker {
             log.debug("SystemOverviewDocumentService not available, skip AI completion markdown generation: versionId={}",
                     versionId);
             return;
+        }
+        // 先把当前项目图谱回溯成四层 Claim（BusinessDomain CONTAINS Feature / Feature IMPLEMENTED_BY
+        // Controller / Service READS/WRITES Table 等）写入 lg_knowledge_claim，否则 generateAfterScan
+        // 投影不到任何映射，报告只剩表头模板。ingest 失败不阻塞报告生成（降级到已有 Claim）。
+        if (systemOverviewIngestService != null) {
+            try {
+                systemOverviewIngestService.ingestFromProjectGraph(projectId, versionId);
+            } catch (Exception e) {
+                log.warn("Failed to ingest system overview claims from graph before report generation: "
+                        + "versionId={}, error={}", versionId, e.getMessage());
+            }
         }
         try {
             systemOverviewDocumentService.generateAfterScan(projectId, versionId);

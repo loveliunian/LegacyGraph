@@ -1,1 +1,0 @@
-{"nodes": [{"id": "backend_src_main_resources_prompts_db_schema_analysis", "label": "\u6570\u636e\u5e93Schema\u5206\u6790 Prompt \u6a21\u677f", "file_type": "code", "source_file": "backend/src/main/resources/prompts/db-schema-analysis.txt", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

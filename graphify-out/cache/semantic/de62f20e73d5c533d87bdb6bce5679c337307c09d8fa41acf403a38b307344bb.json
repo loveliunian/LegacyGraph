@@ -1,1 +1,0 @@
-{"nodes": [{"id": "backend_src_test_resources_prompts_hello_prompt_hello_prompt", "label": "Hello World Test Prompt Template", "file_type": "document", "source_file": "backend/src/test/resources/prompts/hello_prompt.txt", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

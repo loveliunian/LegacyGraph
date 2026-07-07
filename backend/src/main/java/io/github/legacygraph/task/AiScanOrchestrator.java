@@ -970,26 +970,35 @@ public class AiScanOrchestrator {
                 allNodes.addAll(neo4jGraphDao.queryNodes(projectId, versionId,
                         t, null, null, null, MAX_TEST_GEN_NODES));
             }
-            int generated = 0;
-            for (GraphNode node : allNodes) {
-                try {
-                    TestCaseAgent.TestGenerationRequest req = new TestCaseAgent.TestGenerationRequest();
-                    req.setProjectId(projectId);
-                    req.setFeatureKey(node.getNodeKey());
-                    req.setFeatureName(node.getNodeName());
-                    req.setApiEndpoint(node.getNodeKey());
-                    req.setHttpMethod("GET");
 
-                    List<GeneratedTestCase> cases = testCaseAgent.generateTestCases(req);
-                    for (GeneratedTestCase gen : cases) {
-                        persistTestCase(projectId, versionId, node, gen, generated);
-                        generated++;
+            // P1 优化：并发调 LLM（复用 docExtractExecutor 4 路；此时 doc/code/mapping 已结束，池空闲）。
+            // 原串行 60 节点逐个阻塞 ~17s/节点，实测 1044s；4 路并发预期降到 ~260-350s。
+            // 不回到 8 路：注释见 orchestrate()，DeepSeek 8 路曾触发限流导致 code 抽取 138s→576s。
+            AtomicInteger generated = new AtomicInteger(0);
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            for (GraphNode node : allNodes) {
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        TestCaseAgent.TestGenerationRequest req = new TestCaseAgent.TestGenerationRequest();
+                        req.setProjectId(projectId);
+                        req.setFeatureKey(node.getNodeKey());
+                        req.setFeatureName(node.getNodeName());
+                        req.setApiEndpoint(node.getNodeKey());
+                        req.setHttpMethod("GET");
+
+                        List<GeneratedTestCase> cases = testCaseAgent.generateTestCases(req);
+                        for (GeneratedTestCase gen : cases) {
+                            int idx = generated.incrementAndGet();
+                            persistTestCase(projectId, versionId, node, gen, idx);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Test generation failed for node {}: {}", node.getNodeKey(), e.getMessage());
                     }
-                } catch (Exception e) {
-                    log.warn("Test generation failed for node {}: {}", node.getNodeKey(), e.getMessage());
-                }
+                }, docExtractExecutor));
             }
-            completeTask(task, "AI 生成测试用例 " + generated + " 条", null);
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            completeTask(task, "AI 生成测试用例 " + generated.get() + " 条", null);
         } catch (Exception e) {
             log.error("AI_TEST_GENERATE failed: versionId={}", versionId, e);
             completeTask(task, null, e.getMessage());
@@ -1008,7 +1017,7 @@ public class AiScanOrchestrator {
             tc.setScenario(nonBlank(gen.getFeatureKey(), node.getNodeKey()));
             tc.setTargetNodeId(node.getId());
             tc.setPriority("MEDIUM");
-            tc.setPreconditions(gen.getPreconditions() != null ? String.join("\n", gen.getPreconditions()) : "");
+            tc.setPreconditions(toJsonArray(gen.getPreconditions()));
             tc.setSteps(buildStructuredSteps(gen));
             tc.setExpectedResult(buildExpectedResult(gen));
             tc.setConfidence(BigDecimal.valueOf(0.7));
@@ -1023,30 +1032,49 @@ public class AiScanOrchestrator {
     }
 
     private String buildStructuredSteps(GeneratedTestCase gen) throws Exception {
-        StringBuilder steps = new StringBuilder();
+        // steps 列为 JSONB 类型，输出 JSON 数组，元素为字符串或对象
+        List<Object> steps = new ArrayList<>();
         if (gen.getSteps() != null && !gen.getSteps().isEmpty()) {
-            steps.append(String.join("\n", gen.getSteps()));
+            steps.addAll(gen.getSteps());
         }
         if (gen.getRequest() != null && !gen.getRequest().isEmpty()) {
-            if (!steps.isEmpty()) {
-                steps.append("\n");
-            }
-            steps.append("REQUEST ").append(objectMapper.writeValueAsString(gen.getRequest()));
+            Map<String, Object> requestStep = new HashMap<>();
+            requestStep.put("action", "REQUEST");
+            requestStep.put("body", gen.getRequest());
+            steps.add(requestStep);
         }
         if (gen.getNeedHumanInput() != null && !gen.getNeedHumanInput().isEmpty()) {
-            if (!steps.isEmpty()) {
-                steps.append("\n");
-            }
-            steps.append("NEED_HUMAN_INPUT ").append(String.join("; ", gen.getNeedHumanInput()));
+            Map<String, Object> humanInputStep = new HashMap<>();
+            humanInputStep.put("action", "NEED_HUMAN_INPUT");
+            humanInputStep.put("items", gen.getNeedHumanInput());
+            steps.add(humanInputStep);
         }
-        return steps.toString();
+        return objectMapper.writeValueAsString(steps);
     }
 
     private String buildExpectedResult(GeneratedTestCase gen) throws Exception {
+        // expected_result 列为 JSONB NOT NULL，必须输出合法 JSON
         if (gen.getAssertions() == null || gen.getAssertions().isEmpty()) {
-            return "验证接口返回符合预期";
+            Map<String, Object> defaultExpected = new HashMap<>();
+            defaultExpected.put("description", "验证接口返回符合预期");
+            return objectMapper.writeValueAsString(defaultExpected);
         }
         return objectMapper.writeValueAsString(gen.getAssertions());
+    }
+
+    /**
+     * 将 List<String> 序列化为 JSON 数组字符串，null 或空时返回 "[]"。
+     * preconditions 列为 JSONB 类型，必须输出合法 JSON。
+     */
+    private String toJsonArray(List<String> list) {
+        if (list == null || list.isEmpty()) {
+            return "[]";
+        }
+        try {
+            return objectMapper.writeValueAsString(list);
+        } catch (Exception e) {
+            return "[]";
+        }
     }
 
     // ==================== AI_REVIEW_PREPARE ====================

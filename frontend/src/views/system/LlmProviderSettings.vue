@@ -64,9 +64,18 @@
           width="100" />
         <el-table-column
           label="操作"
-          width="280"
+          width="340"
           fixed="right">
           <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              :loading="testingCode === row.providerCode"
+              @click="handleTest(row)"
+            >
+              测试
+            </el-button>
             <el-button
               v-if="!row.isDefault && row.isActive"
               link
@@ -202,12 +211,58 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 测试结果对话框 -->
+    <el-dialog
+      v-model="testResultVisible"
+      title="🔌 提供商连通性测试"
+      width="520px"
+    >
+      <div v-if="testResult" class="test-result">
+        <el-alert
+          :type="testResult.success ? 'success' : 'error'"
+          :closable="false"
+          show-icon
+        >
+          <template #title>
+            {{ testResult.success ? '✅ 测试成功' : '❌ 测试失败' }}
+          </template>
+          <div class="test-result-message">{{ testResult.message }}</div>
+        </el-alert>
+
+        <el-descriptions :column="2" border class="test-result-desc">
+          <el-descriptions-item label="提供商代码">
+            {{ testResult.providerCode }}
+          </el-descriptions-item>
+          <el-descriptions-item label="模型">
+            {{ testResult.modelId }}
+          </el-descriptions-item>
+          <el-descriptions-item label="模型类型">
+            <el-tag :type="testResult.type === 'embedding' ? 'warning' : 'primary'" size="small">
+              {{ testResult.type === 'embedding' ? '向量模型' : '对话模型' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="响应耗时">
+            {{ testResult.latencyMs }} ms
+          </el-descriptions-item>
+          <el-descriptions-item v-if="testResult.vectorDim !== undefined" label="向量维度">
+            {{ testResult.vectorDim }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="testResult.responseSnippet" label="模型回复" :span="2">
+            {{ testResult.responseSnippet }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <el-button @click="testResultVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { llmApi, type LlmProvider } from '@/api/llm.api'
+import { llmApi, type LlmProvider, type LlmProviderTestResult } from '@/api/llm.api'
 import { ElMessage } from 'element-plus'
 import { Plus, Check } from '@element-plus/icons-vue'
 
@@ -217,6 +272,11 @@ const dialogVisible = ref(false)
 const dialogMode = ref<'add' | 'edit'>('add')
 const saving = ref(false)
 const formRef = ref()
+
+// 测试连通性相关状态
+const testingCode = ref<string | null>(null)
+const testResultVisible = ref(false)
+const testResult = ref<LlmProviderTestResult | null>(null)
 
 const form = reactive({
   providerCode: '',
@@ -336,6 +396,35 @@ async function handleDelete(row: LlmProvider) {
   }
 }
 
+async function handleTest(row: LlmProvider) {
+  testingCode.value = row.providerCode
+  testResult.value = null
+  try {
+    const result = await llmApi.test(row.providerCode)
+    testResult.value = result
+    testResultVisible.value = true
+    if (result.success) {
+      ElMessage.success(`${row.providerCode} 连接正常（${result.latencyMs}ms）`)
+    } else {
+      ElMessage.warning(`${row.providerCode} 测试失败`)
+    }
+  } catch (e: any) {
+    // 后端返回的业务错误（Result.error）也会走这里
+    testResult.value = {
+      providerCode: row.providerCode,
+      modelId: row.modelId,
+      type: row.providerCode.toLowerCase().includes('embedding') ? 'embedding' : 'chat',
+      success: false,
+      message: e?.message || '请求异常',
+      latencyMs: 0
+    }
+    testResultVisible.value = true
+    ElMessage.error(`${row.providerCode} 测试请求失败`)
+  } finally {
+    testingCode.value = null
+  }
+}
+
 onMounted(() => {
   loadData()
 })
@@ -359,5 +448,22 @@ onMounted(() => {
 .card-title {
   font-size: 16px;
   font-weight: 600;
+}
+
+.test-result {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.test-result-message {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.test-result-desc {
+  margin-top: 4px;
 }
 </style>

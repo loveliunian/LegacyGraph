@@ -8,6 +8,7 @@ import io.github.legacygraph.llm.LlmCallException;
 import io.github.legacygraph.llm.LlmGateway;
 import io.github.legacygraph.llm.PiiMaskingService;
 import io.github.legacygraph.llm.PromptTemplateLoader;
+import io.github.legacygraph.llm.ReasoningModelClient;
 import io.github.legacygraph.llm.SecretScanService;
 import io.github.legacygraph.repository.AgentRunRepository;
 import io.github.legacygraph.repository.PromptRunRepository;
@@ -58,8 +59,11 @@ class LlmGatewayTest {
         PromptTemplateLoader templateLoader = new PromptTemplateLoader(promptTemplateService);
         PiiMaskingService piiMaskingService = new PiiMaskingService();
         SecretScanService secretScanService = new SecretScanService();
+        ReasoningModelClient reasoningModelClient =
+                org.mockito.Mockito.mock(ReasoningModelClient.class);
         llmGateway = new LlmGateway(objectMapper, promptRunRepository, agentRunRepository, templateLoader,
-                piiMaskingService, secretScanService, llmProviderService, new RetryTemplate());
+                piiMaskingService, secretScanService, llmProviderService, new RetryTemplate(),
+                reasoningModelClient);
     }
 
     @Test

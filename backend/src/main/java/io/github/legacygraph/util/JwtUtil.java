@@ -8,9 +8,8 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -28,9 +27,14 @@ public class JwtUtil {
     }
 
     public String generateToken(String userId, String username) {
+        return generateToken(userId, username, Collections.emptyList());
+    }
+
+    public String generateToken(String userId, String username, List<String> roles) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
+        claims.put("roles", roles);
         return createToken(claims, username);
     }
 
@@ -55,6 +59,22 @@ public class JwtUtil {
     public String getUserIdFromToken(String token) {
         Claims claims = getClaimsFromToken(token);
         return claims != null ? claims.get("userId", String.class) : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> getRolesFromToken(String token) {
+        Claims claims = getClaimsFromToken(token);
+        if (claims == null) {
+            return Collections.emptyList();
+        }
+        Object rolesObj = claims.get("roles");
+        if (rolesObj instanceof List<?> list) {
+            return list.stream()
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .collect(Collectors.toList());
+        }
+        return Collections.emptyList();
     }
 
     public Date getExpirationDateFromToken(String token) {

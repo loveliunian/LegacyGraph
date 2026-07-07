@@ -50,6 +50,7 @@ public class LlmGateway {
     private final SecretScanService secretScanService;
     private final LlmProviderService llmProviderService;
     private final RetryTemplate llmRetryTemplate;
+    private final ReasoningModelClient reasoningModelClient;
 
     /** 缓存已创建的 ChatModel，按 providerCode 缓存 */
     private final Map<String, OpenAiChatModel> chatModelCache = new ConcurrentHashMap<>();
@@ -71,7 +72,8 @@ public class LlmGateway {
                       PiiMaskingService piiMaskingService,
                       SecretScanService secretScanService,
                       LlmProviderService llmProviderService,
-                      RetryTemplate llmRetryTemplate) {
+                      RetryTemplate llmRetryTemplate,
+                      ReasoningModelClient reasoningModelClient) {
         this.objectMapper = objectMapper;
         this.promptRunRepository = promptRunRepository;
         this.agentRunRepository = agentRunRepository;
@@ -80,6 +82,7 @@ public class LlmGateway {
         this.secretScanService = secretScanService;
         this.llmProviderService = llmProviderService;
         this.llmRetryTemplate = llmRetryTemplate;
+        this.reasoningModelClient = reasoningModelClient;
     }
 
     /**
@@ -378,6 +381,18 @@ public class LlmGateway {
      * {@code legacy-graph.ai.llm-timeout} 在 {@code LlmProviderService#createChatModel} 处注入。
      */
     private ChatResponse invokeModel(String prompt) {
+        LlmProvider provider = llmProviderService.getActiveDefault();
+        // 推理模型走 ReasoningModelClient（Spring AI 不读 reasoning_content）
+        if (isReasoningModel(provider)) {
+            log.debug("Using ReasoningModelClient for reasoning model: {}", provider.getModelId());
+            String text = reasoningModelClient.callCompletion(provider, prompt);
+            // 包装为 ChatResponse 以复用现有调用链（extractText 从 getResult().getOutput().getText() 取值）
+            org.springframework.ai.chat.messages.AssistantMessage msg =
+                    new org.springframework.ai.chat.messages.AssistantMessage(text);
+            org.springframework.ai.chat.model.Generation gen =
+                    new org.springframework.ai.chat.model.Generation(msg);
+            return new org.springframework.ai.chat.model.ChatResponse(java.util.List.of(gen));
+        }
         OpenAiChatModel chatModel = getChatModelWithHealing(null);
         ChatClient chatClient = ChatClient.create(chatModel);
         return llmRetryTemplate.execute(ctx -> {
@@ -389,6 +404,16 @@ public class LlmGateway {
                     .call()
                     .chatResponse();
         });
+    }
+
+    /**
+     * 判断当前 provider 是否为推理模型（content 输出在 reasoning_content 字段）。
+     * DeepSeek 推理模型：deepseek-reasoner, deepseek-v4-flash, deepseek-v4-pro
+     */
+    private boolean isReasoningModel(LlmProvider provider) {
+        if (provider == null || provider.getModelId() == null) return false;
+        String modelId = provider.getModelId().toLowerCase();
+        return modelId.contains("reason") || modelId.contains("v4-flash") || modelId.contains("v4-pro");
     }
 
     private String extractText(ChatResponse chatResponse) {
@@ -731,6 +756,37 @@ public class LlmGateway {
             String safePrompt = redactForEgress(prompt);
             log.info("LLM stream call: projectId={}, template={}", projectId, templateName);
 
+            LlmProvider provider = llmProviderService.getActiveDefault();
+
+            // 推理模型走 ReasoningModelClient（Spring AI 不读 reasoning_content）
+            if (isReasoningModel(provider)) {
+                log.debug("Using ReasoningModelClient for stream: {}", provider.getModelId());
+                StringBuilder fullResponse = new StringBuilder();
+                reasoningModelClient.streamCompletion(provider, safePrompt)
+                        .subscribe(
+                                token -> {
+                                    fullResponse.append(token);
+                                    callback.onToken(token);
+                                },
+                                error -> {
+                                    log.error("Stream error: {}", error.getMessage());
+                                    callback.onError(error);
+                                },
+                                () -> {
+                                    String finalText = fullResponse.toString().trim();
+                                    if (finalText.isEmpty()) {
+                                        log.error("Stream completed but response is empty");
+                                        callback.onError(new LlmCallException(
+                                                "LLM 返回空响应，可能触发了 API 限流，请稍后重试", null, false, null));
+                                    } else {
+                                        callback.onComplete(fullResponse.toString());
+                                        log.info("Stream completed, total length: {}", fullResponse.length());
+                                    }
+                                }
+                        );
+                return;
+            }
+
             OpenAiChatModel chatModel = getChatModelWithHealing(null);
             ChatClient chatClient = ChatClient.create(chatModel);
 
@@ -780,6 +836,18 @@ public class LlmGateway {
             String prompt = templateLoader.render(templateName, variables);
             String safePrompt = redactForEgress(prompt);
             log.info("LLM stream call (Flux): projectId={}, template={}", projectId, templateName);
+
+            LlmProvider provider = llmProviderService.getActiveDefault();
+
+            // 推理模型走 ReasoningModelClient（Spring AI 不读 reasoning_content）
+            if (isReasoningModel(provider)) {
+                log.debug("Using ReasoningModelClient for Flux stream: {}", provider.getModelId());
+                return reasoningModelClient.streamCompletion(provider, safePrompt)
+                        .onErrorResume(e -> {
+                            log.error("Stream error: {}", e.getMessage());
+                            return Flux.empty();
+                        });
+            }
 
             OpenAiChatModel chatModel = getChatModelWithHealing(null);
             ChatClient chatClient = ChatClient.create(chatModel);

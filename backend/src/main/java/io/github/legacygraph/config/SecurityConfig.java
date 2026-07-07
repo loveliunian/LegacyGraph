@@ -52,6 +52,8 @@ public class SecurityConfig {
                         // §11.2 安全加固：高危操作需要 ADMIN 角色
                         .requestMatchers("/lg/plugins/register").hasRole("ADMIN")
                         .requestMatchers("/lg/system-overview/ingest").hasRole("ADMIN")
+                        // ingest-from-graph 为项目级操作（只读当前项目图谱、写项目隔离 Claim），
+                        // 由工作台常规用户触发，仅要求已认证，不锁 ADMIN。
                         .requestMatchers("/lg/system-overview/ingest-builtins").hasRole("ADMIN")
                         .requestMatchers("/lg/system-overview/clear").hasRole("ADMIN")
                         .requestMatchers("/lg/self-analysis/bootstrap").hasRole("ADMIN")

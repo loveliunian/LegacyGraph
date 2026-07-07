@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * LLM 提供商管理控制器
@@ -112,5 +113,23 @@ public class LlmProviderController {
         llmProviderService.delete(providerCode);
         llmGateway.clearCache(); // 清除缓存避免误用已删除的提供商
         return Result.ok();
+    }
+
+    /**
+     * 测试提供商连通性 — 使用当前保存的 API Key 发起一次轻量调用。
+     * <p>向量模型（provider_code 含 "embedding"）调用 embed 接口验证；
+     * 其他模型调用 chat 接口验证。</p>
+     */
+    @PostMapping("/{providerCode}/test")
+    @Operation(summary = "测试提供商连通性", description = "用当前 API Key 发起轻量调用，区分 chat / embedding 两类模型")
+    public Result<Map<String, Object>> testProvider(
+            @Parameter(description = "提供商代码", required = true)
+            @PathVariable String providerCode) {
+        LlmProvider provider = llmProviderService.getByCode(providerCode);
+        if (provider == null) {
+            return Result.error("提供商不存在: " + providerCode);
+        }
+        Map<String, Object> result = llmProviderService.testProvider(provider);
+        return Result.ok(result);
     }
 }

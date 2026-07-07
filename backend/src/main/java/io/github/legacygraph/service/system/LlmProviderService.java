@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -228,5 +230,115 @@ public class LlmProviderService {
                 .openAiClient(openAiClient)
                 .options(options)
                 .build();
+    }
+
+    /**
+     * 根据提供商配置动态创建 OpenAiEmbeddingModel（用于向量模型测试）
+     */
+    public OpenAiEmbeddingModel createEmbeddingModel(LlmProvider provider) {
+        Map<String, Object> config = provider.getApiConfig();
+        if (config == null) {
+            log.warn("LlmProvider apiConfig is null for provider={}, falling back to empty config", provider.getProviderCode());
+            config = Map.of();
+        }
+        String apiKey = (String) config.getOrDefault("api_key", "");
+        apiKey = resolveEnvPlaceholders(apiKey);
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "LLM 提供商 " + provider.getProviderCode() + " 的 api_key 未配置。");
+        }
+        String baseUrl = provider.getEndpoint();
+
+        var httpClient = SpringAiOpenAiHttpClient.builder()
+                .timeout(Duration.ofSeconds(60))
+                .build();
+
+        var clientOptions = ClientOptions.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .httpClient(httpClient)
+                .build();
+
+        var openAiClient = new OpenAIClientImpl(clientOptions);
+
+        var options = OpenAiEmbeddingOptions.builder()
+                .model(provider.getModelId())
+                .apiKey(apiKey)
+                .baseUrl(baseUrl)
+                .build();
+
+        return OpenAiEmbeddingModel.builder()
+                .openAiClient(openAiClient)
+                .options(options)
+                .build();
+    }
+
+    /**
+     * 判断提供商是否为向量（Embedding）模型。
+     * 约定：provider_code 包含 "embedding"（大小写不敏感）。
+     */
+    public boolean isEmbeddingProvider(LlmProvider provider) {
+        return provider != null
+                && provider.getProviderCode() != null
+                && provider.getProviderCode().toLowerCase().contains("embedding");
+    }
+
+    /**
+     * 测试 LLM 提供商连通性（区分 chat / embedding 两类）。
+     * 返回 Map：success, message, latencyMs, model, responseSnippet
+     */
+    public Map<String, Object> testProvider(LlmProvider provider) {
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("providerCode", provider.getProviderCode());
+        result.put("modelId", provider.getModelId());
+        result.put("type", isEmbeddingProvider(provider) ? "embedding" : "chat");
+
+        long start = System.currentTimeMillis();
+        try {
+            if (isEmbeddingProvider(provider)) {
+                OpenAiEmbeddingModel embeddingModel = createEmbeddingModel(provider);
+                float[] vec = embeddingModel.embed("hello");
+                long latency = System.currentTimeMillis() - start;
+                result.put("success", true);
+                result.put("message", "Embedding 测试成功，返回维度=" + (vec != null ? vec.length : 0));
+                result.put("latencyMs", latency);
+                result.put("vectorDim", vec != null ? vec.length : 0);
+            } else {
+                OpenAiChatModel chatModel = createChatModel(provider);
+                org.springframework.ai.chat.client.ChatClient chatClient =
+                        org.springframework.ai.chat.client.ChatClient.create(chatModel);
+                org.springframework.ai.chat.model.ChatResponse chatResponse = chatClient.prompt()
+                        .user("请回复 'OK' 两个字，确认连接正常。")
+                        .call()
+                        .chatResponse();
+                long latency = System.currentTimeMillis() - start;
+                String reply = "";
+                if (chatResponse != null && chatResponse.getResult() != null
+                        && chatResponse.getResult().getOutput() != null) {
+                    reply = chatResponse.getResult().getOutput().getText();
+                }
+                result.put("success", true);
+                result.put("message", "Chat 测试成功");
+                result.put("latencyMs", latency);
+                result.put("responseSnippet", reply != null && reply.length() > 200
+                        ? reply.substring(0, 200) + "..." : reply);
+            }
+        } catch (Exception e) {
+            long latency = System.currentTimeMillis() - start;
+            result.put("success", false);
+            result.put("message", "测试失败: " + rootCauseMessage(e));
+            result.put("latencyMs", latency);
+        }
+        return result;
+    }
+
+    /** 提取异常根因消息 */
+    private static String rootCauseMessage(Throwable e) {
+        Throwable cur = e;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        String msg = cur.getMessage();
+        return msg != null ? msg : cur.getClass().getSimpleName();
     }
 }

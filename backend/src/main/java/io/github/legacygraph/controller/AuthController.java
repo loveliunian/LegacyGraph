@@ -103,12 +103,12 @@ public class AuthController {
             return Result.error("用户已被禁用");
         }
 
-        String accessToken = jwtUtil.generateToken(user.getId(), user.getUsername());
-        String refreshToken = jwtUtil.generateToken(user.getId(), user.getUsername());
-
         List<String> roles = user.getRoles() != null
                 ? Arrays.asList(user.getRoles().split(","))
                 : List.of("USER");
+
+        String accessToken = jwtUtil.generateToken(user.getId(), user.getUsername(), roles);
+        String refreshToken = jwtUtil.generateToken(user.getId(), user.getUsername(), roles);
 
         LoginResponse.UserInfo userInfo = new LoginResponse.UserInfo(
                 user.getId(),
@@ -235,15 +235,15 @@ public class AuthController {
             return ResponseEntity.status(403).body(Result.error("用户已被禁用"));
         }
 
-        String accessToken = jwtUtil.generateToken(user.getId(), user.getUsername());
-        String newRefreshToken = jwtUtil.generateToken(user.getId(), user.getUsername());
-
         List<String> roles = user.getRoles() != null
                 ? Arrays.asList(user.getRoles().split(","))
                 : List.of("USER");
         List<String> permissions = user.getPermissions() != null
                 ? Arrays.asList(user.getPermissions().split(","))
                 : List.of("read", "write");
+
+        String accessToken = jwtUtil.generateToken(user.getId(), user.getUsername(), roles);
+        String newRefreshToken = jwtUtil.generateToken(user.getId(), user.getUsername(), roles);
 
         LoginResponse.UserInfo userInfo = new LoginResponse.UserInfo(
                 user.getId(),

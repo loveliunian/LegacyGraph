@@ -332,8 +332,10 @@ class AiScanOrchestratorTest {
         ArgumentCaptor<TestCase> testCaseCaptor = ArgumentCaptor.forClass(TestCase.class);
         verify(testCaseRepository, times(1)).insert(testCaseCaptor.capture());
         TestCase persisted = testCaseCaptor.getValue();
-        assertEquals("用户已登录", persisted.getPreconditions());
+        // preconditions 现在是 JSON 数组
+        assertEquals("[\"用户已登录\"]", persisted.getPreconditions());
         assertTrue(persisted.getExpectedResult().contains("$.code == 0"));
+        // steps 是 JSON 数组，包含 request 的 method 字段
         assertTrue(persisted.getSteps().contains("\"method\":\"POST\""));
     }
 

@@ -6,6 +6,7 @@ import io.github.legacygraph.entity.AiScanJob;
 import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.AiScanJobRepository;
 import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
+import io.github.legacygraph.service.systemoverview.SystemOverviewIngestService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,9 +36,11 @@ class AiScanJobWorkerTest {
         io.github.legacygraph.repository.ScanVersionRepository scanVersionRepository = 
             mock(io.github.legacygraph.repository.ScanVersionRepository.class);
         SystemOverviewDocumentService systemOverviewDocumentService = mock(SystemOverviewDocumentService.class);
-        AiScanJobWorker worker = new AiScanJobWorker(aiScanJobRepository, aiScanOrchestrator, 
+        SystemOverviewIngestService systemOverviewIngestService = mock(SystemOverviewIngestService.class);
+        AiScanJobWorker worker = new AiScanJobWorker(aiScanJobRepository, aiScanOrchestrator,
             objectMapper, projectScanner, scanVersionRepository);
         worker.setSystemOverviewDocumentService(systemOverviewDocumentService);
+        worker.setSystemOverviewIngestService(systemOverviewIngestService);
 
         AiScanConfig config = new AiScanConfig();
         config.setEnableAi(true);
@@ -72,5 +76,10 @@ class AiScanJobWorkerTest {
                 any(),
                 any());
         verify(systemOverviewDocumentService).generateAfterScan("project-1", "version-1");
+        // 报告生成前应先从图谱回溯填充四层 Claim，否则报告只剩表头模板
+        verify(systemOverviewIngestService).ingestFromProjectGraph("project-1", "version-1");
+        org.mockito.InOrder order = inOrder(systemOverviewIngestService, systemOverviewDocumentService);
+        order.verify(systemOverviewIngestService).ingestFromProjectGraph("project-1", "version-1");
+        order.verify(systemOverviewDocumentService).generateAfterScan("project-1", "version-1");
     }
 }

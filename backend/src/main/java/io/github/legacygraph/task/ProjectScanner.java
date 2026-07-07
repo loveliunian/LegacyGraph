@@ -35,6 +35,7 @@ import io.github.legacygraph.repository.ScanVersionRepository;
 import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 import io.github.legacygraph.service.scan.DatabaseMetadataScanService;
 import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
+import io.github.legacygraph.service.systemoverview.SystemOverviewIngestService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -92,6 +93,7 @@ public class ProjectScanner {
     private ScanScopeResolver scanScopeResolver;
     private AssetDiscoveryService assetDiscoveryService;
     private SystemOverviewDocumentService systemOverviewDocumentService;
+    private SystemOverviewIngestService systemOverviewIngestService;
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -229,6 +231,11 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSystemOverviewDocumentService(SystemOverviewDocumentService systemOverviewDocumentService) {
         this.systemOverviewDocumentService = systemOverviewDocumentService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSystemOverviewIngestService(SystemOverviewIngestService systemOverviewIngestService) {
+        this.systemOverviewIngestService = systemOverviewIngestService;
     }
 
     /**
@@ -843,6 +850,16 @@ public class ProjectScanner {
         if (systemOverviewDocumentService == null) {
             log.debug("SystemOverviewDocumentService not available, skip markdown generation: versionId={}", versionId);
             return;
+        }
+        // 先把当前项目图谱回溯成四层 Claim 写入 lg_knowledge_claim，否则 generateAfterScan 投影不到
+        // 任何映射，报告只剩表头模板。ingest 失败不阻塞报告生成（降级到已有 Claim）。
+        if (systemOverviewIngestService != null) {
+            try {
+                systemOverviewIngestService.ingestFromProjectGraph(projectId, versionId);
+            } catch (Exception e) {
+                log.warn("Failed to ingest system overview claims from graph before report generation: "
+                        + "versionId={}, error={}", versionId, e.getMessage());
+            }
         }
         try {
             systemOverviewDocumentService.generateAfterScan(projectId, versionId);

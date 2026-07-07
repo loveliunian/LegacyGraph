@@ -83,7 +83,7 @@ public class SystemOverviewIngestController {
      * </p>
      */
     @PostMapping("/ingest-from-graph")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "从当前项目图谱生成系统关系总览",
             description = "回溯当前项目 API 调用链（Controller/Service/Table）生成四层关系 Claim，供总览动态投影。")
     public Result<SystemOverviewIngestResult> ingestFromGraph(

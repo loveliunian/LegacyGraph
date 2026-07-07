@@ -233,15 +233,20 @@ public class VectorRetrievalService {
     }
 
     /**
-     * 解析 versionId：为空时自动查找该项目最新的 version_id
+     * 解析 versionId：为空时自动查找该项目最新的 version_id。
+     * <p>
+     * 关键：lg_vector_document.version_id 统一存储为无连字符格式（与 Neo4j 对齐），
+     * 而 QA 检索入口传入的是标准 UUID（带连字符）。此处统一规范化为无连字符，
+     * 否则向量/关键词检索因格式不匹配恒返回 0 条（与项目 GraphQueryService 等一致）。
      */
     private String resolveVersionId(String projectId, String versionId) {
-        if (versionId != null && !versionId.isBlank()) return versionId;
+        if (versionId != null && !versionId.isBlank()) return versionId.replace("-", "");
         try {
             String latest = vectorDocumentRepository.findLatestVersionId(projectId);
             if (latest != null) {
                 log.debug("Auto-resolved versionId for project {}: {}", projectId, latest);
-                return latest;
+                // findLatestVersionId 返回的已是 DB 无连字符格式，仍规范化以防万一
+                return latest.replace("-", "");
             }
         } catch (Exception e) {
             log.warn("Failed to resolve latest versionId for project {}: {}", projectId, e.getMessage());

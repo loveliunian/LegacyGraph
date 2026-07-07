@@ -19,6 +19,7 @@ import io.github.legacygraph.integration.graphify.GraphifyRunResult;
 import io.github.legacygraph.integration.graphify.GraphifyRunner;
 import io.github.legacygraph.repository.*;
 import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
+import io.github.legacygraph.service.systemoverview.SystemOverviewIngestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -79,6 +80,7 @@ class ProjectScannerFullFlowTest {
     @Mock private GraphifyRunner graphifyRunner;
     @Mock private GraphifyImportService graphifyImportService;
     @Mock private SystemOverviewDocumentService systemOverviewDocumentService;
+    @Mock private SystemOverviewIngestService systemOverviewIngestService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private ProjectScanner scanner;
@@ -112,6 +114,7 @@ class ProjectScannerFullFlowTest {
                 graphifyImportService
         );
         scanner.setSystemOverviewDocumentService(systemOverviewDocumentService);
+        scanner.setSystemOverviewIngestService(systemOverviewIngestService);
 
         // 默认 mock 行为
         lenient().when(scanTaskRepository.insert(any(ScanTask.class))).thenAnswer(inv -> {
@@ -393,6 +396,12 @@ class ProjectScannerFullFlowTest {
 
         // ===== 验证 9: 扫描成功后生成用户可下载的系统关系总结 Markdown =====
         verify(systemOverviewDocumentService).generateAfterScan(PROJECT_ID, VERSION_ID);
+        // 报告生成前应先从图谱回溯填充四层 Claim，否则报告只剩表头模板
+        verify(systemOverviewIngestService).ingestFromProjectGraph(PROJECT_ID, VERSION_ID);
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(
+                systemOverviewIngestService, systemOverviewDocumentService);
+        order.verify(systemOverviewIngestService).ingestFromProjectGraph(PROJECT_ID, VERSION_ID);
+        order.verify(systemOverviewDocumentService).generateAfterScan(PROJECT_ID, VERSION_ID);
     }
 
     @Test
@@ -427,6 +436,7 @@ class ProjectScannerFullFlowTest {
         // Graphify 不应被调用（扫描在 DB_DISCOVERY 检查点后提前返回）
         verify(graphifyRunner, never()).run(any());
         verify(systemOverviewDocumentService, never()).generateAfterScan(anyString(), anyString());
+        verify(systemOverviewIngestService, never()).ingestFromProjectGraph(anyString(), anyString());
     }
 
     @Test

@@ -550,6 +550,9 @@ public class Neo4jWriteRepository {
                 row.put("projectId", edge.getProjectId());
                 row.put("versionId", normalizeId(edge.getVersionId()));
                 row.put("edgeKey", edge.getEdgeKey() != null ? edge.getEdgeKey() : "");
+                // P5 修复：补 edgeType 属性。原 row 漏放该字段，ON CREATE SET r = row 只设了动态关系标签，
+                // r.edgeType 属性恒为 null，导致按 r.edgeType 过滤的查询（系统总览边类型统计）漏边。
+                row.put("edgeType", edgeType);
                 row.put("sourceType", edge.getSourceType() != null ? edge.getSourceType() : "");
                 row.put("confidence", edge.getConfidence() != null ? edge.getConfidence().doubleValue() : 1.0);
                 row.put("status", edge.getStatus() != null ? edge.getStatus() : "");
@@ -567,7 +570,8 @@ public class Neo4jWriteRepository {
                     "MATCH (to {id: row.toId}) " +
                     "MERGE (from)-[r:%s {projectId: row.projectId, versionId: row.versionId, edgeKey: row.edgeKey}]->(to) " +
                     "ON CREATE SET r = row " +
-                    "ON MATCH SET r.sourceType = row.sourceType, " +
+                    "ON MATCH SET r.edgeType = row.edgeType, " +
+                    "r.sourceType = row.sourceType, " +
                     "r.confidence = row.confidence, " +
                     "r.status = row.status, " +
                     "r.properties = row.properties, " +
