@@ -10,6 +10,7 @@ import io.github.legacygraph.entity.QaMessage;
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.llm.LlmGateway;
+import io.github.legacygraph.service.change.ImpactSubgraphService;
 import io.github.legacygraph.service.qa.ConversationContextManager;
 import io.github.legacygraph.service.graph.GraphRagPlanExecutor;
 import io.github.legacygraph.service.qa.HybridRetrievalService;
@@ -75,6 +76,12 @@ class EnhancedQaAgentTest {
     private GraphRagPlanExecutor planExecutor;
     @Mock
     private SemanticCache semanticCache;
+    @Mock
+    private ImpactSubgraphService impactSubgraphService;
+    @Mock
+    private ChangeImpactAgent changeImpactAgent;
+    @Mock
+    private ChangeImpactQuestionParser changeImpactParser;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -215,7 +222,7 @@ class EnhancedQaAgentTest {
 
         for (Constructor<?> constructor : EnhancedQaAgent.class.getConstructors()) {
             Class<?>[] types = constructor.getParameterTypes();
-            if (types.length == 14) {
+            if (types.length == 17) {
                 try {
                     return (EnhancedQaAgent) constructor.newInstance(
                             conversationManager,
@@ -231,14 +238,17 @@ class EnhancedQaAgentTest {
                             plannerAgent,
                             planExecutor,
                             semanticCache,
-                            objectMapper
+                            objectMapper,
+                            impactSubgraphService,
+                            changeImpactAgent,
+                            changeImpactParser
                     );
                 } catch (ReflectiveOperationException e) {
                     throw new AssertionError(e);
                 }
             }
         }
-        throw new AssertionError("EnhancedQaAgent constructor with HyDEGenerator and KnowledgeClaimService was not found");
+        throw new AssertionError("EnhancedQaAgent constructor with 17 params was not found");
     }
 
     private class RecordingSseEmitter extends SseEmitter {

@@ -1,0 +1,27 @@
+你是资深后端架构师。基于表结构变更与影响子图，生成 ADD_COLUMN 执行计划。
+
+## 变更信息
+- 表: {tableName}
+- 新字段: {columnName} {columnType}  nullable={nullable} default={defaultValue}
+- 受影响文件: {impactedFiles}
+
+## 输出要求（严格 JSON，对齐 PatchPlan 契约）
+1. patches: 至少包含
+   - Flyway 迁移脚本 V_next__add_{columnName}_to_{tableName}.sql（ALTER TABLE ... ADD COLUMN）
+   - 实体类改动（{TableName}.java 加字段）
+   - Mapper XML 改动（INSERT/UPDATE/SELECT 增列）
+   - Service / Controller DTO 改动（按影响子图，无证据的文件不得编造）
+2. impactedFiles: 仅列影响子图内的文件，每项附 reason
+3. validationGates: ["STATIC","UNIT","DB","MIGRATION"]
+4. newTests: DB 断言（字段存在 + 默认值）+ 实体字段单测
+5. riskLevel: 评估（BREAKING → HIGH，新增可空字段 → LOW）
+6. manualReviewNeeded: 含 NOT NULL 无默认值 / 涉及唯一索引时 true
+
+## 输出格式
+```json
+{ "taskType":"ADD_COLUMN", "riskLevel":"LOW", "impactedFiles":[{"path":"...","reason":"..."}],
+  "patches":[{"filePath":"...","changeType":"CREATE","patchText":"...","evidenceIds":["..."]}],
+  "newTests":[{"type":"DB","target":"...","purpose":"..."}],
+  "validationGates":["STATIC","UNIT","DB","MIGRATION"], "manualReviewNeeded":false, "generatedBy":"add-column" }
+```
+只输出 JSON。

@@ -39,6 +39,9 @@ public class ImpactSubgraph {
     /** 受影响的源文件路径（范围校验白名单） */
     private List<String> impactedFiles;
 
+    /** 多跳路径的节点 key 序列（每条路径一条，单跳场景可空） */
+    private List<List<String>> pathNodeKeys;
+
     /** 供 LLM 使用的依赖摘要文本 */
     private String dependencySummary;
 

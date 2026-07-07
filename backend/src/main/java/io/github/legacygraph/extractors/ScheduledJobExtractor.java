@@ -68,6 +68,7 @@ public class ScheduledJobExtractor {
                         ScheduledJobFact fact = new ScheduledJobFact();
                         fact.setClassName(packageName.isEmpty() ? className : packageName + "." + className);
                         fact.setMethodName(method.getNameAsString());
+                        fact.setMethodSignature(MethodSignatureSupport.build(method));
                         fact.setAnnotationType(annotationName);
                         fact.setSourcePath(javaFile.toString());
                         fact.setStartLine(method.getBegin().map(p -> p.line).orElse(null));
@@ -122,6 +123,7 @@ public class ScheduledJobExtractor {
     public static class ScheduledJobFact {
         private String className;
         private String methodName;
+        private String methodSignature;
         private String annotationType;
         private String cronExpression;
         private String fixedRate;

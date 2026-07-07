@@ -1,5 +1,6 @@
 package io.github.legacygraph.service.change;
 
+import io.github.legacygraph.common.TraversalDirection;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.entity.GraphEdge;
@@ -28,6 +29,9 @@ public class ImpactSubgraphService {
 
     /** 邻域跳数上限（默认 1 跳；ChangeTask MVP 只需直接邻域） */
     private static final int MAX_NEIGHBORS = 200;
+
+    /** 多跳路径数上限（变更影响需更全，高于 QA GraphRAG 的 20） */
+    private static final int MAX_PATHS = 50;
 
     /**
      * 以目标节点为中心提取影响子图。
@@ -91,6 +95,124 @@ public class ImpactSubgraphService {
                 .impactedFiles(new ArrayList<>(impactedFiles))
                 .dependencySummary(summary)
                 .build();
+    }
+
+    /**
+     * 以目标节点为中心，沿指定方向做有界多跳反向遍历。
+     * <p>
+     * 修正 {@code doc/系统关系总览/02 §13.4} 偏移：原 {@link #extractByNode} 仅 1 跳，
+     * 本方法支持多跳依赖链（Table←SQL←Mapper←Service←Api←Feature）。
+     * </p>
+     * <p>
+     * 关键：{@code findPathsDirected} 按 nodeKey 匹配端点（非 nodeId），本方法入参是
+     * targetNodeId，须先 {@code findNodeById} 取 nodeKey 再查路径。
+     * </p>
+     *
+     * @param direction 反向链路类型，决定遍历的边类型与方向
+     * @param maxDepth  最大跳数（钳制 [1,4]）
+     */
+    public ImpactSubgraph extractByNodeMultiHop(String projectId, String versionId,
+                                                String targetNodeId,
+                                                TraversalDirection direction,
+                                                int maxDepth) {
+        Optional<GraphNode> targetOpt = neo4jGraphDao.findNodeById(targetNodeId);
+        if (targetOpt.isEmpty()) {
+            log.warn("ImpactSubgraphMultiHop: target node not found: {}", targetNodeId);
+            return ImpactSubgraph.builder()
+                    .targetNodeId(targetNodeId)
+                    .nodeIds(new ArrayList<>())
+                    .edgeIds(new ArrayList<>())
+                    .impactedFiles(new ArrayList<>())
+                    .pathNodeKeys(new ArrayList<>())
+                    .dependencySummary("目标节点不存在，无法定位影响子图。")
+                    .build();
+        }
+        GraphNode target = targetOpt.get();
+        int depth = Math.max(1, Math.min(4, maxDepth));
+
+        List<Neo4jGraphDao.GraphPath> paths = neo4jGraphDao.findPathsDirected(
+                projectId, versionId, target.getNodeKey(),
+                direction.edgeTypes(), direction.flow(), depth, MAX_PATHS);
+
+        Set<String> nodeIds = new LinkedHashSet<>();
+        nodeIds.add(targetNodeId);
+        List<String> edgeIds = new ArrayList<>();
+        Set<String> impactedFiles = new LinkedHashSet<>();
+        List<List<String>> pathNodeKeys = new ArrayList<>();
+        Map<String, GraphNode> nodeById = new HashMap<>();
+        nodeById.put(target.getId(), target);
+        if (target.getSourcePath() != null && !target.getSourcePath().isBlank()) {
+            impactedFiles.add(target.getSourcePath());
+        }
+
+        for (Neo4jGraphDao.GraphPath path : paths) {
+            List<String> keys = new ArrayList<>();
+            for (GraphNode n : path.nodes()) {
+                nodeIds.add(n.getId());
+                nodeById.put(n.getId(), n);
+                if (n.getSourcePath() != null && !n.getSourcePath().isBlank()) {
+                    impactedFiles.add(n.getSourcePath());
+                }
+                keys.add(n.getNodeKey());
+            }
+            if (!keys.isEmpty()) pathNodeKeys.add(keys);
+            for (GraphEdge e : path.edges()) {
+                edgeIds.add(e.getId());
+            }
+        }
+
+        String summary = buildDependencySummaryMultiHop(target, paths);
+        String targetName = target.getDisplayName() != null && !target.getDisplayName().isBlank()
+                ? target.getDisplayName() : target.getNodeName();
+
+        log.info("ImpactSubgraphMultiHop extracted: target={}, paths={}, nodes={}, files={}",
+                targetNodeId, paths.size(), nodeIds.size(), impactedFiles.size());
+
+        return ImpactSubgraph.builder()
+                .targetNodeId(targetNodeId)
+                .targetName(targetName)
+                .targetNodeType(target.getNodeType())
+                .nodeIds(new ArrayList<>(nodeIds))
+                .edgeIds(edgeIds)
+                .impactedFiles(new ArrayList<>(impactedFiles))
+                .pathNodeKeys(pathNodeKeys)
+                .dependencySummary(summary)
+                .build();
+    }
+
+    /**
+     * 把多跳路径序列化为 ChangeImpactAgent 可读的依赖摘要文本（路径链格式）。
+     */
+    private String buildDependencySummaryMultiHop(GraphNode target,
+                                                  List<Neo4jGraphDao.GraphPath> paths) {
+        StringBuilder sb = new StringBuilder();
+        String targetName = target.getDisplayName() != null && !target.getDisplayName().isBlank()
+                ? target.getDisplayName() : target.getNodeName();
+        sb.append("变更目标：").append(targetName)
+                .append("（类型 ").append(target.getNodeType()).append("）\n");
+        if (paths.isEmpty()) {
+            sb.append("该节点无多跳依赖路径。");
+            return sb.toString();
+        }
+        sb.append("多跳依赖路径（").append(paths.size()).append(" 条）：\n");
+        int shown = 0;
+        for (Neo4jGraphDao.GraphPath path : paths) {
+            if (shown++ >= 30) {
+                sb.append("… 其余 ").append(paths.size() - 30).append(" 条省略\n");
+                break;
+            }
+            sb.append("- ");
+            List<GraphNode> nodes = path.nodes();
+            List<GraphEdge> edges = path.edges();
+            for (int i = 0; i < nodes.size(); i++) {
+                sb.append(displayOf(nodes.get(i), nodes.get(i).getId()));
+                if (i < edges.size()) {
+                    sb.append(" -[").append(edges.get(i).getEdgeType()).append("]-> ");
+                }
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 
     /**

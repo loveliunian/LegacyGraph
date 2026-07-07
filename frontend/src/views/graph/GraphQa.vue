@@ -132,6 +132,36 @@
                   置信度：{{ (msg.confidence * 100).toFixed(0) }}%
                 </div>
                 <div
+                  v-if="msg.impact"
+                  class="message-impact">
+                  <p class="impact-title">🔍 变更影响分析：</p>
+                  <div class="impact-summary">
+                    <el-tag v-if="msg.impact.changeKind" size="small" type="warning">
+                      {{ msg.impact.changeKind }}
+                    </el-tag>
+                    <el-tag v-if="msg.impact.tableName" size="small" type="info">
+                      {{ msg.impact.tableName }}
+                    </el-tag>
+                    <el-tag v-if="msg.impact.severity" size="small" :type="msg.impact.severity === 'HIGH' ? 'danger' : msg.impact.severity === 'MEDIUM' ? 'warning' : 'success'">
+                      {{ msg.impact.severity }}
+                    </el-tag>
+                  </div>
+                  <div v-if="msg.impact.impactedNodes" class="impact-nodes">
+                    <span v-for="(node, ni) in msg.impact.impactedNodes" :key="ni" class="impact-node">
+                      {{ node }}
+                    </span>
+                  </div>
+                  <el-button
+                    v-if="msg.impact.suggestCreateTask"
+                    size="small"
+                    type="primary"
+                    plain
+                    class="create-task-btn"
+                    @click="handleCreateChangeTask(msg.impact)">
+                    📝 创建变更任务
+                  </el-button>
+                </div>
+                <div
                   v-if="msg.role === 'assistant' && !thinking"
                   class="message-actions">
                   <el-button
@@ -202,6 +232,7 @@ import { ref, nextTick, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, Link } from '@element-plus/icons-vue'
 import { qaApi, type QaConversation, type EvidenceItem } from '@/api/qa.api'
+import { changeTaskApi } from '@/api/change-task.api'
 import { mapQaHistoryMessages } from './qaMessageMapper'
 import { ElMessage } from 'element-plus'
 
@@ -213,6 +244,7 @@ interface Message {
   content: string
   confidence?: number
   evidences?: EvidenceItem[]
+  impact?: any
   messageId?: string
   conversationId?: string
 }
@@ -224,6 +256,7 @@ const inputText = ref('')
 const thinking = ref(false)
 const streamingContent = ref('')
 const streamingEvidences = ref<EvidenceItem[]>([])
+const streamingImpact = ref<any>(null)
 const chatContainer = ref<HTMLElement>()
 
 const exampleQuestions = [
@@ -283,6 +316,9 @@ const handleSend = async () => {
         onEvidence: (evidences) => {
           streamingEvidences.value = evidences
         },
+        onImpact: (data) => {
+          streamingImpact.value = data
+        },
         onComplete: (data) => {
           if (data.conversationId) {
             currentConversationId.value = data.conversationId
@@ -299,12 +335,14 @@ const handleSend = async () => {
             content: finalContent,
             confidence,
             evidences,
+            impact: data.changeImpact || streamingImpact.value,
             messageId,
             conversationId: data.conversationId || currentConversationId.value || undefined,
           })
 
           streamingContent.value = ''
           streamingEvidences.value = []
+          streamingImpact.value = null
           thinking.value = false
           scrollToBottom()
           refreshConversations()
@@ -411,6 +449,36 @@ const submitFeedback = async (msgIndex: number, helpful: boolean) => {
   } catch (err) {
     console.error('Failed to submit feedback:', err)
     ElMessage.error('反馈提交失败')
+  }
+}
+
+const handleCreateChangeTask = async (impact: any) => {
+  try {
+    const taskType = impact.changeKind || 'ADD_COLUMN'
+    const tableName = impact.tableName || ''
+    const columnName = impact.columnName || ''
+    
+    const title = `添加字段: ${tableName}.${columnName}`
+    const inputIssue = `为 ${tableName} 表添加 ${columnName} 字段`
+
+    await changeTaskApi.create({
+      projectId,
+      versionId: 'latest', // 使用最新版本
+      taskType,
+      title,
+      inputIssue,
+    })
+    
+    ElMessage.success('变更任务创建成功！')
+    
+    // 更新消息中的 impact，移除按钮避免重复创建
+    const lastAssistantMsg = [...messages.value].reverse().find(m => m.role === 'assistant' && m.impact)
+    if (lastAssistantMsg && lastAssistantMsg.impact) {
+      lastAssistantMsg.impact.suggestCreateTask = false
+    }
+  } catch (err) {
+    console.error('Failed to create change task:', err)
+    ElMessage.error('创建变更任务失败')
   }
 }
 
@@ -666,6 +734,49 @@ onMounted(() => {
   margin-top: 6px;
   font-size: 12px;
   color: #67c23a;
+}
+
+.message-impact {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  border-left: 3px solid #1890ff;
+}
+
+.impact-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1890ff;
+  margin-bottom: 8px;
+}
+
+.impact-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.impact-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.impact-node {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #1890ff;
+}
+
+.create-task-btn {
+  margin-top: 8px;
 }
 
 .thinking-dots {

@@ -8,13 +8,18 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -106,13 +111,23 @@ public class ServiceCallExtractor {
                             .reduce((a, b) -> a + ", " + b)
                             .orElse("");
                     String callerMethod = methodName + "(" + paramSignature + ")";
-                    
+
+                    // 构建方法内可见的变量→类型映射（注入字段 + 本地变量），用于推断被调用方法实参类型
+                    final Map<String, String> methodVarToType =
+                            collectMethodVarTypes(method, injectedVarToType);
+
                     method.findAll(MethodCallExpr.class).forEach(methodCall -> {
                         String calledMethod = methodCall.getNameAsString();
                         CallRelation rel = new CallRelation(className, callerMethod, calledMethod);
                         rel.setSourcePath(filePath);
                         rel.setLineNumber(methodCall.getBegin().map(p -> p.line).orElse(null));
                         rel.setCallerMethodSignature(callerMethod);  // 已包含签名
+
+                        // 推断被调用方法签名（基于实参类型），与 JavaStructureExtractor 的 Method nodeKey 对齐
+                        String calledSig = buildCalledMethodSignature(methodCall, methodVarToType);
+                        if (calledSig != null) {
+                            rel.setCalledMethodSignature(calledSig);
+                        }
 
                         // 尝试解析目标：检查方法调用的 scope（如 mapper.findById → mapper 是注入的 MapperUser）
                         methodCall.getScope().ifPresent(scope -> {
@@ -187,6 +202,101 @@ public class ServiceCallExtractor {
             }
         }
         return varToType;
+    }
+
+    /**
+     * 构建方法内可见的变量→类型映射：注入字段/构造参数（类级）+ 方法参数 + 方法内本地变量。
+     * 用于推断方法调用实参的类型，从而生成被调用方法签名。
+     */
+    private Map<String, String> collectMethodVarTypes(MethodDeclaration method,
+                                                       Map<String, String> injectedVarToType) {
+        Map<String, String> varToType = new HashMap<>(injectedVarToType);
+        // 方法形参（最常见的实参来源，如 mapper.findById(id) 中的 id）
+        for (Parameter p : method.getParameters()) {
+            varToType.put(p.getNameAsString(), normalizeTypeName(p.getType().asString()));
+        }
+        // 方法内本地变量
+        for (VariableDeclarationExpr vde : method.findAll(VariableDeclarationExpr.class)) {
+            String type = normalizeTypeName(vde.getElementType().asString());
+            for (VariableDeclarator v : vde.getVariables()) {
+                varToType.put(v.getNameAsString(), type);
+            }
+        }
+        return varToType;
+    }
+
+    /**
+     * 基于调用实参推断被调用方法签名：calledMethod(argType1, argType2)。
+     * 与 JavaStructureExtractor 生成的 Method nodeKey 格式对齐（简单类型名 + ", " 分隔）。
+     * 仅当所有实参类型均可推断时才返回签名；任一不可推断则返回 null
+     * （回退到无签名匹配，沿用既有行为，避免误匹配重载）。
+     */
+    private String buildCalledMethodSignature(MethodCallExpr methodCall, Map<String, String> varToType) {
+        List<Expression> args = methodCall.getArguments();
+        if (args == null || args.isEmpty()) {
+            return methodCall.getNameAsString() + "()";
+        }
+        List<String> argTypes = new ArrayList<>(args.size());
+        for (Expression arg : args) {
+            String type = inferArgumentTypeName(arg, varToType);
+            if (type == null) {
+                return null;  // 实参类型无法可靠推断，不设置签名以避免误匹配重载
+            }
+            argTypes.add(type);
+        }
+        return methodCall.getNameAsString() + "(" + String.join(", ", argTypes) + ")";
+    }
+
+    /**
+     * 推断实参表达式的类型名（简单名，与 JavaStructureExtractor 归一化规则一致）。
+     * 不依赖符号求解，仅处理可在 AST 层面可靠推断的表达式；其余返回 null。
+     */
+    private String inferArgumentTypeName(Expression expr, Map<String, String> varToType) {
+        if (expr.isIntegerLiteralExpr()) return "int";
+        if (expr.isLongLiteralExpr()) return "long";
+        if (expr.isDoubleLiteralExpr()) return "double";
+        if (expr.isStringLiteralExpr() || expr.isTextBlockLiteralExpr()) return "String";
+        if (expr.isBooleanLiteralExpr()) return "boolean";
+        if (expr.isCharLiteralExpr()) return "char";
+        if (expr.isNullLiteralExpr()) return "Object";
+        if (expr.isThisExpr()) return "this";
+        if (expr.isNameExpr()) {
+            return normalizeTypeName(varToType.get(expr.asNameExpr().getNameAsString()));
+        }
+        if (expr.isFieldAccessExpr()) {
+            // scope 为注入字段/本地变量时取其类型（如 this.mapper、ctx.user）
+            return normalizeTypeName(varToType.get(expr.asFieldAccessExpr().getScope().toString()));
+        }
+        if (expr.isObjectCreationExpr()) {
+            return normalizeTypeName(expr.asObjectCreationExpr().getType().asString());
+        }
+        if (expr.isCastExpr()) {
+            return normalizeTypeName(expr.asCastExpr().getType().asString());
+        }
+        if (expr.isEnclosedExpr()) {
+            return inferArgumentTypeName(expr.asEnclosedExpr().getInner(), varToType);
+        }
+        // MethodCallExpr / Lambda / Conditional 等无法在不解析符号的情况下推断返回类型
+        return null;
+    }
+
+    /**
+     * 类型名归一化：去泛型参数 + 取简单类名。
+     * 与 JavaStructureExtractor 的参数签名归一化保持一致。
+     */
+    private String normalizeTypeName(String type) {
+        if (type == null || type.isEmpty()) {
+            return null;
+        }
+        int genericIdx = type.indexOf('<');
+        if (genericIdx > 0) {
+            type = type.substring(0, genericIdx);
+        }
+        int dotIdx = type.lastIndexOf('.');
+        if (dotIdx > 0) {
+            type = type.substring(dotIdx + 1);
+        }
+        return type;
     }
 
     /**

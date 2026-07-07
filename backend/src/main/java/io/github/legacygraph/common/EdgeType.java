@@ -31,6 +31,7 @@ public enum EdgeType {
     REFERENCES("外键引用"),
     BELONGS_TO("属于"),
     MAPS_TO("对应"),
+    APPLIES_TO("应用于"),
 
     // ========== 变更闭环关系（增强版2：ChangeTask 管道） ==========
     AFFECTS("影响"),

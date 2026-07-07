@@ -95,4 +95,37 @@ class PatchPlanValidatorTest {
         PatchPlanValidator.ValidationResult r = validator.validate(plan, subgraphWithFiles("src/A.java"));
         assertFalse(r.isValid());
     }
+
+    @Test
+    void validDdl_sqlScript_notFlagged() {
+        PatchPlan.Patch patch = PatchPlan.Patch.builder()
+                .filePath("db/migration/V1__add_priority.sql")
+                .changeType("CREATE")
+                .patchText("ALTER TABLE lg_change_task ADD COLUMN priority VARCHAR(32)")
+                .evidenceIds(List.of("evd-1"))
+                .build();
+        PatchPlan plan = PatchPlan.builder().patches(List.of(patch)).build();
+
+        PatchPlanValidator.ValidationResult r = validator.validate(plan, subgraphWithFiles("db/migration/V1__add_priority.sql"));
+
+        assertTrue(r.isValid(), "有效 ADD COLUMN DDL 应通过");
+        assertFalse(r.isNeedsReview());
+        assertTrue(r.getDdlViolations().isEmpty());
+    }
+
+    @Test
+    void invalidDdl_sqlScript_marksNeedsReview() {
+        PatchPlan.Patch patch = PatchPlan.Patch.builder()
+                .filePath("db/migration/V1__bad.sql")
+                .changeType("CREATE")
+                .patchText("DROP TABLE lg_change_task")
+                .evidenceIds(List.of("evd-1"))
+                .build();
+        PatchPlan plan = PatchPlan.builder().patches(List.of(patch)).build();
+
+        PatchPlanValidator.ValidationResult r = validator.validate(plan, subgraphWithFiles("db/migration/V1__bad.sql"));
+
+        assertTrue(r.isNeedsReview(), "非 ADD COLUMN DDL 须标记 needsReview");
+        assertFalse(r.getDdlViolations().isEmpty());
+    }
 }

@@ -84,11 +84,24 @@ public class FeatureModuleAdapter implements ExtractionAdapter {
         if (context.getFrontendDir() != null) {
             return Paths.get(context.getBaseDir(), context.getFrontendDir());
         }
-        // 从 asset 路径推断：找到 src/views 或 src/pages 的父级
         String path = asset.getRelativePath();
-        int srcIdx = path.indexOf("/src/");
-        if (srcIdx > 0) {
-            return asset.getFile().toAbsolutePath().getParent().getParent();
+        if (path == null || asset.getFile() == null) {
+            return null;
+        }
+        String normalized = path.replace('\\', '/');
+        String[] segments = normalized.split("/");
+        for (int i = 0; i < segments.length - 1; i++) {
+            boolean isFrontendSource = "src".equals(segments[i])
+                    && i + 1 < segments.length
+                    && ("views".equals(segments[i + 1]) || "pages".equals(segments[i + 1]));
+            if (isFrontendSource) {
+                Path root = asset.getFile().toAbsolutePath();
+                int levelsToRoot = segments.length - i;
+                for (int level = 0; level < levelsToRoot; level++) {
+                    root = root.getParent();
+                }
+                return root;
+            }
         }
         return null;
     }

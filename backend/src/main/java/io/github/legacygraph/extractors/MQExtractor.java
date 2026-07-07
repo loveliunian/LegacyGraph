@@ -83,6 +83,7 @@ public class MQExtractor {
                             method.getBegin().map(p -> p.line).orElse(null),
                             method.getEnd().map(p -> p.line).orElse(null));
                         fact.setMethodName(method.getNameAsString());
+                        fact.setMethodSignature(MethodSignatureSupport.build(method));
                         result.add(fact);
                     }
                 });
@@ -139,6 +140,7 @@ public class MQExtractor {
     public static class MQConsumerFact {
         private String className;
         private String methodName;
+        private String methodSignature;
         private String annotationType;
         private String topic;
         private String consumerGroup;

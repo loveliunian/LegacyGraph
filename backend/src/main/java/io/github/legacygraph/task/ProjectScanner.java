@@ -17,6 +17,7 @@ import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.entity.SourceAssetSnapshot;
+import io.github.legacygraph.extractors.adapter.BusinessDomainAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
 import io.github.legacygraph.extractors.adapter.ExtractionResult;
@@ -222,16 +223,6 @@ public class ProjectScanner {
         this.scanScopeResolver = scanScopeResolver;
         this.assetDiscoveryService = assetDiscoveryService;
     }
-
-    /**
-     * M3 修复：KnowledgeCompiler 注入（扫描完成后触发 Claim 编译）。
-     * <p>
-     * 使用 {@code @Autowired(required = false)} 避免启动依赖循环。
-     * 扫描主流程完成后调用 {@code knowledgeCompiler.compile()} 将 Claim 投影回图谱。
-     * </p>
-     */
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private io.github.legacygraph.service.graph.KnowledgeCompiler knowledgeCompiler;
 
     /**
      * 异步启动完整扫描流程
@@ -449,6 +440,30 @@ public class ProjectScanner {
                 adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan);
                 completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
                 log.info("Adapter registry scan processed {} assets", adapterCount);
+
+                // 目录级扫描：BusinessDomain 从包结构推断
+                try {
+                    BusinessDomainAdapter domainAdapter = null;
+                    for (ExtractionAdapter adapter : extractionAdapterRegistry.getAllAdapters()) {
+                        if (adapter instanceof BusinessDomainAdapter bda) {
+                            domainAdapter = bda;
+                            break;
+                        }
+                    }
+                    if (domainAdapter != null && backendDir != null) {
+                        File backendRoot = new File(backendDir);
+                        if (backendRoot.exists() && backendRoot.isDirectory()) {
+                            ExtractionResult domainResult = domainAdapter.extractFromDirectory(
+                                    backendRoot, projectId, versionId);
+                            int domainCount = domainResult.getNodeCount();
+                            if (domainCount > 0) {
+                                log.info("Scanned {} business domains from package structure", domainCount);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("BusinessDomain directory scan failed: {}", e.getMessage());
+                }
                 if (adapterCount > 0) {
                     log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=completed by Adapter Registry ({} assets)",
                             projectId, versionId, adapterCount);
@@ -1642,26 +1657,6 @@ public class ProjectScanner {
             log.info("Incremental deletion completed: projectId={}, versionId={}, deletedAssets={}, deletedNeo4jNodes={}",
                     projectId, versionId, deletedPaths.size(), deletedNodes);
         }
-        
-        // M3 修复：扫描完成后触发 KnowledgeCompiler 编译 Claim 到图谱
-        if (knowledgeCompiler != null) {
-            try {
-                log.info("Triggering KnowledgeCompiler after adapter scan: projectId={}, versionId={}", 
-                        projectId, versionId);
-                var compileOptions = io.github.legacygraph.dto.claim.CompileOptions.builder()
-                        .dryRun(false)  // 实际写入图谱
-                        .includePending(false)  // 只编译 CONFIRMED 状态
-                        .build();
-                var projection = knowledgeCompiler.compile(projectId, versionId, compileOptions);
-                log.info("KnowledgeCompiler completed: {} nodes, {} edges, {} issues", 
-                        projection.getNodeClaims().size(), 
-                        projection.getEdgeClaims().size(),
-                        projection.getIssues().size());
-            } catch (Exception e) {
-                log.warn("KnowledgeCompiler failed after scan, continuing: {}", e.getMessage());
-            }
-        }
-        
         return processed;
     }
 

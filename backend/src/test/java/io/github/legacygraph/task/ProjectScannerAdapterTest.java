@@ -47,7 +47,7 @@ class ProjectScannerAdapterTest {
     @Test
     void scanAssetsWithAdaptersDelegatesSupportedFilesToRegistry() throws Exception {
         Files.writeString(tempDir.resolve("OrderController.java"), "class OrderController {}");
-        when(adapterRegistry.selectAdapter(any(), any())).thenReturn(Optional.of(adapter));
+        when(adapterRegistry.selectAdapters(any(), any())).thenReturn(java.util.List.of(adapter));
         when(adapter.extract(any(), any())).thenReturn(ExtractionResult.builder()
                 .processedAssets(1)
                 .nodeCount(3)
@@ -79,7 +79,7 @@ class ProjectScannerAdapterTest {
                 tempDir.toString(), tempDir.toString(), tempDir.toString());
 
         assertEquals(1, processed);
-        verify(adapterRegistry).selectAdapter(any(), any());
+        verify(adapterRegistry).selectAdapters(any(), any());
         verify(adapter).extract(any(), any());
     }
 
@@ -94,7 +94,7 @@ class ProjectScannerAdapterTest {
                 .assetKind("CODE")
                 .build();
         when(assetDiscoveryService.discoverAssets(any())).thenReturn(new AssetDiscoveryService.DiscoveryResult(1, java.util.List.of(discoveredAsset)));
-        when(adapterRegistry.selectAdapter(any(), any())).thenReturn(Optional.of(adapter));
+        when(adapterRegistry.selectAdapters(any(), any())).thenReturn(java.util.List.of(adapter));
         when(adapter.extract(any(), any())).thenReturn(ExtractionResult.builder()
                 .processedAssets(1)
                 .summary("ok")

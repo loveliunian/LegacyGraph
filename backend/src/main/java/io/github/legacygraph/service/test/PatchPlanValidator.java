@@ -47,8 +47,11 @@ public class PatchPlanValidator {
                 result.setNeedsReview(true);
             }
 
-            // ② 格式校验（DELETE 允许空 diff）
-            if (!"DELETE".equalsIgnoreCase(patch.getChangeType()) && !isUnifiedDiff(patch.getPatchText())) {
+            // ② 格式校验（DELETE 允许空 diff；.sql Flyway 脚本是 SQL 文本，非 unified diff，由 ④ 校验）
+            boolean isSqlScript = fp != null && fp.endsWith(".sql");
+            if (!"DELETE".equalsIgnoreCase(patch.getChangeType())
+                    && !isSqlScript
+                    && !isUnifiedDiff(patch.getPatchText())) {
                 result.getErrors().add("补丁非 unified diff 格式: " + fp);
                 result.setValid(false);
             }
@@ -58,14 +61,24 @@ public class PatchPlanValidator {
                 result.getMissingEvidenceFiles().add(fp);
                 result.setNeedsReview(true);
             }
+
+            // ④ DDL 专项校验（ADD_COLUMN）：.sql 文件须为 ALTER TABLE ADD COLUMN；否则 needsReview
+            if (fp != null && fp.endsWith(".sql")) {
+                String patchText = patch.getPatchText() != null ? patch.getPatchText().toUpperCase() : "";
+                if (!patchText.contains("ALTER TABLE") || !patchText.contains("ADD COLUMN")) {
+                    result.getDdlViolations().add("非有效 ADD COLUMN DDL: " + fp);
+                    result.setNeedsReview(true);
+                }
+            }
         }
 
         if (!result.getErrors().isEmpty()) {
             result.setValid(false);
         }
-        log.info("PatchPlan validate: valid={}, needsReview={}, outOfScope={}, missingEvidence={}",
+        log.info("PatchPlan validate: valid={}, needsReview={}, outOfScope={}, missingEvidence={}, ddlViolations={}",
                 result.isValid(), result.isNeedsReview(),
-                result.getOutOfScopeFiles().size(), result.getMissingEvidenceFiles().size());
+                result.getOutOfScopeFiles().size(), result.getMissingEvidenceFiles().size(),
+                result.getDdlViolations().size());
         return result;
     }
 
@@ -86,5 +99,7 @@ public class PatchPlanValidator {
         private List<String> errors = new ArrayList<>();
         private List<String> outOfScopeFiles = new ArrayList<>();
         private List<String> missingEvidenceFiles = new ArrayList<>();
+        /** DDL 专项校验违规（ADD_COLUMN 场景） */
+        private List<String> ddlViolations = new ArrayList<>();
     }
 }

@@ -124,14 +124,14 @@ class ProjectScannerFullFlowTest {
                 mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class));
 
         // Adapter registry: Java → javaAdapter, XML → xmlAdapter, Vue/TS → vueAdapter
-        lenient().when(adapterRegistry.selectAdapter(any(), any())).thenAnswer(inv -> {
+        lenient().when(adapterRegistry.selectAdapters(any(), any())).thenAnswer(inv -> {
             var asset = inv.getArgument(1);
             String fileType = asset.getClass().getMethod("getFileType").invoke(asset).toString();
             return switch (fileType.toLowerCase()) {
-                case "java" -> Optional.of(javaAdapter);
-                case "xml" -> Optional.of(xmlAdapter);
-                case "vue", "ts" -> Optional.of(vueAdapter);
-                default -> Optional.empty();
+                case "java" -> java.util.List.of(javaAdapter);
+                case "xml" -> java.util.List.of(xmlAdapter);
+                case "vue", "ts" -> java.util.List.of(vueAdapter);
+                default -> java.util.List.of();
             };
         });
 
@@ -368,7 +368,7 @@ class ProjectScannerFullFlowTest {
 
         // ===== 验证 3: Adapter Registry 被调用（Java/XML/Vue 文件被处理） =====
         // adapterRegistry.selectAdapter 至少被调用（遍历了 Java、XML、Vue 文件）
-        verify(adapterRegistry, atLeastOnce()).selectAdapter(any(), any());
+        verify(adapterRegistry, atLeastOnce()).selectAdapters(any(), any());
 
         // ===== 验证 4: 默认不调用 Graphify Runner =====
         verify(graphifyRunner, never()).isAvailable();
@@ -549,6 +549,6 @@ class ProjectScannerFullFlowTest {
         verify(graphifyRunner, never()).run(any());
 
         // 但 Adapter 扫描应正常执行
-        verify(adapterRegistry, atLeastOnce()).selectAdapter(any(), any());
+        verify(adapterRegistry, atLeastOnce()).selectAdapters(any(), any());
     }
 }

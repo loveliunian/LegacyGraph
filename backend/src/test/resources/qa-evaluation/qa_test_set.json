@@ -61,6 +61,42 @@
         "projectId": "test-project",
         "versionId": "test-version"
       }
+    },
+    {
+      "id": "qa_change_001",
+      "category": "变更影响",
+      "question": "给 lg_change_task 加 priority 字段怎么做",
+      "expected_keywords": ["ALTER TABLE", "ADD COLUMN", "ChangeTask", "实体", "Mapper"],
+      "expected_evidence_types": ["GRAPH_NODE", "SQL"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
+    },
+    {
+      "id": "qa_change_002",
+      "category": "变更影响",
+      "question": "lg_qa_message 加个 status 字段要改哪些地方",
+      "expected_keywords": ["影响", "字段", "SQL", "Service", "Controller"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
+    },
+    {
+      "id": "qa_change_003",
+      "category": "变更影响",
+      "question": "改 lg_change_task 表的 risk_level 字段长度",
+      "expected_keywords": ["MODIFY", "ALTER", "影响", "SQL"],
+      "expected_evidence_types": ["GRAPH_NODE", "SQL"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "test-project",
+        "versionId": "test-version"
+      }
     }
   ]
 }

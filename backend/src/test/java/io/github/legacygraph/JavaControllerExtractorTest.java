@@ -205,6 +205,34 @@ class JavaControllerExtractorTest {
     }
 
     @Test
+    void methodSignature_stripsGenericArgumentsLikeJavaStructureExtractor() throws IOException {
+        String content = """
+                package com.example.controller;
+
+                import java.util.List;
+                import org.springframework.web.bind.annotation.PostMapping;
+                import org.springframework.web.bind.annotation.RequestBody;
+                import org.springframework.web.bind.annotation.RestController;
+
+                @RestController
+                public class BatchController {
+                    @PostMapping("/batch")
+                    public String create(@RequestBody List<String> names) {
+                        return "ok";
+                    }
+                }
+                """;
+        Path javaFile = tempDir.resolve("BatchController.java");
+        Files.writeString(javaFile, content);
+
+        List<ApiFact> facts = new JavaControllerExtractor().extractFromFile(javaFile);
+
+        assertEquals(1, facts.size());
+        assertEquals("create(List)", facts.get(0).getMethodSignature(),
+                "Controller API 方法签名应去掉泛型参数，与 JavaStructureExtractor 的 Method nodeKey 对齐");
+    }
+
+    @Test
     void testNonControllerReturnsEmpty() throws IOException {
         // given: 普通类，没有 Controller 注解
         String content = """

@@ -38,6 +38,7 @@ export interface QaMessage {
 interface QaStreamCallbacks {
   onToken: (token: string) => void
   onEvidence?: (evidences: EvidenceItem[]) => void
+  onImpact?: (data: any) => void
   onComplete: (data: any) => void
   onError: (error: Error) => void
 }
@@ -129,6 +130,8 @@ export const qaApi = {
                 } else if (currentEvent === 'evidence') {
                   const items = Array.isArray(parsed) ? parsed : parsed.items
                   callbacks.onEvidence?.(Array.isArray(items) ? items : [])
+                } else if (currentEvent === 'impact') {
+                  callbacks.onImpact?.(parsed)
                 } else if (currentEvent === 'complete') {
                   callbacks.onComplete(parsed)
                 } else if (currentEvent === 'error') {

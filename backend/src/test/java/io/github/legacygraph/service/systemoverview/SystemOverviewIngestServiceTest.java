@@ -66,17 +66,20 @@ class SystemOverviewIngestServiceTest {
         assertEquals(SystemOverviewIngestService.CHUNK_TYPE, docs.get(0).getChunkType());
         assertNotNull(docs.get(0).getContent());
 
-        // Claim：覆盖四种谓词，全为 CODE 来源
+        // Claim：覆盖总览需要的核心谓词，默认按 DOC 来源和谨慎置信度入库。
         ArgumentCaptor<List<KnowledgeClaimDraft>> draftsCaptor = ArgumentCaptor.forClass(List.class);
         verify(knowledgeClaimService).upsertDrafts(draftsCaptor.capture());
         List<KnowledgeClaimDraft> drafts = draftsCaptor.getValue();
         assertTrue(drafts.size() > 12, "每行应生成多条 Claim");
         assertTrue(drafts.stream().anyMatch(d -> "CONTAINS".equals(d.getPredicate())));
         assertTrue(drafts.stream().anyMatch(d -> "IMPLEMENTED_BY".equals(d.getPredicate())));
+        assertTrue(drafts.stream().anyMatch(d -> "HANDLED_BY".equals(d.getPredicate())));
         assertTrue(drafts.stream().anyMatch(d -> "USES".equals(d.getPredicate())));
         assertTrue(drafts.stream().anyMatch(d -> "READS".equals(d.getPredicate())));
-        assertTrue(drafts.stream().allMatch(d -> "CODE".equals(d.getSourceType())));
-        assertTrue(drafts.stream().allMatch(d -> d.getConfidence().doubleValue() >= 0.85));
+        assertTrue(drafts.stream().anyMatch(d -> "WRITES".equals(d.getPredicate())));
+        assertTrue(drafts.stream().anyMatch(d -> "MAPS_TO".equals(d.getPredicate())));
+        assertTrue(drafts.stream().allMatch(d -> "DOC".equals(d.getSourceType())));
+        assertTrue(drafts.stream().allMatch(d -> d.getConfidence().doubleValue() < 0.85));
 
         // FAQ：5 条入语义缓存
         verify(semanticCache, times(5)).put(eq("self"), anyString(), anyString(), any());
@@ -104,9 +107,15 @@ class SystemOverviewIngestServiceTest {
         verify(knowledgeClaimService).upsertDrafts(captor.capture());
         List<KnowledgeClaimDraft> drafts = captor.getValue();
 
-        // CONTAINS + IMPLEMENTED_BY + USES + READS(lg_test) = 4；Neo4j 被跳过
-        assertEquals(4, drafts.size());
+        // CONTAINS + IMPLEMENTED_BY + HANDLED_BY + USES + READS/WRITES/MAPS_TO(lg_test) = 7；Neo4j 被跳过
+        assertEquals(7, drafts.size());
+        assertTrue(drafts.stream().anyMatch(d -> "HANDLED_BY".equals(d.getPredicate())
+                && "TestService".equals(d.getObjectKey())));
         assertTrue(drafts.stream().anyMatch(d -> "READS".equals(d.getPredicate())
+                && "lg_test".equals(d.getObjectKey())));
+        assertTrue(drafts.stream().anyMatch(d -> "WRITES".equals(d.getPredicate())
+                && "lg_test".equals(d.getObjectKey())));
+        assertTrue(drafts.stream().anyMatch(d -> "MAPS_TO".equals(d.getPredicate())
                 && "lg_test".equals(d.getObjectKey())));
         assertFalse(drafts.stream().anyMatch(d -> "Neo4j".equals(d.getObjectKey())),
                 "非 lg_ 表不应生成 READS Claim");

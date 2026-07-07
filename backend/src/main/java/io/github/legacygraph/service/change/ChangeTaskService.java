@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.ChangeImpactAgent;
+import io.github.legacygraph.agent.adapter.AddColumnPatchAgentAdapter;
 import io.github.legacygraph.agent.adapter.MigrationAgentAdapter;
 import io.github.legacygraph.agent.adapter.RefactorAgentAdapter;
 import io.github.legacygraph.dto.ChangeImpactAnalysis;
@@ -54,12 +55,14 @@ public class ChangeTaskService {
     private final ChangeImpactAgent changeImpactAgent;
     private final RefactorAgentAdapter refactorAgentAdapter;
     private final MigrationAgentAdapter migrationAgentAdapter;
+    private final AddColumnPatchAgentAdapter addColumnPatchAgentAdapter;
     private final io.github.legacygraph.agent.PatchPlanAgent patchPlanAgent;
     private final PatchPlanValidator patchPlanValidator;
     private final ValidationGateRunner validationGateRunner;
     private final PrOrchestrator prOrchestrator;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final ColumnIngestService columnIngestService;
 
     public ChangeTaskService(ChangeTaskRepository changeTaskRepository,
                              PatchFileRepository patchFileRepository,
@@ -69,12 +72,14 @@ public class ChangeTaskService {
                              ChangeImpactAgent changeImpactAgent,
                              RefactorAgentAdapter refactorAgentAdapter,
                              MigrationAgentAdapter migrationAgentAdapter,
+                             AddColumnPatchAgentAdapter addColumnPatchAgentAdapter,
                              io.github.legacygraph.agent.PatchPlanAgent patchPlanAgent,
                              PatchPlanValidator patchPlanValidator,
                              ValidationGateRunner validationGateRunner,
                              PrOrchestrator prOrchestrator,
                              ObjectMapper objectMapper,
-                             TransactionTemplate transactionTemplate) {
+                             TransactionTemplate transactionTemplate,
+                             ColumnIngestService columnIngestService) {
         this.changeTaskRepository = changeTaskRepository;
         this.patchFileRepository = patchFileRepository;
         this.validationGateRepository = validationGateRepository;
@@ -83,12 +88,14 @@ public class ChangeTaskService {
         this.changeImpactAgent = changeImpactAgent;
         this.refactorAgentAdapter = refactorAgentAdapter;
         this.migrationAgentAdapter = migrationAgentAdapter;
+        this.addColumnPatchAgentAdapter = addColumnPatchAgentAdapter;
         this.patchPlanAgent = patchPlanAgent;
         this.patchPlanValidator = patchPlanValidator;
         this.validationGateRunner = validationGateRunner;
         this.prOrchestrator = prOrchestrator;
         this.objectMapper = objectMapper;
         this.transactionTemplate = transactionTemplate;
+        this.columnIngestService = columnIngestService;
     }
 
     /** 创建变更任务（状态 OPEN）—— 短 TX。 */
@@ -129,8 +136,9 @@ public class ChangeTaskService {
      */
     public ImpactSubgraph refreshImpact(String taskId, String targetNodeId) {
         ChangeTask task = requireTask(taskId);
-        ImpactSubgraph subgraph = impactSubgraphService.extractByNode(
-                task.getProjectId(), task.getVersionId(), targetNodeId);
+        ImpactSubgraph subgraph = impactSubgraphService.extractByNodeMultiHop(
+                task.getProjectId(), task.getVersionId(), targetNodeId,
+                io.github.legacygraph.common.TraversalDirection.TABLE_REVERSE, 3);
 
         // Phase 3-1: AgentEnvelope 合约调用（含证据目录）
         String riskLevel = null;
@@ -196,6 +204,12 @@ public class ChangeTaskService {
             case "BUGFIX" -> plan = patchPlanAgent.generate(
                     task.getProjectId(), taskId, task.getTitle(), task.getInputIssue(),
                     subgraph, req.getEvidenceSummary(), req.getFailingTests());
+            case "ADD_COLUMN" -> plan = addColumnPatchAgentAdapter.toPatchPlan(
+                    taskId, task.getProjectId(), req.getTableName(), req.getColumnName(),
+                    req.getColumnType(),
+                    req.getNullable() != null && req.getNullable(),
+                    req.getDefaultValue(),
+                    subgraph, evidenceIds);
             default -> throw new IllegalArgumentException(
                     "任务类型 " + task.getTaskType() + " 暂无自动补丁生成器");
         }
@@ -303,9 +317,19 @@ public class ChangeTaskService {
         boolean allPassed = validationGateRunner.runAll(taskId, ctx);
 
         // 短 TX 更新任务状态
-        return transactionTemplate.execute(status ->
+        ChangeTask validated = transactionTemplate.execute(status ->
                 updateTaskAfterValidation(taskId, task.getProjectId(), task.getVersionId(),
                         task.getTitle(), allPassed));
+        // P4 闭环：ADD_COLUMN 验证通过后回写 Column 节点 + 失效语义缓存
+        if (allPassed && validated != null && "ADD_COLUMN".equals(validated.getTaskType())) {
+            try {
+                PatchPlan plan = fromJson(validated.getProposal(), PatchPlan.class);
+                columnIngestService.onValidationPassed(validated, plan);
+            } catch (Exception e) {
+                log.warn("Post-validation column ingest failed for task {}: {}", taskId, e.getMessage());
+            }
+        }
+        return validated;
     }
 
     private ChangeTask updateTaskAfterValidation(String taskId, String projectId,
@@ -428,5 +452,15 @@ public class ChangeTaskService {
         private String evidenceSummary;
         /** BUGFIX 用：失败测试 / 复现摘要 */
         private String failingTests;
+        /** ADD_COLUMN 用：目标表名 */
+        private String tableName;
+        /** ADD_COLUMN 用：字段名 */
+        private String columnName;
+        /** ADD_COLUMN 用：字段类型（如 VARCHAR(32)） */
+        private String columnType;
+        /** ADD_COLUMN 用：是否可空 */
+        private Boolean nullable;
+        /** ADD_COLUMN 用：默认值（可空） */
+        private String defaultValue;
     }
 }

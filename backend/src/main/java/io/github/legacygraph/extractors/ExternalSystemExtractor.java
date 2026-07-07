@@ -108,6 +108,7 @@ public class ExternalSystemExtractor {
                                     ExternalCallFact fact = new ExternalCallFact();
                                     fact.setClassName(packageName.isEmpty() ? className : packageName + "." + className);
                                     fact.setMethodName(method.getNameAsString());
+                                    fact.setMethodSignature(MethodSignatureSupport.build(method));
                                     fact.setClientType(scopeStr.contains("restTemplate") ? "RestTemplate" : 
                                         (scopeStr.contains("webClient") ? "WebClient" : "HttpClient"));
                                     fact.setSourcePath(javaFile.toString());
@@ -145,6 +146,7 @@ public class ExternalSystemExtractor {
     public static class ExternalCallFact {
         private String className;
         private String methodName;
+        private String methodSignature;
         private String clientType; // FeignClient, RestTemplate, WebClient, HttpClient
         private String serviceName;
         private String baseUrl;

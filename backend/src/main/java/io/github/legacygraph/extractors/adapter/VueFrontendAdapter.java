@@ -47,7 +47,24 @@ public class VueFrontendAdapter implements ExtractionAdapter {
         try {
             List<FactPersister.FactDraft> drafts = new ArrayList<>();
             List<FrontendPageFact> pages = vueExtractor.extractFromFile(asset.getFile());
+            List<FrontendPageFact.FrontendButton> buttons = List.of();
+            if (asset.getFileType().equalsIgnoreCase("vue")) {
+                buttons = apiExtractor.extractButtonsFromVue(asset.getFile());
+            }
+            List<FrontendPageFact.FrontendApiCall> apiCalls = apiExtractor.extractFromFile(asset.getFile());
+
+            if ((pages == null || pages.isEmpty()) && shouldCreateSyntheticPage(asset, buttons, apiCalls)) {
+                pages = List.of(createSyntheticPage(asset));
+            }
             if (pages != null && !pages.isEmpty()) {
+                for (FrontendPageFact page : pages) {
+                    if (!buttons.isEmpty()) {
+                        page.setButtons(buttons);
+                    }
+                    if (apiCalls != null && !apiCalls.isEmpty()) {
+                        page.setApiCalls(apiCalls);
+                    }
+                }
                 for (FrontendPageFact page : pages) {
                     drafts.add(FactPersister.FactDraft.builder()
                             .projectId(context.getProjectId())
@@ -69,34 +86,26 @@ public class VueFrontendAdapter implements ExtractionAdapter {
                         context.getProjectId(), context.getVersionId(), pages, asset.getRelativePath());
             }
             // 抽取按钮（仅对 .vue 文件）
-            if (asset.getFileType().equalsIgnoreCase("vue")) {
-                List<FrontendPageFact.FrontendButton> buttons = apiExtractor.extractButtonsFromVue(asset.getFile());
-                if (buttons != null && !buttons.isEmpty()) {
-                    // 将按钮关联到页面
-                    for (FrontendPageFact page : pages) {
-                        page.setButtons(buttons);
-                    }
-                    for (FrontendPageFact.FrontendButton button : buttons) {
-                        drafts.add(FactPersister.FactDraft.builder()
-                                .projectId(context.getProjectId())
-                                .versionId(context.getVersionId())
-                                .sourceType("FRONTEND_AST")
-                                .factType("FRONTEND_BUTTON")
-                                .factKey(button.getText() + "#" + button.getLineNumber())
-                                .factName(button.getText())
-                                .sourcePath(asset.getRelativePath())
-                                .startLine(button.getLineNumber())
-                                .endLine(button.getLineNumber())
-                                .data(button)
-                                .confidence(BigDecimal.ONE)
-                                .status("EXTRACTED")
-                                .build());
-                        count++;
-                    }
+            if (buttons != null && !buttons.isEmpty()) {
+                for (FrontendPageFact.FrontendButton button : buttons) {
+                    drafts.add(FactPersister.FactDraft.builder()
+                            .projectId(context.getProjectId())
+                            .versionId(context.getVersionId())
+                            .sourceType("FRONTEND_AST")
+                            .factType("FRONTEND_BUTTON")
+                            .factKey(button.getText() + "#" + button.getLineNumber())
+                            .factName(button.getText())
+                            .sourcePath(asset.getRelativePath())
+                            .startLine(button.getLineNumber())
+                            .endLine(button.getLineNumber())
+                            .data(button)
+                            .confidence(BigDecimal.ONE)
+                            .status("EXTRACTED")
+                            .build());
+                    count++;
                 }
             }
             
-            List<FrontendPageFact.FrontendApiCall> apiCalls = apiExtractor.extractFromFile(asset.getFile());
             if (apiCalls != null && !apiCalls.isEmpty()) {
                 for (FrontendPageFact.FrontendApiCall api : apiCalls) {
                     drafts.add(FactPersister.FactDraft.builder()
@@ -127,6 +136,65 @@ public class VueFrontendAdapter implements ExtractionAdapter {
                 .evidenceCount(count)
                 .summary("Frontend: " + count + " pages/APIs")
                 .build();
+    }
+
+    private boolean shouldCreateSyntheticPage(SourceAsset asset,
+            List<FrontendPageFact.FrontendButton> buttons,
+            List<FrontendPageFact.FrontendApiCall> apiCalls) {
+        return asset.getFileType() != null
+                && asset.getFileType().equalsIgnoreCase("vue")
+                && ((buttons != null && !buttons.isEmpty()) || (apiCalls != null && !apiCalls.isEmpty()));
+    }
+
+    private FrontendPageFact createSyntheticPage(SourceAsset asset) {
+        FrontendPageFact page = new FrontendPageFact();
+        String componentPath = asset.getRelativePath() != null
+                ? asset.getRelativePath()
+                : asset.getFile().toString();
+        String routePath = inferRoutePath(componentPath);
+        page.setRoutePath(routePath);
+        page.setRouteName(routePath.replace("/", "_").replaceAll("^_+", ""));
+        page.setPageName(page.getRouteName());
+        page.setTitle(page.getRouteName());
+        page.setComponentPath(componentPath);
+        return page;
+    }
+
+    private String inferRoutePath(String componentPath) {
+        String normalized = componentPath.replace('\\', '/');
+        String marker = "/src/views/";
+        int markerIdx = normalized.indexOf(marker);
+        if (markerIdx < 0 && normalized.startsWith("src/views/")) {
+            markerIdx = -marker.length() + "src/views/".length();
+        }
+        if (markerIdx < 0) {
+            marker = "/src/pages/";
+            markerIdx = normalized.indexOf(marker);
+            if (markerIdx < 0 && normalized.startsWith("src/pages/")) {
+                markerIdx = -marker.length() + "src/pages/".length();
+            }
+        }
+
+        String route;
+        if (markerIdx >= 0) {
+            int start = markerIdx + marker.length();
+            if (markerIdx < 0) {
+                start = marker.replace("/src/", "src/").length();
+            }
+            route = normalized.substring(start);
+        } else if (normalized.startsWith("src/views/")) {
+            route = normalized.substring("src/views/".length());
+        } else if (normalized.startsWith("src/pages/")) {
+            route = normalized.substring("src/pages/".length());
+        } else {
+            route = Path.of(normalized).getFileName().toString();
+        }
+        route = route.replaceAll("/index\\.vue$", "");
+        route = route.replaceAll("\\.(vue|jsx|tsx|ts|js)$", "");
+        if (!route.startsWith("/")) {
+            route = "/" + route;
+        }
+        return route;
     }
 
     @Override

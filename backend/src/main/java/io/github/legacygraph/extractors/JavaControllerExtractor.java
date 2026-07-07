@@ -256,18 +256,7 @@ public class JavaControllerExtractor {
      * 与 JavaStructureExtractor 生成的 Method key 格式对齐
      */
     private String buildMethodSignature(MethodDeclaration method) {
-        String methodName = method.getNameAsString();
-        String params = method.getParameters().stream()
-                .map(p -> {
-                    String type = p.getTypeAsString();
-                    // 提取简单类型名（去掉包名）
-                    if (type.contains(".")) {
-                        type = type.substring(type.lastIndexOf('.') + 1);
-                    }
-                    return type;
-                })
-                .collect(java.util.stream.Collectors.joining(", "));
-        return methodName + "(" + params + ")";
+        return MethodSignatureSupport.build(method);
     }
 
     /**

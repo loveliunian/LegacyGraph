@@ -67,8 +67,10 @@ public class SystemOverviewController {
     @Operation(summary = "获取核心贯穿链路", description = "返回业务→功能→代码→数据的核心链路描述")
     public Result<List<String>> getPaths(
             @Parameter(description = "项目ID", required = true) @PathVariable String projectId,
-            @Parameter(description = "扫描版本ID") @RequestParam(required = false) String versionId) {
+            @Parameter(description = "扫描版本ID") @RequestParam(required = false) String versionId,
+            @Parameter(description = "链路起点关键词") @RequestParam(required = false) String from,
+            @Parameter(description = "链路终点关键词") @RequestParam(required = false) String to) {
 
-        return Result.success(systemOverviewService.getPaths(projectId, versionId));
+        return Result.success(systemOverviewService.getPaths(projectId, versionId, from, to));
     }
 }

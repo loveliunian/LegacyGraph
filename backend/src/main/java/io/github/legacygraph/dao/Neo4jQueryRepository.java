@@ -703,4 +703,111 @@ public class Neo4jQueryRepository {
         }
         return paths;
     }
+
+    /**
+     * 有向有界路径查询 — 从单一起点沿指定方向遍历依赖链。
+     * <p>
+     * 与 {@link #findPaths} 区别：单起点（非 from-to）+ 有向。
+     * INBOUND 用 {@code <-[relSpec]-}（反向往上游），OUTBOUND 用 {@code -[relSpec]->}。
+     * 用于变更影响多跳反查（Table←SQL←Mapper←Service←Api←Feature）。
+     * </p>
+     */
+    public List<Neo4jGraphDao.GraphPath> findPathsDirected(String projectId, String versionId,
+                                                           String startNodeKey,
+                                                           List<String> relationshipTypes,
+                                                           io.github.legacygraph.common.FlowDirection flow,
+                                                           int maxDepth, int limit) {
+        if (startNodeKey == null || startNodeKey.isBlank()) {
+            return List.of();
+        }
+        int depth = Math.max(1, Math.min(4, maxDepth));
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+
+        // relSpec 拼接（复用 findPaths 逻辑）
+        StringBuilder relSpec = new StringBuilder();
+        if (relationshipTypes != null) {
+            for (String t : relationshipTypes) {
+                if (t == null || t.isBlank()) continue;
+                String safe = CypherCatalog.safeIdentifier(t.trim(), "relType");
+                if (relSpec.length() > 0) relSpec.append("|");
+                relSpec.append(safe);
+            }
+        }
+        if (relSpec.length() > 0) relSpec.insert(0, ":");
+        relSpec.append("*1..").append(depth);
+
+        // INBOUND: <-[relSpec]- (反向，往上游)；OUTBOUND: -[relSpec]-> (正向)
+        String arrow = (flow == io.github.legacygraph.common.FlowDirection.INBOUND)
+                ? "<-[" + relSpec + "]-" : "-[" + relSpec + "]->";
+
+        String cypher =
+                "MATCH p = (start {projectId: $projectId, versionId: $versionId, nodeKey: $startNodeKey})" +
+                arrow +
+                "() " +
+                "RETURN p, nodes(p) AS ns, relationships(p) AS rs " +
+                "LIMIT $limit";
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("projectId", projectId);
+        params.put("versionId", normalizeId(versionId));
+        params.put("startNodeKey", startNodeKey);
+        params.put("limit", (long) safeLimit);
+
+        List<Neo4jGraphDao.GraphPath> paths = new ArrayList<>();
+        try (Session session = neo4jDriver.session()) {
+            Result result = session.run(cypher, params);
+            while (result.hasNext()) {
+                org.neo4j.driver.Record record = result.next();
+                List<org.neo4j.driver.types.Node> neoNodes =
+                        record.get("ns").asList(v -> v.asNode());
+                List<org.neo4j.driver.types.Relationship> neoRels =
+                        record.get("rs").asList(v -> v.asRelationship());
+                if (neoNodes.isEmpty()) continue;
+
+                List<GraphNode> graphNodes = new ArrayList<>(neoNodes.size());
+                for (org.neo4j.driver.types.Node neoNode : neoNodes) {
+                    graphNodes.add(recordToNode(neoNode));
+                }
+
+                Set<String> relTypeSet = new LinkedHashSet<>();
+                for (org.neo4j.driver.types.Relationship rel : neoRels) {
+                    relTypeSet.add(rel.type());
+                }
+
+                List<GraphEdge> graphEdges = new ArrayList<>(neoRels.size());
+                for (int i = 0; i < neoRels.size(); i++) {
+                    org.neo4j.driver.types.Relationship rel = neoRels.get(i);
+                    org.neo4j.driver.types.Node n0 = neoNodes.get(i);
+                    org.neo4j.driver.types.Node n1 = neoNodes.get(i + 1);
+                    String relStart = rel.startNodeElementId();
+                    org.neo4j.driver.types.Node edgeFrom =
+                            relStart.equals(n0.elementId()) ? n0 : n1;
+                    org.neo4j.driver.types.Node edgeTo =
+                            relStart.equals(n0.elementId()) ? n1 : n0;
+                    graphEdges.add(recordToEdge(rel, edgeFrom, edgeTo));
+                }
+
+                GraphNode first = graphNodes.get(0);
+                GraphNode last = graphNodes.get(graphNodes.size() - 1);
+
+                BigDecimal pathConf = null;
+                for (GraphNode n : graphNodes) {
+                    if (n.getConfidence() != null) {
+                        if (pathConf == null || n.getConfidence().compareTo(pathConf) < 0) {
+                            pathConf = n.getConfidence();
+                        }
+                    }
+                }
+
+                paths.add(new Neo4jGraphDao.GraphPath(
+                        graphNodes, graphEdges, new ArrayList<>(relTypeSet),
+                        first.getSourcePath(), first.getStartLine(), first.getEndLine(),
+                        pathConf, first.getNodeKey(), last.getNodeKey()));
+            }
+        } catch (Exception e) {
+            log.warn("findPathsDirected failed for {}: {}", startNodeKey, e.getMessage());
+            return List.of();
+        }
+        return paths;
+    }
 }

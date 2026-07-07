@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  * 落地 {@code doc/系统关系总览/04-落地实施计划.md} 阶段2 + M2 修复。
  * </p>
  * <p>
- * 动态投影策略：优先从 {@code lg_knowledge_claim} 查询已确认的 Claim（CONFIRMED 状态），
+ * 动态投影策略：优先从 {@code lg_knowledge_claim} 查询可用 Claim（CONFIRMED/PENDING_CONFIRM），
  * 按 (subjectType, predicate, objectType) 聚合为四层映射。若无 Claim 数据则回退到内置映射。
  * </p>
  * <p>
@@ -76,6 +76,19 @@ public class SystemOverviewService {
     }
 
     /**
+     * 按起点/终点过滤贯穿链路。
+     */
+    public List<String> getPaths(String projectId, String versionId, String from, String to) {
+        if ((from == null || from.isBlank()) && (to == null || to.isBlank())) {
+            return getPaths(projectId, versionId);
+        }
+        return buildDynamicMappings(projectId, versionId).stream()
+                .map(this::toPath)
+                .filter(path -> matches(path, from) && matches(path, to))
+                .collect(Collectors.toList());
+    }
+
+    /**
      * 生成系统关系总览 Markdown 报告（对齐 02 结构）。
      */
     public String generateMarkdown(String projectId, String versionId) {
@@ -119,18 +132,25 @@ public class SystemOverviewService {
     /**
      * 从 lg_knowledge_claim 动态投影四层映射。
      * <p>
-     * 查询 CONFIRMED 状态的 Claim，按 subjectKey 聚合为 LayerMappingDTO。
+     * 查询 CONFIRMED/PENDING_CONFIRM 状态的 Claim，按 subjectKey 聚合为 LayerMappingDTO。
      * 若无 Claim 数据则回退到内置映射。
      * </p>
      */
     private List<LayerMappingDTO> buildDynamicMappings(String projectId, String versionId) {
         try {
-            // 查询所有 CONFIRMED 状态的 Claim
             List<KnowledgeClaim> claims = knowledgeClaimService.listClaims(
-                    projectId, versionId, null, null, "CONFIRMED", null, 500);
+                    projectId, versionId, null, null, null, null, 500);
 
             if (claims == null || claims.isEmpty()) {
-                log.debug("No confirmed claims found for projectId={}, falling back to builtin mappings", projectId);
+                log.debug("No claims found for projectId={}, falling back to builtin mappings", projectId);
+                return buildBuiltinMappings();
+            }
+
+            claims = claims.stream()
+                    .filter(this::isUsableOverviewClaim)
+                    .collect(Collectors.toList());
+            if (claims.isEmpty()) {
+                log.debug("No usable overview claims found for projectId={}, falling back to builtin mappings", projectId);
                 return buildBuiltinMappings();
             }
 
@@ -174,6 +194,18 @@ public class SystemOverviewService {
                         controller = fc.getObjectKey();
                     } else if ("USES".equals(fc.getPredicate()) && "Service".equals(fc.getObjectType())) {
                         codeModule = fc.getObjectKey();
+                    }
+                }
+
+                if (codeModule == null && controller != null) {
+                    List<KnowledgeClaim> controllerClaims = bySubject.getOrDefault(controller, Collections.emptyList());
+                    for (KnowledgeClaim cc : controllerClaims) {
+                        if ("Controller".equals(cc.getSubjectType())
+                                && "HANDLED_BY".equals(cc.getPredicate())
+                                && "Service".equals(cc.getObjectType())) {
+                            codeModule = cc.getObjectKey();
+                            break;
+                        }
                     }
                 }
 
@@ -261,6 +293,31 @@ public class SystemOverviewService {
                 "变更影响：Table ← READS/WRITE ← SQL ← Mapper ← Service ← HANDLED_BY ← Api ← Feature",
                 "Graphify导入：graph.json → Compatibility → Import → GraphMergeAgent → Neo4j"
         );
+    }
+
+    private boolean isUsableOverviewClaim(KnowledgeClaim claim) {
+        if (claim == null || claim.getSubjectKey() == null) {
+            return false;
+        }
+        String status = claim.getStatus();
+        return status == null || "CONFIRMED".equals(status) || "PENDING_CONFIRM".equals(status);
+    }
+
+    private String toPath(LayerMappingDTO mapping) {
+        String tables = mapping.getDataTables() == null || mapping.getDataTables().isEmpty()
+                ? "-"
+                : String.join(",", mapping.getDataTables());
+        return String.format("%s → %s → %s → %s → %s → %s",
+                n(mapping.getBusinessDomain()),
+                n(mapping.getCapability()),
+                n(mapping.getApiPath()),
+                n(mapping.getController()),
+                n(mapping.getCodeModule()),
+                tables);
+    }
+
+    private boolean matches(String path, String keyword) {
+        return keyword == null || keyword.isBlank() || path.contains(keyword);
     }
 
     private LayerMappingDTO mapping(String domain, String capability, String feature, String controller,

@@ -1177,6 +1177,30 @@ public class GraphBuilder {
         return edge;
     }
 
+    private String buildMethodKey(String className, String methodName, String methodSignature) {
+        if (methodSignature != null && !methodSignature.isBlank()) {
+            return className + "." + methodSignature;
+        }
+        return className + "." + methodName;
+    }
+
+    private String nullToUnknown(String value) {
+        return value == null || value.isBlank() ? "unknown" : value;
+    }
+
+    private String inferTestedClassKey(String testClassName) {
+        if (testClassName == null || testClassName.isBlank()) {
+            return null;
+        }
+        if (testClassName.endsWith("Tests")) {
+            return testClassName.substring(0, testClassName.length() - "Tests".length());
+        }
+        if (testClassName.endsWith("Test")) {
+            return testClassName.substring(0, testClassName.length() - "Test".length());
+        }
+        return null;
+    }
+
     // ==================== 配置项图谱构建 ====================
 
     /**
@@ -1227,7 +1251,7 @@ public class GraphBuilder {
     // ==================== 定时任务图谱构建 ====================
 
     /**
-     * 构建定时任务图谱：ScheduledJob 节点 + CALLS 边
+     * 构建定时任务图谱：ScheduledJob 节点 + HANDLED_BY Method 边
      */
     public void buildScheduledJobGraph(String projectId, String versionId,
             List<io.github.legacygraph.extractors.ScheduledJobExtractor.ScheduledJobFact> jobs) {
@@ -1250,21 +1274,29 @@ public class GraphBuilder {
                     SourceType.CODE_AST.name(), job.getSourcePath(),
                     BigDecimal.ONE, NodeStatus.CONFIRMED,
                     "CODE_SCAN");
+            jobNode.setStartLine(job.getStartLine());
+            jobNode.setEndLine(job.getEndLine());
             allNodes.add(jobNode);
 
-            // ScheduledJob -> Class CALLS 边
-            if (job.getClassName() != null) {
-                String classKey = job.getClassName();
-                GraphNode classNode = findExistingNode(projectId, versionId,
-                        NodeType.Service.name(), classKey);
-                if (classNode != null) {
-                    allEdges.add(buildEdge(projectId, versionId,
-                            jobId, classNode.getId(),
-                            EdgeType.CALLS.name(),
-                            jobKey + "->calls->" + classKey,
-                            SourceType.CODE_AST.name(),
-                            BigDecimal.ONE, NodeStatus.CONFIRMED));
-                }
+            if (job.getClassName() != null && job.getMethodName() != null) {
+                String methodKey = buildMethodKey(job.getClassName(), job.getMethodName(), job.getMethodSignature());
+                GraphNode methodNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                        NodeType.Method.name(), methodKey, job.getMethodName(),
+                        job.getMethodName(), "定时任务处理方法",
+                        SourceType.CODE_AST.name(), job.getSourcePath(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED,
+                        "CODE_SCAN");
+                methodNode.setStartLine(job.getStartLine());
+                methodNode.setEndLine(job.getEndLine());
+                methodNode.setClassName(job.getClassName());
+                allNodes.add(methodNode);
+
+                allEdges.add(buildEdge(projectId, versionId,
+                        jobId, methodNode.getId(),
+                        EdgeType.HANDLED_BY.name(),
+                        jobKey + "->handled_by->" + methodKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED));
             }
         }
 
@@ -1277,7 +1309,7 @@ public class GraphBuilder {
     // ==================== 消息队列图谱构建 ====================
 
     /**
-     * 构建消息队列图谱：MessageQueue 节点 + CONSUMES 边
+     * 构建消息队列图谱：MQConsumer / MQTopic 节点 + 方法级处理与触发边
      */
     public void buildMQGraph(String projectId, String versionId,
             List<io.github.legacygraph.extractors.MQExtractor.MQConsumerFact> consumers) {
@@ -1287,32 +1319,66 @@ public class GraphBuilder {
         List<GraphEdge> allEdges = new ArrayList<>();
 
         for (var consumer : consumers) {
-            String queueKey = "mq:" + consumer.getAnnotationType() + ":" + consumer.getTopic();
-            String queueId = UUID.randomUUID().toString();
+            String topicName = consumer.getTopic() != null ? consumer.getTopic() : "unknown";
+            String consumerKey = "mq-consumer:" + consumer.getAnnotationType() + ":"
+                    + nullToUnknown(consumer.getClassName()) + "."
+                    + nullToUnknown(consumer.getMethodName()) + ":" + topicName;
+            String consumerId = UUID.randomUUID().toString();
 
-            // MessageQueue 节点
-            GraphNode queueNode = buildNode(projectId, versionId, queueId,
-                    NodeType.MQConsumer.name(), queueKey, consumer.getTopic(),
-                    consumer.getTopic(),
-                    consumer.getAnnotationType() + " 消息队列",
+            GraphNode consumerNode = buildNode(projectId, versionId, consumerId,
+                    NodeType.MQConsumer.name(), consumerKey, topicName,
+                    topicName,
+                    consumer.getAnnotationType() + " 消息消费者",
                     SourceType.CODE_AST.name(), consumer.getSourcePath(),
                     BigDecimal.ONE, NodeStatus.CONFIRMED,
                     "CODE_SCAN");
-            allNodes.add(queueNode);
+            consumerNode.setStartLine(consumer.getStartLine());
+            consumerNode.setEndLine(consumer.getEndLine());
+            allNodes.add(consumerNode);
 
-            // MessageQueue -> Class CONSUMES 边
-            if (consumer.getClassName() != null) {
-                String classKey = consumer.getClassName();
-                GraphNode classNode = findExistingNode(projectId, versionId,
-                        NodeType.Service.name(), classKey);
-                if (classNode != null) {
-                    allEdges.add(buildEdge(projectId, versionId,
-                            queueNode.getId(), classNode.getId(),
-                            EdgeType.CONSUMES.name(),
-                            queueKey + "->consumes->" + classKey,
-                            SourceType.CODE_AST.name(),
-                            BigDecimal.ONE, NodeStatus.CONFIRMED));
-                }
+            String topicKey = "mq-topic:" + topicName;
+            GraphNode topicNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                    NodeType.MQTopic.name(), topicKey, topicName,
+                    topicName,
+                    consumer.getAnnotationType() + " 消息主题",
+                    SourceType.CODE_AST.name(), consumer.getSourcePath(),
+                    BigDecimal.ONE, NodeStatus.CONFIRMED,
+                    "CODE_SCAN");
+            allNodes.add(topicNode);
+
+            allEdges.add(buildEdge(projectId, versionId,
+                    consumerNode.getId(), topicNode.getId(),
+                    EdgeType.CONSUMES.name(),
+                    consumerKey + "->consumes->" + topicKey,
+                    SourceType.CODE_AST.name(),
+                    BigDecimal.ONE, NodeStatus.CONFIRMED));
+
+            if (consumer.getClassName() != null && consumer.getMethodName() != null) {
+                String methodKey = buildMethodKey(consumer.getClassName(), consumer.getMethodName(), consumer.getMethodSignature());
+                GraphNode methodNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                        NodeType.Method.name(), methodKey, consumer.getMethodName(),
+                        consumer.getMethodName(), "消息消费处理方法",
+                        SourceType.CODE_AST.name(), consumer.getSourcePath(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED,
+                        "CODE_SCAN");
+                methodNode.setStartLine(consumer.getStartLine());
+                methodNode.setEndLine(consumer.getEndLine());
+                methodNode.setClassName(consumer.getClassName());
+                allNodes.add(methodNode);
+
+                allEdges.add(buildEdge(projectId, versionId,
+                        consumerNode.getId(), methodNode.getId(),
+                        EdgeType.HANDLED_BY.name(),
+                        consumerKey + "->handled_by->" + methodKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+
+                allEdges.add(buildEdge(projectId, versionId,
+                        methodNode.getId(), topicNode.getId(),
+                        EdgeType.TRIGGERS.name(),
+                        methodKey + "->triggers->" + topicKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED));
             }
         }
 
@@ -1325,7 +1391,7 @@ public class GraphBuilder {
     // ==================== 外部系统图谱构建 ====================
 
     /**
-     * 构建外部系统图谱：ExternalSystem 节点 + CALLS_EXTERNAL 边
+     * 构建外部系统图谱：ExternalSystem / 外部 ApiEndpoint 节点 + CALLS_EXTERNAL 边
      */
     public void buildExternalSystemGraph(String projectId, String versionId,
             List<io.github.legacygraph.extractors.ExternalSystemExtractor.ExternalCallFact> calls) {
@@ -1347,21 +1413,66 @@ public class GraphBuilder {
                     SourceType.CODE_AST.name(), call.getSourcePath(),
                     BigDecimal.ONE, NodeStatus.CONFIRMED,
                     "CODE_SCAN");
+            systemNode.setStartLine(call.getStartLine());
+            systemNode.setEndLine(call.getEndLine());
             allNodes.add(systemNode);
 
-            // Class -> ExternalSystem CALLS_EXTERNAL 边
-            if (call.getClassName() != null) {
-                String classKey = call.getClassName();
-                GraphNode classNode = findExistingNode(projectId, versionId,
-                        NodeType.Service.name(), classKey);
-                if (classNode != null) {
-                    allEdges.add(buildEdge(projectId, versionId,
-                            classNode.getId(), systemId,
-                            EdgeType.CALLS_EXTERNAL.name(),
-                            classKey + "->calls_external->" + systemKey,
-                            SourceType.CODE_AST.name(),
-                            BigDecimal.ONE, NodeStatus.CONFIRMED));
-                }
+            if (call.getBaseUrl() != null && !call.getBaseUrl().isBlank()) {
+                String apiKey = "external:" + call.getBaseUrl();
+                GraphNode externalApiNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                        NodeType.ApiEndpoint.name(), apiKey, call.getBaseUrl(),
+                        call.getBaseUrl(), "外部 API: " + call.getBaseUrl(),
+                        SourceType.CODE_AST.name(), call.getSourcePath(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED,
+                        "CODE_SCAN");
+                externalApiNode.setStartLine(call.getStartLine());
+                externalApiNode.setEndLine(call.getEndLine());
+                allNodes.add(externalApiNode);
+
+                allEdges.add(buildEdge(projectId, versionId,
+                        systemId, externalApiNode.getId(),
+                        EdgeType.CALLS_EXTERNAL.name(),
+                        systemKey + "->calls_external->" + apiKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+            }
+
+            if (call.getClassName() != null && call.getMethodName() != null) {
+                String methodKey = buildMethodKey(call.getClassName(), call.getMethodName(), call.getMethodSignature());
+                GraphNode methodNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                        NodeType.Method.name(), methodKey, call.getMethodName(),
+                        call.getMethodName(), "外部系统调用方法",
+                        SourceType.CODE_AST.name(), call.getSourcePath(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED,
+                        "CODE_SCAN");
+                methodNode.setStartLine(call.getStartLine());
+                methodNode.setEndLine(call.getEndLine());
+                methodNode.setClassName(call.getClassName());
+                allNodes.add(methodNode);
+
+                allEdges.add(buildEdge(projectId, versionId,
+                        methodNode.getId(), systemId,
+                        EdgeType.CALLS_EXTERNAL.name(),
+                        methodKey + "->calls_external->" + systemKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+            } else if (call.getClassName() != null) {
+                NodeType classNodeType = inferNodeType(call.getClassName());
+                GraphNode classNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                        classNodeType.name(), call.getClassName(),
+                        call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1),
+                        call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1),
+                        null,
+                        SourceType.CODE_AST.name(), call.getSourcePath(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED,
+                        "CODE_SCAN");
+                allNodes.add(classNode);
+                allEdges.add(buildEdge(projectId, versionId,
+                        classNode.getId(), systemId,
+                        EdgeType.CALLS_EXTERNAL.name(),
+                        call.getClassName() + "->calls_external->" + systemKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED));
             }
         }
 
@@ -1374,7 +1485,7 @@ public class GraphBuilder {
     // ==================== 测试用例图谱构建 ====================
 
     /**
-     * 构建测试用例图谱：TestCase 节点 + VERIFIED_BY 边
+     * 构建测试用例图谱：TestCase / Assertion 节点 + 验证关系
      */
     public void buildTestCaseGraph(String projectId, String versionId,
             List<io.github.legacygraph.extractors.TestCaseExtractor.TestCaseFact> testCases) {
@@ -1395,21 +1506,60 @@ public class GraphBuilder {
                     SourceType.CODE_AST.name(), tc.getSourcePath(),
                     BigDecimal.ONE, NodeStatus.CONFIRMED,
                     "CODE_SCAN");
+            testNode.setStartLine(tc.getStartLine());
+            testNode.setEndLine(tc.getEndLine());
             allNodes.add(testNode);
 
-            // TestCase -> Class VERIFIED_BY 边
-            if (tc.getClassName() != null) {
-                String classKey = tc.getClassName();
-                GraphNode classNode = findExistingNode(projectId, versionId,
-                        NodeType.Service.name(), classKey);
-                if (classNode != null) {
+            if (tc.getAssertions() != null) {
+                int index = 0;
+                for (var assertion : tc.getAssertions()) {
+                    String assertionLine = assertion.getStartLine() != null
+                            ? assertion.getStartLine().toString()
+                            : String.valueOf(index);
+                    String assertionKey = "assertion:" + testKey + "#"
+                            + assertion.getAssertionType() + "#" + assertionLine;
+                    GraphNode assertionNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                            NodeType.Assertion.name(), assertionKey, assertion.getAssertionType(),
+                            assertion.getAssertionType(),
+                            assertion.getExpectedValue(),
+                            SourceType.CODE_AST.name(), tc.getSourcePath(),
+                            BigDecimal.ONE, NodeStatus.CONFIRMED,
+                            "CODE_SCAN");
+                    assertionNode.setStartLine(assertion.getStartLine());
+                    assertionNode.setEndLine(assertion.getEndLine());
+                    allNodes.add(assertionNode);
+
                     allEdges.add(buildEdge(projectId, versionId,
-                            classNode.getId(), testId,
-                            EdgeType.VERIFIED_BY.name(),
-                            classKey + "->verified_by->" + testKey,
+                            testId, assertionNode.getId(),
+                            EdgeType.CONTAINS.name(),
+                            testKey + "->contains->" + assertionKey,
                             SourceType.CODE_AST.name(),
                             BigDecimal.ONE, NodeStatus.CONFIRMED));
+                    index++;
                 }
+            }
+
+            String testedClassKey = inferTestedClassKey(tc.getClassName());
+            if (testedClassKey != null) {
+                GraphNode classNode = findExistingNode(projectId, versionId,
+                        NodeType.Service.name(), testedClassKey);
+                if (classNode == null) {
+                    classNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                            NodeType.Service.name(), testedClassKey,
+                            testedClassKey.substring(testedClassKey.lastIndexOf('.') + 1),
+                            testedClassKey.substring(testedClassKey.lastIndexOf('.') + 1),
+                            "测试推断的被测类",
+                            SourceType.CODE_AST.name(), tc.getSourcePath(),
+                            BigDecimal.valueOf(0.6), NodeStatus.PENDING_CONFIRM,
+                            "CODE_SCAN");
+                    allNodes.add(classNode);
+                }
+                allEdges.add(buildEdge(projectId, versionId,
+                        classNode.getId(), testId,
+                        EdgeType.VERIFIED_BY.name(),
+                        testedClassKey + "->verified_by->" + testKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.valueOf(0.6), NodeStatus.PENDING_CONFIRM));
             }
         }
 
@@ -1537,6 +1687,7 @@ public class GraphBuilder {
 
         List<GraphNode> allNodes = new ArrayList<>();
         List<GraphEdge> allEdges = new ArrayList<>();
+        Map<String, GraphNode> moduleNodes = new HashMap<>();
 
         // 1. 创建 FeatureModule 节点
         for (var module : modules) {
@@ -1554,6 +1705,7 @@ public class GraphBuilder {
                     BigDecimal.ONE, NodeStatus.CONFIRMED,
                     "CODE_SCAN");
             allNodes.add(moduleNode);
+            moduleNodes.put(moduleKey, moduleNode);
         }
 
         // 2. 创建 Feature 节点和 FeatureModule -> Feature CONTAINS 边
@@ -1575,8 +1727,11 @@ public class GraphBuilder {
 
             // FeatureModule -> Feature CONTAINS 边
             String moduleKey = "module:" + feature.getModuleName();
-            GraphNode moduleNode = findExistingNode(projectId, versionId,
-                    NodeType.FeatureModule.name(), moduleKey);
+            GraphNode moduleNode = moduleNodes.get(moduleKey);
+            if (moduleNode == null) {
+                moduleNode = findExistingNode(projectId, versionId,
+                        NodeType.FeatureModule.name(), moduleKey);
+            }
 
             if (moduleNode != null) {
                 allEdges.add(buildEdge(projectId, versionId,
@@ -1605,6 +1760,225 @@ public class GraphBuilder {
         int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
         int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
         log.info("Built feature module graph: {} nodes, {} edges (projectId={}, versionId={})",
+                nodeCount, edgeCount, projectId, versionId);
+    }
+
+    // ==================== RBAC 角色图谱构建 ====================
+
+    /**
+     * 构建 RBAC 角色图谱：Role 节点 + USES 边
+     */
+    public void buildRbacRoleGraph(String projectId, String versionId,
+            List<io.github.legacygraph.model.NodeExtractionResult> roles) {
+        if (roles == null || roles.isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+        List<GraphEdge> allEdges = new ArrayList<>();
+
+        for (var role : roles) {
+            String roleKey = role.getNodeKey();
+            String roleId = UUID.randomUUID().toString();
+
+            GraphNode roleNode = buildNode(projectId, versionId, roleId,
+                    NodeType.Role.name(), roleKey, role.getDisplayName(),
+                    role.getDisplayName(), role.getDescription(),
+                    role.getSourceType(), role.getSourcePath(),
+                    BigDecimal.valueOf(role.getConfidence()), NodeStatus.CONFIRMED,
+                    "CODE_SCAN");
+            allNodes.add(roleNode);
+
+            // Role -> Service/Controller USES 边
+            String context = (String) role.getProperties().get("context");
+            if (context != null) {
+                String className = context.contains(".") ? context.substring(0, context.indexOf(".")) : context;
+                GraphNode classNode = findExistingNode(projectId, versionId,
+                        NodeType.Service.name(), className);
+                if (classNode == null) {
+                    classNode = findExistingNode(projectId, versionId,
+                            NodeType.Controller.name(), className);
+                }
+                if (classNode != null) {
+                    allEdges.add(buildEdge(projectId, versionId,
+                            roleId, classNode.getId(),
+                            EdgeType.USES.name(),
+                            roleKey + "->uses->" + className,
+                            role.getSourceType(),
+                            BigDecimal.valueOf(role.getConfidence()), NodeStatus.CONFIRMED));
+                }
+            }
+        }
+
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
+        log.info("Built RBAC role graph: {} nodes, {} edges (projectId={}, versionId={})",
+                nodeCount, edgeCount, projectId, versionId);
+    }
+
+    // ==================== 业务域图谱构建 ====================
+
+    /**
+     * 构建业务域图谱：BusinessDomain 节点
+     */
+    public void buildBusinessDomainGraph(String projectId, String versionId,
+            List<io.github.legacygraph.model.NodeExtractionResult> domains) {
+        if (domains == null || domains.isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+
+        for (var domain : domains) {
+            String domainKey = domain.getNodeKey();
+            String domainId = UUID.randomUUID().toString();
+
+            GraphNode domainNode = buildNode(projectId, versionId, domainId,
+                    NodeType.BusinessDomain.name(), domainKey, domain.getDisplayName(),
+                    domain.getDisplayName(), domain.getDescription(),
+                    domain.getSourceType(), domain.getSourcePath(),
+                    BigDecimal.valueOf(domain.getConfidence()), NodeStatus.CONFIRMED,
+                    "CODE_SCAN");
+            allNodes.add(domainNode);
+        }
+
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        log.info("Built business domain graph: {} nodes (projectId={}, versionId={})",
+                nodeCount, projectId, versionId);
+    }
+
+    // ==================== 业务对象图谱构建 ====================
+
+    /**
+     * 构建业务对象图谱：BusinessObject 节点 + MAPS_TO 边
+     */
+    public void buildBusinessObjectGraph(String projectId, String versionId,
+            List<io.github.legacygraph.model.NodeExtractionResult> objects) {
+        if (objects == null || objects.isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+        List<GraphEdge> allEdges = new ArrayList<>();
+
+        for (var obj : objects) {
+            String objKey = obj.getNodeKey();
+            String objId = UUID.randomUUID().toString();
+
+            GraphNode objNode = buildNode(projectId, versionId, objId,
+                    NodeType.BusinessObject.name(), objKey, obj.getDisplayName(),
+                    obj.getDisplayName(), obj.getDescription(),
+                    obj.getSourceType(), obj.getSourcePath(),
+                    BigDecimal.valueOf(obj.getConfidence()), NodeStatus.CONFIRMED,
+                    "CODE_SCAN");
+            allNodes.add(objNode);
+
+            // BusinessObject -> Table MAPS_TO 边
+            String tableName = (String) obj.getProperties().get("tableName");
+            if (tableName != null && !tableName.isEmpty()) {
+                GraphNode tableNode = findExistingNode(projectId, versionId,
+                        NodeType.Table.name(), tableName);
+                if (tableNode != null) {
+                    allEdges.add(buildEdge(projectId, versionId,
+                            objId, tableNode.getId(),
+                            EdgeType.MAPS_TO.name(),
+                            objKey + "->maps_to->" + tableName,
+                            obj.getSourceType(),
+                            BigDecimal.valueOf(obj.getConfidence()), NodeStatus.CONFIRMED));
+                }
+            }
+        }
+
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
+        log.info("Built business object graph: {} nodes, {} edges (projectId={}, versionId={})",
+                nodeCount, edgeCount, projectId, versionId);
+    }
+
+    // ==================== 业务规则图谱构建 ====================
+
+    /**
+     * 构建业务规则图谱：BusinessRule 节点 + APPLIES_TO 边
+     */
+    public void buildBusinessRuleGraph(String projectId, String versionId,
+            List<io.github.legacygraph.model.NodeExtractionResult> rules) {
+        if (rules == null || rules.isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+        List<GraphEdge> allEdges = new ArrayList<>();
+
+        for (var rule : rules) {
+            String ruleKey = rule.getNodeKey();
+            String ruleId = UUID.randomUUID().toString();
+
+            GraphNode ruleNode = buildNode(projectId, versionId, ruleId,
+                    NodeType.BusinessRule.name(), ruleKey, rule.getDisplayName(),
+                    rule.getDisplayName(), rule.getDescription(),
+                    rule.getSourceType(), rule.getSourcePath(),
+                    BigDecimal.valueOf(rule.getConfidence()), NodeStatus.CONFIRMED,
+                    "CODE_SCAN");
+            allNodes.add(ruleNode);
+
+            // BusinessRule -> BusinessObject APPLIES_TO 边
+            String className = (String) rule.getProperties().get("className");
+            if (className != null) {
+                String objKey = "bo:" + className.toLowerCase();
+                GraphNode objNode = findExistingNode(projectId, versionId,
+                        NodeType.BusinessObject.name(), objKey);
+                if (objNode != null) {
+                    allEdges.add(buildEdge(projectId, versionId,
+                            ruleId, objNode.getId(),
+                            EdgeType.APPLIES_TO.name(),
+                            ruleKey + "->applies_to->" + objKey,
+                            rule.getSourceType(),
+                            BigDecimal.valueOf(rule.getConfidence()), NodeStatus.CONFIRMED));
+                }
+            }
+        }
+
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
+        log.info("Built business rule graph: {} nodes, {} edges (projectId={}, versionId={})",
+                nodeCount, edgeCount, projectId, versionId);
+    }
+
+    // ==================== 业务流程图谱构建 ====================
+
+    /**
+     * 构建业务流程图谱：BusinessProcess 节点 + CALLS 边
+     */
+    public void buildBusinessProcessGraph(String projectId, String versionId,
+            List<io.github.legacygraph.model.NodeExtractionResult> processes) {
+        if (processes == null || processes.isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+        List<GraphEdge> allEdges = new ArrayList<>();
+
+        for (var process : processes) {
+            String processKey = process.getNodeKey();
+            String processId = UUID.randomUUID().toString();
+
+            GraphNode processNode = buildNode(projectId, versionId, processId,
+                    NodeType.BusinessProcess.name(), processKey, process.getDisplayName(),
+                    process.getDisplayName(), process.getDescription(),
+                    process.getSourceType(), process.getSourcePath(),
+                    BigDecimal.valueOf(process.getConfidence()), NodeStatus.CONFIRMED,
+                    "CODE_SCAN");
+            allNodes.add(processNode);
+
+            // BusinessProcess -> Service CALLS 边
+            String className = (String) process.getProperties().get("className");
+            if (className != null) {
+                GraphNode classNode = findExistingNode(projectId, versionId,
+                        NodeType.Service.name(), className);
+                if (classNode != null) {
+                    allEdges.add(buildEdge(projectId, versionId,
+                            processId, classNode.getId(),
+                            EdgeType.CALLS.name(),
+                            processKey + "->calls->" + className,
+                            process.getSourceType(),
+                            BigDecimal.valueOf(process.getConfidence()), NodeStatus.CONFIRMED));
+                }
+            }
+        }
+
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
+        log.info("Built business process graph: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
     }
 }

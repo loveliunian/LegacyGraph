@@ -38,8 +38,12 @@ class PluginRegistryTest {
         assertEquals(PluginType.TOOL, desc.type());
         assertEquals("http://localhost:3000/mcp", desc.metadata().get("mcpEndpoint"));
         assertEquals("MCP", desc.metadata().get("protocol"));
+        assertFalse(desc.metadata().containsKey("auth"));
         assertEquals(ext, registry.getExternal("ext-mcp-1"));
         assertTrue(registry.listAll().stream().anyMatch(p -> "ext-mcp-1".equals(p.id())));
+        assertTrue(registry.listAll().stream()
+                .filter(p -> "ext-mcp-1".equals(p.id()))
+                .noneMatch(p -> p.metadata().containsKey("auth")));
         assertTrue(registry.listByType(PluginType.TOOL).stream()
                 .anyMatch(p -> "ext-mcp-1".equals(p.id())));
     }

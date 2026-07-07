@@ -2,6 +2,7 @@ package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.ChangeImpactAgent;
+import io.github.legacygraph.agent.adapter.AddColumnPatchAgentAdapter;
 import io.github.legacygraph.agent.adapter.MigrationAgentAdapter;
 import io.github.legacygraph.agent.adapter.RefactorAgentAdapter;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import io.github.legacygraph.service.change.ChangeTaskService;
+import io.github.legacygraph.service.change.ColumnIngestService;
 import io.github.legacygraph.service.change.ImpactSubgraphService;
 import io.github.legacygraph.service.test.PatchPlanValidator;
 import io.github.legacygraph.service.change.PrOrchestrator;
@@ -39,10 +41,12 @@ class ChangeTaskServiceTest {
     @Mock private ChangeImpactAgent changeImpactAgent;
     @Mock private RefactorAgentAdapter refactorAgentAdapter;
     @Mock private MigrationAgentAdapter migrationAgentAdapter;
+    @Mock private AddColumnPatchAgentAdapter addColumnPatchAgentAdapter;
     @Mock private io.github.legacygraph.agent.PatchPlanAgent patchPlanAgent;
     @Mock private ValidationGateRunner validationGateRunner;
     @Mock private PrOrchestrator prOrchestrator;
     @Mock private TransactionTemplate transactionTemplate;
+    @Mock private ColumnIngestService columnIngestService;
 
     private ChangeTaskService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -63,8 +67,8 @@ class ChangeTaskServiceTest {
         service = new ChangeTaskService(changeTaskRepository, patchFileRepository,
                 validationGateRepository, reviewRecordRepository, impactSubgraphService,
                 changeImpactAgent, refactorAgentAdapter, migrationAgentAdapter,
-                patchPlanAgent, new PatchPlanValidator(), validationGateRunner,
-                prOrchestrator, objectMapper, transactionTemplate);
+                addColumnPatchAgentAdapter, patchPlanAgent, new PatchPlanValidator(), validationGateRunner,
+                prOrchestrator, objectMapper, transactionTemplate, columnIngestService);
     }
 
     @Test

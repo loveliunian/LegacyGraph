@@ -23,7 +23,7 @@ public class PatchPlan {
 
     private String taskId;
 
-    /** BUGFIX / REFACTOR / UPGRADE */
+    /** BUGFIX / REFACTOR / UPGRADE / ADD_COLUMN */
     private String taskType;
 
     /** LOW / MEDIUM / HIGH */

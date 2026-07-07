@@ -1,8 +1,14 @@
 package io.github.legacygraph.task;
 
+import io.github.legacygraph.config.GraphWriteConfig;
+import io.github.legacygraph.dto.claim.CompileOptions;
+import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.extractors.adapter.*;
 import io.github.legacygraph.entity.ScanTask;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
+import io.github.legacygraph.service.graph.KnowledgeCompiler;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import java.util.concurrent.Semaphore;
 
@@ -11,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -31,11 +38,26 @@ public class AdapterExecutionService {
 
     private final ExtractionAdapterRegistry adapterRegistry;
     private final ScanTaskRecorder taskRecorder;
+    private final KnowledgeClaimService knowledgeClaimService;
+    private final KnowledgeCompiler knowledgeCompiler;
+    private final GraphWriteConfig graphWriteConfig;
 
     public AdapterExecutionService(ExtractionAdapterRegistry adapterRegistry,
                                    ScanTaskRecorder taskRecorder) {
+        this(adapterRegistry, taskRecorder, null, null, null);
+    }
+
+    @Autowired
+    public AdapterExecutionService(ExtractionAdapterRegistry adapterRegistry,
+                                   ScanTaskRecorder taskRecorder,
+                                   KnowledgeClaimService knowledgeClaimService,
+                                   KnowledgeCompiler knowledgeCompiler,
+                                   GraphWriteConfig graphWriteConfig) {
         this.adapterRegistry = adapterRegistry;
         this.taskRecorder = taskRecorder;
+        this.knowledgeClaimService = knowledgeClaimService;
+        this.knowledgeCompiler = knowledgeCompiler;
+        this.graphWriteConfig = graphWriteConfig;
     }
 
     /**
@@ -99,6 +121,7 @@ public class AdapterExecutionService {
             Semaphore semaphore = new Semaphore(MAX_CONCURRENT);
             AtomicInteger visited = new AtomicInteger(0);
             AtomicInteger processed = new AtomicInteger(0);
+            Queue<KnowledgeClaimDraft> claimDrafts = new ConcurrentLinkedQueue<>();
 
             List<Callable<Void>> tasks = files.stream()
                     .<Callable<Void>>map(file -> () -> {
@@ -119,6 +142,7 @@ public class AdapterExecutionService {
                                     ExtractionResult result = adapter.extract(context, asset);
                                     if (result != null) {
                                         processed.addAndGet(Math.max(0, result.getProcessedAssets()));
+                                        collectClaimDrafts(result, claimDrafts);
                                     }
                                 } catch (Exception e) {
                                     log.warn("Adapter {} failed for {}: {}",
@@ -142,6 +166,7 @@ public class AdapterExecutionService {
                 executor.invokeAll(tasks);
             }
 
+            compileClaimDraftsIfConfigured(context, claimDrafts);
             taskRecorder.completeTask(task, "Adapter processed " + processed.get() + " assets", null);
             return processed.get();
         } catch (Exception e) {
@@ -183,6 +208,7 @@ public class AdapterExecutionService {
         Semaphore semaphore = new Semaphore(maxConcurrency);
         AtomicInteger visited = new AtomicInteger(0);
         AtomicInteger processed = new AtomicInteger(0);
+        Queue<KnowledgeClaimDraft> claimDrafts = new ConcurrentLinkedQueue<>();
 
         List<Callable<Void>> calls = assets.stream()
                 .<Callable<Void>>map(asset -> () -> {
@@ -206,6 +232,7 @@ public class AdapterExecutionService {
                                 ExtractionResult result = adapter.extract(context, asset);
                                 if (result != null) {
                                     processed.addAndGet(Math.max(0, result.getProcessedAssets()));
+                                    collectClaimDrafts(result, claimDrafts);
                                 }
                             } catch (Exception ex) {
                                 log.warn("Adapter {} failed for asset {}: {}",
@@ -230,7 +257,38 @@ public class AdapterExecutionService {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
+        compileClaimDraftsIfConfigured(context, claimDrafts);
         return processed.get();
+    }
+
+    private void collectClaimDrafts(ExtractionResult result, Queue<KnowledgeClaimDraft> claimDrafts) {
+        if (result.getClaimDrafts() == null || result.getClaimDrafts().isEmpty()) {
+            return;
+        }
+        claimDrafts.addAll(result.getClaimDrafts());
+    }
+
+    private void compileClaimDraftsIfConfigured(ScanContext context, Queue<KnowledgeClaimDraft> claimDrafts) {
+        if (graphWriteConfig == null
+                || (!graphWriteConfig.isShadowMode() && !graphWriteConfig.isClaimCompilerMode())
+                || knowledgeClaimService == null
+                || knowledgeCompiler == null
+                || claimDrafts.isEmpty()) {
+            return;
+        }
+        List<KnowledgeClaimDraft> drafts = List.copyOf(claimDrafts);
+        try {
+            knowledgeClaimService.upsertDrafts(drafts);
+            CompileOptions options = CompileOptions.builder()
+                    .dryRun(graphWriteConfig.isShadowMode())
+                    .includePending(graphWriteConfig.isCompilerIncludePending())
+                    .minConfidence(graphWriteConfig.getCompilerMinConfidence())
+                    .build();
+            knowledgeCompiler.compile(context.getProjectId(), context.getVersionId(), options);
+        } catch (Exception e) {
+            log.warn("Claim compiler write-mode hook failed for projectId={}, versionId={}: {}",
+                    context.getProjectId(), context.getVersionId(), e.getMessage());
+        }
     }
 
     /** 判断文件是否有潜在适配器能处理 */

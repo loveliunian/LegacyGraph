@@ -8,8 +8,13 @@ import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.extractors.DatabaseMetadataExtractor;
+import io.github.legacygraph.extractors.ExternalSystemExtractor;
+import io.github.legacygraph.extractors.FeatureModuleExtractor;
 import io.github.legacygraph.extractors.JavaStructureExtractor;
+import io.github.legacygraph.extractors.MQExtractor;
 import io.github.legacygraph.extractors.MyBatisXmlExtractor;
+import io.github.legacygraph.extractors.ScheduledJobExtractor;
+import io.github.legacygraph.extractors.TestCaseExtractor;
 import io.github.legacygraph.model.MapperSqlFact;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -202,5 +208,172 @@ class GraphBuilderTest {
         assertTrue(statusColumn.getProperties().contains("\"nullable\":false"));
         assertTrue(statusColumn.getProperties().contains("\"columnDefault\":\"'NEW'\""));
         assertTrue(statusColumn.getProperties().contains("\"semanticType\":\"status\""));
+    }
+
+    @Test
+    void buildFeatureModuleGraph_createsModuleFeatureContainsEdgeInSameBatch() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
+        when(neo4jGraphDao.findNode(any(), any(), any(), any())).thenReturn(Optional.empty());
+
+        FeatureModuleExtractor.FeatureModuleFact module = new FeatureModuleExtractor.FeatureModuleFact();
+        module.setModuleName("orders");
+        module.setModulePath("/tmp/frontend/src/views/orders");
+        module.setPageCount(1);
+
+        FeatureModuleExtractor.FeatureFact feature = new FeatureModuleExtractor.FeatureFact();
+        feature.setModuleName("orders");
+        feature.setFeatureName("index");
+        feature.setFeaturePath("/tmp/frontend/src/views/orders/index.vue");
+
+        graphBuilder.buildFeatureModuleGraph("project-1", "v1", List.of(module), List.of(feature));
+
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphEdge> edges = edgeCaptor.getValue();
+
+        assertTrue(edges.stream().anyMatch(edge ->
+                EdgeType.CONTAINS.name().equals(edge.getEdgeType())
+                        && "module:orders->contains->feature:orders/index".equals(edge.getEdgeKey())));
+    }
+
+    @Test
+    void buildScheduledJobGraph_createsMethodAndHandledByEdge() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
+
+        ScheduledJobExtractor.ScheduledJobFact job = new ScheduledJobExtractor.ScheduledJobFact();
+        job.setClassName("com.demo.OrderJob");
+        job.setMethodName("sync");
+        job.setMethodSignature("sync()");
+        job.setAnnotationType("Scheduled");
+        job.setCronExpression("0 0 * * * ?");
+        job.setSourcePath("/tmp/OrderJob.java");
+
+        graphBuilder.buildScheduledJobGraph("project-1", "v1", List.of(job));
+
+        var nodeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeNodesBatch(nodeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphNode> nodes = nodeCaptor.getValue();
+        assertTrue(nodes.stream().anyMatch(node ->
+                NodeType.Method.name().equals(node.getNodeType())
+                        && "com.demo.OrderJob.sync()".equals(node.getNodeKey())));
+
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertTrue(edges.stream().anyMatch(edge ->
+                EdgeType.HANDLED_BY.name().equals(edge.getEdgeType())
+                        && "job:com.demo.OrderJob.sync->handled_by->com.demo.OrderJob.sync()".equals(edge.getEdgeKey())));
+    }
+
+    @Test
+    void buildMQGraph_createsConsumerTopicAndMethodEdges() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
+
+        MQExtractor.MQConsumerFact consumer = new MQExtractor.MQConsumerFact();
+        consumer.setClassName("com.demo.OrderListener");
+        consumer.setMethodName("handle");
+        consumer.setMethodSignature("handle(String)");
+        consumer.setAnnotationType("KafkaListener");
+        consumer.setTopic("order.created");
+        consumer.setConsumerGroup("order-service");
+        consumer.setSourcePath("/tmp/OrderListener.java");
+
+        graphBuilder.buildMQGraph("project-1", "v1", List.of(consumer));
+
+        var nodeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeNodesBatch(nodeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphNode> nodes = nodeCaptor.getValue();
+        assertTrue(nodes.stream().anyMatch(node -> NodeType.MQConsumer.name().equals(node.getNodeType())));
+        assertTrue(nodes.stream().anyMatch(node ->
+                NodeType.MQTopic.name().equals(node.getNodeType())
+                        && "mq-topic:order.created".equals(node.getNodeKey())));
+        assertTrue(nodes.stream().anyMatch(node ->
+                NodeType.Method.name().equals(node.getNodeType())
+                        && "com.demo.OrderListener.handle(String)".equals(node.getNodeKey())));
+
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertTrue(edges.stream().anyMatch(edge -> EdgeType.CONSUMES.name().equals(edge.getEdgeType())));
+        assertTrue(edges.stream().anyMatch(edge -> EdgeType.HANDLED_BY.name().equals(edge.getEdgeType())));
+        assertTrue(edges.stream().anyMatch(edge -> EdgeType.TRIGGERS.name().equals(edge.getEdgeType())));
+    }
+
+    @Test
+    void buildExternalSystemGraph_createsExternalEndpointAndMethodEdges() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
+
+        ExternalSystemExtractor.ExternalCallFact call = new ExternalSystemExtractor.ExternalCallFact();
+        call.setClassName("com.demo.PaymentClient");
+        call.setMethodName("pay");
+        call.setMethodSignature("pay(PaymentRequest)");
+        call.setClientType("RestTemplate");
+        call.setBaseUrl("https://pay.example.com/api/pay");
+        call.setSourcePath("/tmp/PaymentClient.java");
+
+        graphBuilder.buildExternalSystemGraph("project-1", "v1", List.of(call));
+
+        var nodeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeNodesBatch(nodeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphNode> nodes = nodeCaptor.getValue();
+        assertTrue(nodes.stream().anyMatch(node -> NodeType.ExternalSystem.name().equals(node.getNodeType())));
+        assertTrue(nodes.stream().anyMatch(node ->
+                NodeType.ApiEndpoint.name().equals(node.getNodeType())
+                        && "external:https://pay.example.com/api/pay".equals(node.getNodeKey())));
+
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertTrue(edges.stream().anyMatch(edge ->
+                EdgeType.CALLS_EXTERNAL.name().equals(edge.getEdgeType())
+                        && edge.getEdgeKey().contains("com.demo.PaymentClient.pay(PaymentRequest)->calls_external->")));
+        assertTrue(edges.stream().anyMatch(edge ->
+                EdgeType.CALLS_EXTERNAL.name().equals(edge.getEdgeType())
+                        && edge.getEdgeKey().contains("->calls_external->external:https://pay.example.com/api/pay")));
+    }
+
+    @Test
+    void buildTestCaseGraph_createsAssertionNodesAndContainsEdges() {
+        graphBuilder = new GraphBuilder(neo4jGraphDao, writer);
+        when(neo4jGraphDao.findNode(any(), any(), any(), any())).thenReturn(Optional.empty());
+
+        TestCaseExtractor.AssertionFact assertion = new TestCaseExtractor.AssertionFact();
+        assertion.setAssertionType("assertEquals");
+        assertion.setExpectedValue("expected");
+        assertion.setStartLine(12);
+        assertion.setEndLine(12);
+
+        TestCaseExtractor.TestCaseFact testCase = new TestCaseExtractor.TestCaseFact();
+        testCase.setClassName("com.demo.OrderServiceTest");
+        testCase.setMethodName("createsOrder");
+        testCase.setAnnotationType("Test");
+        testCase.setSourcePath("/tmp/OrderServiceTest.java");
+        testCase.setAssertions(List.of(assertion));
+
+        graphBuilder.buildTestCaseGraph("project-1", "v1", List.of(testCase));
+
+        var nodeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeNodesBatch(nodeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphNode> nodes = nodeCaptor.getValue();
+        assertTrue(nodes.stream().anyMatch(node -> NodeType.TestCase.name().equals(node.getNodeType())));
+        assertTrue(nodes.stream().anyMatch(node ->
+                NodeType.Assertion.name().equals(node.getNodeType())
+                        && node.getNodeKey().contains("assertEquals#12")));
+
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertTrue(edges.stream().anyMatch(edge ->
+                EdgeType.CONTAINS.name().equals(edge.getEdgeType())
+                        && edge.getEdgeKey().contains("->contains->assertion:")));
     }
 }

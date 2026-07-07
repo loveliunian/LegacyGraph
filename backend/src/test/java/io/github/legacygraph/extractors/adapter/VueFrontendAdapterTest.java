@@ -1,15 +1,18 @@
 package io.github.legacygraph.extractors.adapter;
 
 import io.github.legacygraph.builder.FrontendGraphBuilder;
+import io.github.legacygraph.model.FrontendPageFact;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -35,13 +38,13 @@ class VueFrontendAdapterTest {
     private VueFrontendAdapter adapter;
 
     /**
-     * 测试 supports — 支持 vue/jsx/tsx 文件。
+     * 测试 supports — 支持 vue/jsx/tsx/ts/js 文件。
      */
     @Test
     void supports_returnsTrueForFrontendFiles() {
         ScanContext ctx = ScanContext.builder().build();
 
-        for (String ext : new String[]{"vue", "jsx", "tsx"}) {
+        for (String ext : new String[]{"vue", "jsx", "tsx", "ts", "js"}) {
             Path file = tempDir.resolve("component." + ext);
             assertDoesNotThrow(() -> Files.writeString(file, "export default {}"));
             SourceAsset asset = SourceAsset.builder()
@@ -74,9 +77,9 @@ class VueFrontendAdapterTest {
         AdapterCapability cap = adapter.capability();
 
         assertEquals("VueFrontendAdapter", cap.getName());
-        assertEquals(Set.of("javascript"), cap.getLanguages());
-        assertEquals(Set.of("vue", "react"), cap.getFrameworks());
-        assertEquals(Set.of("vue", "jsx", "tsx"), cap.getFileTypes());
+        assertEquals(Set.of("javascript", "typescript"), cap.getLanguages());
+        assertEquals(Set.of("vue", "react", "angular"), cap.getFrameworks());
+        assertEquals(Set.of("vue", "jsx", "tsx", "ts", "js"), cap.getFileTypes());
         assertFalse(cap.isAiEnhanced());
         assertEquals(40, cap.getPriority());
     }
@@ -130,5 +133,41 @@ class VueFrontendAdapterTest {
                 && drafts.stream().anyMatch(draft -> "FRONTEND_PAGE".equals(draft.getFactType())
                 && "/orders".equals(draft.getFactKey()))));
         verify(factPersister, never()).saveFact(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void extractVueComponentBindsButtonsBeforeBuildingFrontendGraph() throws Exception {
+        Path viewDir = tempDir.resolve("src/views/orders");
+        Files.createDirectories(viewDir);
+        Path file = viewDir.resolve("index.vue");
+        Files.writeString(file, """
+                <template>
+                  <el-button v-permission="'order:create'" @click="createOrder">新增</el-button>
+                </template>
+                """);
+        ScanContext ctx = ScanContext.builder()
+                .projectId("project-1")
+                .versionId("v1")
+                .build();
+        SourceAsset asset = SourceAsset.builder()
+                .file(file)
+                .relativePath("src/views/orders/index.vue")
+                .fileType("vue")
+                .language("typescript")
+                .build();
+
+        adapter.extract(ctx, asset);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<FrontendPageFact>> pagesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(frontendGraphBuilder).buildFrontendGraph(
+                eq("project-1"), eq("v1"), pagesCaptor.capture(), eq("src/views/orders/index.vue"));
+
+        List<FrontendPageFact> pages = pagesCaptor.getValue();
+        assertEquals(1, pages.size());
+        assertEquals("/orders", pages.get(0).getRoutePath());
+        assertNotNull(pages.get(0).getButtons());
+        assertEquals(1, pages.get(0).getButtons().size());
+        assertEquals("order:create", pages.get(0).getButtons().get(0).getPermission());
     }
 }

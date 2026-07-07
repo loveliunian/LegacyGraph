@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,6 +35,7 @@ public class SelfAnalysisController {
      * 触发自身分析导入（默认 graphify-out/graph.json）。
      */
     @PostMapping("/bootstrap")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "触发自身分析导入", description = "把 graphify-out/graph.json 导入系统图谱（Neo4j），让 QA 可检索自身知识")
     public Result<GraphifyImportService.ImportResult> bootstrap(
             @Parameter(description = "项目ID（默认 self）") @RequestParam(defaultValue = "self") String projectId,

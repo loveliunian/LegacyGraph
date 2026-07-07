@@ -176,7 +176,7 @@ public class SystemOverviewIngestService {
         }
         // 4. Controller IMPLEMENTED_BY Service（Controller 委托 Service 实现）
         if (notBlank(row.getController()) && notBlank(row.getCodeModule())) {
-            drafts.add(draft(projectId, versionId, "Controller", row.getController(), "HANDLED_BY",
+            drafts.add(draft(projectId, versionId, "Controller", row.getController(), "IMPLEMENTED_BY",
                     "Service", row.getCodeModule(), source, confidence));
         }
         // 5. Feature USES Service
@@ -269,29 +269,29 @@ public class SystemOverviewIngestService {
         List<RelationRow> rows = new ArrayList<>();
         // 12 业务域核心映射，对齐 02 §0.1 表总览
         rows.add(row("项目与数据源管理", "项目纳管", "project", "ProjectController", "/lg/projects",
-                "ProjectService", "lg_project,lg_code_repo,lg_db_connection,lg_document", "BELONGS_TO", "CODE", 0.85));
+                "ProjectService", "lg_project,lg_code_repo,lg_db_connection,lg_document", "BELONGS_TO", "DOC", 0.70));
         rows.add(row("项目与数据源管理", "用户认证", "login", "AuthController", "/lg/auth",
-                "AuthService", "lg_sys_user,lg_sys_role,lg_sys_user_role", "REQUIRES_PERMISSION", "CODE", 0.85));
+                "AuthService", "lg_sys_user,lg_sys_role,lg_sys_user_role", "REQUIRES_PERMISSION", "DOC", 0.70));
         rows.add(row("资料扫描", "扫描编排", "scan", "ScanController", "/scan-versions",
-                "ProjectScanner", "lg_scan_version,lg_scan_task,lg_source_asset_snapshot", "TRIGGERS", "CODE", 0.85));
+                "ProjectScanner", "lg_scan_version,lg_scan_task,lg_source_asset_snapshot", "TRIGGERS", "DOC", 0.70));
         rows.add(row("图谱构建与查询", "图谱写入", "graph", "GraphQueryController", "/lg/projects/{projectId}",
-                "EvidenceGraphWriter", "Neo4j,lg_evidence,lg_node_evidence,lg_edge_evidence", "HAS_EVIDENCE", "CODE", 0.90));
+                "EvidenceGraphWriter", "Neo4j,lg_evidence,lg_node_evidence,lg_edge_evidence", "HAS_EVIDENCE", "DOC", 0.70));
         rows.add(row("事实/证据/知识断言", "知识断言", "fact", "KnowledgeController", "/knowledge",
-                "KnowledgeClaimService", "lg_knowledge_claim,lg_gap_task", "MAPS_TO", "CODE", 0.85));
+                "KnowledgeClaimService", "lg_knowledge_claim,lg_gap_task", "MAPS_TO", "DOC", 0.70));
         rows.add(row("QA 问答", "流式问答", "graph(GraphQa)", "EnhancedQaController", "/qa/ask/stream",
-                "EnhancedQaAgent", "lg_qa_conversation,lg_qa_message,lg_semantic_cache", "USES", "CODE", 0.85));
+                "EnhancedQaAgent", "lg_qa_conversation,lg_qa_message,lg_semantic_cache", "USES", "DOC", 0.70));
         rows.add(row("测试闭环", "测试生成", "test", "TestCaseController", "/lg/projects/{projectId}",
-                "TestCaseAgent", "lg_test_case,lg_test_assertion,lg_test_result", "VERIFIED_BY", "CODE", 0.85));
+                "TestCaseAgent", "lg_test_case,lg_test_assertion,lg_test_result", "VERIFIED_BY", "DOC", 0.70));
         rows.add(row("代码理解", "代码理解编排", "understanding", "CodeUnderstandingController", "/understanding",
-                "CodeUnderstandingOrchestrator", "lg_agent_run,lg_tool_run", "USES", "CODE", 0.85));
+                "CodeUnderstandingOrchestrator", "lg_agent_run,lg_tool_run", "USES", "DOC", 0.70));
         rows.add(row("变更影响与迁移", "变更影响", "change", "ChangeTaskController", "/change-tasks",
-                "ChangeImpactAgent", "lg_change_task,lg_patch_file,lg_pr_task", "AFFECTS", "CODE", 0.85));
+                "ChangeImpactAgent", "lg_change_task,lg_patch_file,lg_pr_task", "AFFECTS", "DOC", 0.70));
         rows.add(row("报告与度量", "报告导出", "report", "ReportExportController", "/reports",
-                "ReportExportService", "lg_reports", "USES", "CODE", 0.85));
+                "ReportExportService", "lg_reports", "USES", "DOC", 0.70));
         rows.add(row("LLM 与 Agent 管理", "模型网关", "settings", "LlmProviderController", "/llm/providers",
-                "LlmGateway", "lg_llm_provider,lg_prompt_run", "USES", "CODE", 0.85));
+                "LlmGateway", "lg_llm_provider,lg_prompt_run", "USES", "DOC", 0.70));
         rows.add(row("系统管理", "系统配置", "system", "SystemController", "/lg/system",
-                "SystemService", "lg_sys_config,lg_sys_dict,lg_sys_operation_log", "BELONGS_TO", "CODE", 0.85));
+                "SystemService", "lg_sys_config,lg_sys_dict,lg_sys_operation_log", "BELONGS_TO", "DOC", 0.70));
         return rows;
     }
 

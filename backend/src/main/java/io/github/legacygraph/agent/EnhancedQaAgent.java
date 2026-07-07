@@ -1,19 +1,24 @@
 package io.github.legacygraph.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.common.TraversalDirection;
+import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dto.ChangeImpactAnalysis;
 import io.github.legacygraph.dto.EvidenceItem;
+import io.github.legacygraph.dto.graph.AgentEnvelope;
+import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.rag.GraphRagEvidenceCard;
 import io.github.legacygraph.dto.rag.GraphRagExecutionResult;
 import io.github.legacygraph.dto.rag.GraphRagPlan;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.entity.VectorDocument;
-import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.llm.LlmGateway;
-import io.github.legacygraph.service.qa.ConversationContextManager;
+import io.github.legacygraph.service.change.ImpactSubgraphService;
 import io.github.legacygraph.service.graph.GraphRagPlanExecutor;
-import io.github.legacygraph.service.qa.HybridRetrievalService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
+import io.github.legacygraph.service.qa.ConversationContextManager;
+import io.github.legacygraph.service.qa.HybridRetrievalService;
 import io.github.legacygraph.service.qa.ReRankingService;
 import io.github.legacygraph.service.qa.SemanticCache;
 import io.github.legacygraph.service.qa.VectorRetrievalService;
@@ -48,6 +53,9 @@ public class EnhancedQaAgent {
     private final GraphRagPlanExecutor planExecutor;
     private final SemanticCache semanticCache;
     private final ObjectMapper objectMapper;
+    private final ImpactSubgraphService impactSubgraphService;
+    private final ChangeImpactAgent changeImpactAgent;
+    private final ChangeImpactQuestionParser changeImpactParser;
 
     /**
      * 流式问答
@@ -111,6 +119,61 @@ public class EnhancedQaAgent {
             QueryIntent intent = intentClassifier.classify(projectId, question, history);
             stageTimings.put("intent_classify", System.currentTimeMillis() - stageStart);
 
+            // 5.5 变更影响专用链路（与 GraphRAG 分支并列互斥，CHANGE_IMPACT 不触发 GraphRAG Planner）
+            long impactStart = System.currentTimeMillis();
+            List<EvidenceItem> impactEvidences = Collections.emptyList();
+            ChangeImpactAnalysis impactAnalysis = null;
+            ChangeImpactQuestionParser.ParsedChangeRequest parsedChange = null;
+            if (intent.requiresChangeImpact()) {
+                try {
+                    sendEvent(emitter, "thinking", Map.of("stage", "parsing_change"));
+                    parsedChange = changeImpactParser.parse(question);
+                    if (parsedChange.getChangeKind() != null
+                            && !"UNKNOWN".equals(parsedChange.getChangeKind())
+                            && parsedChange.getTableName() != null) {
+                        sendEvent(emitter, "thinking", Map.of("stage", "extracting_impact"));
+                        String targetNodeId = resolveTableNodeId(projectId, versionId, parsedChange.getTableName());
+                        if (targetNodeId != null) {
+                            ImpactSubgraph subgraph = impactSubgraphService.extractByNodeMultiHop(
+                                projectId, versionId, targetNodeId,
+                                TraversalDirection.TABLE_REVERSE, intent.getRecommendedGraphDepth());
+
+                            sendEvent(emitter, "thinking", Map.of("stage", "analyzing_impact"));
+                            ChangeImpactAgent.ChangeImpactInput impactInput = ChangeImpactAgent.ChangeImpactInput.builder()
+                                .changeTarget(parsedChange.getTableName() + "."
+                                    + (parsedChange.getColumnName() != null ? parsedChange.getColumnName() : ""))
+                                .changeDescription(question)
+                                .dependencies(subgraph.getDependencySummary())
+                                .build();
+                            AgentEnvelope<ChangeImpactAgent.ChangeImpactInput> env =
+                                AgentEnvelope.<ChangeImpactAgent.ChangeImpactInput>builder()
+                                    .projectId(projectId).agentType("ChangeImpact").input(impactInput).build();
+                            try {
+                                impactAnalysis = changeImpactAgent.analyze(env);
+                            } catch (Exception e) {
+                                log.warn("ChangeImpactAgent failed: {}", e.getMessage());
+                            }
+                            impactEvidences = toImpactEvidenceItems(subgraph);
+
+                            Map<String, Object> impactData = new HashMap<>();
+                            impactData.put("changeKind", parsedChange.getChangeKind());
+                            impactData.put("tableName", parsedChange.getTableName());
+                            impactData.put("severity", impactAnalysis != null ? impactAnalysis.getSeverity() : "");
+                            impactData.put("impactedNodes", impactAnalysis != null ? impactAnalysis.getImpactedNodes() : List.of());
+                            impactData.put("regressionScope", impactAnalysis != null ? impactAnalysis.getRegressionScope() : List.of());
+                            sendEvent(emitter, "impact", impactData);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Change impact branch failed, continuing with generic retrieval: {}", e.getMessage());
+                }
+            }
+            stageTimings.put("change_impact", System.currentTimeMillis() - impactStart);
+            // lambda 闭包需 final 副本
+            final List<EvidenceItem> finalImpactEvidences = impactEvidences;
+            final ChangeImpactAnalysis finalImpactAnalysis = impactAnalysis;
+            final ChangeImpactQuestionParser.ParsedChangeRequest finalParsedChange = parsedChange;
+
             // 6. 查询改写
             stageStart = System.currentTimeMillis();
             sendEvent(emitter, "thinking", Map.of("stage", "rewriting"));
@@ -171,18 +234,24 @@ public class EnhancedQaAgent {
             sendEvent(emitter, "thinking", Map.of("stage", "expanding_graph"));
             List<GraphNode> graphNodes = expandGraph(projectId, versionId, question, intent);
 
-            // 10. 构建证据列表（含 GraphRAG 证据卡）
+            // 10. 构建证据列表（含 GraphRAG 证据卡 + 变更影响证据）
             List<EvidenceItem> evidences = buildEvidenceList(docs, graphNodes);
             // 追加 GraphRAG 证据卡（结构化映射：claimId/nodeKey/行号/relationTypes/confidence）
             for (GraphRagEvidenceCard card : graphRagCards) {
                 if (evidences.size() >= 20) break;
                 evidences.add(EvidenceItem.fromGraphRagCard(card));
             }
+            // 追加变更影响证据
+            for (EvidenceItem ie : finalImpactEvidences) {
+                if (evidences.size() >= 20) break;
+                evidences.add(ie);
+            }
             sendEvent(emitter, "evidence", Map.of("items", evidences));
 
             // 11. 构建上下文（含 GraphRAG 结果）
             String retrievalContext = buildRetrievalContext(docs, graphNodes);
             retrievalContext = appendGraphRagContext(retrievalContext, graphRagCards, plan);
+            retrievalContext = appendChangeImpactContext(retrievalContext, finalImpactAnalysis, finalParsedChange);
             String fullContext = contextText + "\n" + retrievalContext;
 
             // 12. 流式生成答案
@@ -250,6 +319,15 @@ public class EnhancedQaAgent {
                         completeData.put("answer", displayText);
                         completeData.put("latencyMs", totalLatency);
                         completeData.put("stageTimings", stageTimings);
+                        if (finalParsedChange != null && finalParsedChange.getChangeKind() != null
+                                && !"UNKNOWN".equals(finalParsedChange.getChangeKind())) {
+                            Map<String, Object> changeImpact = new HashMap<>();
+                            changeImpact.put("changeKind", finalParsedChange.getChangeKind());
+                            changeImpact.put("tableName", finalParsedChange.getTableName());
+                            changeImpact.put("severity", finalImpactAnalysis != null ? finalImpactAnalysis.getSeverity() : null);
+                            changeImpact.put("suggestCreateTask", "ADD_COLUMN".equals(finalParsedChange.getChangeKind()));
+                            completeData.put("changeImpact", changeImpact);
+                        }
                         sendEvent(emitter, "complete", completeData);
                         
                         emitter.complete();
@@ -520,6 +598,71 @@ public class EnhancedQaAgent {
     }
 
     private record ClaimScore(KnowledgeClaim claim, double score) {}
+
+    /**
+     * 按表名查 Table 节点 ID。
+     * 无现成 findByName 方法，仿 GraphPathReadModel.getTableImpact：
+     * queryNodes("Table") 取全量后按 nodeName 忽略大小写过滤。
+     * versionId 须去横线匹配 Neo4j 存储格式。
+     */
+    private String resolveTableNodeId(String projectId, String versionId, String tableName) {
+        if (tableName == null || tableName.isBlank()) return null;
+        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        List<GraphNode> tables = neo4jGraphDao.queryNodes(
+            projectId, normalizedVersionId, "Table", null, null, null, 200);
+        return tables.stream()
+            .filter(t -> tableName.equalsIgnoreCase(t.getNodeName()))
+            .map(GraphNode::getId)
+            .findFirst()
+            .orElse(null);
+    }
+
+    /**
+     * 把影响子图节点转为 EvidenceItem（复用 EvidenceItem.fromGraphNode）。
+     */
+    private List<EvidenceItem> toImpactEvidenceItems(ImpactSubgraph subgraph) {
+        if (subgraph == null || subgraph.getNodeIds() == null || subgraph.getNodeIds().isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(subgraph.getNodeIds());
+        List<EvidenceItem> items = new ArrayList<>();
+        for (GraphNode n : nodes) {
+            items.add(EvidenceItem.fromGraphNode(n.getId(), n.getNodeName(), n.getNodeType(),
+                n.getSourcePath(), n.getDescription()));
+        }
+        return items;
+    }
+
+    /**
+     * 追加变更影响分析结果到上下文，指示 LLM 产出"影响清单 + 执行步骤 + 建议建任务"。
+     */
+    private String appendChangeImpactContext(String currentContext,
+                                             ChangeImpactAnalysis impactAnalysis,
+                                             ChangeImpactQuestionParser.ParsedChangeRequest parsed) {
+        if (parsed == null || parsed.getChangeKind() == null
+                || "UNKNOWN".equals(parsed.getChangeKind())) {
+            return currentContext;
+        }
+        StringBuilder ctx = new StringBuilder(currentContext);
+        ctx.append("\n## 变更影响分析\n");
+        ctx.append("变更类型: ").append(parsed.getChangeKind()).append("\n");
+        if (parsed.getTableName() != null) ctx.append("目标表: ").append(parsed.getTableName()).append("\n");
+        if (parsed.getColumnName() != null) ctx.append("字段: ").append(parsed.getColumnName()).append("\n");
+        if (parsed.getColumnType() != null) ctx.append("类型: ").append(parsed.getColumnType()).append("\n");
+        if (impactAnalysis != null) {
+            if (impactAnalysis.getSeverity() != null) ctx.append("严重程度: ").append(impactAnalysis.getSeverity()).append("\n");
+            if (impactAnalysis.getImpactedNodes() != null && !impactAnalysis.getImpactedNodes().isEmpty()) {
+                ctx.append("受影响节点: ").append(String.join(", ", impactAnalysis.getImpactedNodes())).append("\n");
+            }
+            if (impactAnalysis.getRegressionScope() != null && !impactAnalysis.getRegressionScope().isEmpty()) {
+                ctx.append("回归范围: ").append(String.join(", ", impactAnalysis.getRegressionScope())).append("\n");
+            }
+        }
+        ctx.append("\n请基于以上影响分析，给出：① 受影响清单（表→SQL→Mapper→Service→Controller→前端）")
+          .append("② 执行步骤（DDL→实体→Mapper→Service→Controller→前端→测试）")
+          .append("③ 建议（如需加字段，建议创建 ADD_COLUMN 变更任务）。无证据的内容标注为推断。\n");
+        return ctx.toString();
+    }
 
     private void sendEvent(SseEmitter emitter, String eventName, Object data) throws IOException {
         emitter.send(SseEmitter.event()

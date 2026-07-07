@@ -33,7 +33,7 @@ public class ChangeTask {
 
     private String versionId;
 
-    /** BUGFIX / REFACTOR / UPGRADE */
+    /** BUGFIX / REFACTOR / UPGRADE / ADD_COLUMN */
     private String taskType;
 
     private String title;

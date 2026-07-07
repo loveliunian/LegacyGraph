@@ -154,6 +154,26 @@ public class Neo4jGraphDao {
                 relationshipTypes, maxDepth, limit);
     }
 
+    /**
+     * 有向有界路径查询 — 从单一起点沿指定方向遍历依赖链。
+     * <p>
+     * 与 {@link #findPaths} 的区别：① 单起点（非 from-to 双端）；
+     * ② 有向（INBOUND 反向往上游，OUTBOUND 正向往下游）。
+     * 用于变更影响多跳反查（如 Table←SQL←Mapper←Service←Api←Feature）。
+     * </p>
+     *
+     * @param startNodeKey 起点节点 key（非 nodeId）
+     * @param flow         INBOUND 反向 / OUTBOUND 正向
+     */
+    public List<GraphPath> findPathsDirected(String projectId, String versionId,
+                                             String startNodeKey,
+                                             List<String> relationshipTypes,
+                                             io.github.legacygraph.common.FlowDirection flow,
+                                             int maxDepth, int limit) {
+        return queryRepo.findPathsDirected(projectId, versionId, startNodeKey,
+                relationshipTypes, flow, maxDepth, limit);
+    }
+
     public Optional<GraphEdge> findEdgeById(String edgeId) {
         return queryRepo.findEdgeById(edgeId);
     }

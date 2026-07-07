@@ -182,8 +182,11 @@ class ServiceCallExtractorTest {
     @Test
     void testCallRelation_AllArgsConstructor() {
         ServiceCallExtractor.CallRelation relation = new ServiceCallExtractor.CallRelation(
-                "com.example.TestService", "handleRequest", "processData",
-                "com.example.DataProcessor", "process", "/path/TestService.java", 42);
+                "com.example.TestService", "handleRequest", "processData");
+        relation.setTargetClass("com.example.DataProcessor");
+        relation.setTargetMethod("process");
+        relation.setSourcePath("/path/TestService.java");
+        relation.setLineNumber(42);
 
         assertEquals("com.example.TestService", relation.getCallerClass());
         assertEquals("handleRequest", relation.getCallerMethod());

@@ -372,41 +372,41 @@ class FullPipelineIntegrationTest {
 
         // Java → JavaServiceCallAdapter（Controller 文件由 JavaCodeAdapter 处理，此处用 Service 文件）
         SourceAsset javaAsset = toSourceAsset("backend/src/main/java/com/demo/service/OrderService.java");
-        var javaAdapter = adapterRegistry.selectAdapter(ctx, javaAsset);
-        assertTrue(javaAdapter.isPresent(), "Java Service 文件应有适配器");
-        assertEquals("JavaServiceCallAdapter", javaAdapter.get().capability().getName(),
+        var javaAdapter = adapterRegistry.selectAdapters(ctx, javaAsset);
+        assertFalse(javaAdapter.isEmpty(), "Java Service 文件应有适配器");
+        assertEquals("JavaServiceCallAdapter", javaAdapter.get(0).capability().getName(),
                 "Java Service 文件应路由到 JavaServiceCallAdapter");
 
         // Controller 文件被 JavaServiceCallAdapter 拒绝（由 JavaCodeAdapter 处理）
         SourceAsset controllerAsset = toSourceAsset("backend/src/main/java/com/demo/controller/OrderController.java");
-        var controllerAdapter = adapterRegistry.selectAdapter(ctx, controllerAsset);
+        var controllerAdapter = adapterRegistry.selectAdapters(ctx, controllerAsset);
         assertTrue(controllerAdapter.isEmpty(),
                 "Controller 文件不应被 JavaServiceCallAdapter 接受（由 JavaCodeAdapter 处理）");
 
         // MyBatis Mapper XML → MyBatisXmlAdapter
         SourceAsset xmlAsset = toSourceAsset("backend/src/main/resources/mapper/OrderMapper.xml");
-        var xmlAdapter = adapterRegistry.selectAdapter(ctx, xmlAsset);
-        assertTrue(xmlAdapter.isPresent(), "Mapper XML 应有适配器");
-        assertEquals("MyBatisXmlAdapter", xmlAdapter.get().capability().getName(),
+        var xmlAdapter = adapterRegistry.selectAdapters(ctx, xmlAsset);
+        assertFalse(xmlAdapter.isEmpty(), "Mapper XML 应有适配器");
+        assertEquals("MyBatisXmlAdapter", xmlAdapter.get(0).capability().getName(),
                 "Mapper XML 应路由到 MyBatisXmlAdapter");
 
         // Vue → VueFrontendAdapter
         SourceAsset vueAsset = toSourceAsset("frontend/src/views/OrderList.vue");
-        var vueAdapter = adapterRegistry.selectAdapter(ctx, vueAsset);
-        assertTrue(vueAdapter.isPresent(), "Vue 文件应有适配器");
-        assertEquals("VueFrontendAdapter", vueAdapter.get().capability().getName(),
+        var vueAdapter = adapterRegistry.selectAdapters(ctx, vueAsset);
+        assertFalse(vueAdapter.isEmpty(), "Vue 文件应有适配器");
+        assertEquals("VueFrontendAdapter", vueAdapter.get(0).capability().getName(),
                 "Vue 文件应路由到 VueFrontendAdapter");
 
         // Markdown → DocumentAdapter
         SourceAsset mdAsset = toSourceAsset("docs/README.md");
-        var mdAdapter = adapterRegistry.selectAdapter(ctx, mdAsset);
-        assertTrue(mdAdapter.isPresent(), "MD 文件应有适配器");
-        assertEquals("DocumentAdapter", mdAdapter.get().capability().getName(),
+        var mdAdapter = adapterRegistry.selectAdapters(ctx, mdAsset);
+        assertFalse(mdAdapter.isEmpty(), "MD 文件应有适配器");
+        assertEquals("DocumentAdapter", mdAdapter.get(0).capability().getName(),
                 "MD 文件应路由到 DocumentAdapter");
 
         // YAML 无适配器 → empty
         SourceAsset yamlAsset = toSourceAsset("backend/src/main/resources/application.yml");
-        var yamlAdapter = adapterRegistry.selectAdapter(ctx, yamlAsset);
+        var yamlAdapter = adapterRegistry.selectAdapters(ctx, yamlAsset);
         assertTrue(yamlAdapter.isEmpty(), "YAML 文件不应有适配器（非 Mapper XML）");
     }
 
@@ -428,7 +428,7 @@ class FullPipelineIntegrationTest {
 
         // Java: OrderService.java（非 Controller，JavaServiceCallAdapter 接受）
         SourceAsset javaAsset = toSourceAsset("backend/src/main/java/com/demo/service/OrderService.java");
-        var javaAdapter = adapterRegistry.selectAdapter(ctx, javaAsset).orElseThrow();
+        var javaAdapter = adapterRegistry.selectAdapters(ctx, javaAsset).get(0);
         ExtractionResult javaResult = javaAdapter.extract(ctx, javaAsset);
         assertNotNull(javaResult, "Java 抽取结果不应为 null");
         assertTrue(javaResult.getProcessedAssets() > 0, "Java 应处理至少 1 个资产");
@@ -436,21 +436,21 @@ class FullPipelineIntegrationTest {
 
         // XML: OrderMapper.xml
         SourceAsset xmlAsset = toSourceAsset("backend/src/main/resources/mapper/OrderMapper.xml");
-        var xmlAdapter = adapterRegistry.selectAdapter(ctx, xmlAsset).orElseThrow();
+        var xmlAdapter = adapterRegistry.selectAdapters(ctx, xmlAsset).get(0);
         ExtractionResult xmlResult = xmlAdapter.extract(ctx, xmlAsset);
         assertNotNull(xmlResult, "XML 抽取结果不应为 null");
         assertTrue(xmlResult.getProcessedAssets() > 0, "XML 应处理至少 1 个资产");
 
         // Vue: OrderList.vue
         SourceAsset vueAsset = toSourceAsset("frontend/src/views/OrderList.vue");
-        var vueAdapter = adapterRegistry.selectAdapter(ctx, vueAsset).orElseThrow();
+        var vueAdapter = adapterRegistry.selectAdapters(ctx, vueAsset).get(0);
         ExtractionResult vueResult = vueAdapter.extract(ctx, vueAsset);
         assertNotNull(vueResult, "Vue 抽取结果不应为 null");
         assertTrue(vueResult.getProcessedAssets() > 0, "Vue 应处理至少 1 个资产");
 
         // MD: README.md
         SourceAsset mdAsset = toSourceAsset("docs/README.md");
-        var mdAdapter = adapterRegistry.selectAdapter(ctx, mdAsset).orElseThrow();
+        var mdAdapter = adapterRegistry.selectAdapters(ctx, mdAsset).get(0);
         ExtractionResult mdResult = mdAdapter.extract(ctx, mdAsset);
         assertNotNull(mdResult, "MD 抽取结果不应为 null");
         assertTrue(mdResult.getProcessedAssets() > 0, "MD 应处理至少 1 个资产");
@@ -473,12 +473,12 @@ class FullPipelineIntegrationTest {
 
         // 对 Java 文件执行抽取
         SourceAsset javaAsset = toSourceAsset("backend/src/main/java/com/demo/service/OrderService.java");
-        var javaAdapter = adapterRegistry.selectAdapter(ctx, javaAsset).orElseThrow();
+        var javaAdapter = adapterRegistry.selectAdapters(ctx, javaAsset).get(0);
         javaAdapter.extract(ctx, javaAsset);
 
         // 对 Mapper XML 执行抽取
         SourceAsset xmlAsset = toSourceAsset("backend/src/main/resources/mapper/OrderMapper.xml");
-        var xmlAdapter = adapterRegistry.selectAdapter(ctx, xmlAsset).orElseThrow();
+        var xmlAdapter = adapterRegistry.selectAdapters(ctx, xmlAsset).get(0);
         xmlAdapter.extract(ctx, xmlAsset);
 
         // 验证单条和批量 Fact 写入都被调用：
@@ -551,11 +551,11 @@ class FullPipelineIntegrationTest {
                     .<java.util.concurrent.Callable<Void>>map(file -> () -> {
                         try {
                             SourceAsset asset = toSourceAsset(projectRoot.relativize(file).toString());
-                            var adapter = adapterRegistry.selectAdapter(ctx, asset);
+                            var adapter = adapterRegistry.selectAdapters(ctx, asset);
                             if (adapter.isEmpty()) {
                                 return null;
                             }
-                            ExtractionResult result = adapter.get().extract(ctx, asset);
+                            ExtractionResult result = adapter.get(0).extract(ctx, asset);
                             if (result != null && result.getProcessedAssets() > 0) {
                                 processed.addAndGet(result.getProcessedAssets());
                             } else {
@@ -602,11 +602,11 @@ class FullPipelineIntegrationTest {
                 .fileType("java")
                 .build();
 
-        var javaAdapter = adapterRegistry.selectAdapter(ctx, missingAsset);
-        if (javaAdapter.isPresent()) {
+        var javaAdapter = adapterRegistry.selectAdapters(ctx, missingAsset);
+        if (!javaAdapter.isEmpty()) {
             assertDoesNotThrow(() -> {
                 try {
-                    javaAdapter.get().extract(ctx, missingAsset);
+                    javaAdapter.get(0).extract(ctx, missingAsset);
                 } catch (Exception e) {
                     // 期望被 catch（模拟 ProjectScanner 的 try-catch 隔离）
                     // 不传播异常

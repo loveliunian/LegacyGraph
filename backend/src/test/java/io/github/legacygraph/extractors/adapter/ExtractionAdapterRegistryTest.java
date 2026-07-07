@@ -58,22 +58,24 @@ class ExtractionAdapterRegistryTest {
     }
 
     /**
-     * 测试 selectAdapter 选择第一个匹配的适配器。
+     * 测试 selectAdapters 返回所有匹配的适配器，避免前序适配器截流同一资产。
      */
     @Test
-    void selectAdapter_selectsFirstMatching() {
+    void selectAdapters_returnsAllMatchingAdapters() {
         ScanContext ctx = ScanContext.builder().build();
         SourceAsset asset = SourceAsset.builder().fileType("xml").build();
         when(javaAdapter.supports(ctx, asset)).thenReturn(false);
         when(xmlAdapter.supports(ctx, asset)).thenReturn(true);
+        when(aiAdapter.supports(ctx, asset)).thenReturn(true);
 
-        Optional<ExtractionAdapter> result = registry.selectAdapter(ctx, asset);
+        java.util.List<ExtractionAdapter> result = registry.selectAdapters(ctx, asset);
 
-        assertTrue(result.isPresent());
-        assertEquals("XmlAdapter", result.get().capability().getName());
+        assertEquals(2, result.size());
+        assertEquals("XmlAdapter", result.get(0).capability().getName());
+        assertEquals("AIAdapter", result.get(1).capability().getName());
         verify(javaAdapter).supports(ctx, asset);
         verify(xmlAdapter).supports(ctx, asset);
-        verify(aiAdapter, never()).supports(any(), any());
+        verify(aiAdapter).supports(ctx, asset);
     }
 
     /**
@@ -87,7 +89,7 @@ class ExtractionAdapterRegistryTest {
         when(xmlAdapter.supports(ctx, asset)).thenReturn(false);
         when(aiAdapter.supports(ctx, asset)).thenReturn(false);
 
-        Optional<ExtractionAdapter> result = registry.selectAdapter(ctx, asset);
+        java.util.List<ExtractionAdapter> result = registry.selectAdapters(ctx, asset);
 
         assertTrue(result.isEmpty());
     }

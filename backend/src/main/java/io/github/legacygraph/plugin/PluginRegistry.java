@@ -63,11 +63,13 @@ public class PluginRegistry {
      * 动态注册外部插件（MCP/HTTP）。落地 04 阶段4：插件动态加载。
      */
     public PluginDescriptor registerExternal(ExternalPluginDescriptor ext) {
+        if (ext.getId() == null || ext.getId().isBlank()) {
+            throw new IllegalArgumentException("Plugin id cannot be blank");
+        }
         PluginType type = PluginType.valueOf(ext.getPluginType().toUpperCase());
         Map<String, String> metadata = new java.util.HashMap<>();
         if (ext.getMcpEndpoint() != null) metadata.put("mcpEndpoint", ext.getMcpEndpoint());
         if (ext.getProtocol() != null) metadata.put("protocol", ext.getProtocol());
-        if (ext.getAuth() != null) metadata.put("auth", ext.getAuth());
         PluginDescriptor descriptor = new PluginDescriptor(
                 ext.getId(), ext.getName(), ext.getDescription(), type, "1.0.0", metadata);
         register(descriptor);

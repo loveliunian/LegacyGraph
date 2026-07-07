@@ -214,7 +214,7 @@ public class FrontendApiExtractor {
         // 匹配 @click="xxx"
         Pattern clickPattern = Pattern.compile("@click\\s*=\\s*['\"]([^'\"]+)['\"]");
         // 匹配 v-permission="xxx" 或者 has-permission="xxx"
-        Pattern permPattern = Pattern.compile("(v-permission|has-permission|permission)\\s*=\\s*['\"]([^'\"]+)['\"]");
+        Pattern permPattern = Pattern.compile("(v-permission|has-permission|permission)\\s*=\\s*(['\"])(.*?)\\2");
 
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -242,7 +242,7 @@ public class FrontendApiExtractor {
                     // 查找权限
                     Matcher permMatcher = permPattern.matcher(buttonBlock);
                     if (permMatcher.find()) {
-                        button.setPermission(permMatcher.group(2));
+                        button.setPermission(cleanAttributeValue(permMatcher.group(3)));
                     }
                 }
 
@@ -263,5 +263,17 @@ public class FrontendApiExtractor {
         }
 
         return result;
+    }
+
+    private String cleanAttributeValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.trim();
+        while ((cleaned.startsWith("'") && cleaned.endsWith("'"))
+                || (cleaned.startsWith("\"") && cleaned.endsWith("\""))) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1).trim();
+        }
+        return cleaned;
     }
 }

@@ -139,6 +139,22 @@ public class SemanticCache {
     }
 
     /**
+     * 失效某项目下全部语义缓存（schema 变更后调用，避免返回过时答案）。
+     * <p>对齐 doc/项目升级计划/QA变更影响问答打通详细设计.md §4.4.2</p>
+     */
+    public void invalidateByProject(String projectId) {
+        try {
+            if (projectId == null || projectId.isBlank()) return;
+            LambdaQueryWrapper<SemanticCacheEntry> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(SemanticCacheEntry::getProjectId, projectId);
+            int deleted = cacheRepository.delete(wrapper);
+            log.info("Invalidated {} semantic cache entries for project {}", deleted, projectId);
+        } catch (Exception e) {
+            log.warn("Semantic cache invalidation failed for project {}: {}", projectId, e.getMessage());
+        }
+    }
+
+    /**
      * 清除过期缓存
      * L7 修复：添加 @Scheduled 定时触发，每小时执行一次
      */

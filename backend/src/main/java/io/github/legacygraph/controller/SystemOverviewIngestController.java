@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,6 +43,7 @@ public class SystemOverviewIngestController {
      * 幂等：Claim 按 key 去重，向量 upsert，语义缓存按 question 去重。
      */
     @PostMapping("/ingest")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "导入系统关系总览事实底座",
             description = "把业务能力映射行写入向量/Claim，把 FAQ 写入语义缓存。EnhancedQaAgent 底座填充后自动生效。")
     public Result<SystemOverviewIngestResult> ingest(
@@ -60,6 +62,7 @@ public class SystemOverviewIngestController {
      * 用于初始化 LegacyGraph 自身的关系知识底座。
      */
     @PostMapping("/ingest-builtins")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "导入内置系统关系总览底座",
             description = "内置 12 业务域映射 + 核心 FAQ，一键初始化关系知识底座。")
     public Result<SystemOverviewIngestResult> ingestBuiltins(

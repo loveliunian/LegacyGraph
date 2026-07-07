@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -20,6 +21,7 @@ import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -50,7 +52,9 @@ public class SecurityConfig {
                         // §11.2 安全加固：高危操作需要 ADMIN 角色
                         .requestMatchers("/lg/plugins/register").hasRole("ADMIN")
                         .requestMatchers("/lg/system-overview/ingest").hasRole("ADMIN")
+                        .requestMatchers("/lg/system-overview/ingest-builtins").hasRole("ADMIN")
                         .requestMatchers("/lg/system-overview/clear").hasRole("ADMIN")
+                        .requestMatchers("/lg/self-analysis/bootstrap").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, org.springframework.security.web.access.intercept.AuthorizationFilter.class);

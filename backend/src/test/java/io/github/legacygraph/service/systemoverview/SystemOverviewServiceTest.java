@@ -2,24 +2,39 @@ package io.github.legacygraph.service.systemoverview;
 
 import io.github.legacygraph.dto.systemoverview.LayerMappingDTO;
 import io.github.legacygraph.dto.systemoverview.SystemOverviewDTO;
+import io.github.legacygraph.entity.KnowledgeClaim;
+import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 /**
  * {@link SystemOverviewService} 单元测试。
  * 验证 12 业务域映射、按域模糊匹配、Markdown 报告生成。
  */
+@ExtendWith(MockitoExtension.class)
 class SystemOverviewServiceTest {
+
+    @Mock
+    private KnowledgeClaimService knowledgeClaimService;
 
     private SystemOverviewService service;
 
     @BeforeEach
     void setUp() {
-        service = new SystemOverviewService();
+        service = new SystemOverviewService(knowledgeClaimService);
+        lenient().when(knowledgeClaimService.listClaims(anyString(), anyString(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
     }
 
     @Test
@@ -56,5 +71,63 @@ class SystemOverviewServiceTest {
         assertTrue(md.contains("核心贯穿链路"));
         assertTrue(md.contains("ProjectController"));
         assertTrue(md.contains("BusinessDomain CONTAINS Feature"));
+    }
+
+    @Test
+    void getOverview_usesPendingDocClaimsInsteadOfFallingBackToBuiltins() {
+        when(knowledgeClaimService.listClaims(eq("p2"), eq("v2"), any(), any(), isNull(), any(), anyInt()))
+                .thenReturn(List.of(
+                        claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "下单", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "下单", "IMPLEMENTED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "下单", "USES", "Service", "OrderService", "DOC", "PENDING_CONFIRM"),
+                        claim("ApiEndpoint", "POST /orders", "HANDLED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("Service", "OrderService", "READS", "Table", "lg_order", "DOC", "PENDING_CONFIRM"),
+                        claim("Service", "OrderService", "WRITES", "Table", "lg_order_item", "DOC", "PENDING_CONFIRM")
+                ));
+
+        SystemOverviewDTO dto = service.getOverview("p2", "v2");
+
+        assertEquals(1, dto.getMappings().size());
+        LayerMappingDTO mapping = dto.getMappings().get(0);
+        assertEquals("订单域", mapping.getBusinessDomain());
+        assertEquals("下单", mapping.getCapability());
+        assertEquals("OrderController", mapping.getController());
+        assertEquals("POST /orders", mapping.getApiPath());
+        assertEquals("OrderService", mapping.getCodeModule());
+        assertEquals(List.of("lg_order", "lg_order_item"), mapping.getDataTables());
+    }
+
+    @Test
+    void getPaths_filtersDynamicMappingsByFromAndTo() {
+        when(knowledgeClaimService.listClaims(eq("p3"), eq("v3"), any(), any(), isNull(), any(), anyInt()))
+                .thenReturn(List.of(
+                        claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "下单", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "下单", "IMPLEMENTED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "下单", "USES", "Service", "OrderService", "DOC", "PENDING_CONFIRM"),
+                        claim("Service", "OrderService", "READS", "Table", "lg_order", "DOC", "PENDING_CONFIRM")
+                ));
+
+        List<String> paths = service.getPaths("p3", "v3", "订单", "lg_order");
+
+        assertEquals(1, paths.size());
+        assertTrue(paths.get(0).contains("订单域"));
+        assertTrue(paths.get(0).contains("lg_order"));
+    }
+
+    private static KnowledgeClaim claim(String subjectType, String subjectKey, String predicate,
+                                        String objectType, String objectKey,
+                                        String sourceType, String status) {
+        KnowledgeClaim claim = new KnowledgeClaim();
+        claim.setProjectId("p");
+        claim.setVersionId("v");
+        claim.setSubjectType(subjectType);
+        claim.setSubjectKey(subjectKey);
+        claim.setPredicate(predicate);
+        claim.setObjectType(objectType);
+        claim.setObjectKey(objectKey);
+        claim.setSourceType(sourceType);
+        claim.setStatus(status);
+        claim.setConfidence(new BigDecimal("0.6000"));
+        return claim;
     }
 }

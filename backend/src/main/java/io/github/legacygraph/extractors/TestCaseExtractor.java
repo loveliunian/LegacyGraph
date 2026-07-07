@@ -73,6 +73,7 @@ public class TestCaseExtractor {
                         TestCaseFact fact = new TestCaseFact();
                         fact.setClassName(packageName.isEmpty() ? className : packageName + "." + className);
                         fact.setMethodName(method.getNameAsString());
+                        fact.setMethodSignature(MethodSignatureSupport.build(method));
                         fact.setAnnotationType(annotationName);
                         fact.setSourcePath(javaFile.toString());
                         fact.setStartLine(method.getBegin().map(p -> p.line).orElse(null));
@@ -124,6 +125,7 @@ public class TestCaseExtractor {
     public static class TestCaseFact {
         private String className;
         private String methodName;
+        private String methodSignature;
         private String annotationType;
         private String sourcePath;
         private Integer startLine;
