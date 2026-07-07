@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
+const axiosMockState = vi.hoisted(() => ({
+  responseFulfilled: undefined as undefined | ((response: any) => any),
+}))
+
 // Mock dependencies before importing the module
 vi.mock('element-plus', () => ({
   ElMessage: {
@@ -33,7 +37,11 @@ vi.mock('axios', async () => {
       create: vi.fn(() => ({
         interceptors: {
           request: { use: vi.fn() },
-          response: { use: vi.fn() }
+          response: {
+            use: vi.fn((fulfilled: (response: any) => any) => {
+              axiosMockState.responseFulfilled = fulfilled
+            })
+          }
         },
         get: vi.fn(),
         post: vi.fn(),
@@ -78,5 +86,17 @@ describe('request 工具', () => {
   it('应该导出 downloadFile 方法', async () => {
     const { downloadFile } = await import('@/utils/request')
     expect(typeof downloadFile).toBe('function')
+  })
+
+  it('blob 响应应直接返回文件内容，不走业务 code 校验', async () => {
+    await import('@/utils/request')
+    const blob = new Blob(['report'], { type: 'text/markdown' })
+
+    const result = axiosMockState.responseFulfilled?.({
+      data: blob,
+      config: { responseType: 'blob' },
+    })
+
+    expect(result).toBe(blob)
   })
 })

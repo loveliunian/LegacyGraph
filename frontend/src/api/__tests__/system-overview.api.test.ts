@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { downloadFile, get } from '@/utils/request'
-import { exportSystemOverviewReport, getCorePaths } from '../system-overview.api'
+import { downloadFile, get, post } from '@/utils/request'
+import {
+  downloadSystemOverviewDocument,
+  exportSystemOverviewReport,
+  generateSystemOverviewDocument,
+  getCorePaths,
+} from '../system-overview.api'
 
 vi.mock('@/utils/request', () => ({
   get: vi.fn(),
@@ -23,6 +28,24 @@ describe('system overview api', () => {
     exportSystemOverviewReport('project-1', 'v1', 'MD')
 
     expect(downloadFile).toHaveBeenCalledWith('/reports/system-overview/project-1/v1', {
+      format: 'MD',
+    })
+  })
+
+  it('generates persisted system overview document for existing scans', () => {
+    generateSystemOverviewDocument('project-1', 'v1')
+
+    expect(post).toHaveBeenCalledWith(
+      '/lg/projects/project-1/system-overview/reports/generate',
+      {},
+      { params: { versionId: 'v1' } },
+    )
+  })
+
+  it('downloads persisted system overview document by report id', () => {
+    downloadSystemOverviewDocument('project-1', 'report-1', 'MD')
+
+    expect(downloadFile).toHaveBeenCalledWith('/lg/projects/project-1/reports/report-1/download', {
       format: 'MD',
     })
   })

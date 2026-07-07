@@ -1,0 +1,4182 @@
+{
+  "pom.xml": {
+    "mtime": 1783406596.6399868,
+    "ast_hash": "dc327d69539030de63317aa675872d82",
+    "semantic_hash": "dc327d69539030de63317aa675872d82"
+  },
+  "src/main/java/io/github/legacygraph/LegacyGraphApplication.java": {
+    "mtime": 1783406388.6845043,
+    "ast_hash": "51e2aa7bbbdd5ebdae683c03cad66c79",
+    "semantic_hash": "51e2aa7bbbdd5ebdae683c03cad66c79"
+  },
+  "src/main/java/io/github/legacygraph/agent/AddColumnPatchAgent.java": {
+    "mtime": 1783353554.7036474,
+    "ast_hash": "3e690754761032ab6c00bdccb37cd7f7",
+    "semantic_hash": "3e690754761032ab6c00bdccb37cd7f7"
+  },
+  "src/main/java/io/github/legacygraph/agent/ChangeImpactAgent.java": {
+    "mtime": 1783406596.6507168,
+    "ast_hash": "198de77b52821d857250a9b75469ee4a",
+    "semantic_hash": "198de77b52821d857250a9b75469ee4a"
+  },
+  "src/main/java/io/github/legacygraph/agent/ChangeImpactQuestionParser.java": {
+    "mtime": 1783354984.9962537,
+    "ast_hash": "c2e778cafd8f0e2743e235dd467564a7",
+    "semantic_hash": "c2e778cafd8f0e2743e235dd467564a7"
+  },
+  "src/main/java/io/github/legacygraph/agent/CodeFactAgent.java": {
+    "mtime": 1783406596.6578047,
+    "ast_hash": "1bf6d15a3d4d0b5cc935c54469e1f98c",
+    "semantic_hash": "1bf6d15a3d4d0b5cc935c54469e1f98c"
+  },
+  "src/main/java/io/github/legacygraph/agent/DbSchemaAnalysisAgent.java": {
+    "mtime": 1783406596.6650302,
+    "ast_hash": "2a2bc8bc3d228ffd315ff8ed8363139c",
+    "semantic_hash": "2a2bc8bc3d228ffd315ff8ed8363139c"
+  },
+  "src/main/java/io/github/legacygraph/agent/DocUnderstandingAgent.java": {
+    "mtime": 1783406596.6722817,
+    "ast_hash": "8b3a52a366dd3959f68f90bc046c91e6",
+    "semantic_hash": "8b3a52a366dd3959f68f90bc046c91e6"
+  },
+  "src/main/java/io/github/legacygraph/agent/EnhancedQaAgent.java": {
+    "mtime": 1783392723.724057,
+    "ast_hash": "0869eb74a754ada1db2b33efc8a62b53",
+    "semantic_hash": "0869eb74a754ada1db2b33efc8a62b53"
+  },
+  "src/main/java/io/github/legacygraph/agent/FeatureMappingAgent.java": {
+    "mtime": 1783406368.9991362,
+    "ast_hash": "3445ceba582cce9b65e7830981772a2e",
+    "semantic_hash": "3445ceba582cce9b65e7830981772a2e"
+  },
+  "src/main/java/io/github/legacygraph/agent/GapFinderAgent.java": {
+    "mtime": 1782973459.1802251,
+    "ast_hash": "56c45bcee09166e2eefd7933ed30ecff",
+    "semantic_hash": "56c45bcee09166e2eefd7933ed30ecff"
+  },
+  "src/main/java/io/github/legacygraph/agent/GraphMergeAgent.java": {
+    "mtime": 1783406388.7033553,
+    "ast_hash": "51f5ad4454049b772090af2599f6994e",
+    "semantic_hash": "51f5ad4454049b772090af2599f6994e"
+  },
+  "src/main/java/io/github/legacygraph/agent/GraphRagPlannerAgent.java": {
+    "mtime": 1783392738.8778687,
+    "ast_hash": "706f92cff764177494c3bfd59b3c95cd",
+    "semantic_hash": "706f92cff764177494c3bfd59b3c95cd"
+  },
+  "src/main/java/io/github/legacygraph/agent/HyDEGenerator.java": {
+    "mtime": 1783058624.0823896,
+    "ast_hash": "38f0fb2fdb706dc5d17bd32f4fb1ceee",
+    "semantic_hash": "38f0fb2fdb706dc5d17bd32f4fb1ceee"
+  },
+  "src/main/java/io/github/legacygraph/agent/MigrationAgent.java": {
+    "mtime": 1783406596.6800196,
+    "ast_hash": "129f9a2f0b082a00e398c2f75c5960de",
+    "semantic_hash": "129f9a2f0b082a00e398c2f75c5960de"
+  },
+  "src/main/java/io/github/legacygraph/agent/PatchPlanAgent.java": {
+    "mtime": 1782962991.441286,
+    "ast_hash": "43e787f2d9dcbfc2908d435759f29df9",
+    "semantic_hash": "43e787f2d9dcbfc2908d435759f29df9"
+  },
+  "src/main/java/io/github/legacygraph/agent/PrDescriptionAgent.java": {
+    "mtime": 1783406596.6870847,
+    "ast_hash": "02e2103c7f527fca7e93b3da6ab0d166",
+    "semantic_hash": "02e2103c7f527fca7e93b3da6ab0d166"
+  },
+  "src/main/java/io/github/legacygraph/agent/QaAgent.java": {
+    "mtime": 1783406596.6942065,
+    "ast_hash": "2f6f4dbc75218e079a5a61b1fc1eb6c9",
+    "semantic_hash": "2f6f4dbc75218e079a5a61b1fc1eb6c9"
+  },
+  "src/main/java/io/github/legacygraph/agent/QueryIntent.java": {
+    "mtime": 1783392699.9671915,
+    "ast_hash": "dbb48feb050751945cfbda9a829f35ed",
+    "semantic_hash": "dbb48feb050751945cfbda9a829f35ed"
+  },
+  "src/main/java/io/github/legacygraph/agent/QueryIntentClassifier.java": {
+    "mtime": 1783058807.5323768,
+    "ast_hash": "a9ee0ad551898b044e3b6231310d018a",
+    "semantic_hash": "a9ee0ad551898b044e3b6231310d018a"
+  },
+  "src/main/java/io/github/legacygraph/agent/QueryRewriter.java": {
+    "mtime": 1783058624.0762422,
+    "ast_hash": "2121b3dfdad8d1d43522c0c04d446fb2",
+    "semantic_hash": "2121b3dfdad8d1d43522c0c04d446fb2"
+  },
+  "src/main/java/io/github/legacygraph/agent/RefactorAgent.java": {
+    "mtime": 1783406596.7012308,
+    "ast_hash": "ee428d972ad61590347379331cff123e",
+    "semantic_hash": "ee428d972ad61590347379331cff123e"
+  },
+  "src/main/java/io/github/legacygraph/agent/ReportInsightAgent.java": {
+    "mtime": 1783406596.7086873,
+    "ast_hash": "6f21e6c4f251a51bbbeb8deb6c981237",
+    "semantic_hash": "6f21e6c4f251a51bbbeb8deb6c981237"
+  },
+  "src/main/java/io/github/legacygraph/agent/ReviewAgent.java": {
+    "mtime": 1783406596.7157228,
+    "ast_hash": "ced6e1b94262036518597e5ca61709b5",
+    "semantic_hash": "ced6e1b94262036518597e5ca61709b5"
+  },
+  "src/main/java/io/github/legacygraph/agent/SqlAdvisorAgent.java": {
+    "mtime": 1783406596.728508,
+    "ast_hash": "37ee2d96867e01b672fdd35683eaed85",
+    "semantic_hash": "37ee2d96867e01b672fdd35683eaed85"
+  },
+  "src/main/java/io/github/legacygraph/agent/TestCaseAgent.java": {
+    "mtime": 1783406596.7365243,
+    "ast_hash": "b309217b0de0ffa18081c4a4f1009def",
+    "semantic_hash": "b309217b0de0ffa18081c4a4f1009def"
+  },
+  "src/main/java/io/github/legacygraph/agent/TestFailureAnalysisAgent.java": {
+    "mtime": 1783406388.7231567,
+    "ast_hash": "eb4d90f2652e952d352737ec4503bcb4",
+    "semantic_hash": "eb4d90f2652e952d352737ec4503bcb4"
+  },
+  "src/main/java/io/github/legacygraph/agent/adapter/AddColumnPatchAgentAdapter.java": {
+    "mtime": 1783353563.4421449,
+    "ast_hash": "964a1c76321fd4525811196256e5dcb6",
+    "semantic_hash": "964a1c76321fd4525811196256e5dcb6"
+  },
+  "src/main/java/io/github/legacygraph/agent/adapter/MigrationAgentAdapter.java": {
+    "mtime": 1782888235.9813519,
+    "ast_hash": "ca60f532bd324ab84b3541395ee21e5d",
+    "semantic_hash": "ca60f532bd324ab84b3541395ee21e5d"
+  },
+  "src/main/java/io/github/legacygraph/agent/adapter/RefactorAgentAdapter.java": {
+    "mtime": 1782888218.7023704,
+    "ast_hash": "c454253efc35ccfe8ba8695f703849a2",
+    "semantic_hash": "c454253efc35ccfe8ba8695f703849a2"
+  },
+  "src/main/java/io/github/legacygraph/annotation/Log.java": {
+    "mtime": 1782783203.205555,
+    "ast_hash": "d5d67c040072ffcbe1aa2b7f4df41784",
+    "semantic_hash": "d5d67c040072ffcbe1aa2b7f4df41784"
+  },
+  "src/main/java/io/github/legacygraph/aspect/LogAspect.java": {
+    "mtime": 1782783203.671133,
+    "ast_hash": "512e97ebe71f01b92bba4265f3bc0fb6",
+    "semantic_hash": "512e97ebe71f01b92bba4265f3bc0fb6"
+  },
+  "src/main/java/io/github/legacygraph/builder/BusinessGraphBuilder.java": {
+    "mtime": 1783406112.9021423,
+    "ast_hash": "51c76f83bc0c82be36c062d253cdec3b",
+    "semantic_hash": "51c76f83bc0c82be36c062d253cdec3b"
+  },
+  "src/main/java/io/github/legacygraph/builder/EvidenceGraphWriter.java": {
+    "mtime": 1783406596.7469897,
+    "ast_hash": "c573d30cbc0f13ba99c09fd00e8c6c48",
+    "semantic_hash": "c573d30cbc0f13ba99c09fd00e8c6c48"
+  },
+  "src/main/java/io/github/legacygraph/builder/FeatureIdentityNormalizer.java": {
+    "mtime": 1782960360.8230293,
+    "ast_hash": "63cb681bcd4093b38f40acb671e00252",
+    "semantic_hash": "63cb681bcd4093b38f40acb671e00252"
+  },
+  "src/main/java/io/github/legacygraph/builder/FeatureSliceBuilder.java": {
+    "mtime": 1782958701.5704532,
+    "ast_hash": "4d94ac453b1086ebfc68be64a9f4ca79",
+    "semantic_hash": "4d94ac453b1086ebfc68be64a9f4ca79"
+  },
+  "src/main/java/io/github/legacygraph/builder/FeatureSliceStore.java": {
+    "mtime": 1782956348.1433687,
+    "ast_hash": "b342183a1c8ffac36a070cf2267af6ac",
+    "semantic_hash": "b342183a1c8ffac36a070cf2267af6ac"
+  },
+  "src/main/java/io/github/legacygraph/builder/FrontendGraphBuilder.java": {
+    "mtime": 1782838851.2637813,
+    "ast_hash": "2f3c4825e8d90af3bb1a9638dc381f3e",
+    "semantic_hash": "2f3c4825e8d90af3bb1a9638dc381f3e"
+  },
+  "src/main/java/io/github/legacygraph/builder/GraphBuilder.java": {
+    "mtime": 1783382339.6380951,
+    "ast_hash": "3cad40f09aff645340fa91367e1b6441",
+    "semantic_hash": "3cad40f09aff645340fa91367e1b6441"
+  },
+  "src/main/java/io/github/legacygraph/builder/GraphWriteReconciler.java": {
+    "mtime": 1782963143.1211078,
+    "ast_hash": "d829bc89a0afd18020b18e3a49c8f84c",
+    "semantic_hash": "d829bc89a0afd18020b18e3a49c8f84c"
+  },
+  "src/main/java/io/github/legacygraph/builder/PgEvidenceTxExecutor.java": {
+    "mtime": 1782986560.8276513,
+    "ast_hash": "b0a3ec5fd96ff2a212cb75ca23dac15e",
+    "semantic_hash": "b0a3ec5fd96ff2a212cb75ca23dac15e"
+  },
+  "src/main/java/io/github/legacygraph/builder/ScenarioDSLBuilder.java": {
+    "mtime": 1782861260.1218715,
+    "ast_hash": "5d4e5c7ce5f1dba341d287d9d35d303b",
+    "semantic_hash": "5d4e5c7ce5f1dba341d287d9d35d303b"
+  },
+  "src/main/java/io/github/legacygraph/builder/TraceGraphAligner.java": {
+    "mtime": 1782838851.2642055,
+    "ast_hash": "e5f462670a1023dc5d3b6219ea7ad1a9",
+    "semantic_hash": "e5f462670a1023dc5d3b6219ea7ad1a9"
+  },
+  "src/main/java/io/github/legacygraph/common/EdgeType.java": {
+    "mtime": 1783352875.3822834,
+    "ast_hash": "7737514d1127eb714ad713d8323191d9",
+    "semantic_hash": "7737514d1127eb714ad713d8323191d9"
+  },
+  "src/main/java/io/github/legacygraph/common/ErrorCode.java": {
+    "mtime": 1782783203.430334,
+    "ast_hash": "366c113b91029b27adb55484a626df81",
+    "semantic_hash": "366c113b91029b27adb55484a626df81"
+  },
+  "src/main/java/io/github/legacygraph/common/FlowDirection.java": {
+    "mtime": 1783353232.1789308,
+    "ast_hash": "d520c2b8a602b5023ec8e671fccba5fa",
+    "semantic_hash": "d520c2b8a602b5023ec8e671fccba5fa"
+  },
+  "src/main/java/io/github/legacygraph/common/NodeStatus.java": {
+    "mtime": 1782783203.4473944,
+    "ast_hash": "82de0dc4dd8dfde281c5fdc4f3b51516",
+    "semantic_hash": "82de0dc4dd8dfde281c5fdc4f3b51516"
+  },
+  "src/main/java/io/github/legacygraph/common/NodeType.java": {
+    "mtime": 1783004268.8894527,
+    "ast_hash": "7df97d17dd52089b5eec2000f2ffaba8",
+    "semantic_hash": "7df97d17dd52089b5eec2000f2ffaba8"
+  },
+  "src/main/java/io/github/legacygraph/common/PageQuery.java": {
+    "mtime": 1782783203.5948448,
+    "ast_hash": "abd6127ba0df6b2d2fc1a6c8a91dc10e",
+    "semantic_hash": "abd6127ba0df6b2d2fc1a6c8a91dc10e"
+  },
+  "src/main/java/io/github/legacygraph/common/PageResult.java": {
+    "mtime": 1782783203.604618,
+    "ast_hash": "ab5a43ba92dbcb09b68930e66f0ff58f",
+    "semantic_hash": "ab5a43ba92dbcb09b68930e66f0ff58f"
+  },
+  "src/main/java/io/github/legacygraph/common/Result.java": {
+    "mtime": 1782783203.6121242,
+    "ast_hash": "3f78d0117c1a685d97815415a7b0e0ae",
+    "semantic_hash": "3f78d0117c1a685d97815415a7b0e0ae"
+  },
+  "src/main/java/io/github/legacygraph/common/ScanStep.java": {
+    "mtime": 1783068534.1706877,
+    "ast_hash": "2b8be700bf1fbeb467941d3232ed1e42",
+    "semantic_hash": "2b8be700bf1fbeb467941d3232ed1e42"
+  },
+  "src/main/java/io/github/legacygraph/common/SourceType.java": {
+    "mtime": 1783332927.114669,
+    "ast_hash": "52dff05aabc0d5b80984be88a158284b",
+    "semantic_hash": "52dff05aabc0d5b80984be88a158284b"
+  },
+  "src/main/java/io/github/legacygraph/common/TaskStatus.java": {
+    "mtime": 1782783203.4770164,
+    "ast_hash": "f4cfba664d8c6da5b7f6b72eb00abf17",
+    "semantic_hash": "f4cfba664d8c6da5b7f6b72eb00abf17"
+  },
+  "src/main/java/io/github/legacygraph/common/TraversalDirection.java": {
+    "mtime": 1783353237.8517122,
+    "ast_hash": "e3f594cb5d82f406165e8e1c645f95d6",
+    "semantic_hash": "e3f594cb5d82f406165e8e1c645f95d6"
+  },
+  "src/main/java/io/github/legacygraph/config/AgentConfigProperties.java": {
+    "mtime": 1783034646.5456548,
+    "ast_hash": "b00cb3d246b1c1a9b9d451d2b3a5c3c1",
+    "semantic_hash": "b00cb3d246b1c1a9b9d451d2b3a5c3c1"
+  },
+  "src/main/java/io/github/legacygraph/config/AsyncConfig.java": {
+    "mtime": 1783066376.1458995,
+    "ast_hash": "9bedae733b4321a2a1789701a1b900df",
+    "semantic_hash": "9bedae733b4321a2a1789701a1b900df"
+  },
+  "src/main/java/io/github/legacygraph/config/FlywayConfig.java": {
+    "mtime": 1783095080.398302,
+    "ast_hash": "b38b4f227ab07404de1bb5de4569e563",
+    "semantic_hash": "b38b4f227ab07404de1bb5de4569e563"
+  },
+  "src/main/java/io/github/legacygraph/config/GraphWriteConfig.java": {
+    "mtime": 1783345455.1403704,
+    "ast_hash": "16a2c36e3df44e92e51f2b0169b25874",
+    "semantic_hash": "16a2c36e3df44e92e51f2b0169b25874"
+  },
+  "src/main/java/io/github/legacygraph/config/JacksonConfig.java": {
+    "mtime": 1782783202.8343966,
+    "ast_hash": "81b0ec5789f63bb7f6e5d60d2b133565",
+    "semantic_hash": "81b0ec5789f63bb7f6e5d60d2b133565"
+  },
+  "src/main/java/io/github/legacygraph/config/LlmConfig.java": {
+    "mtime": 1783318793.6320927,
+    "ast_hash": "e622334a79758433046df383c5a0abed",
+    "semantic_hash": "e622334a79758433046df383c5a0abed"
+  },
+  "src/main/java/io/github/legacygraph/config/MinioConfig.java": {
+    "mtime": 1783095338.7095652,
+    "ast_hash": "0e88e518a855b6ce3fed806ff8cfbfcb",
+    "semantic_hash": "0e88e518a855b6ce3fed806ff8cfbfcb"
+  },
+  "src/main/java/io/github/legacygraph/config/MybatisPlusConfig.java": {
+    "mtime": 1782783202.8830702,
+    "ast_hash": "321a32376562702232558c8db4367995",
+    "semantic_hash": "321a32376562702232558c8db4367995"
+  },
+  "src/main/java/io/github/legacygraph/config/Neo4jConfig.java": {
+    "mtime": 1783337627.3562517,
+    "ast_hash": "917a5df264fd85a3201282bfed6ccb8e",
+    "semantic_hash": "917a5df264fd85a3201282bfed6ccb8e"
+  },
+  "src/main/java/io/github/legacygraph/config/Neo4jInitializer.java": {
+    "mtime": 1782783202.893078,
+    "ast_hash": "fdb017ed25fcb8db39afb2cdf3ddd854",
+    "semantic_hash": "fdb017ed25fcb8db39afb2cdf3ddd854"
+  },
+  "src/main/java/io/github/legacygraph/config/ObservabilityConfig.java": {
+    "mtime": 1783070990.5258641,
+    "ast_hash": "b1ca4c64679958683ff462d67b694ea3",
+    "semantic_hash": "b1ca4c64679958683ff462d67b694ea3"
+  },
+  "src/main/java/io/github/legacygraph/config/RedisConfig.java": {
+    "mtime": 1783396877.8862004,
+    "ast_hash": "94771e7bcff2f9d3f8a85e0c8ea6df7f",
+    "semantic_hash": "94771e7bcff2f9d3f8a85e0c8ea6df7f"
+  },
+  "src/main/java/io/github/legacygraph/config/SecurityConfig.java": {
+    "mtime": 1783381391.9333048,
+    "ast_hash": "ae845317b025e6f2ad020b3ac7da6465",
+    "semantic_hash": "ae845317b025e6f2ad020b3ac7da6465"
+  },
+  "src/main/java/io/github/legacygraph/config/WebMvcConfig.java": {
+    "mtime": 1782783202.8418138,
+    "ast_hash": "c3f47c24a28a8b361224a1ee4a051f7e",
+    "semantic_hash": "c3f47c24a28a8b361224a1ee4a051f7e"
+  },
+  "src/main/java/io/github/legacygraph/config/health/LlmProviderHealthIndicator.java": {
+    "mtime": 1783094805.1332364,
+    "ast_hash": "e2d100eda72720c96b6de29d58cb8b72",
+    "semantic_hash": "e2d100eda72720c96b6de29d58cb8b72"
+  },
+  "src/main/java/io/github/legacygraph/config/health/McpToolHealthIndicator.java": {
+    "mtime": 1783094805.1336906,
+    "ast_hash": "544a5e9eb571e470f5f6f32ff744189e",
+    "semantic_hash": "544a5e9eb571e470f5f6f32ff744189e"
+  },
+  "src/main/java/io/github/legacygraph/config/health/MinioHealthIndicator.java": {
+    "mtime": 1783095307.6497598,
+    "ast_hash": "4d2c1041dc650bf54fe86a895bc8b5aa",
+    "semantic_hash": "4d2c1041dc650bf54fe86a895bc8b5aa"
+  },
+  "src/main/java/io/github/legacygraph/config/health/Neo4jHealthIndicator.java": {
+    "mtime": 1783072541.2885113,
+    "ast_hash": "5bf5fa1e8ba99ec7cee461c22b0427fe",
+    "semantic_hash": "5bf5fa1e8ba99ec7cee461c22b0427fe"
+  },
+  "src/main/java/io/github/legacygraph/config/health/PostgresqlHealthIndicator.java": {
+    "mtime": 1783094805.1324527,
+    "ast_hash": "ea9445d06afa2bc8580fbad42898e4b8",
+    "semantic_hash": "ea9445d06afa2bc8580fbad42898e4b8"
+  },
+  "src/main/java/io/github/legacygraph/config/health/RedisHealthIndicator.java": {
+    "mtime": 1783094805.1328716,
+    "ast_hash": "efdd5f01f34443bda0d16976ded36905",
+    "semantic_hash": "efdd5f01f34443bda0d16976ded36905"
+  },
+  "src/main/java/io/github/legacygraph/controller/AgentRunController.java": {
+    "mtime": 1783095923.199951,
+    "ast_hash": "51e6239abe5caad920c8fd0d548ec842",
+    "semantic_hash": "51e6239abe5caad920c8fd0d548ec842"
+  },
+  "src/main/java/io/github/legacygraph/controller/AuditLogController.java": {
+    "mtime": 1783072809.1842809,
+    "ast_hash": "79f1b39ca10c16ff7384ce3ee398de82",
+    "semantic_hash": "79f1b39ca10c16ff7384ce3ee398de82"
+  },
+  "src/main/java/io/github/legacygraph/controller/AuthController.java": {
+    "mtime": 1783333631.3043244,
+    "ast_hash": "5785cfc10c4fb07daa0c4dd802046e1e",
+    "semantic_hash": "5785cfc10c4fb07daa0c4dd802046e1e"
+  },
+  "src/main/java/io/github/legacygraph/controller/ChangeTaskController.java": {
+    "mtime": 1783072809.8541887,
+    "ast_hash": "4dc4166c79d78ff3b8ae3233cc78ad82",
+    "semantic_hash": "4dc4166c79d78ff3b8ae3233cc78ad82"
+  },
+  "src/main/java/io/github/legacygraph/controller/CodeUnderstandingController.java": {
+    "mtime": 1783011242.8980122,
+    "ast_hash": "474c5b934e4622b553b89e3066ba6772",
+    "semantic_hash": "474c5b934e4622b553b89e3066ba6772"
+  },
+  "src/main/java/io/github/legacygraph/controller/CrossRepoImpactController.java": {
+    "mtime": 1783326356.2352588,
+    "ast_hash": "c7865e3a6766bd290473aec2098a43ea",
+    "semantic_hash": "c7865e3a6766bd290473aec2098a43ea"
+  },
+  "src/main/java/io/github/legacygraph/controller/EnhancedQaController.java": {
+    "mtime": 1783390631.2225893,
+    "ast_hash": "54426b1aff07237b28ba2e144a80e858",
+    "semantic_hash": "54426b1aff07237b28ba2e144a80e858"
+  },
+  "src/main/java/io/github/legacygraph/controller/EvidenceConflictController.java": {
+    "mtime": 1783094689.1343246,
+    "ast_hash": "071f82310abd0593ae003ecc32677f62",
+    "semantic_hash": "071f82310abd0593ae003ecc32677f62"
+  },
+  "src/main/java/io/github/legacygraph/controller/FactController.java": {
+    "mtime": 1783333032.0113263,
+    "ast_hash": "9a8061a22f46119d8704da7c5aac4c60",
+    "semantic_hash": "9a8061a22f46119d8704da7c5aac4c60"
+  },
+  "src/main/java/io/github/legacygraph/controller/GraphDiffController.java": {
+    "mtime": 1783073235.3162553,
+    "ast_hash": "07b44af7bd44f9fc59bf87e54d8b15f2",
+    "semantic_hash": "07b44af7bd44f9fc59bf87e54d8b15f2"
+  },
+  "src/main/java/io/github/legacygraph/controller/GraphQaController.java": {
+    "mtime": 1782800307.0684216,
+    "ast_hash": "9dff4a5f5a15fd31fac71428ad123783",
+    "semantic_hash": "9dff4a5f5a15fd31fac71428ad123783"
+  },
+  "src/main/java/io/github/legacygraph/controller/GraphQueryController.java": {
+    "mtime": 1783406388.7468317,
+    "ast_hash": "064a9dc888d5352b41ab7502db6a5920",
+    "semantic_hash": "064a9dc888d5352b41ab7502db6a5920"
+  },
+  "src/main/java/io/github/legacygraph/controller/GraphifyController.java": {
+    "mtime": 1783333524.3366697,
+    "ast_hash": "cb01fd9f60f7463ffeccb21f4b2c2064",
+    "semantic_hash": "cb01fd9f60f7463ffeccb21f4b2c2064"
+  },
+  "src/main/java/io/github/legacygraph/controller/GraphifyDiffController.java": {
+    "mtime": 1783326361.2167497,
+    "ast_hash": "f6c047cd00afd0b6e438dcebad46f6b8",
+    "semantic_hash": "f6c047cd00afd0b6e438dcebad46f6b8"
+  },
+  "src/main/java/io/github/legacygraph/controller/GraphifyJobController.java": {
+    "mtime": 1783326335.939126,
+    "ast_hash": "5479c8f49675f4217e734afb1023a12c",
+    "semantic_hash": "5479c8f49675f4217e734afb1023a12c"
+  },
+  "src/main/java/io/github/legacygraph/controller/GraphifyQuestionController.java": {
+    "mtime": 1783326358.051557,
+    "ast_hash": "633038602c87a9563a690134ec8a097b",
+    "semantic_hash": "633038602c87a9563a690134ec8a097b"
+  },
+  "src/main/java/io/github/legacygraph/controller/KnowledgeController.java": {
+    "mtime": 1783386577.2880583,
+    "ast_hash": "844db742ae4b0b15ced1a092432c8c82",
+    "semantic_hash": "844db742ae4b0b15ced1a092432c8c82"
+  },
+  "src/main/java/io/github/legacygraph/controller/LlmAgentController.java": {
+    "mtime": 1783334996.1026435,
+    "ast_hash": "b4319cbb7310d6ecc08f9bbe913af586",
+    "semantic_hash": "b4319cbb7310d6ecc08f9bbe913af586"
+  },
+  "src/main/java/io/github/legacygraph/controller/LlmProviderController.java": {
+    "mtime": 1783072808.988612,
+    "ast_hash": "307c3b2a2942e02462926883fd7b97cc",
+    "semantic_hash": "307c3b2a2942e02462926883fd7b97cc"
+  },
+  "src/main/java/io/github/legacygraph/controller/NotificationController.java": {
+    "mtime": 1783147814.99306,
+    "ast_hash": "2408c6af08744aac72326b8ae86ed4ea",
+    "semantic_hash": "2408c6af08744aac72326b8ae86ed4ea"
+  },
+  "src/main/java/io/github/legacygraph/controller/PluginController.java": {
+    "mtime": 1783349768.2574584,
+    "ast_hash": "829957087f49b421b3645f0fed6b872b",
+    "semantic_hash": "829957087f49b421b3645f0fed6b872b"
+  },
+  "src/main/java/io/github/legacygraph/controller/ProjectController.java": {
+    "mtime": 1783072809.7621348,
+    "ast_hash": "e91babddc51ff90926e4b68082884df9",
+    "semantic_hash": "e91babddc51ff90926e4b68082884df9"
+  },
+  "src/main/java/io/github/legacygraph/controller/ProjectOverviewController.java": {
+    "mtime": 1783406388.7712185,
+    "ast_hash": "11ced0a5f4a122475a804067ce030b24",
+    "semantic_hash": "11ced0a5f4a122475a804067ce030b24"
+  },
+  "src/main/java/io/github/legacygraph/controller/PromptTemplateController.java": {
+    "mtime": 1783072809.0223305,
+    "ast_hash": "156fd399f500e7703c3ce0d2ebcb30f2",
+    "semantic_hash": "156fd399f500e7703c3ce0d2ebcb30f2"
+  },
+  "src/main/java/io/github/legacygraph/controller/QuotaController.java": {
+    "mtime": 1783070943.3207157,
+    "ast_hash": "f8e10471cf6ec3b50966febbc05b1d5b",
+    "semantic_hash": "f8e10471cf6ec3b50966febbc05b1d5b"
+  },
+  "src/main/java/io/github/legacygraph/controller/ReportController.java": {
+    "mtime": 1783072821.698748,
+    "ast_hash": "79838cae2767dadfca048fc340d0d76e",
+    "semantic_hash": "79838cae2767dadfca048fc340d0d76e"
+  },
+  "src/main/java/io/github/legacygraph/controller/ReportExportController.java": {
+    "mtime": 1783342944.7467391,
+    "ast_hash": "c58692959b40fc5b77e71cbca83e0d50",
+    "semantic_hash": "c58692959b40fc5b77e71cbca83e0d50"
+  },
+  "src/main/java/io/github/legacygraph/controller/ReviewController.java": {
+    "mtime": 1783047676.013752,
+    "ast_hash": "78a1b49a71ec8ddf73379fd00cb05a9b",
+    "semantic_hash": "78a1b49a71ec8ddf73379fd00cb05a9b"
+  },
+  "src/main/java/io/github/legacygraph/controller/ScanController.java": {
+    "mtime": 1783406388.7907774,
+    "ast_hash": "0b1162eea771e97e4ef2dba2e6e84d34",
+    "semantic_hash": "0b1162eea771e97e4ef2dba2e6e84d34"
+  },
+  "src/main/java/io/github/legacygraph/controller/SelfAnalysisController.java": {
+    "mtime": 1783381408.0492818,
+    "ast_hash": "3b53cce7f4cf069aec3f4afcb0042973",
+    "semantic_hash": "3b53cce7f4cf069aec3f4afcb0042973"
+  },
+  "src/main/java/io/github/legacygraph/controller/SourceController.java": {
+    "mtime": 1783406596.758641,
+    "ast_hash": "33636c0b5c5999e1c09a765ed7da0104",
+    "semantic_hash": "33636c0b5c5999e1c09a765ed7da0104"
+  },
+  "src/main/java/io/github/legacygraph/controller/SystemController.java": {
+    "mtime": 1783335009.2093046,
+    "ast_hash": "cbf41cfcb3b5c2742a10cc0b5db57f9a",
+    "semantic_hash": "cbf41cfcb3b5c2742a10cc0b5db57f9a"
+  },
+  "src/main/java/io/github/legacygraph/controller/SystemOverviewController.java": {
+    "mtime": 1783381312.155671,
+    "ast_hash": "129991ae0ad5f20b33c7ffe92b54cfdf",
+    "semantic_hash": "129991ae0ad5f20b33c7ffe92b54cfdf"
+  },
+  "src/main/java/io/github/legacygraph/controller/SystemOverviewIngestController.java": {
+    "mtime": 1783397681.745057,
+    "ast_hash": "2d1cae1fa9fdd09d393ec05a25387ae7",
+    "semantic_hash": "2d1cae1fa9fdd09d393ec05a25387ae7"
+  },
+  "src/main/java/io/github/legacygraph/controller/TestCaseController.java": {
+    "mtime": 1783406596.7734013,
+    "ast_hash": "1411aaa8e2e9bcaf553e5a3198408bee",
+    "semantic_hash": "1411aaa8e2e9bcaf553e5a3198408bee"
+  },
+  "src/main/java/io/github/legacygraph/controller/TraceController.java": {
+    "mtime": 1783072820.9193382,
+    "ast_hash": "e1acb244658a4a07ca9f21665c17894d",
+    "semantic_hash": "e1acb244658a4a07ca9f21665c17894d"
+  },
+  "src/main/java/io/github/legacygraph/controller/ValidationController.java": {
+    "mtime": 1783072820.4038153,
+    "ast_hash": "62effaf362dde0de6b117dfe2caaed37",
+    "semantic_hash": "62effaf362dde0de6b117dfe2caaed37"
+  },
+  "src/main/java/io/github/legacygraph/controller/VectorController.java": {
+    "mtime": 1783094849.1186883,
+    "ast_hash": "5b27808abf2a46dd315608a0c59da88d",
+    "semantic_hash": "5b27808abf2a46dd315608a0c59da88d"
+  },
+  "src/main/java/io/github/legacygraph/dao/CypherCatalog.java": {
+    "mtime": 1783094427.2423618,
+    "ast_hash": "5921519743293155438051852f172e16",
+    "semantic_hash": "5921519743293155438051852f172e16"
+  },
+  "src/main/java/io/github/legacygraph/dao/Neo4jAdminRepository.java": {
+    "mtime": 1783331791.6718705,
+    "ast_hash": "c44649b798b145379201eb2a73951413",
+    "semantic_hash": "c44649b798b145379201eb2a73951413"
+  },
+  "src/main/java/io/github/legacygraph/dao/Neo4jConversions.java": {
+    "mtime": 1783072808.9480937,
+    "ast_hash": "93a1a3062c3aaa4dc64856721008d862",
+    "semantic_hash": "93a1a3062c3aaa4dc64856721008d862"
+  },
+  "src/main/java/io/github/legacygraph/dao/Neo4jGraphDao.java": {
+    "mtime": 1783406388.8102636,
+    "ast_hash": "058f4bf81055e77e93a4d256799a7b94",
+    "semantic_hash": "058f4bf81055e77e93a4d256799a7b94"
+  },
+  "src/main/java/io/github/legacygraph/dao/Neo4jProjectionRepository.java": {
+    "mtime": 1783068781.7274737,
+    "ast_hash": "8cbda05ebd8c06137cd0febef8269b82",
+    "semantic_hash": "8cbda05ebd8c06137cd0febef8269b82"
+  },
+  "src/main/java/io/github/legacygraph/dao/Neo4jQueryRepository.java": {
+    "mtime": 1783353249.5799677,
+    "ast_hash": "680eab60f19fffd336c795b10b23a207",
+    "semantic_hash": "680eab60f19fffd336c795b10b23a207"
+  },
+  "src/main/java/io/github/legacygraph/dao/Neo4jSchemaRepository.java": {
+    "mtime": 1783094453.2788038,
+    "ast_hash": "8ab4c50260c8b6db4e45ff12594e8d45",
+    "semantic_hash": "8ab4c50260c8b6db4e45ff12594e8d45"
+  },
+  "src/main/java/io/github/legacygraph/dao/Neo4jWriteRepository.java": {
+    "mtime": 1783343851.2203708,
+    "ast_hash": "2ee3608d14e7721e7c8289572051a8e1",
+    "semantic_hash": "2ee3608d14e7721e7c8289572051a8e1"
+  },
+  "src/main/java/io/github/legacygraph/deployment/GraphifyHealthIndicator.java": {
+    "mtime": 1783319841.5319755,
+    "ast_hash": "59a6c1cf1b068188a069b1deeedbcfff",
+    "semantic_hash": "59a6c1cf1b068188a069b1deeedbcfff"
+  },
+  "src/main/java/io/github/legacygraph/deployment/GraphifyOpsMonitor.java": {
+    "mtime": 1783319639.6642962,
+    "ast_hash": "79c8ab439bfbf89b97c8c9c834d2fa56",
+    "semantic_hash": "79c8ab439bfbf89b97c8c9c834d2fa56"
+  },
+  "src/main/java/io/github/legacygraph/deployment/GraphifyProdConfig.java": {
+    "mtime": 1783323284.0324137,
+    "ast_hash": "abfaeb28be72ec08e6cd50630d0edadd",
+    "semantic_hash": "abfaeb28be72ec08e6cd50630d0edadd"
+  },
+  "src/main/java/io/github/legacygraph/dto/AiScanConfig.java": {
+    "mtime": 1783047666.3440347,
+    "ast_hash": "ac7c903f38d3eddbae218ceb2d7c0207",
+    "semantic_hash": "ac7c903f38d3eddbae218ceb2d7c0207"
+  },
+  "src/main/java/io/github/legacygraph/dto/ChangeImpactAnalysis.java": {
+    "mtime": 1782801175.720724,
+    "ast_hash": "841b1414bd2bcfcb2981c20a1395771d",
+    "semantic_hash": "841b1414bd2bcfcb2981c20a1395771d"
+  },
+  "src/main/java/io/github/legacygraph/dto/CreateCodeRepoRequest.java": {
+    "mtime": 1783335991.8700285,
+    "ast_hash": "ef4a2fb7e7830a2f58df4764bc6cbb09",
+    "semantic_hash": "ef4a2fb7e7830a2f58df4764bc6cbb09"
+  },
+  "src/main/java/io/github/legacygraph/dto/CreateDbConnectionRequest.java": {
+    "mtime": 1782783202.34647,
+    "ast_hash": "85bf578ff932ac4c1bdcfe5e234d63b7",
+    "semantic_hash": "85bf578ff932ac4c1bdcfe5e234d63b7"
+  },
+  "src/main/java/io/github/legacygraph/dto/CreateProjectRequest.java": {
+    "mtime": 1782783202.3543622,
+    "ast_hash": "b1c2ac1923a9d810f936f0afaca41cd1",
+    "semantic_hash": "b1c2ac1923a9d810f936f0afaca41cd1"
+  },
+  "src/main/java/io/github/legacygraph/dto/CreateScanVersionRequest.java": {
+    "mtime": 1782898145.1012478,
+    "ast_hash": "167651075d4a1104d3579aac40c0d4a5",
+    "semantic_hash": "167651075d4a1104d3579aac40c0d4a5"
+  },
+  "src/main/java/io/github/legacygraph/dto/DbSchemaAnalysis.java": {
+    "mtime": 1782811360.3456433,
+    "ast_hash": "a46decb85012214b739c139d6bf07404",
+    "semantic_hash": "a46decb85012214b739c139d6bf07404"
+  },
+  "src/main/java/io/github/legacygraph/dto/EvidenceItem.java": {
+    "mtime": 1783321411.3495195,
+    "ast_hash": "8ce8e8d3df03de23c3e68fb54d584fa8",
+    "semantic_hash": "8ce8e8d3df03de23c3e68fb54d584fa8"
+  },
+  "src/main/java/io/github/legacygraph/dto/FactExtractionResult.java": {
+    "mtime": 1782783202.359207,
+    "ast_hash": "d604dc486128411c9c58de1d17efed67",
+    "semantic_hash": "d604dc486128411c9c58de1d17efed67"
+  },
+  "src/main/java/io/github/legacygraph/dto/GenerateTestCasesRequest.java": {
+    "mtime": 1782783202.241892,
+    "ast_hash": "d2e409a595febab9fec302698ab53011",
+    "semantic_hash": "d2e409a595febab9fec302698ab53011"
+  },
+  "src/main/java/io/github/legacygraph/dto/GeneratedTestCase.java": {
+    "mtime": 1782783202.2274034,
+    "ast_hash": "0d0177ac07df8e001ccdbdfba370910b",
+    "semantic_hash": "0d0177ac07df8e001ccdbdfba370910b"
+  },
+  "src/main/java/io/github/legacygraph/dto/GraphMergeDecision.java": {
+    "mtime": 1782783202.3408668,
+    "ast_hash": "885fd12a5449c442c50703d83f05c4ba",
+    "semantic_hash": "885fd12a5449c442c50703d83f05c4ba"
+  },
+  "src/main/java/io/github/legacygraph/dto/LoginRequest.java": {
+    "mtime": 1782783202.3615773,
+    "ast_hash": "1f0b8e23065c30757234b0ee3ca0cb42",
+    "semantic_hash": "1f0b8e23065c30757234b0ee3ca0cb42"
+  },
+  "src/main/java/io/github/legacygraph/dto/LoginResponse.java": {
+    "mtime": 1782783202.3753376,
+    "ast_hash": "843fbafe279095814f9b72410ef60fbf",
+    "semantic_hash": "843fbafe279095814f9b72410ef60fbf"
+  },
+  "src/main/java/io/github/legacygraph/dto/ManualFactRequest.java": {
+    "mtime": 1783333015.1602387,
+    "ast_hash": "f66f403b66168a5ac7e1442ccdb54730",
+    "semantic_hash": "f66f403b66168a5ac7e1442ccdb54730"
+  },
+  "src/main/java/io/github/legacygraph/dto/MigrationConversion.java": {
+    "mtime": 1782801183.0247297,
+    "ast_hash": "3a8dc0b04d132805d92ec2434bab8299",
+    "semantic_hash": "3a8dc0b04d132805d92ec2434bab8299"
+  },
+  "src/main/java/io/github/legacygraph/dto/PrDescription.java": {
+    "mtime": 1782801189.9818,
+    "ast_hash": "2480f26daf3231a64afe5ff7657bee5e",
+    "semantic_hash": "2480f26daf3231a64afe5ff7657bee5e"
+  },
+  "src/main/java/io/github/legacygraph/dto/ProjectOverviewResponse.java": {
+    "mtime": 1783341747.4850843,
+    "ast_hash": "705996146b7bee2584c18d9dd78b18be",
+    "semantic_hash": "705996146b7bee2584c18d9dd78b18be"
+  },
+  "src/main/java/io/github/legacygraph/dto/QaAnswer.java": {
+    "mtime": 1783406596.7979228,
+    "ast_hash": "b518b372f5b4dba617ed3f7dc16df7a5",
+    "semantic_hash": "b518b372f5b4dba617ed3f7dc16df7a5"
+  },
+  "src/main/java/io/github/legacygraph/dto/RefactorSuggestion.java": {
+    "mtime": 1782801166.5565042,
+    "ast_hash": "2f034c6081ccf1473cd0df60b08bdb53",
+    "semantic_hash": "2f034c6081ccf1473cd0df60b08bdb53"
+  },
+  "src/main/java/io/github/legacygraph/dto/ReportInsight.java": {
+    "mtime": 1782800472.9091558,
+    "ast_hash": "d4e595c6983d581df33dba969e2a1524",
+    "semantic_hash": "d4e595c6983d581df33dba969e2a1524"
+  },
+  "src/main/java/io/github/legacygraph/dto/ReviewConfirmRequest.java": {
+    "mtime": 1782816152.1310863,
+    "ast_hash": "2f4f209b806346bc2ab679da6389a36a",
+    "semantic_hash": "2f4f209b806346bc2ab679da6389a36a"
+  },
+  "src/main/java/io/github/legacygraph/dto/ReviewCreateRequest.java": {
+    "mtime": 1782896618.0326645,
+    "ast_hash": "a67b6991e33924fa6cb4c8772a471aa2",
+    "semantic_hash": "a67b6991e33924fa6cb4c8772a471aa2"
+  },
+  "src/main/java/io/github/legacygraph/dto/ScanPhase.java": {
+    "mtime": 1783044620.8345156,
+    "ast_hash": "9eefd763baac17e1f3ef5c46784b89ce",
+    "semantic_hash": "9eefd763baac17e1f3ef5c46784b89ce"
+  },
+  "src/main/java/io/github/legacygraph/dto/ScanProgressResponse.java": {
+    "mtime": 1783050015.5573883,
+    "ast_hash": "55e4a1b5b08bcae16cb6ed5e0ff0c3b4",
+    "semantic_hash": "55e4a1b5b08bcae16cb6ed5e0ff0c3b4"
+  },
+  "src/main/java/io/github/legacygraph/dto/SqlAdvisorResult.java": {
+    "mtime": 1782800458.204012,
+    "ast_hash": "df310dda10d1d98bcff612771249f138",
+    "semantic_hash": "df310dda10d1d98bcff612771249f138"
+  },
+  "src/main/java/io/github/legacygraph/dto/StartTestRunRequest.java": {
+    "mtime": 1782783202.335785,
+    "ast_hash": "aef5a5cccf2545aa5d6e578685a16f60",
+    "semantic_hash": "aef5a5cccf2545aa5d6e578685a16f60"
+  },
+  "src/main/java/io/github/legacygraph/dto/TestCaseGenerationResult.java": {
+    "mtime": 1782799711.057811,
+    "ast_hash": "b654ddbf92408cec0da83d6e504f9760",
+    "semantic_hash": "b654ddbf92408cec0da83d6e504f9760"
+  },
+  "src/main/java/io/github/legacygraph/dto/TestFailureAnalysis.java": {
+    "mtime": 1782800466.0188556,
+    "ast_hash": "b5473e9136b28a1735db305770477409",
+    "semantic_hash": "b5473e9136b28a1735db305770477409"
+  },
+  "src/main/java/io/github/legacygraph/dto/claim/ClaimCompileIssue.java": {
+    "mtime": 1783001847.6954136,
+    "ast_hash": "b79b556582d10603ba1299bc7aa2f023",
+    "semantic_hash": "b79b556582d10603ba1299bc7aa2f023"
+  },
+  "src/main/java/io/github/legacygraph/dto/claim/ClaimEvidenceRef.java": {
+    "mtime": 1782965593.5598078,
+    "ast_hash": "e8114d2ed570e1172a9373cab4b2374d",
+    "semantic_hash": "e8114d2ed570e1172a9373cab4b2374d"
+  },
+  "src/main/java/io/github/legacygraph/dto/claim/CompileOptions.java": {
+    "mtime": 1783001847.6459951,
+    "ast_hash": "6aa2a6ad62ad0ea31a476756ef7b7167",
+    "semantic_hash": "6aa2a6ad62ad0ea31a476756ef7b7167"
+  },
+  "src/main/java/io/github/legacygraph/dto/claim/CompiledGraphProjection.java": {
+    "mtime": 1783001847.6484003,
+    "ast_hash": "09a21b86eb508ce32d458b63875cc71d",
+    "semantic_hash": "09a21b86eb508ce32d458b63875cc71d"
+  },
+  "src/main/java/io/github/legacygraph/dto/claim/KnowledgeClaimDraft.java": {
+    "mtime": 1782965593.5652204,
+    "ast_hash": "2d13af30c3f15ebe1a36c03a581817d2",
+    "semantic_hash": "2d13af30c3f15ebe1a36c03a581817d2"
+  },
+  "src/main/java/io/github/legacygraph/dto/gap/GapTaskView.java": {
+    "mtime": 1782965593.554644,
+    "ast_hash": "26fec10464be9165e4468b4afb1b6ead",
+    "semantic_hash": "26fec10464be9165e4468b4afb1b6ead"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/AgentEnvelope.java": {
+    "mtime": 1782985284.7876983,
+    "ast_hash": "bc31827f6042d17132b1c1e6e6778cc4",
+    "semantic_hash": "bc31827f6042d17132b1c1e6e6778cc4"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/AgentRunContract.java": {
+    "mtime": 1782985173.1617756,
+    "ast_hash": "2f4cba83b24cc382730ad302f80e7c93",
+    "semantic_hash": "2f4cba83b24cc382730ad302f80e7c93"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/EvidenceRecord.java": {
+    "mtime": 1782985194.1458938,
+    "ast_hash": "1c7d82de56949f8e4f8c5a97fd605a78",
+    "semantic_hash": "1c7d82de56949f8e4f8c5a97fd605a78"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/FeatureSlice.java": {
+    "mtime": 1783000006.9380677,
+    "ast_hash": "a0e0eee41f002a845928aca34da94aed",
+    "semantic_hash": "a0e0eee41f002a845928aca34da94aed"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/GraphEdgeClaim.java": {
+    "mtime": 1783002012.489716,
+    "ast_hash": "b006de5b2d0b8d24bcf0b850384ddbf1",
+    "semantic_hash": "b006de5b2d0b8d24bcf0b850384ddbf1"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/GraphNodeClaim.java": {
+    "mtime": 1783052443.7549262,
+    "ast_hash": "8b236d6d76770e27c7db6146250cc600",
+    "semantic_hash": "8b236d6d76770e27c7db6146250cc600"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/GraphWriteIntent.java": {
+    "mtime": 1782963581.5570946,
+    "ast_hash": "b4d11b545655c496339c452e799e3389",
+    "semantic_hash": "b4d11b545655c496339c452e799e3389"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/HybridRagResult.java": {
+    "mtime": 1783406388.8348439,
+    "ast_hash": "1287a21848bc7a55834d53640e565f50",
+    "semantic_hash": "1287a21848bc7a55834d53640e565f50"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/ImpactSubgraph.java": {
+    "mtime": 1783353237.8814144,
+    "ast_hash": "a238eaca5bc48d51a12bb5f6e8495228",
+    "semantic_hash": "a238eaca5bc48d51a12bb5f6e8495228"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/PatchPlan.java": {
+    "mtime": 1783355428.2005455,
+    "ast_hash": "b6ecb25e61b775473723873fd8576be3",
+    "semantic_hash": "b6ecb25e61b775473723873fd8576be3"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/PrivacyLevel.java": {
+    "mtime": 1782838851.2674413,
+    "ast_hash": "2798e2991de9de19fddc8e309459b0e6",
+    "semantic_hash": "2798e2991de9de19fddc8e309459b0e6"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/RuntimeEvidenceRecord.java": {
+    "mtime": 1782985175.5187263,
+    "ast_hash": "2ac8015cc666af7af2596c6f1e806fb2",
+    "semantic_hash": "2ac8015cc666af7af2596c6f1e806fb2"
+  },
+  "src/main/java/io/github/legacygraph/dto/graph/ScenarioDSL.java": {
+    "mtime": 1782985403.0735385,
+    "ast_hash": "8a2b35b54d4f3b37c44df3908b8fd6ca",
+    "semantic_hash": "8a2b35b54d4f3b37c44df3908b8fd6ca"
+  },
+  "src/main/java/io/github/legacygraph/dto/plugin/ExternalPluginDescriptor.java": {
+    "mtime": 1783345804.3855307,
+    "ast_hash": "5cc10af6315998531b87c5baf8ce9aee",
+    "semantic_hash": "5cc10af6315998531b87c5baf8ce9aee"
+  },
+  "src/main/java/io/github/legacygraph/dto/rag/GraphRagEvidenceCard.java": {
+    "mtime": 1783321379.3023503,
+    "ast_hash": "f19b411f733d38085a17e8b2a4df297c",
+    "semantic_hash": "f19b411f733d38085a17e8b2a4df297c"
+  },
+  "src/main/java/io/github/legacygraph/dto/rag/GraphRagExecutionResult.java": {
+    "mtime": 1783002421.0159917,
+    "ast_hash": "ec16bb81881e3243445444af1d88f521",
+    "semantic_hash": "ec16bb81881e3243445444af1d88f521"
+  },
+  "src/main/java/io/github/legacygraph/dto/rag/GraphRagPlan.java": {
+    "mtime": 1783321973.8372772,
+    "ast_hash": "eefd63a0cb5ef557988c8dbf0bf586d3",
+    "semantic_hash": "eefd63a0cb5ef557988c8dbf0bf586d3"
+  },
+  "src/main/java/io/github/legacygraph/dto/report/ConfidenceTrendReport.java": {
+    "mtime": 1782783202.4207397,
+    "ast_hash": "3c7fb13e4384b0a8de8d76fc8ce641ff",
+    "semantic_hash": "3c7fb13e4384b0a8de8d76fc8ce641ff"
+  },
+  "src/main/java/io/github/legacygraph/dto/report/GraphMetricsReport.java": {
+    "mtime": 1782783202.407551,
+    "ast_hash": "81ba6bafbcd4666b13021f195ffb7370",
+    "semantic_hash": "81ba6bafbcd4666b13021f195ffb7370"
+  },
+  "src/main/java/io/github/legacygraph/dto/report/GraphQualityReport.java": {
+    "mtime": 1782965824.9835312,
+    "ast_hash": "c74c251c895592166af8b9ddd8c381d0",
+    "semantic_hash": "c74c251c895592166af8b9ddd8c381d0"
+  },
+  "src/main/java/io/github/legacygraph/dto/report/MigrationReadinessReport.java": {
+    "mtime": 1782783202.4014528,
+    "ast_hash": "6ec97f5e80cfb4c19e8fe7d3d0ed1af4",
+    "semantic_hash": "6ec97f5e80cfb4c19e8fe7d3d0ed1af4"
+  },
+  "src/main/java/io/github/legacygraph/dto/report/ScanResearchReport.java": {
+    "mtime": 1783002464.0551932,
+    "ast_hash": "5bbe3ed0d05ccd3ae2bfaa758ef5bc76",
+    "semantic_hash": "5bbe3ed0d05ccd3ae2bfaa758ef5bc76"
+  },
+  "src/main/java/io/github/legacygraph/dto/report/TestCoverageReport.java": {
+    "mtime": 1782783202.3854072,
+    "ast_hash": "e49000d6fd45cbe965958ad83b836cc9",
+    "semantic_hash": "e49000d6fd45cbe965958ad83b836cc9"
+  },
+  "src/main/java/io/github/legacygraph/dto/scan/ResolvedDbScope.java": {
+    "mtime": 1783001576.868061,
+    "ast_hash": "8fcbafd6ac68bccea256db3e2e58822a",
+    "semantic_hash": "8fcbafd6ac68bccea256db3e2e58822a"
+  },
+  "src/main/java/io/github/legacygraph/dto/scan/ResolvedDocScope.java": {
+    "mtime": 1783001576.9154818,
+    "ast_hash": "95df318cd429ec0b89c413309fd926c6",
+    "semantic_hash": "95df318cd429ec0b89c413309fd926c6"
+  },
+  "src/main/java/io/github/legacygraph/dto/scan/ResolvedRepoScope.java": {
+    "mtime": 1783001577.082712,
+    "ast_hash": "3cd53ed4b375573ea681257ea045f377",
+    "semantic_hash": "3cd53ed4b375573ea681257ea045f377"
+  },
+  "src/main/java/io/github/legacygraph/dto/scan/ResolvedScanPlan.java": {
+    "mtime": 1783001566.120148,
+    "ast_hash": "25419590fcba159508613532b413d52e",
+    "semantic_hash": "25419590fcba159508613532b413d52e"
+  },
+  "src/main/java/io/github/legacygraph/dto/systemoverview/LayerMappingDTO.java": {
+    "mtime": 1783396851.8644328,
+    "ast_hash": "26e721a775430cff8f5a489d10368024",
+    "semantic_hash": "26e721a775430cff8f5a489d10368024"
+  },
+  "src/main/java/io/github/legacygraph/dto/systemoverview/SystemOverviewDTO.java": {
+    "mtime": 1783396851.8624341,
+    "ast_hash": "053aeea35cb351288904c5dbfa21b446",
+    "semantic_hash": "053aeea35cb351288904c5dbfa21b446"
+  },
+  "src/main/java/io/github/legacygraph/dto/systemoverview/SystemOverviewIngestRequest.java": {
+    "mtime": 1783338952.25399,
+    "ast_hash": "7523538074fed8351415729ae8490364",
+    "semantic_hash": "7523538074fed8351415729ae8490364"
+  },
+  "src/main/java/io/github/legacygraph/dto/systemoverview/SystemOverviewIngestResult.java": {
+    "mtime": 1783338989.7017057,
+    "ast_hash": "727b39f6a53e1e537219d870dc36d50b",
+    "semantic_hash": "727b39f6a53e1e537219d870dc36d50b"
+  },
+  "src/main/java/io/github/legacygraph/dto/trace/TraceIngestRequest.java": {
+    "mtime": 1782783202.2353332,
+    "ast_hash": "d61dd275d95b77ef2509ead7e9956d64",
+    "semantic_hash": "d61dd275d95b77ef2509ead7e9956d64"
+  },
+  "src/main/java/io/github/legacygraph/dto/trace/TraceTopology.java": {
+    "mtime": 1782783202.2312841,
+    "ast_hash": "f069a706695cfc81c43668cb1abf7b2e",
+    "semantic_hash": "f069a706695cfc81c43668cb1abf7b2e"
+  },
+  "src/main/java/io/github/legacygraph/dto/understanding/CodeUnderstandingRequest.java": {
+    "mtime": 1783010157.7876344,
+    "ast_hash": "55bd05af2264b4e6547eac8c2a5a6812",
+    "semantic_hash": "55bd05af2264b4e6547eac8c2a5a6812"
+  },
+  "src/main/java/io/github/legacygraph/dto/understanding/CodeUnderstandingTaskResult.java": {
+    "mtime": 1783008797.0269196,
+    "ast_hash": "76b0329a82044570b1e391d622168895",
+    "semantic_hash": "76b0329a82044570b1e391d622168895"
+  },
+  "src/main/java/io/github/legacygraph/dto/understanding/CreateUnderstandingReportResponse.java": {
+    "mtime": 1783010205.7175903,
+    "ast_hash": "c9999f2dcd31512f776cf2ea57734e73",
+    "semantic_hash": "c9999f2dcd31512f776cf2ea57734e73"
+  },
+  "src/main/java/io/github/legacygraph/dto/understanding/ToolHealthResponse.java": {
+    "mtime": 1783008797.0318952,
+    "ast_hash": "30485a8653c0396615a9effcbdc28201",
+    "semantic_hash": "30485a8653c0396615a9effcbdc28201"
+  },
+  "src/main/java/io/github/legacygraph/entity/AgentRun.java": {
+    "mtime": 1782838851.2676966,
+    "ast_hash": "34ef5aa04f0e6f67e5425a62d6c66b30",
+    "semantic_hash": "34ef5aa04f0e6f67e5425a62d6c66b30"
+  },
+  "src/main/java/io/github/legacygraph/entity/AiScanJob.java": {
+    "mtime": 1783070243.2010984,
+    "ast_hash": "3275d446469e11be2915a3aa218848cb",
+    "semantic_hash": "3275d446469e11be2915a3aa218848cb"
+  },
+  "src/main/java/io/github/legacygraph/entity/AuditLog.java": {
+    "mtime": 1783085168.3447998,
+    "ast_hash": "47a419f5fc4890c65091367d571e279a",
+    "semantic_hash": "47a419f5fc4890c65091367d571e279a"
+  },
+  "src/main/java/io/github/legacygraph/entity/ChangeTask.java": {
+    "mtime": 1783355428.0113554,
+    "ast_hash": "ab0d63c2eed54d27f6717e384c021fea",
+    "semantic_hash": "ab0d63c2eed54d27f6717e384c021fea"
+  },
+  "src/main/java/io/github/legacygraph/entity/CodeRepo.java": {
+    "mtime": 1782982430.0552495,
+    "ast_hash": "c6dd97a2c7ae2bed0e739d8b6cbbf46b",
+    "semantic_hash": "c6dd97a2c7ae2bed0e739d8b6cbbf46b"
+  },
+  "src/main/java/io/github/legacygraph/entity/DbConnection.java": {
+    "mtime": 1783334206.7941854,
+    "ast_hash": "67c38d4858bc7028dfa219b49e1153c1",
+    "semantic_hash": "67c38d4858bc7028dfa219b49e1153c1"
+  },
+  "src/main/java/io/github/legacygraph/entity/DocChunk.java": {
+    "mtime": 1782982429.9415078,
+    "ast_hash": "f579889a6632326deec7053ae5ffc764",
+    "semantic_hash": "f579889a6632326deec7053ae5ffc764"
+  },
+  "src/main/java/io/github/legacygraph/entity/Document.java": {
+    "mtime": 1782982429.957713,
+    "ast_hash": "84e6c5245cc85c9409fed64797049ac1",
+    "semantic_hash": "84e6c5245cc85c9409fed64797049ac1"
+  },
+  "src/main/java/io/github/legacygraph/entity/DomainOntologyRelation.java": {
+    "mtime": 1782982429.9810922,
+    "ast_hash": "01268cdd8f26becb9cc18b20add545cc",
+    "semantic_hash": "01268cdd8f26becb9cc18b20add545cc"
+  },
+  "src/main/java/io/github/legacygraph/entity/DomainOntologyTerm.java": {
+    "mtime": 1782982429.974467,
+    "ast_hash": "0d9159a12bd965cf5def26969e8fcbfb",
+    "semantic_hash": "0d9159a12bd965cf5def26969e8fcbfb"
+  },
+  "src/main/java/io/github/legacygraph/entity/EdgeEvidence.java": {
+    "mtime": 1782982430.0431807,
+    "ast_hash": "58aa3233666783336bc51ea4ff168b42",
+    "semantic_hash": "58aa3233666783336bc51ea4ff168b42"
+  },
+  "src/main/java/io/github/legacygraph/entity/Evidence.java": {
+    "mtime": 1782982430.0666735,
+    "ast_hash": "9411a20f5a2a96fc25d1fadde3b99b6a",
+    "semantic_hash": "9411a20f5a2a96fc25d1fadde3b99b6a"
+  },
+  "src/main/java/io/github/legacygraph/entity/EvidenceConflict.java": {
+    "mtime": 1783094689.133248,
+    "ast_hash": "ccf64ef54992f895577a3dc6700ae930",
+    "semantic_hash": "ccf64ef54992f895577a3dc6700ae930"
+  },
+  "src/main/java/io/github/legacygraph/entity/Fact.java": {
+    "mtime": 1782783203.1555169,
+    "ast_hash": "59218f25b7d689e72e7b2085e509e21a",
+    "semantic_hash": "59218f25b7d689e72e7b2085e509e21a"
+  },
+  "src/main/java/io/github/legacygraph/entity/GapTask.java": {
+    "mtime": 1782982429.9691956,
+    "ast_hash": "d4fd88def1870125c73ca153ac0b39f2",
+    "semantic_hash": "d4fd88def1870125c73ca153ac0b39f2"
+  },
+  "src/main/java/io/github/legacygraph/entity/GraphEdge.java": {
+    "mtime": 1782783203.075937,
+    "ast_hash": "a397f4362d8186deb48f9ef365b1c8d6",
+    "semantic_hash": "a397f4362d8186deb48f9ef365b1c8d6"
+  },
+  "src/main/java/io/github/legacygraph/entity/GraphNode.java": {
+    "mtime": 1783052227.7303405,
+    "ast_hash": "0ca5667b38dddcc09d8d79fad1714539",
+    "semantic_hash": "0ca5667b38dddcc09d8d79fad1714539"
+  },
+  "src/main/java/io/github/legacygraph/entity/GraphWriteIntentEntity.java": {
+    "mtime": 1783068639.4353848,
+    "ast_hash": "20a1e5b2caba503dc5a7086376b28ba8",
+    "semantic_hash": "20a1e5b2caba503dc5a7086376b28ba8"
+  },
+  "src/main/java/io/github/legacygraph/entity/KnowledgeClaim.java": {
+    "mtime": 1782982429.9941626,
+    "ast_hash": "5386f1cac8ed3f69e49d59e2c991fc41",
+    "semantic_hash": "5386f1cac8ed3f69e49d59e2c991fc41"
+  },
+  "src/main/java/io/github/legacygraph/entity/LlmProvider.java": {
+    "mtime": 1782784498.5064485,
+    "ast_hash": "7fd751a400183682fb2a695a49ed1a74",
+    "semantic_hash": "7fd751a400183682fb2a695a49ed1a74"
+  },
+  "src/main/java/io/github/legacygraph/entity/MigrationRisk.java": {
+    "mtime": 1783073305.3779523,
+    "ast_hash": "655a07736e12d2beee5b308a56ce412b",
+    "semantic_hash": "655a07736e12d2beee5b308a56ce412b"
+  },
+  "src/main/java/io/github/legacygraph/entity/NodeEvidence.java": {
+    "mtime": 1782982429.92809,
+    "ast_hash": "d0f6574f35a9e556ea054805b78cb2c8",
+    "semantic_hash": "d0f6574f35a9e556ea054805b78cb2c8"
+  },
+  "src/main/java/io/github/legacygraph/entity/Notification.java": {
+    "mtime": 1783076944.1379397,
+    "ast_hash": "218fd17356a37433fb7aafe6dc8c87fa",
+    "semantic_hash": "218fd17356a37433fb7aafe6dc8c87fa"
+  },
+  "src/main/java/io/github/legacygraph/entity/PatchFile.java": {
+    "mtime": 1782982429.952717,
+    "ast_hash": "91bb1f8b1ef3fc83d38012f996ba1854",
+    "semantic_hash": "91bb1f8b1ef3fc83d38012f996ba1854"
+  },
+  "src/main/java/io/github/legacygraph/entity/PrTask.java": {
+    "mtime": 1782982429.934403,
+    "ast_hash": "97922108947041b5d57e6c0b2b26d930",
+    "semantic_hash": "97922108947041b5d57e6c0b2b26d930"
+  },
+  "src/main/java/io/github/legacygraph/entity/Project.java": {
+    "mtime": 1782982430.006196,
+    "ast_hash": "a33be8e73b0812438098c3d5a5b3fd02",
+    "semantic_hash": "a33be8e73b0812438098c3d5a5b3fd02"
+  },
+  "src/main/java/io/github/legacygraph/entity/PromptRun.java": {
+    "mtime": 1782783203.099022,
+    "ast_hash": "f18fee887f3ff47071d4cbafc5bca423",
+    "semantic_hash": "f18fee887f3ff47071d4cbafc5bca423"
+  },
+  "src/main/java/io/github/legacygraph/entity/PromptTemplate.java": {
+    "mtime": 1782783203.0679257,
+    "ast_hash": "44aa13b9b5d47bb23b2c1fea90ccefc2",
+    "semantic_hash": "44aa13b9b5d47bb23b2c1fea90ccefc2"
+  },
+  "src/main/java/io/github/legacygraph/entity/QaConversation.java": {
+    "mtime": 1783064179.7242994,
+    "ast_hash": "90fb9d4a6776f9b84cf69f5cf59e4346",
+    "semantic_hash": "90fb9d4a6776f9b84cf69f5cf59e4346"
+  },
+  "src/main/java/io/github/legacygraph/entity/QaFeedback.java": {
+    "mtime": 1783058560.5307565,
+    "ast_hash": "ca2d190bd1c2dd1ec380ff10dcbb5f41",
+    "semantic_hash": "ca2d190bd1c2dd1ec380ff10dcbb5f41"
+  },
+  "src/main/java/io/github/legacygraph/entity/QaMessage.java": {
+    "mtime": 1783058560.5215998,
+    "ast_hash": "e23245e2fc0cc774a787db3746ea1403",
+    "semantic_hash": "e23245e2fc0cc774a787db3746ea1403"
+  },
+  "src/main/java/io/github/legacygraph/entity/Report.java": {
+    "mtime": 1782982430.024186,
+    "ast_hash": "361364cac9b969de34cb9b2fc86bc1a2",
+    "semantic_hash": "361364cac9b969de34cb9b2fc86bc1a2"
+  },
+  "src/main/java/io/github/legacygraph/entity/ReviewRecord.java": {
+    "mtime": 1782816145.1771195,
+    "ast_hash": "b96cc3c2e7cc9567e0fd19f475940fe0",
+    "semantic_hash": "b96cc3c2e7cc9567e0fd19f475940fe0"
+  },
+  "src/main/java/io/github/legacygraph/entity/RuntimeTrace.java": {
+    "mtime": 1782982429.9473858,
+    "ast_hash": "80410d4e2865f4547df78aec72a27bff",
+    "semantic_hash": "80410d4e2865f4547df78aec72a27bff"
+  },
+  "src/main/java/io/github/legacygraph/entity/ScanTask.java": {
+    "mtime": 1783044609.1087475,
+    "ast_hash": "e9c6886fc7c0696c2a9c2bee92180c01",
+    "semantic_hash": "e9c6886fc7c0696c2a9c2bee92180c01"
+  },
+  "src/main/java/io/github/legacygraph/entity/ScanVersion.java": {
+    "mtime": 1783068852.5153666,
+    "ast_hash": "252f7a009522ecdc0c1cb5bdb06e345c",
+    "semantic_hash": "252f7a009522ecdc0c1cb5bdb06e345c"
+  },
+  "src/main/java/io/github/legacygraph/entity/SemanticCacheEntry.java": {
+    "mtime": 1783304576.9911642,
+    "ast_hash": "2830e222257fd929b100e0189b52f1e1",
+    "semantic_hash": "2830e222257fd929b100e0189b52f1e1"
+  },
+  "src/main/java/io/github/legacygraph/entity/SourceAssetSnapshot.java": {
+    "mtime": 1783001747.2661965,
+    "ast_hash": "c02259f90c341fe7533abc2d3672ebed",
+    "semantic_hash": "c02259f90c341fe7533abc2d3672ebed"
+  },
+  "src/main/java/io/github/legacygraph/entity/SysConfig.java": {
+    "mtime": 1783073304.4731288,
+    "ast_hash": "6d0a04915f4d7a96ef0c2d39cc83f643",
+    "semantic_hash": "6d0a04915f4d7a96ef0c2d39cc83f643"
+  },
+  "src/main/java/io/github/legacygraph/entity/SysDict.java": {
+    "mtime": 1783073304.607834,
+    "ast_hash": "697e1df5130fa4117aaa673fd1d4aabd",
+    "semantic_hash": "697e1df5130fa4117aaa673fd1d4aabd"
+  },
+  "src/main/java/io/github/legacygraph/entity/SysDictItem.java": {
+    "mtime": 1783073304.7381916,
+    "ast_hash": "1006307627b4653b745b14f4fefd2b3f",
+    "semantic_hash": "1006307627b4653b745b14f4fefd2b3f"
+  },
+  "src/main/java/io/github/legacygraph/entity/SysRole.java": {
+    "mtime": 1783073305.1323667,
+    "ast_hash": "bbb69f603d862300925a9c6e2c5cc7d8",
+    "semantic_hash": "bbb69f603d862300925a9c6e2c5cc7d8"
+  },
+  "src/main/java/io/github/legacygraph/entity/SysUser.java": {
+    "mtime": 1783073304.8673286,
+    "ast_hash": "236994c97b648378d11c84760ce21cdf",
+    "semantic_hash": "236994c97b648378d11c84760ce21cdf"
+  },
+  "src/main/java/io/github/legacygraph/entity/SysUserRole.java": {
+    "mtime": 1783073304.9961247,
+    "ast_hash": "09117e5e092815b1dee2c6126f9bb8e2",
+    "semantic_hash": "09117e5e092815b1dee2c6126f9bb8e2"
+  },
+  "src/main/java/io/github/legacygraph/entity/TestAssertion.java": {
+    "mtime": 1782982430.0302844,
+    "ast_hash": "34b9de709e2b59bf9b38ef5c22d944b0",
+    "semantic_hash": "34b9de709e2b59bf9b38ef5c22d944b0"
+  },
+  "src/main/java/io/github/legacygraph/entity/TestCase.java": {
+    "mtime": 1782982430.0491953,
+    "ast_hash": "312b09a754ec3c3a74cce8a862d80e54",
+    "semantic_hash": "312b09a754ec3c3a74cce8a862d80e54"
+  },
+  "src/main/java/io/github/legacygraph/entity/TestResult.java": {
+    "mtime": 1782982430.0359116,
+    "ast_hash": "9bc766d6d1e7ef5be5d53d7beee53ed6",
+    "semantic_hash": "9bc766d6d1e7ef5be5d53d7beee53ed6"
+  },
+  "src/main/java/io/github/legacygraph/entity/TestRun.java": {
+    "mtime": 1782982430.0190454,
+    "ast_hash": "6f1f2140a44c7647088d0fcc2f0ef11c",
+    "semantic_hash": "6f1f2140a44c7647088d0fcc2f0ef11c"
+  },
+  "src/main/java/io/github/legacygraph/entity/ToolEvidenceEntity.java": {
+    "mtime": 1783008737.7509096,
+    "ast_hash": "2541c73bf93a70f3490e103da8764d84",
+    "semantic_hash": "2541c73bf93a70f3490e103da8764d84"
+  },
+  "src/main/java/io/github/legacygraph/entity/ToolRunEntity.java": {
+    "mtime": 1783008737.753478,
+    "ast_hash": "2e4e59d3332fd2a3584dfb05f3253c6a",
+    "semantic_hash": "2e4e59d3332fd2a3584dfb05f3253c6a"
+  },
+  "src/main/java/io/github/legacygraph/entity/ValidationGate.java": {
+    "mtime": 1782982430.0129535,
+    "ast_hash": "98504b50dd1a660e5797e8377b6dc261",
+    "semantic_hash": "98504b50dd1a660e5797e8377b6dc261"
+  },
+  "src/main/java/io/github/legacygraph/entity/VectorDocument.java": {
+    "mtime": 1783406388.854695,
+    "ast_hash": "8bbe35e138173e26124d6a41df1c342f",
+    "semantic_hash": "8bbe35e138173e26124d6a41df1c342f"
+  },
+  "src/main/java/io/github/legacygraph/eval/GraphifyBenchmarkCase.java": {
+    "mtime": 1783320439.523216,
+    "ast_hash": "f9451ad36a0ba728950938670d1b671e",
+    "semantic_hash": "f9451ad36a0ba728950938670d1b671e"
+  },
+  "src/main/java/io/github/legacygraph/eval/GraphifyBenchmarkCaseRegistry.java": {
+    "mtime": 1783333474.289842,
+    "ast_hash": "e86f87c5deb308a0da09f107de7f53fb",
+    "semantic_hash": "e86f87c5deb308a0da09f107de7f53fb"
+  },
+  "src/main/java/io/github/legacygraph/eval/GraphifyBenchmarkResult.java": {
+    "mtime": 1783320415.2335608,
+    "ast_hash": "20c528c7d572a2a139deb07edf88d8a5",
+    "semantic_hash": "20c528c7d572a2a139deb07edf88d8a5"
+  },
+  "src/main/java/io/github/legacygraph/eval/GraphifyBenchmarkScorer.java": {
+    "mtime": 1783320445.0700226,
+    "ast_hash": "c519746f1bb84fc87b03eb673f663e11",
+    "semantic_hash": "c519746f1bb84fc87b03eb673f663e11"
+  },
+  "src/main/java/io/github/legacygraph/eval/GraphifyQualityResult.java": {
+    "mtime": 1783333465.301537,
+    "ast_hash": "44007ef1cfe36a8d1a5894b4b437888e",
+    "semantic_hash": "44007ef1cfe36a8d1a5894b4b437888e"
+  },
+  "src/main/java/io/github/legacygraph/eval/GraphifyQualityService.java": {
+    "mtime": 1783333491.1298285,
+    "ast_hash": "7a1996205f176c992d68e8022eeb3cf9",
+    "semantic_hash": "7a1996205f176c992d68e8022eeb3cf9"
+  },
+  "src/main/java/io/github/legacygraph/event/DomainEvent.java": {
+    "mtime": 1783068573.637136,
+    "ast_hash": "ae4f54c4536f16f189d83429bb28aac8",
+    "semantic_hash": "ae4f54c4536f16f189d83429bb28aac8"
+  },
+  "src/main/java/io/github/legacygraph/event/DomainEventListener.java": {
+    "mtime": 1783094104.7832797,
+    "ast_hash": "0082b59589b490b29ef3f442edbdfc3b",
+    "semantic_hash": "0082b59589b490b29ef3f442edbdfc3b"
+  },
+  "src/main/java/io/github/legacygraph/event/EntityMergedEvent.java": {
+    "mtime": 1783068573.63244,
+    "ast_hash": "78f92dd86c5381380a784ca0a54923b1",
+    "semantic_hash": "78f92dd86c5381380a784ca0a54923b1"
+  },
+  "src/main/java/io/github/legacygraph/event/GraphUpdatedEvent.java": {
+    "mtime": 1783073201.6091537,
+    "ast_hash": "5cc3772ec6e0292c1c4067d93c88e4c4",
+    "semantic_hash": "5cc3772ec6e0292c1c4067d93c88e4c4"
+  },
+  "src/main/java/io/github/legacygraph/event/GraphWriteCompletedEvent.java": {
+    "mtime": 1783068573.6742342,
+    "ast_hash": "ec8c3011900cad58fa8e02e59927f5be",
+    "semantic_hash": "ec8c3011900cad58fa8e02e59927f5be"
+  },
+  "src/main/java/io/github/legacygraph/event/ProjectCreatedEvent.java": {
+    "mtime": 1783073202.8243544,
+    "ast_hash": "5e51864e6b8c12e562a5862d2c250844",
+    "semantic_hash": "5e51864e6b8c12e562a5862d2c250844"
+  },
+  "src/main/java/io/github/legacygraph/event/ScanCompletedEvent.java": {
+    "mtime": 1783073200.3906522,
+    "ast_hash": "d7546445dce53664f3535adbcb056920",
+    "semantic_hash": "d7546445dce53664f3535adbcb056920"
+  },
+  "src/main/java/io/github/legacygraph/event/VersionCreatedEvent.java": {
+    "mtime": 1783073204.0999064,
+    "ast_hash": "46b23f1fb660292b2b354f2f8991854e",
+    "semantic_hash": "46b23f1fb660292b2b354f2f8991854e"
+  },
+  "src/main/java/io/github/legacygraph/exception/BusinessException.java": {
+    "mtime": 1782783204.4053962,
+    "ast_hash": "af3363ec1ffec4bdb7d252dc6371e990",
+    "semantic_hash": "af3363ec1ffec4bdb7d252dc6371e990"
+  },
+  "src/main/java/io/github/legacygraph/exception/GlobalExceptionHandler.java": {
+    "mtime": 1782887240.016247,
+    "ast_hash": "002049d0e4a56e7be3dc43ec6ee9c1f5",
+    "semantic_hash": "002049d0e4a56e7be3dc43ec6ee9c1f5"
+  },
+  "src/main/java/io/github/legacygraph/extractors/BusinessDomainExtractor.java": {
+    "mtime": 1783353465.991006,
+    "ast_hash": "1ca4e3f2573bd236bce5f186c7ac2ffe",
+    "semantic_hash": "1ca4e3f2573bd236bce5f186c7ac2ffe"
+  },
+  "src/main/java/io/github/legacygraph/extractors/BusinessObjectExtractor.java": {
+    "mtime": 1783353466.0062091,
+    "ast_hash": "21a31563e394a0f278676e5b38a430fc",
+    "semantic_hash": "21a31563e394a0f278676e5b38a430fc"
+  },
+  "src/main/java/io/github/legacygraph/extractors/BusinessProcessExtractor.java": {
+    "mtime": 1783353525.1716297,
+    "ast_hash": "88ecbca761cc36b85ff5209574ec5dca",
+    "semantic_hash": "88ecbca761cc36b85ff5209574ec5dca"
+  },
+  "src/main/java/io/github/legacygraph/extractors/BusinessRuleExtractor.java": {
+    "mtime": 1783353525.1836581,
+    "ast_hash": "c457a30e4be800bcda2d962e1b48116b",
+    "semantic_hash": "c457a30e4be800bcda2d962e1b48116b"
+  },
+  "src/main/java/io/github/legacygraph/extractors/ConfigItemExtractor.java": {
+    "mtime": 1783344987.7784913,
+    "ast_hash": "4179764292e34567d12d0100fa8d3dc5",
+    "semantic_hash": "4179764292e34567d12d0100fa8d3dc5"
+  },
+  "src/main/java/io/github/legacygraph/extractors/DatabaseConstraintExtractor.java": {
+    "mtime": 1783009737.3637323,
+    "ast_hash": "e588d411865d0c3936de5754d7cf62d7",
+    "semantic_hash": "e588d411865d0c3936de5754d7cf62d7"
+  },
+  "src/main/java/io/github/legacygraph/extractors/DatabaseMetadataExtractor.java": {
+    "mtime": 1783341568.944026,
+    "ast_hash": "6e54ce4c3fd9f198f3c52a53647f745e",
+    "semantic_hash": "6e54ce4c3fd9f198f3c52a53647f745e"
+  },
+  "src/main/java/io/github/legacygraph/extractors/DocumentExtractor.java": {
+    "mtime": 1783306533.3351762,
+    "ast_hash": "afbc41f5d1e688985e7095273b33a6d1",
+    "semantic_hash": "afbc41f5d1e688985e7095273b33a6d1"
+  },
+  "src/main/java/io/github/legacygraph/extractors/ExternalSystemExtractor.java": {
+    "mtime": 1783382297.5924582,
+    "ast_hash": "6f40dd8999d51a50969f03aec9fa5817",
+    "semantic_hash": "6f40dd8999d51a50969f03aec9fa5817"
+  },
+  "src/main/java/io/github/legacygraph/extractors/FeatureModuleExtractor.java": {
+    "mtime": 1783395225.3910959,
+    "ast_hash": "3d35d4daa30c1d8b9755ecb471e13103",
+    "semantic_hash": "3d35d4daa30c1d8b9755ecb471e13103"
+  },
+  "src/main/java/io/github/legacygraph/extractors/FrontendApiExtractor.java": {
+    "mtime": 1783381498.5932508,
+    "ast_hash": "6cb7a9bc5c72d7492e524391cf1cba67",
+    "semantic_hash": "6cb7a9bc5c72d7492e524391cf1cba67"
+  },
+  "src/main/java/io/github/legacygraph/extractors/JavaControllerExtractor.java": {
+    "mtime": 1783382252.261212,
+    "ast_hash": "6040739b1703f54ba1ed720e0f6fa9bc",
+    "semantic_hash": "6040739b1703f54ba1ed720e0f6fa9bc"
+  },
+  "src/main/java/io/github/legacygraph/extractors/JavaStructureExtractor.java": {
+    "mtime": 1783346528.7010791,
+    "ast_hash": "648fa9ceb79210f34d9f5ac3bd479a3c",
+    "semantic_hash": "648fa9ceb79210f34d9f5ac3bd479a3c"
+  },
+  "src/main/java/io/github/legacygraph/extractors/MQExtractor.java": {
+    "mtime": 1783382276.2564754,
+    "ast_hash": "c1f054b763db881c4ba281e7e333ca64",
+    "semantic_hash": "c1f054b763db881c4ba281e7e333ca64"
+  },
+  "src/main/java/io/github/legacygraph/extractors/MethodSignatureSupport.java": {
+    "mtime": 1783382242.7403598,
+    "ast_hash": "6959e35b6fef458d061432ac4bd8e450",
+    "semantic_hash": "6959e35b6fef458d061432ac4bd8e450"
+  },
+  "src/main/java/io/github/legacygraph/extractors/MyBatisAnnotationExtractor.java": {
+    "mtime": 1783348668.0248525,
+    "ast_hash": "2520ffa25d437cd4a6a678eae6ed0896",
+    "semantic_hash": "2520ffa25d437cd4a6a678eae6ed0896"
+  },
+  "src/main/java/io/github/legacygraph/extractors/MyBatisXmlExtractor.java": {
+    "mtime": 1782783203.9924212,
+    "ast_hash": "141f464ab937fbf154a879400595ba75",
+    "semantic_hash": "141f464ab937fbf154a879400595ba75"
+  },
+  "src/main/java/io/github/legacygraph/extractors/RbacRoleExtractor.java": {
+    "mtime": 1783353525.1796708,
+    "ast_hash": "4482dbe67228511b218d1e3ef5ca5cb7",
+    "semantic_hash": "4482dbe67228511b218d1e3ef5ca5cb7"
+  },
+  "src/main/java/io/github/legacygraph/extractors/ScheduledJobExtractor.java": {
+    "mtime": 1783382263.3688533,
+    "ast_hash": "7567df17ab8c5098f55d3cecda004ee8",
+    "semantic_hash": "7567df17ab8c5098f55d3cecda004ee8"
+  },
+  "src/main/java/io/github/legacygraph/extractors/ServiceCallExtractor.java": {
+    "mtime": 1783354925.5791254,
+    "ast_hash": "28fc650fd757934b6f511bb22fa36eba",
+    "semantic_hash": "28fc650fd757934b6f511bb22fa36eba"
+  },
+  "src/main/java/io/github/legacygraph/extractors/SqlTableExtractor.java": {
+    "mtime": 1783348291.5165887,
+    "ast_hash": "20d8944ebb42e606ace584a9f584c7bc",
+    "semantic_hash": "20d8944ebb42e606ace584a9f584c7bc"
+  },
+  "src/main/java/io/github/legacygraph/extractors/TestCaseExtractor.java": {
+    "mtime": 1783382319.3760455,
+    "ast_hash": "3eea915c973bdf5d68e3c624f1ebf371",
+    "semantic_hash": "3eea915c973bdf5d68e3c624f1ebf371"
+  },
+  "src/main/java/io/github/legacygraph/extractors/VueRouteExtractor.java": {
+    "mtime": 1782783204.0292761,
+    "ast_hash": "78d3cd0f6ad99dc255e7e27545111935",
+    "semantic_hash": "78d3cd0f6ad99dc255e7e27545111935"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/AdapterCapability.java": {
+    "mtime": 1782985166.794128,
+    "ast_hash": "398ec0db99b9d8f0f8417cd673f95276",
+    "semantic_hash": "398ec0db99b9d8f0f8417cd673f95276"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/BusinessDomainAdapter.java": {
+    "mtime": 1783352762.1460638,
+    "ast_hash": "d9472397340ed95532638608f7fae33a",
+    "semantic_hash": "d9472397340ed95532638608f7fae33a"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/BusinessObjectAdapter.java": {
+    "mtime": 1783352875.4206789,
+    "ast_hash": "5fadae4e63e0dd073b301712b5bd5ac4",
+    "semantic_hash": "5fadae4e63e0dd073b301712b5bd5ac4"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/BusinessProcessAdapter.java": {
+    "mtime": 1783352875.4288518,
+    "ast_hash": "071ec62e1784476de9db44d1877639bc",
+    "semantic_hash": "071ec62e1784476de9db44d1877639bc"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/BusinessRuleAdapter.java": {
+    "mtime": 1783352875.408804,
+    "ast_hash": "f5df2cc0be2a0ae93022bc049c9697cb",
+    "semantic_hash": "f5df2cc0be2a0ae93022bc049c9697cb"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/ConfigItemAdapter.java": {
+    "mtime": 1783345940.5925589,
+    "ast_hash": "f568faa2dca3898ff8a90a9568e6bb7e",
+    "semantic_hash": "f568faa2dca3898ff8a90a9568e6bb7e"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/DocumentAdapter.java": {
+    "mtime": 1783139420.1471617,
+    "ast_hash": "c3f1427acc8b36a85b6353664791cdf9",
+    "semantic_hash": "c3f1427acc8b36a85b6353664791cdf9"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/ExternalSystemAdapter.java": {
+    "mtime": 1783345940.57445,
+    "ast_hash": "d53d0af37830b463668a6aad3885dd64",
+    "semantic_hash": "d53d0af37830b463668a6aad3885dd64"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/ExtractionAdapter.java": {
+    "mtime": 1782838851.267991,
+    "ast_hash": "95b545a588c513b43154f4f186fbcfe7",
+    "semantic_hash": "95b545a588c513b43154f4f186fbcfe7"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/ExtractionAdapterRegistry.java": {
+    "mtime": 1783350904.1396449,
+    "ast_hash": "354819effbe9842785acd209403685cc",
+    "semantic_hash": "354819effbe9842785acd209403685cc"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/ExtractionResult.java": {
+    "mtime": 1783003153.749834,
+    "ast_hash": "8a999aeef67629d8967c1936461747a5",
+    "semantic_hash": "8a999aeef67629d8967c1936461747a5"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/FactPersister.java": {
+    "mtime": 1783064072.4339983,
+    "ast_hash": "24fa27830e0caf89d3414a1f72d64aae",
+    "semantic_hash": "24fa27830e0caf89d3414a1f72d64aae"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/FeatureModuleAdapter.java": {
+    "mtime": 1783395612.8385563,
+    "ast_hash": "277c1212223842870328dc0cb71d841c",
+    "semantic_hash": "277c1212223842870328dc0cb71d841c"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/JavaCodeAdapter.java": {
+    "mtime": 1783406388.8786643,
+    "ast_hash": "3ba76df5913f2d4b32110268c328d183",
+    "semantic_hash": "3ba76df5913f2d4b32110268c328d183"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/JavaServiceCallAdapter.java": {
+    "mtime": 1783049775.5670264,
+    "ast_hash": "c872454f1628434d671d41a2cecf2ff4",
+    "semantic_hash": "c872454f1628434d671d41a2cecf2ff4"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/MQAdapter.java": {
+    "mtime": 1783345940.5656705,
+    "ast_hash": "1a08c3ceaa07aa104abd25dd40fe3875",
+    "semantic_hash": "1a08c3ceaa07aa104abd25dd40fe3875"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/MyBatisAnnotationAdapter.java": {
+    "mtime": 1783348569.3558304,
+    "ast_hash": "7c62d70b38a18d47aa14e21201c6962b",
+    "semantic_hash": "7c62d70b38a18d47aa14e21201c6962b"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/MyBatisXmlAdapter.java": {
+    "mtime": 1783348515.9444852,
+    "ast_hash": "a5e577f2e4941b630bdaceb1cb352425",
+    "semantic_hash": "a5e577f2e4941b630bdaceb1cb352425"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/RbacRoleAdapter.java": {
+    "mtime": 1783352875.4494817,
+    "ast_hash": "4c5b1727413da51b9ef108f9b597ccd0",
+    "semantic_hash": "4c5b1727413da51b9ef108f9b597ccd0"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/ScanContext.java": {
+    "mtime": 1782983883.4340773,
+    "ast_hash": "0dec60b2a06490135fc9f43f1af9c3d2",
+    "semantic_hash": "0dec60b2a06490135fc9f43f1af9c3d2"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/ScheduledJobAdapter.java": {
+    "mtime": 1783345940.5852718,
+    "ast_hash": "4d6aaf4a5e00e3f1fb7d8ac6b02c5812",
+    "semantic_hash": "4d6aaf4a5e00e3f1fb7d8ac6b02c5812"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/SourceAsset.java": {
+    "mtime": 1783001725.8503182,
+    "ast_hash": "8542c3505f762d95afa32e239a24c57a",
+    "semantic_hash": "8542c3505f762d95afa32e239a24c57a"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/TestCaseAdapter.java": {
+    "mtime": 1783345940.5504894,
+    "ast_hash": "b728072d8aa8f3cebb6be5197c606c6d",
+    "semantic_hash": "b728072d8aa8f3cebb6be5197c606c6d"
+  },
+  "src/main/java/io/github/legacygraph/extractors/adapter/VueFrontendAdapter.java": {
+    "mtime": 1783381528.9370615,
+    "ast_hash": "5c74577ab10450d8912dcaeee62b6d7e",
+    "semantic_hash": "5c74577ab10450d8912dcaeee62b6d7e"
+  },
+  "src/main/java/io/github/legacygraph/federation/CrossRepoImpactService.java": {
+    "mtime": 1783326189.5320334,
+    "ast_hash": "53ae2c70415672641e9c4a89abb19e59",
+    "semantic_hash": "53ae2c70415672641e9c4a89abb19e59"
+  },
+  "src/main/java/io/github/legacygraph/federation/CrossRepositoryLinkCandidate.java": {
+    "mtime": 1783319344.9928043,
+    "ast_hash": "af95c93dd03ef2e38dbb0bde0b4523d0",
+    "semantic_hash": "af95c93dd03ef2e38dbb0bde0b4523d0"
+  },
+  "src/main/java/io/github/legacygraph/federation/CrossRepositoryLinker.java": {
+    "mtime": 1783319344.9972446,
+    "ast_hash": "ba717615e5987e94271197e8de3476e6",
+    "semantic_hash": "ba717615e5987e94271197e8de3476e6"
+  },
+  "src/main/java/io/github/legacygraph/federation/FederatedGraphScope.java": {
+    "mtime": 1783319283.0073686,
+    "ast_hash": "4013d23c48686d337f49bc3508349ded",
+    "semantic_hash": "4013d23c48686d337f49bc3508349ded"
+  },
+  "src/main/java/io/github/legacygraph/filter/JwtAuthenticationFilter.java": {
+    "mtime": 1783168915.3176756,
+    "ast_hash": "1e142fb9f28049c94712c2e12b70607c",
+    "semantic_hash": "1e142fb9f28049c94712c2e12b70607c"
+  },
+  "src/main/java/io/github/legacygraph/governance/GraphifyAccessPolicy.java": {
+    "mtime": 1783319160.637231,
+    "ast_hash": "a0f489fff0fb900cde1f139349c52199",
+    "semantic_hash": "a0f489fff0fb900cde1f139349c52199"
+  },
+  "src/main/java/io/github/legacygraph/governance/GraphifyProvenanceRedactor.java": {
+    "mtime": 1783319160.660527,
+    "ast_hash": "f912b2a7c361fdd0451c154645778d83",
+    "semantic_hash": "f912b2a7c361fdd0451c154645778d83"
+  },
+  "src/main/java/io/github/legacygraph/governance/Role.java": {
+    "mtime": 1783319160.672248,
+    "ast_hash": "4b516c351883dc5746c7e670d1e94cd6",
+    "semantic_hash": "4b516c351883dc5746c7e670d1e94cd6"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyDiff.java": {
+    "mtime": 1783318604.3189282,
+    "ast_hash": "05f2bd5bfccff86a638260f7d8fa3386",
+    "semantic_hash": "05f2bd5bfccff86a638260f7d8fa3386"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyDiffService.java": {
+    "mtime": 1783318604.3086712,
+    "ast_hash": "078b10d716a68421c375199a40c45ab8",
+    "semantic_hash": "078b10d716a68421c375199a40c45ab8"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyImportJob.java": {
+    "mtime": 1783318220.7108333,
+    "ast_hash": "de8deefac89f4991ab054fb93e19994f",
+    "semantic_hash": "de8deefac89f4991ab054fb93e19994f"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyImportJobRepository.java": {
+    "mtime": 1783323363.6621203,
+    "ast_hash": "78fcb3bd597e227688578661ab321e71",
+    "semantic_hash": "78fcb3bd597e227688578661ab321e71"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyImportJobScheduler.java": {
+    "mtime": 1783323409.298607,
+    "ast_hash": "5a45eb6becd3fccded55c1d9836bbc27",
+    "semantic_hash": "5a45eb6becd3fccded55c1d9836bbc27"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyImportJobService.java": {
+    "mtime": 1783318372.5163012,
+    "ast_hash": "7f37fc16c8325ae7fa4d6971ed0054bf",
+    "semantic_hash": "7f37fc16c8325ae7fa4d6971ed0054bf"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyImportSnapshot.java": {
+    "mtime": 1783318604.3065581,
+    "ast_hash": "75a31f71f5b61840cc9784bef32a3a66",
+    "semantic_hash": "75a31f71f5b61840cc9784bef32a3a66"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyImportSnapshotService.java": {
+    "mtime": 1783324625.5263689,
+    "ast_hash": "dbbdc8953480c78c41a832d7c5a84eb9",
+    "semantic_hash": "dbbdc8953480c78c41a832d7c5a84eb9"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyMetrics.java": {
+    "mtime": 1783318220.740304,
+    "ast_hash": "e5784b9061952db128642cb0e6a5297b",
+    "semantic_hash": "e5784b9061952db128642cb0e6a5297b"
+  },
+  "src/main/java/io/github/legacygraph/graphify/GraphifyRollbackService.java": {
+    "mtime": 1783324118.80561,
+    "ast_hash": "ef961d462533b3d57c9394b201ef404b",
+    "semantic_hash": "ef961d462533b3d57c9394b201ef404b"
+  },
+  "src/main/java/io/github/legacygraph/handler/FloatArrayTypeHandler.java": {
+    "mtime": 1783060692.6363382,
+    "ast_hash": "2253585a476121f05df6989da0d106ae",
+    "semantic_hash": "2253585a476121f05df6989da0d106ae"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyCanonicalMapper.java": {
+    "mtime": 1783306666.8526053,
+    "ast_hash": "c30eaac0696e8c0fee2e33cdb0ff256e",
+    "semantic_hash": "c30eaac0696e8c0fee2e33cdb0ff256e"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyCommandBuilder.java": {
+    "mtime": 1783322977.2401245,
+    "ast_hash": "9fe6cc802648b768f0eba1ccd926b1a4",
+    "semantic_hash": "9fe6cc802648b768f0eba1ccd926b1a4"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyCompatibilityReport.java": {
+    "mtime": 1783317895.0750668,
+    "ast_hash": "41dc99aceae2d792f95c8a69f5f5e3aa",
+    "semantic_hash": "41dc99aceae2d792f95c8a69f5f5e3aa"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyCompatibilityService.java": {
+    "mtime": 1783317761.9119844,
+    "ast_hash": "86bd2166f88ae7391e8e97edb130d3ed",
+    "semantic_hash": "86bd2166f88ae7391e8e97edb130d3ed"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyGraphJson.java": {
+    "mtime": 1783305429.6906083,
+    "ast_hash": "6e242f36aa95f853cbe5483f0498e1fb",
+    "semantic_hash": "6e242f36aa95f853cbe5483f0498e1fb"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyGraphParser.java": {
+    "mtime": 1783305480.367946,
+    "ast_hash": "d3eb35a5b993c638e216376aac5cf801",
+    "semantic_hash": "d3eb35a5b993c638e216376aac5cf801"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyImportService.java": {
+    "mtime": 1783317849.8660667,
+    "ast_hash": "7ac0499447a8133fa829e08a913dc87c",
+    "semantic_hash": "7ac0499447a8133fa829e08a913dc87c"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyProperties.java": {
+    "mtime": 1783323259.067467,
+    "ast_hash": "4ee94d9d9fb78633d21ebf933f4d7f30",
+    "semantic_hash": "4ee94d9d9fb78633d21ebf933f4d7f30"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyRunResult.java": {
+    "mtime": 1783306853.3429031,
+    "ast_hash": "8c0b1caaf326a390d0d2bfbc247e1cbe",
+    "semantic_hash": "8c0b1caaf326a390d0d2bfbc247e1cbe"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifyRunner.java": {
+    "mtime": 1783343727.5149944,
+    "ast_hash": "c1d10fe6962c7b656ad18a861bc58144",
+    "semantic_hash": "c1d10fe6962c7b656ad18a861bc58144"
+  },
+  "src/main/java/io/github/legacygraph/integration/graphify/GraphifySchemaVersion.java": {
+    "mtime": 1783311421.8763614,
+    "ast_hash": "f88d33528915563faafaa45329ab3e36",
+    "semantic_hash": "f88d33528915563faafaa45329ab3e36"
+  },
+  "src/main/java/io/github/legacygraph/llm/LlmCallException.java": {
+    "mtime": 1782799455.5648444,
+    "ast_hash": "9678074c3005ae219fe0986cf61342d5",
+    "semantic_hash": "9678074c3005ae219fe0986cf61342d5"
+  },
+  "src/main/java/io/github/legacygraph/llm/LlmGateway.java": {
+    "mtime": 1783406388.8998508,
+    "ast_hash": "2369aaf428f9779ffc1a7a1a544096af",
+    "semantic_hash": "2369aaf428f9779ffc1a7a1a544096af"
+  },
+  "src/main/java/io/github/legacygraph/llm/PiiMaskingService.java": {
+    "mtime": 1782783202.788351,
+    "ast_hash": "1cd58f0840a9ed75842335e3a2b9fecd",
+    "semantic_hash": "1cd58f0840a9ed75842335e3a2b9fecd"
+  },
+  "src/main/java/io/github/legacygraph/llm/PromptTemplateLoader.java": {
+    "mtime": 1783072809.0201566,
+    "ast_hash": "cf07f6d877e986ca5a9f96c7377d3c6b",
+    "semantic_hash": "cf07f6d877e986ca5a9f96c7377d3c6b"
+  },
+  "src/main/java/io/github/legacygraph/llm/SecretScanService.java": {
+    "mtime": 1782838851.2688844,
+    "ast_hash": "760fb72b392604cd70c50442cf56128b",
+    "semantic_hash": "760fb72b392604cd70c50442cf56128b"
+  },
+  "src/main/java/io/github/legacygraph/model/ApiFact.java": {
+    "mtime": 1783350736.7699933,
+    "ast_hash": "a13b72cb4d20a421300905a804041701",
+    "semantic_hash": "a13b72cb4d20a421300905a804041701"
+  },
+  "src/main/java/io/github/legacygraph/model/FrontendPageFact.java": {
+    "mtime": 1782783203.6599,
+    "ast_hash": "5b72424aff9cb9ba9d08687ccc123902",
+    "semantic_hash": "5b72424aff9cb9ba9d08687ccc123902"
+  },
+  "src/main/java/io/github/legacygraph/model/MapperSqlFact.java": {
+    "mtime": 1782783203.6545074,
+    "ast_hash": "b6b11ee7b6e4e6820b0735c5f26f9681",
+    "semantic_hash": "b6b11ee7b6e4e6820b0735c5f26f9681"
+  },
+  "src/main/java/io/github/legacygraph/model/NodeExtractionResult.java": {
+    "mtime": 1783352341.6990433,
+    "ast_hash": "4254e71f2430f47f4685423345aa2bc2",
+    "semantic_hash": "4254e71f2430f47f4685423345aa2bc2"
+  },
+  "src/main/java/io/github/legacygraph/plugin/BuiltinPluginRegistrar.java": {
+    "mtime": 1783342975.3552866,
+    "ast_hash": "95c76db13e9abc0c6d105a199f93d057",
+    "semantic_hash": "95c76db13e9abc0c6d105a199f93d057"
+  },
+  "src/main/java/io/github/legacygraph/plugin/PluginRegistry.java": {
+    "mtime": 1783383771.9115222,
+    "ast_hash": "5fac5410c61384064f4b6cc276dc878c",
+    "semantic_hash": "5fac5410c61384064f4b6cc276dc878c"
+  },
+  "src/main/java/io/github/legacygraph/query/GraphifyQuestionAnswer.java": {
+    "mtime": 1783319442.972349,
+    "ast_hash": "fd00931c01dcee344631bf1078f77273",
+    "semantic_hash": "fd00931c01dcee344631bf1078f77273"
+  },
+  "src/main/java/io/github/legacygraph/query/GraphifyQuestionRequest.java": {
+    "mtime": 1783319440.2487342,
+    "ast_hash": "4ba45612b8ca2f354425ab73999740f0",
+    "semantic_hash": "4ba45612b8ca2f354425ab73999740f0"
+  },
+  "src/main/java/io/github/legacygraph/query/GraphifyQuestionService.java": {
+    "mtime": 1783324370.0492759,
+    "ast_hash": "49ea493c6e14f74b8aeeb774070c21d4",
+    "semantic_hash": "49ea493c6e14f74b8aeeb774070c21d4"
+  },
+  "src/main/java/io/github/legacygraph/repository/AgentRunRepository.java": {
+    "mtime": 1782838851.2689579,
+    "ast_hash": "770c72ba235d8712c342bf139196e0e3",
+    "semantic_hash": "770c72ba235d8712c342bf139196e0e3"
+  },
+  "src/main/java/io/github/legacygraph/repository/AiScanJobRepository.java": {
+    "mtime": 1783047941.4309685,
+    "ast_hash": "ba7266be671d6bfbc7faa7d504b4aca3",
+    "semantic_hash": "ba7266be671d6bfbc7faa7d504b4aca3"
+  },
+  "src/main/java/io/github/legacygraph/repository/AuditLogRepository.java": {
+    "mtime": 1782783202.7673542,
+    "ast_hash": "2c9b489a1cf2ac0a65e42129b0ee001f",
+    "semantic_hash": "2c9b489a1cf2ac0a65e42129b0ee001f"
+  },
+  "src/main/java/io/github/legacygraph/repository/ChangeTaskRepository.java": {
+    "mtime": 1782886253.911433,
+    "ast_hash": "1b9194ea50826beab819d97c2bc39263",
+    "semantic_hash": "1b9194ea50826beab819d97c2bc39263"
+  },
+  "src/main/java/io/github/legacygraph/repository/CodeRepoRepository.java": {
+    "mtime": 1782783202.5807664,
+    "ast_hash": "750599bfe0440ef94d25b713daec5d74",
+    "semantic_hash": "750599bfe0440ef94d25b713daec5d74"
+  },
+  "src/main/java/io/github/legacygraph/repository/DbConnectionRepository.java": {
+    "mtime": 1782783202.742062,
+    "ast_hash": "3bd2e883ed74debfb057afb7e9cec484",
+    "semantic_hash": "3bd2e883ed74debfb057afb7e9cec484"
+  },
+  "src/main/java/io/github/legacygraph/repository/DocChunkRepository.java": {
+    "mtime": 1782783202.513002,
+    "ast_hash": "78722de2f2d3beeda619df703e634268",
+    "semantic_hash": "78722de2f2d3beeda619df703e634268"
+  },
+  "src/main/java/io/github/legacygraph/repository/DocumentRepository.java": {
+    "mtime": 1782783202.5535748,
+    "ast_hash": "ec846464d795363f3e1931db19f9b6ad",
+    "semantic_hash": "ec846464d795363f3e1931db19f9b6ad"
+  },
+  "src/main/java/io/github/legacygraph/repository/DomainOntologyRelationRepository.java": {
+    "mtime": 1782966029.966045,
+    "ast_hash": "3143dacb117dc582effdffb4c2f1a012",
+    "semantic_hash": "3143dacb117dc582effdffb4c2f1a012"
+  },
+  "src/main/java/io/github/legacygraph/repository/DomainOntologyTermRepository.java": {
+    "mtime": 1782966029.8952816,
+    "ast_hash": "197bcdbadaed9760d892dc640b745e0e",
+    "semantic_hash": "197bcdbadaed9760d892dc640b745e0e"
+  },
+  "src/main/java/io/github/legacygraph/repository/EdgeEvidenceRepository.java": {
+    "mtime": 1782783202.772206,
+    "ast_hash": "9cdef67b13b3056e19ded01168b29ac3",
+    "semantic_hash": "9cdef67b13b3056e19ded01168b29ac3"
+  },
+  "src/main/java/io/github/legacygraph/repository/EvidenceConflictRepository.java": {
+    "mtime": 1783094689.1338413,
+    "ast_hash": "a360645ef5888879c58fab743dd17805",
+    "semantic_hash": "a360645ef5888879c58fab743dd17805"
+  },
+  "src/main/java/io/github/legacygraph/repository/EvidenceRepository.java": {
+    "mtime": 1782987467.1656837,
+    "ast_hash": "389acfa0de27b9c741d079d83af98902",
+    "semantic_hash": "389acfa0de27b9c741d079d83af98902"
+  },
+  "src/main/java/io/github/legacygraph/repository/FactRepository.java": {
+    "mtime": 1783047867.069907,
+    "ast_hash": "866e7a95106936c18c733d22361e0ae2",
+    "semantic_hash": "866e7a95106936c18c733d22361e0ae2"
+  },
+  "src/main/java/io/github/legacygraph/repository/GapTaskRepository.java": {
+    "mtime": 1782965574.7992995,
+    "ast_hash": "4f4787b99b8df47a192bcafcf2df7998",
+    "semantic_hash": "4f4787b99b8df47a192bcafcf2df7998"
+  },
+  "src/main/java/io/github/legacygraph/repository/GraphEdgeRepository.java": {
+    "mtime": 1782982116.4566867,
+    "ast_hash": "6a31d28fbb7f38a950be669d26537495",
+    "semantic_hash": "6a31d28fbb7f38a950be669d26537495"
+  },
+  "src/main/java/io/github/legacygraph/repository/GraphNodeRepository.java": {
+    "mtime": 1782783202.6357956,
+    "ast_hash": "407b93cf35ed7baa86b13609e71cb13b",
+    "semantic_hash": "407b93cf35ed7baa86b13609e71cb13b"
+  },
+  "src/main/java/io/github/legacygraph/repository/GraphWriteIntentRepository.java": {
+    "mtime": 1783002402.70658,
+    "ast_hash": "7e584dc8e9043bdfda81be0ab4b776ef",
+    "semantic_hash": "7e584dc8e9043bdfda81be0ab4b776ef"
+  },
+  "src/main/java/io/github/legacygraph/repository/KnowledgeClaimRepository.java": {
+    "mtime": 1782965574.7930658,
+    "ast_hash": "2f56b5d339eab69ecdf64666d872813c",
+    "semantic_hash": "2f56b5d339eab69ecdf64666d872813c"
+  },
+  "src/main/java/io/github/legacygraph/repository/LegacyBaseMapper.java": {
+    "mtime": 1783397677.919824,
+    "ast_hash": "20b5df593286839f92d79e3d24da6d1d",
+    "semantic_hash": "20b5df593286839f92d79e3d24da6d1d"
+  },
+  "src/main/java/io/github/legacygraph/repository/LlmProviderRepository.java": {
+    "mtime": 1782903615.516748,
+    "ast_hash": "2c1023f6efcdb3b38816ec3a6eb6cb12",
+    "semantic_hash": "2c1023f6efcdb3b38816ec3a6eb6cb12"
+  },
+  "src/main/java/io/github/legacygraph/repository/MigrationRiskRepository.java": {
+    "mtime": 1782783202.5675101,
+    "ast_hash": "449a0fde52669486219e0152acfe8853",
+    "semantic_hash": "449a0fde52669486219e0152acfe8853"
+  },
+  "src/main/java/io/github/legacygraph/repository/NodeEvidenceRepository.java": {
+    "mtime": 1782783202.6165664,
+    "ast_hash": "600b65b3fb8d8c7b31a28ec47c211999",
+    "semantic_hash": "600b65b3fb8d8c7b31a28ec47c211999"
+  },
+  "src/main/java/io/github/legacygraph/repository/NotificationRepository.java": {
+    "mtime": 1783076944.1340408,
+    "ast_hash": "9172d8d5470be844a813d264ebc79442",
+    "semantic_hash": "9172d8d5470be844a813d264ebc79442"
+  },
+  "src/main/java/io/github/legacygraph/repository/PatchFileRepository.java": {
+    "mtime": 1782886260.0655777,
+    "ast_hash": "d8d97e79397e29e5a563087ca2a2191d",
+    "semantic_hash": "d8d97e79397e29e5a563087ca2a2191d"
+  },
+  "src/main/java/io/github/legacygraph/repository/PrTaskRepository.java": {
+    "mtime": 1782886272.6815753,
+    "ast_hash": "f53200168a76f8d29586ca747b325460",
+    "semantic_hash": "f53200168a76f8d29586ca747b325460"
+  },
+  "src/main/java/io/github/legacygraph/repository/ProjectRepository.java": {
+    "mtime": 1782783202.6670415,
+    "ast_hash": "74cb7232bfcba68f19399ac7554c4a58",
+    "semantic_hash": "74cb7232bfcba68f19399ac7554c4a58"
+  },
+  "src/main/java/io/github/legacygraph/repository/PromptRunRepository.java": {
+    "mtime": 1782783202.6430085,
+    "ast_hash": "f364aee1406db6d34e0fe0c36fe17910",
+    "semantic_hash": "f364aee1406db6d34e0fe0c36fe17910"
+  },
+  "src/main/java/io/github/legacygraph/repository/PromptTemplateRepository.java": {
+    "mtime": 1782783202.5923688,
+    "ast_hash": "d00aae4cf527053bd5faec9fda9f2b89",
+    "semantic_hash": "d00aae4cf527053bd5faec9fda9f2b89"
+  },
+  "src/main/java/io/github/legacygraph/repository/QaConversationRepository.java": {
+    "mtime": 1783058560.54859,
+    "ast_hash": "3d62efa480a75161cee190701233462b",
+    "semantic_hash": "3d62efa480a75161cee190701233462b"
+  },
+  "src/main/java/io/github/legacygraph/repository/QaFeedbackRepository.java": {
+    "mtime": 1783058560.5717697,
+    "ast_hash": "c159c51b62f34bac3f27ab4b51e90e6d",
+    "semantic_hash": "c159c51b62f34bac3f27ab4b51e90e6d"
+  },
+  "src/main/java/io/github/legacygraph/repository/QaMessageRepository.java": {
+    "mtime": 1783058560.5410848,
+    "ast_hash": "a5508dfd9c4977129da045a339689efc",
+    "semantic_hash": "a5508dfd9c4977129da045a339689efc"
+  },
+  "src/main/java/io/github/legacygraph/repository/ReportRepository.java": {
+    "mtime": 1782783202.7219021,
+    "ast_hash": "d3282ec3006bd13f0f39ab711c501789",
+    "semantic_hash": "d3282ec3006bd13f0f39ab711c501789"
+  },
+  "src/main/java/io/github/legacygraph/repository/ReviewRecordRepository.java": {
+    "mtime": 1782783202.4465582,
+    "ast_hash": "a1e841fde1c4426d085fc14f639a657f",
+    "semantic_hash": "a1e841fde1c4426d085fc14f639a657f"
+  },
+  "src/main/java/io/github/legacygraph/repository/RuntimeTraceRepository.java": {
+    "mtime": 1782783202.5996354,
+    "ast_hash": "d333daac9bffca2f23ed36fec4eb953e",
+    "semantic_hash": "d333daac9bffca2f23ed36fec4eb953e"
+  },
+  "src/main/java/io/github/legacygraph/repository/ScanTaskRepository.java": {
+    "mtime": 1782783202.714436,
+    "ast_hash": "2b41b6511000325f5343c68e48018691",
+    "semantic_hash": "2b41b6511000325f5343c68e48018691"
+  },
+  "src/main/java/io/github/legacygraph/repository/ScanVersionRepository.java": {
+    "mtime": 1782783202.494888,
+    "ast_hash": "670bd2977a447bca672fe8037994d419",
+    "semantic_hash": "670bd2977a447bca672fe8037994d419"
+  },
+  "src/main/java/io/github/legacygraph/repository/SemanticCacheRepository.java": {
+    "mtime": 1783139904.4048026,
+    "ast_hash": "13093d07da173abb8f3648e40cc0853b",
+    "semantic_hash": "13093d07da173abb8f3648e40cc0853b"
+  },
+  "src/main/java/io/github/legacygraph/repository/SourceAssetSnapshotRepository.java": {
+    "mtime": 1783001755.568324,
+    "ast_hash": "c06421c1e5f0e098260526c13179e7e9",
+    "semantic_hash": "c06421c1e5f0e098260526c13179e7e9"
+  },
+  "src/main/java/io/github/legacygraph/repository/SysConfigRepository.java": {
+    "mtime": 1782783202.6800945,
+    "ast_hash": "77e1ae09360ae3bf11489a6ffa8563bf",
+    "semantic_hash": "77e1ae09360ae3bf11489a6ffa8563bf"
+  },
+  "src/main/java/io/github/legacygraph/repository/SysDictItemRepository.java": {
+    "mtime": 1782783202.692306,
+    "ast_hash": "a484735353b5774955e288d0c08e53f6",
+    "semantic_hash": "a484735353b5774955e288d0c08e53f6"
+  },
+  "src/main/java/io/github/legacygraph/repository/SysDictRepository.java": {
+    "mtime": 1782783202.5211446,
+    "ast_hash": "9af17075749e5e4bf9ba3e6de0f60568",
+    "semantic_hash": "9af17075749e5e4bf9ba3e6de0f60568"
+  },
+  "src/main/java/io/github/legacygraph/repository/SysRoleRepository.java": {
+    "mtime": 1782783202.7079031,
+    "ast_hash": "3625272bc3ed97e872e5a17c87b009c6",
+    "semantic_hash": "3625272bc3ed97e872e5a17c87b009c6"
+  },
+  "src/main/java/io/github/legacygraph/repository/SysUserRepository.java": {
+    "mtime": 1783084816.9164703,
+    "ast_hash": "91a10d5539e838edaca15d079a2bef9c",
+    "semantic_hash": "91a10d5539e838edaca15d079a2bef9c"
+  },
+  "src/main/java/io/github/legacygraph/repository/SysUserRoleRepository.java": {
+    "mtime": 1782783202.6218865,
+    "ast_hash": "00059171daa18d2b76328b49a48ff1aa",
+    "semantic_hash": "00059171daa18d2b76328b49a48ff1aa"
+  },
+  "src/main/java/io/github/legacygraph/repository/TestAssertionRepository.java": {
+    "mtime": 1782783202.5436275,
+    "ast_hash": "5b4e22c0318204df4d7d02ea0980215e",
+    "semantic_hash": "5b4e22c0318204df4d7d02ea0980215e"
+  },
+  "src/main/java/io/github/legacygraph/repository/TestCaseRepository.java": {
+    "mtime": 1782783202.434545,
+    "ast_hash": "c715995dee208fdc037208106f8e1ed1",
+    "semantic_hash": "c715995dee208fdc037208106f8e1ed1"
+  },
+  "src/main/java/io/github/legacygraph/repository/TestResultRepository.java": {
+    "mtime": 1782783202.7805028,
+    "ast_hash": "f1f685e60ff23b7aa757fe954b0c2690",
+    "semantic_hash": "f1f685e60ff23b7aa757fe954b0c2690"
+  },
+  "src/main/java/io/github/legacygraph/repository/TestRunRepository.java": {
+    "mtime": 1782783202.4555292,
+    "ast_hash": "98c677e274be472b54a13165064b41f4",
+    "semantic_hash": "98c677e274be472b54a13165064b41f4"
+  },
+  "src/main/java/io/github/legacygraph/repository/ToolEvidenceRepository.java": {
+    "mtime": 1783008737.7856462,
+    "ast_hash": "7daa0d17951a9f1bcdb032e5dfbc68cb",
+    "semantic_hash": "7daa0d17951a9f1bcdb032e5dfbc68cb"
+  },
+  "src/main/java/io/github/legacygraph/repository/ToolRunRepository.java": {
+    "mtime": 1783008737.7609615,
+    "ast_hash": "bfe9055bb9010a90045212cb243576a0",
+    "semantic_hash": "bfe9055bb9010a90045212cb243576a0"
+  },
+  "src/main/java/io/github/legacygraph/repository/ValidationGateRepository.java": {
+    "mtime": 1782886266.3641474,
+    "ast_hash": "c93557750683b91ac29f5edf6fca1bc6",
+    "semantic_hash": "c93557750683b91ac29f5edf6fca1bc6"
+  },
+  "src/main/java/io/github/legacygraph/repository/VectorDocumentRepository.java": {
+    "mtime": 1783319654.6177683,
+    "ast_hash": "4c6edb75ed96d96fdd74b26ae6a9eed0",
+    "semantic_hash": "4c6edb75ed96d96fdd74b26ae6a9eed0"
+  },
+  "src/main/java/io/github/legacygraph/review/GraphifyReviewAudit.java": {
+    "mtime": 1783319037.8708673,
+    "ast_hash": "7329dc5aa45c5f70e186bac5bf63ebdb",
+    "semantic_hash": "7329dc5aa45c5f70e186bac5bf63ebdb"
+  },
+  "src/main/java/io/github/legacygraph/review/GraphifyReviewRule.java": {
+    "mtime": 1783319037.8944347,
+    "ast_hash": "5ce15fcbe30ab1621901b39fc8d8da56",
+    "semantic_hash": "5ce15fcbe30ab1621901b39fc8d8da56"
+  },
+  "src/main/java/io/github/legacygraph/review/GraphifyReviewRuleEngine.java": {
+    "mtime": 1783319037.8873365,
+    "ast_hash": "7a52da02138cc6b590c752ac0e83a35c",
+    "semantic_hash": "7a52da02138cc6b590c752ac0e83a35c"
+  },
+  "src/main/java/io/github/legacygraph/security/GraphifyProvenanceRedactor.java": {
+    "mtime": 1783321363.3483813,
+    "ast_hash": "c800120047f7d84c0aa275a40c5f516f",
+    "semantic_hash": "c800120047f7d84c0aa275a40c5f516f"
+  },
+  "src/main/java/io/github/legacygraph/service/AgentRunService.java": {
+    "mtime": 1783095923.199014,
+    "ast_hash": "552e62b8e04519d3d26ec03cffce4404",
+    "semantic_hash": "552e62b8e04519d3d26ec03cffce4404"
+  },
+  "src/main/java/io/github/legacygraph/service/NotificationService.java": {
+    "mtime": 1783076944.150065,
+    "ast_hash": "9c446c29c316a9562c9ba575128b2b2a",
+    "semantic_hash": "9c446c29c316a9562c9ba575128b2b2a"
+  },
+  "src/main/java/io/github/legacygraph/service/change/ChangeReportService.java": {
+    "mtime": 1783072749.3757727,
+    "ast_hash": "cce49ed5b2b048f8a9b26ae8e67acfeb",
+    "semantic_hash": "cce49ed5b2b048f8a9b26ae8e67acfeb"
+  },
+  "src/main/java/io/github/legacygraph/service/change/ChangeTaskService.java": {
+    "mtime": 1783353872.4281228,
+    "ast_hash": "b12776c77f55fe04bf08d6333c69e55b",
+    "semantic_hash": "b12776c77f55fe04bf08d6333c69e55b"
+  },
+  "src/main/java/io/github/legacygraph/service/change/ColumnIngestService.java": {
+    "mtime": 1783384971.6636167,
+    "ast_hash": "fbd14890d5d1acbff6d6fb703daae83a",
+    "semantic_hash": "fbd14890d5d1acbff6d6fb703daae83a"
+  },
+  "src/main/java/io/github/legacygraph/service/change/ImpactSubgraphService.java": {
+    "mtime": 1783353297.2431684,
+    "ast_hash": "7ea783353076da31dcdfbbf2d6f746ce",
+    "semantic_hash": "7ea783353076da31dcdfbbf2d6f746ce"
+  },
+  "src/main/java/io/github/legacygraph/service/change/PrOrchestrator.java": {
+    "mtime": 1783072749.387078,
+    "ast_hash": "760c9adebd49c8e184877f1ba2b78161",
+    "semantic_hash": "760c9adebd49c8e184877f1ba2b78161"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/EvidenceConflictService.java": {
+    "mtime": 1783094689.134103,
+    "ast_hash": "7dc6f18428280e39b15760ec6ca54525",
+    "semantic_hash": "7dc6f18428280e39b15760ec6ca54525"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/FeatureSliceSynthesizer.java": {
+    "mtime": 1783072719.0103583,
+    "ast_hash": "b17b42ec291f56bd669b2a78a1c2f9b0",
+    "semantic_hash": "b17b42ec291f56bd669b2a78a1c2f9b0"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GapFinderService.java": {
+    "mtime": 1783397689.5672774,
+    "ast_hash": "7f56df5944774d2b47d6812f124f5335",
+    "semantic_hash": "7f56df5944774d2b47d6812f124f5335"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphCacheInvalidator.java": {
+    "mtime": 1783073090.5745263,
+    "ast_hash": "298bebea3d128989ff21434ac8be171e",
+    "semantic_hash": "298bebea3d128989ff21434ac8be171e"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphDiffReadModel.java": {
+    "mtime": 1783072717.3240795,
+    "ast_hash": "c5c0e9d1e1ebe0706eb653747a8995c2",
+    "semantic_hash": "c5c0e9d1e1ebe0706eb653747a8995c2"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphMergeService.java": {
+    "mtime": 1783406389.0176766,
+    "ast_hash": "3ec7ad3fa1fb857f2e26b745087a456a",
+    "semantic_hash": "3ec7ad3fa1fb857f2e26b745087a456a"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphPathReadModel.java": {
+    "mtime": 1783342822.2139423,
+    "ast_hash": "ef06608ca49f1d9a79d1fc35e0c607dd",
+    "semantic_hash": "ef06608ca49f1d9a79d1fc35e0c607dd"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphProjectionReadModel.java": {
+    "mtime": 1783072717.6694233,
+    "ast_hash": "d60353a6e99997da667dae8c7405b838",
+    "semantic_hash": "d60353a6e99997da667dae8c7405b838"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphQueryService.java": {
+    "mtime": 1783342849.2291758,
+    "ast_hash": "842bcd57c377749d6bacc3fbfdabb91e",
+    "semantic_hash": "842bcd57c377749d6bacc3fbfdabb91e"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphRagPlanExecutor.java": {
+    "mtime": 1783322023.490217,
+    "ast_hash": "616810b32cf3b44a00e2ce1d7ccf999b",
+    "semantic_hash": "616810b32cf3b44a00e2ce1d7ccf999b"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphValidatorService.java": {
+    "mtime": 1783072717.1037223,
+    "ast_hash": "3457840f99be0480057c94a4a3120d14",
+    "semantic_hash": "3457840f99be0480057c94a4a3120d14"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/GraphWriteIntentService.java": {
+    "mtime": 1783093963.8853796,
+    "ast_hash": "fca007774c79ae57b4633d74fb341c64",
+    "semantic_hash": "fca007774c79ae57b4633d74fb341c64"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/KnowledgeClaimService.java": {
+    "mtime": 1783405653.6895802,
+    "ast_hash": "1d51a100573fbafe440848e02ff5ec65",
+    "semantic_hash": "1d51a100573fbafe440848e02ff5ec65"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/KnowledgeCompiler.java": {
+    "mtime": 1783345460.6723423,
+    "ast_hash": "44c114acf0a9453f55fc7f48db3df2dc",
+    "semantic_hash": "44c114acf0a9453f55fc7f48db3df2dc"
+  },
+  "src/main/java/io/github/legacygraph/service/graph/Neo4jSyncService.java": {
+    "mtime": 1783072718.095089,
+    "ast_hash": "bcfd335e010c20bd35caf12b9c75ddf3",
+    "semantic_hash": "bcfd335e010c20bd35caf12b9c75ddf3"
+  },
+  "src/main/java/io/github/legacygraph/service/qa/ConversationContextManager.java": {
+    "mtime": 1783390640.552952,
+    "ast_hash": "909d1b55f03774d6334af9d21fd5ebe7",
+    "semantic_hash": "909d1b55f03774d6334af9d21fd5ebe7"
+  },
+  "src/main/java/io/github/legacygraph/service/qa/HybridRetrievalService.java": {
+    "mtime": 1783319794.1333966,
+    "ast_hash": "9ded9689e31a72e955c526076d296bc6",
+    "semantic_hash": "9ded9689e31a72e955c526076d296bc6"
+  },
+  "src/main/java/io/github/legacygraph/service/qa/QaQualityAnalyzer.java": {
+    "mtime": 1783072749.4555705,
+    "ast_hash": "1e0212a47009db7d15db789a55413323",
+    "semantic_hash": "1e0212a47009db7d15db789a55413323"
+  },
+  "src/main/java/io/github/legacygraph/service/qa/ReRankingService.java": {
+    "mtime": 1783072720.8035936,
+    "ast_hash": "dc0b1ac3a509c978adec3fff184b87f5",
+    "semantic_hash": "dc0b1ac3a509c978adec3fff184b87f5"
+  },
+  "src/main/java/io/github/legacygraph/service/qa/SemanticCache.java": {
+    "mtime": 1783353765.0328193,
+    "ast_hash": "332d882fe87a2e646b62ce86d7ff6fa2",
+    "semantic_hash": "332d882fe87a2e646b62ce86d7ff6fa2"
+  },
+  "src/main/java/io/github/legacygraph/service/qa/VectorRetrievalService.java": {
+    "mtime": 1783319726.4184167,
+    "ast_hash": "50d812d5a4387200e755685abc5b8818",
+    "semantic_hash": "50d812d5a4387200e755685abc5b8818"
+  },
+  "src/main/java/io/github/legacygraph/service/qa/VectorizationService.java": {
+    "mtime": 1783145940.567986,
+    "ast_hash": "b8941b65b583f5d69f40616dd67e439f",
+    "semantic_hash": "b8941b65b583f5d69f40616dd67e439f"
+  },
+  "src/main/java/io/github/legacygraph/service/report/MigrationReportService.java": {
+    "mtime": 1783072749.4062035,
+    "ast_hash": "b06cebfe6ea225680dcaca1efe6b1627",
+    "semantic_hash": "b06cebfe6ea225680dcaca1efe6b1627"
+  },
+  "src/main/java/io/github/legacygraph/service/report/ReportExportService.java": {
+    "mtime": 1783342910.4486103,
+    "ast_hash": "1c4e586001a5a65c8bb38a3be7ac0906",
+    "semantic_hash": "1c4e586001a5a65c8bb38a3be7ac0906"
+  },
+  "src/main/java/io/github/legacygraph/service/report/ReportingService.java": {
+    "mtime": 1783399401.2184002,
+    "ast_hash": "d2b16522f16163f65583129b339d719e",
+    "semantic_hash": "d2b16522f16163f65583129b339d719e"
+  },
+  "src/main/java/io/github/legacygraph/service/report/ScanPerformanceReportService.java": {
+    "mtime": 1783072749.399092,
+    "ast_hash": "504f966dade5a8aa79e02aacc9f96f92",
+    "semantic_hash": "504f966dade5a8aa79e02aacc9f96f92"
+  },
+  "src/main/java/io/github/legacygraph/service/report/ScanResearchReportService.java": {
+    "mtime": 1783072749.4022756,
+    "ast_hash": "f32415e3bddb2aedf789c84a52f95329",
+    "semantic_hash": "f32415e3bddb2aedf789c84a52f95329"
+  },
+  "src/main/java/io/github/legacygraph/service/rerank/CrossEncoderReranker.java": {
+    "mtime": 1783065883.752705,
+    "ast_hash": "4a0dd8e49479dd5523498111f5277785",
+    "semantic_hash": "4a0dd8e49479dd5523498111f5277785"
+  },
+  "src/main/java/io/github/legacygraph/service/rerank/DocumentReranker.java": {
+    "mtime": 1783065853.6716976,
+    "ast_hash": "7b29205d5b89a1ad1417726e03459822",
+    "semantic_hash": "7b29205d5b89a1ad1417726e03459822"
+  },
+  "src/main/java/io/github/legacygraph/service/rerank/KeywordReranker.java": {
+    "mtime": 1783065883.7466788,
+    "ast_hash": "86fc77f2013f1117fd850d4b19e0cbff",
+    "semantic_hash": "86fc77f2013f1117fd850d4b19e0cbff"
+  },
+  "src/main/java/io/github/legacygraph/service/scan/DatabaseMetadataScanService.java": {
+    "mtime": 1783343811.023607,
+    "ast_hash": "db126d9ba86b88b0c9923be05883b24a",
+    "semantic_hash": "db126d9ba86b88b0c9923be05883b24a"
+  },
+  "src/main/java/io/github/legacygraph/service/scan/DocumentContentService.java": {
+    "mtime": 1783072719.6680698,
+    "ast_hash": "fdd07cb242bef19b9c5297aa382263a9",
+    "semantic_hash": "fdd07cb242bef19b9c5297aa382263a9"
+  },
+  "src/main/java/io/github/legacygraph/service/scan/ProjectOverviewService.java": {
+    "mtime": 1783341755.7885754,
+    "ast_hash": "3baeb36583ffd8f2c24af02a5b8eeec6",
+    "semantic_hash": "3baeb36583ffd8f2c24af02a5b8eeec6"
+  },
+  "src/main/java/io/github/legacygraph/service/scan/ProjectService.java": {
+    "mtime": 1783143673.2897444,
+    "ast_hash": "0072155691cbe4d6047e31f3e581b961",
+    "semantic_hash": "0072155691cbe4d6047e31f3e581b961"
+  },
+  "src/main/java/io/github/legacygraph/service/scan/ScanVersionService.java": {
+    "mtime": 1783334900.9765108,
+    "ast_hash": "a4f439ea44ea9e2de165ba7009646d89",
+    "semantic_hash": "a4f439ea44ea9e2de165ba7009646d89"
+  },
+  "src/main/java/io/github/legacygraph/service/scan/SourceService.java": {
+    "mtime": 1783072719.8442242,
+    "ast_hash": "59a367cdbfb614dfa4cc924317cb368a",
+    "semantic_hash": "59a367cdbfb614dfa4cc924317cb368a"
+  },
+  "src/main/java/io/github/legacygraph/service/scan/TraceIngestionService.java": {
+    "mtime": 1783072720.3280435,
+    "ast_hash": "57396eb8eb92e0a1cc04d0443d2ffa9f",
+    "semantic_hash": "57396eb8eb92e0a1cc04d0443d2ffa9f"
+  },
+  "src/main/java/io/github/legacygraph/service/system/AuditLogService.java": {
+    "mtime": 1783072749.4285755,
+    "ast_hash": "7d87eccdd96a3a2f1ae64d0e8b22a070",
+    "semantic_hash": "7d87eccdd96a3a2f1ae64d0e8b22a070"
+  },
+  "src/main/java/io/github/legacygraph/service/system/AuthSessionService.java": {
+    "mtime": 1783333597.1647592,
+    "ast_hash": "aa3193a13bc2454a18b1dbe5c901cb73",
+    "semantic_hash": "aa3193a13bc2454a18b1dbe5c901cb73"
+  },
+  "src/main/java/io/github/legacygraph/service/system/CacheService.java": {
+    "mtime": 1783072749.4357023,
+    "ast_hash": "c2b38c1e3a654541217448ec53fc16c4",
+    "semantic_hash": "c2b38c1e3a654541217448ec53fc16c4"
+  },
+  "src/main/java/io/github/legacygraph/service/system/LlmProviderService.java": {
+    "mtime": 1783318780.6127818,
+    "ast_hash": "f2ec654d36b29d8733ef4f6877f6cc11",
+    "semantic_hash": "f2ec654d36b29d8733ef4f6877f6cc11"
+  },
+  "src/main/java/io/github/legacygraph/service/system/PromptTemplateService.java": {
+    "mtime": 1783072749.4248595,
+    "ast_hash": "913e356d7332d30c4b1bafc0aaa57070",
+    "semantic_hash": "913e356d7332d30c4b1bafc0aaa57070"
+  },
+  "src/main/java/io/github/legacygraph/service/system/SysConfigService.java": {
+    "mtime": 1783072749.4171896,
+    "ast_hash": "4df25c1f25c05873022207c2e5702908",
+    "semantic_hash": "4df25c1f25c05873022207c2e5702908"
+  },
+  "src/main/java/io/github/legacygraph/service/system/SysDictService.java": {
+    "mtime": 1783072749.413409,
+    "ast_hash": "1b7f880dc52550e993d43f07ffd24ad4",
+    "semantic_hash": "1b7f880dc52550e993d43f07ffd24ad4"
+  },
+  "src/main/java/io/github/legacygraph/service/system/SysUserService.java": {
+    "mtime": 1783072749.4098914,
+    "ast_hash": "bf64f220a1a12a8d17fe8bb47a5a7a46",
+    "semantic_hash": "bf64f220a1a12a8d17fe8bb47a5a7a46"
+  },
+  "src/main/java/io/github/legacygraph/service/system/TokenBlacklistService.java": {
+    "mtime": 1783072749.432293,
+    "ast_hash": "8404ba697aaacd21c9a1ee87d911345d",
+    "semantic_hash": "8404ba697aaacd21c9a1ee87d911345d"
+  },
+  "src/main/java/io/github/legacygraph/service/systemoverview/SelfAnalysisBootstrapService.java": {
+    "mtime": 1783345845.474389,
+    "ast_hash": "0b132fdffa7f66c9f46fc172f601db4e",
+    "semantic_hash": "0b132fdffa7f66c9f46fc172f601db4e"
+  },
+  "src/main/java/io/github/legacygraph/service/systemoverview/SystemOverviewDocumentService.java": {
+    "mtime": 1783399058.4228415,
+    "ast_hash": "10726772caeddf434771e0b7366dc77d",
+    "semantic_hash": "10726772caeddf434771e0b7366dc77d"
+  },
+  "src/main/java/io/github/legacygraph/service/systemoverview/SystemOverviewIngestService.java": {
+    "mtime": 1783397668.002133,
+    "ast_hash": "50619fe61ca837daa7fb37a1673c97b1",
+    "semantic_hash": "50619fe61ca837daa7fb37a1673c97b1"
+  },
+  "src/main/java/io/github/legacygraph/service/systemoverview/SystemOverviewService.java": {
+    "mtime": 1783399058.423949,
+    "ast_hash": "408e56ea32fcf3a21cd71d091cf904e2",
+    "semantic_hash": "408e56ea32fcf3a21cd71d091cf904e2"
+  },
+  "src/main/java/io/github/legacygraph/service/test/PatchPlanValidator.java": {
+    "mtime": 1783354618.372785,
+    "ast_hash": "17429762fba3c50f1179741be3f5d784",
+    "semantic_hash": "17429762fba3c50f1179741be3f5d784"
+  },
+  "src/main/java/io/github/legacygraph/service/test/TestCaseService.java": {
+    "mtime": 1783406596.8455315,
+    "ast_hash": "9377755a6b5c3d4570789eddca0bae4e",
+    "semantic_hash": "9377755a6b5c3d4570789eddca0bae4e"
+  },
+  "src/main/java/io/github/legacygraph/service/test/TestResultUpdateService.java": {
+    "mtime": 1783406389.0538006,
+    "ast_hash": "f7c582c1dcdc1374ecdf45edcd75c877",
+    "semantic_hash": "f7c582c1dcdc1374ecdf45edcd75c877"
+  },
+  "src/main/java/io/github/legacygraph/service/test/ValidationGateRunner.java": {
+    "mtime": 1783072749.4456668,
+    "ast_hash": "2bb9cb818882fdd25615f1bb3d94a0cf",
+    "semantic_hash": "2bb9cb818882fdd25615f1bb3d94a0cf"
+  },
+  "src/main/java/io/github/legacygraph/task/AdapterExecutionService.java": {
+    "mtime": 1783398859.0563571,
+    "ast_hash": "3639925271b56ef63031d63cdeb31ad5",
+    "semantic_hash": "3639925271b56ef63031d63cdeb31ad5"
+  },
+  "src/main/java/io/github/legacygraph/task/AiScanJobWorker.java": {
+    "mtime": 1783399109.791368,
+    "ast_hash": "1368b7b849ef4b481afdc0600d3b52fc",
+    "semantic_hash": "1368b7b849ef4b481afdc0600d3b52fc"
+  },
+  "src/main/java/io/github/legacygraph/task/AiScanOrchestrator.java": {
+    "mtime": 1783398076.6176882,
+    "ast_hash": "d5e5290c29ce541c23c0aed15bdd953f",
+    "semantic_hash": "d5e5290c29ce541c23c0aed15bdd953f"
+  },
+  "src/main/java/io/github/legacygraph/task/AssetDiscovery.java": {
+    "mtime": 1782955871.6970613,
+    "ast_hash": "9fcefc3a8b4f3d23fff15b24af0f86c6",
+    "semantic_hash": "9fcefc3a8b4f3d23fff15b24af0f86c6"
+  },
+  "src/main/java/io/github/legacygraph/task/AssetDiscoveryService.java": {
+    "mtime": 1783339265.8362703,
+    "ast_hash": "5e2e8498d83fec44706e4fd4220453f4",
+    "semantic_hash": "5e2e8498d83fec44706e4fd4220453f4"
+  },
+  "src/main/java/io/github/legacygraph/task/GraphWriteIntentWorker.java": {
+    "mtime": 1783073376.5617785,
+    "ast_hash": "13daeaf788839d1772f2b9ad32d77e53",
+    "semantic_hash": "13daeaf788839d1772f2b9ad32d77e53"
+  },
+  "src/main/java/io/github/legacygraph/task/ProjectScanner.java": {
+    "mtime": 1783406112.9148016,
+    "ast_hash": "47f717d615b5db5a0ac3f59b48d117f4",
+    "semantic_hash": "47f717d615b5db5a0ac3f59b48d117f4"
+  },
+  "src/main/java/io/github/legacygraph/task/ScanPhaseRegistry.java": {
+    "mtime": 1783334602.0735118,
+    "ast_hash": "c4c4a839a13b83c3e8380e56d3914d6a",
+    "semantic_hash": "c4c4a839a13b83c3e8380e56d3914d6a"
+  },
+  "src/main/java/io/github/legacygraph/task/ScanScopeResolver.java": {
+    "mtime": 1783343709.4254293,
+    "ast_hash": "21316f712457a7d6ac985c2846b2c395",
+    "semantic_hash": "21316f712457a7d6ac985c2846b2c395"
+  },
+  "src/main/java/io/github/legacygraph/task/ScanTaskRecorder.java": {
+    "mtime": 1783398859.0547268,
+    "ast_hash": "fc0d4d3c89e1aaf9e396112ab95b9d6e",
+    "semantic_hash": "fc0d4d3c89e1aaf9e396112ab95b9d6e"
+  },
+  "src/main/java/io/github/legacygraph/task/TestExecutionScheduler.java": {
+    "mtime": 1783073090.5688474,
+    "ast_hash": "cb44f0255c0045a2eb0cddced422895f",
+    "semantic_hash": "cb44f0255c0045a2eb0cddced422895f"
+  },
+  "src/main/java/io/github/legacygraph/tenant/TenantQuotaManager.java": {
+    "mtime": 1783070943.3454108,
+    "ast_hash": "1ed2dbbc57b2694c2ff9a7ecbede1a0b",
+    "semantic_hash": "1ed2dbbc57b2694c2ff9a7ecbede1a0b"
+  },
+  "src/main/java/io/github/legacygraph/test/ApiTestExecutor.java": {
+    "mtime": 1782783202.8125422,
+    "ast_hash": "0070bc2c2391eb8dd83cc5af94fded4f",
+    "semantic_hash": "0070bc2c2391eb8dd83cc5af94fded4f"
+  },
+  "src/main/java/io/github/legacygraph/test/DbAssertionExecutor.java": {
+    "mtime": 1782783202.8226917,
+    "ast_hash": "968e61411d39064394f06e28116c6ecb",
+    "semantic_hash": "968e61411d39064394f06e28116c6ecb"
+  },
+  "src/main/java/io/github/legacygraph/test/E2eTestExecutor.java": {
+    "mtime": 1782783202.8059332,
+    "ast_hash": "ffc382858d61c3c63dda70cba10af23e",
+    "semantic_hash": "ffc382858d61c3c63dda70cba10af23e"
+  },
+  "src/main/java/io/github/legacygraph/understanding/CodeUnderstandingOrchestrator.java": {
+    "mtime": 1783072809.2161784,
+    "ast_hash": "0b2e012ed61ab920864438751516f83f",
+    "semantic_hash": "0b2e012ed61ab920864438751516f83f"
+  },
+  "src/main/java/io/github/legacygraph/understanding/CodeUnderstandingReportService.java": {
+    "mtime": 1783047752.2575333,
+    "ast_hash": "275d4c28ef83d00b258bf8fc56ee33d1",
+    "semantic_hash": "275d4c28ef83d00b258bf8fc56ee33d1"
+  },
+  "src/main/java/io/github/legacygraph/understanding/EvidenceNormalizer.java": {
+    "mtime": 1783008780.8095946,
+    "ast_hash": "102baf1461623c6071f8243a3922c783",
+    "semantic_hash": "102baf1461623c6071f8243a3922c783"
+  },
+  "src/main/java/io/github/legacygraph/understanding/KnowledgeClaimDraftMapper.java": {
+    "mtime": 1783008780.8121932,
+    "ast_hash": "f1ae45afb86171b74de48c0964b526fb",
+    "semantic_hash": "f1ae45afb86171b74de48c0964b526fb"
+  },
+  "src/main/java/io/github/legacygraph/understanding/ScanUnderstandingEnhancer.java": {
+    "mtime": 1783008896.6134765,
+    "ast_hash": "ea0bc4c4626ba5ae35efaded0cd28f83",
+    "semantic_hash": "ea0bc4c4626ba5ae35efaded0cd28f83"
+  },
+  "src/main/java/io/github/legacygraph/understanding/ToolQueryPlanner.java": {
+    "mtime": 1783008834.561434,
+    "ast_hash": "fa07b9bb372270c80b1f9dfe8f00af7d",
+    "semantic_hash": "fa07b9bb372270c80b1f9dfe8f00af7d"
+  },
+  "src/main/java/io/github/legacygraph/understanding/ToolRouter.java": {
+    "mtime": 1783008893.5155237,
+    "ast_hash": "faf52d277696417a34c2b7c3fe0e97fe",
+    "semantic_hash": "faf52d277696417a34c2b7c3fe0e97fe"
+  },
+  "src/main/java/io/github/legacygraph/understanding/ToolRunRecorder.java": {
+    "mtime": 1783008780.8164413,
+    "ast_hash": "a6075aab85325422bc3ee68d8f27d820",
+    "semantic_hash": "a6075aab85325422bc3ee68d8f27d820"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/CodeUnderstandingToolAdapter.java": {
+    "mtime": 1783008679.8829198,
+    "ast_hash": "d59b46e8a808c164b8cddd77736d5d3c",
+    "semantic_hash": "d59b46e8a808c164b8cddd77736d5d3c"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolCapability.java": {
+    "mtime": 1783008679.889391,
+    "ast_hash": "b18894e28e83fe63d52ae293f7be6ce6",
+    "semantic_hash": "b18894e28e83fe63d52ae293f7be6ce6"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolConfigProperties.java": {
+    "mtime": 1783010724.443365,
+    "ast_hash": "08496c59a3713e47368614b1f446d313",
+    "semantic_hash": "08496c59a3713e47368614b1f446d313"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolContext.java": {
+    "mtime": 1783008680.0237145,
+    "ast_hash": "d454825474d19540f5d26e032bf88451",
+    "semantic_hash": "d454825474d19540f5d26e032bf88451"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolHealth.java": {
+    "mtime": 1783008679.9367733,
+    "ast_hash": "0bf7e2b0e65aa4ce96c5d7a8b57119f7",
+    "semantic_hash": "0bf7e2b0e65aa4ce96c5d7a8b57119f7"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolHealthService.java": {
+    "mtime": 1783008793.9133837,
+    "ast_hash": "1e6a16e7bfab1ab630a75d3078513f82",
+    "semantic_hash": "1e6a16e7bfab1ab630a75d3078513f82"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolKind.java": {
+    "mtime": 1783008679.9161913,
+    "ast_hash": "0393b61930540a1832fdaa9e60065404",
+    "semantic_hash": "0393b61930540a1832fdaa9e60065404"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolPolicy.java": {
+    "mtime": 1783008679.929077,
+    "ast_hash": "18295422665a0e7079ed7e902174d1a3",
+    "semantic_hash": "18295422665a0e7079ed7e902174d1a3"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolRegistry.java": {
+    "mtime": 1783008782.6731207,
+    "ast_hash": "1e3af8fba5fec53e4888dc5600d3ab24",
+    "semantic_hash": "1e3af8fba5fec53e4888dc5600d3ab24"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolRequest.java": {
+    "mtime": 1783008679.8804379,
+    "ast_hash": "84c13c904aa9f832ec2a8ccc03611c12",
+    "semantic_hash": "84c13c904aa9f832ec2a8ccc03611c12"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolResult.java": {
+    "mtime": 1783008679.9087946,
+    "ast_hash": "e9c3cddbd716612c0027410e00585002",
+    "semantic_hash": "e9c3cddbd716612c0027410e00585002"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/ToolStatus.java": {
+    "mtime": 1783008679.896394,
+    "ast_hash": "b26e2f425704a154185c914eeab00b8e",
+    "semantic_hash": "b26e2f425704a154185c914eeab00b8e"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/CliCommandPolicy.java": {
+    "mtime": 1783008939.8753633,
+    "ast_hash": "1d7a89d7483e6864a0ca4512b9886ff2",
+    "semantic_hash": "1d7a89d7483e6864a0ca4512b9886ff2"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/CliProcessRunner.java": {
+    "mtime": 1783008937.577208,
+    "ast_hash": "3876d5747d2907776b5c3e7d639c0087",
+    "semantic_hash": "3876d5747d2907776b5c3e7d639c0087"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/CliToolAdapter.java": {
+    "mtime": 1783058572.9548776,
+    "ast_hash": "520f248dcc83bad893ae596f5e551fb6",
+    "semantic_hash": "520f248dcc83bad893ae596f5e551fb6"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/CliToolAdapterConfiguration.java": {
+    "mtime": 1783010919.3166456,
+    "ast_hash": "3d290780837ea52f5e729abcefe51d39",
+    "semantic_hash": "3d290780837ea52f5e729abcefe51d39"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/CliToolConfig.java": {
+    "mtime": 1783343176.8855283,
+    "ast_hash": "7ae5c99378338836ddafb98b8b6094cf",
+    "semantic_hash": "7ae5c99378338836ddafb98b8b6094cf"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/LocalFallbackAdapter.java": {
+    "mtime": 1783008804.173733,
+    "ast_hash": "acbc6ef54892fcd67165d714fbf6b416",
+    "semantic_hash": "acbc6ef54892fcd67165d714fbf6b416"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/McpClientFacade.java": {
+    "mtime": 1783008767.9983606,
+    "ast_hash": "8231f2bfdce053857c84afaa0db2844e",
+    "semantic_hash": "8231f2bfdce053857c84afaa0db2844e"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/McpClientFacadeConfiguration.java": {
+    "mtime": 1783011812.3616636,
+    "ast_hash": "c7c7b47fc2052dafc3d46a7d94fcea25",
+    "semantic_hash": "c7c7b47fc2052dafc3d46a7d94fcea25"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/McpCodeGraphAdapter.java": {
+    "mtime": 1783008815.0198092,
+    "ast_hash": "ae15936d984656d3d084a37a3fc11ece",
+    "semantic_hash": "ae15936d984656d3d084a37a3fc11ece"
+  },
+  "src/main/java/io/github/legacygraph/understanding/tool/adapter/McpToolResultMapper.java": {
+    "mtime": 1783008790.6642365,
+    "ast_hash": "aa2908f00f0837fab0baf53731523087",
+    "semantic_hash": "aa2908f00f0837fab0baf53731523087"
+  },
+  "src/main/java/io/github/legacygraph/util/JwtUtil.java": {
+    "mtime": 1782897566.5993438,
+    "ast_hash": "108e22e57a133c03440dd02e75c7b863",
+    "semantic_hash": "108e22e57a133c03440dd02e75c7b863"
+  },
+  "src/main/java/io/github/legacygraph/util/VectorUtils.java": {
+    "mtime": 1783145893.6422842,
+    "ast_hash": "1ee3896e2349a79cdfe3dd53bd0f78a3",
+    "semantic_hash": "1ee3896e2349a79cdfe3dd53bd0f78a3"
+  },
+  "src/main/resources/db/migration/V10__evidence_dedup.sql": {
+    "mtime": 1782901777.2045367,
+    "ast_hash": "0ad86acad8bb8e337b5d09e0dabd02f1",
+    "semantic_hash": "0ad86acad8bb8e337b5d09e0dabd02f1"
+  },
+  "src/main/resources/db/migration/V11__fix_llm_provider_api_config.sql": {
+    "mtime": 1782901880.7508473,
+    "ast_hash": "76585b218cd7a1a0bb2cc9b9f16d66a1",
+    "semantic_hash": "76585b218cd7a1a0bb2cc9b9f16d66a1"
+  },
+  "src/main/resources/db/migration/V12__seed_prompt_templates.sql": {
+    "mtime": 1782958701.5758066,
+    "ast_hash": "9a93d63f5b32e0884b2713dd8077fa23",
+    "semantic_hash": "9a93d63f5b32e0884b2713dd8077fa23"
+  },
+  "src/main/resources/db/migration/V13__scan_version_stats_cache.sql": {
+    "mtime": 1782957539.0344024,
+    "ast_hash": "56665c2e1490abd1c598888ec6217f4a",
+    "semantic_hash": "56665c2e1490abd1c598888ec6217f4a"
+  },
+  "src/main/resources/db/migration/V14__change_task_version_column.sql": {
+    "mtime": 1782957680.9577153,
+    "ast_hash": "d901535c0469823b73148aeb1efbc775",
+    "semantic_hash": "d901535c0469823b73148aeb1efbc775"
+  },
+  "src/main/resources/db/migration/V15__knowledge_claim_and_gap_task.sql": {
+    "mtime": 1782972492.703139,
+    "ast_hash": "97744eed79da3033afdcfdaaec291421",
+    "semantic_hash": "97744eed79da3033afdcfdaaec291421"
+  },
+  "src/main/resources/db/migration/V16__domain_ontology.sql": {
+    "mtime": 1782966029.548644,
+    "ast_hash": "b49777c21a7b5cffd709e105657bf8c6",
+    "semantic_hash": "b49777c21a7b5cffd709e105657bf8c6"
+  },
+  "src/main/resources/db/migration/V17__switch_embedding_to_siliconflow.sql": {
+    "mtime": 1782975018.8225956,
+    "ast_hash": "32e0df0ad35d77108ce1612d6575d704",
+    "semantic_hash": "32e0df0ad35d77108ce1612d6575d704"
+  },
+  "src/main/resources/db/migration/V18__fix_prompt_output_schemas.sql": {
+    "mtime": 1782979096.3997684,
+    "ast_hash": "b1309b7e188b49efcd74bfeff5d653b5",
+    "semantic_hash": "b1309b7e188b49efcd74bfeff5d653b5"
+  },
+  "src/main/resources/db/migration/V19__switch_embedding_to_local_ollama.sql": {
+    "mtime": 1783000264.1389203,
+    "ast_hash": "831edbe75e6053c97eca5a6e791f1ed2",
+    "semantic_hash": "831edbe75e6053c97eca5a6e791f1ed2"
+  },
+  "src/main/resources/db/migration/V1__initial_schema.sql": {
+    "mtime": 1782788255.6844368,
+    "ast_hash": "3794dd10f00e28fe59f2e7d8aaf2b41c",
+    "semantic_hash": "3794dd10f00e28fe59f2e7d8aaf2b41c"
+  },
+  "src/main/resources/db/migration/V20__source_asset_snapshot.sql": {
+    "mtime": 1783001733.8592298,
+    "ast_hash": "7cc5c04c0945755af51123e904dbb0ca",
+    "semantic_hash": "7cc5c04c0945755af51123e904dbb0ca"
+  },
+  "src/main/resources/db/migration/V21__graph_write_intent_outbox.sql": {
+    "mtime": 1783084593.9909344,
+    "ast_hash": "3d2869a1798be0a17850eb44cac7117d",
+    "semantic_hash": "3d2869a1798be0a17850eb44cac7117d"
+  },
+  "src/main/resources/db/migration/V22__understanding_tool_runs.sql": {
+    "mtime": 1783008737.7488985,
+    "ast_hash": "2ec18c021bfba6d67db25b6e9ca23715",
+    "semantic_hash": "2ec18c021bfba6d67db25b6e9ca23715"
+  },
+  "src/main/resources/db/migration/V23__fix_vector_document_schema.sql": {
+    "mtime": 1783095178.367464,
+    "ast_hash": "04c38270f72bed4383ae7f34cdd84fb3",
+    "semantic_hash": "04c38270f72bed4383ae7f34cdd84fb3"
+  },
+  "src/main/resources/db/migration/V24__scan_task_progress.sql": {
+    "mtime": 1783044612.6886032,
+    "ast_hash": "97401116231006a7bf1bb61fd207e02a",
+    "semantic_hash": "97401116231006a7bf1bb61fd207e02a"
+  },
+  "src/main/resources/db/migration/V25__seed_doc_parse_status_dict.sql": {
+    "mtime": 1783047405.3488433,
+    "ast_hash": "43b071cd776116e931a1ec6c6d5ffc28",
+    "semantic_hash": "43b071cd776116e931a1ec6c6d5ffc28"
+  },
+  "src/main/resources/db/migration/V26__repair_scan_task_progress_columns.sql": {
+    "mtime": 1783047653.0909147,
+    "ast_hash": "6c95e2a526299236da4b0018a571173d",
+    "semantic_hash": "6c95e2a526299236da4b0018a571173d"
+  },
+  "src/main/resources/db/migration/V27__db_schema_fingerprint.sql": {
+    "mtime": 1783047916.4819188,
+    "ast_hash": "f37c990e0c43c24e81053066ecb0b630",
+    "semantic_hash": "f37c990e0c43c24e81053066ecb0b630"
+  },
+  "src/main/resources/db/migration/V28__ai_scan_job.sql": {
+    "mtime": 1783047941.4053078,
+    "ast_hash": "b2d7d1160dcc79262861e6d50d38da43",
+    "semantic_hash": "b2d7d1160dcc79262861e6d50d38da43"
+  },
+  "src/main/resources/db/migration/V29__qa_conversation_tables.sql": {
+    "mtime": 1783058532.8134286,
+    "ast_hash": "2c5b8f63b872af9fb5a71d318730a92d",
+    "semantic_hash": "2c5b8f63b872af9fb5a71d318730a92d"
+  },
+  "src/main/resources/db/migration/V2__llm_provider_deepseek.sql": {
+    "mtime": 1782901871.3233426,
+    "ast_hash": "6da23d2b44d0aaa7bf63ab036ea7363c",
+    "semantic_hash": "6da23d2b44d0aaa7bf63ab036ea7363c"
+  },
+  "src/main/resources/db/migration/V30__semantic_cache.sql": {
+    "mtime": 1783095252.192708,
+    "ast_hash": "3f4cf2fb1a7e6b8b8eb11551101f977c",
+    "semantic_hash": "3f4cf2fb1a7e6b8b8eb11551101f977c"
+  },
+  "src/main/resources/db/migration/V31__outbox_enhance.sql": {
+    "mtime": 1783068609.0528984,
+    "ast_hash": "7aec989c120faf73783dd3f85e0f65a7",
+    "semantic_hash": "7aec989c120faf73783dd3f85e0f65a7"
+  },
+  "src/main/resources/db/migration/V32__ai_scan_job_current_step.sql": {
+    "mtime": 1783070251.2743356,
+    "ast_hash": "bf84f532ddf5e4e8ad60f087f8db1ac1",
+    "semantic_hash": "bf84f532ddf5e4e8ad60f087f8db1ac1"
+  },
+  "src/main/resources/db/migration/V33__unify_table_prefix.sql": {
+    "mtime": 1783073293.513678,
+    "ast_hash": "baf4832afeaf24d8367db9e61fcbb605",
+    "semantic_hash": "baf4832afeaf24d8367db9e61fcbb605"
+  },
+  "src/main/resources/db/migration/V34__notifications.sql": {
+    "mtime": 1783085393.4103823,
+    "ast_hash": "3f39bfadbc8a3fc636a9e9972b7e9251",
+    "semantic_hash": "3f39bfadbc8a3fc636a9e9972b7e9251"
+  },
+  "src/main/resources/db/migration/V35__evidence_conflicts.sql": {
+    "mtime": 1783094689.1345065,
+    "ast_hash": "cd2a37bb680924bfc2eaacaa20161a9f",
+    "semantic_hash": "cd2a37bb680924bfc2eaacaa20161a9f"
+  },
+  "src/main/resources/db/migration/V36__seed_qa_agent_prompt_templates.sql": {
+    "mtime": 1783305650.3290448,
+    "ast_hash": "963d190b4fda84ff93e110d8b168435d",
+    "semantic_hash": "963d190b4fda84ff93e110d8b168435d"
+  },
+  "src/main/resources/db/migration/V37__fix_qa_answer_remove_json_output.sql": {
+    "mtime": 1783335263.8434074,
+    "ast_hash": "4a00c00736fb75256a2cb6931f1cf912",
+    "semantic_hash": "4a00c00736fb75256a2cb6931f1cf912"
+  },
+  "src/main/resources/db/migration/V38__db_connection_source.sql": {
+    "mtime": 1783334261.3011568,
+    "ast_hash": "3402c6de8c7865d553ca034507c56758",
+    "semantic_hash": "3402c6de8c7865d553ca034507c56758"
+  },
+  "src/main/resources/db/migration/V39__seed_add_column_dict.sql": {
+    "mtime": 1783355592.4983594,
+    "ast_hash": "9759829b17b7ebeb5dde2202b6bccc98",
+    "semantic_hash": "9759829b17b7ebeb5dde2202b6bccc98"
+  },
+  "src/main/resources/db/migration/V3__fix_schema_gaps.sql": {
+    "mtime": 1782789111.3559945,
+    "ast_hash": "0d3e6f2c17bb4bbf00c8890beba5577e",
+    "semantic_hash": "0d3e6f2c17bb4bbf00c8890beba5577e"
+  },
+  "src/main/resources/db/migration/V40__seed_add_column_prompts.sql": {
+    "mtime": 1783353563.4596293,
+    "ast_hash": "62bbe23c79196217deeed86044f8e278",
+    "semantic_hash": "62bbe23c79196217deeed86044f8e278"
+  },
+  "src/main/resources/db/migration/V41__graph_rag_planner_intent_support.sql": {
+    "mtime": 1783392869.587452,
+    "ast_hash": "219730286df32f168bcce4a35d46c327",
+    "semantic_hash": "219730286df32f168bcce4a35d46c327"
+  },
+  "src/main/resources/db/migration/V4__add_deleted_columns.sql": {
+    "mtime": 1782791341.4421463,
+    "ast_hash": "5f050f47532234cb371f5609e20ee035",
+    "semantic_hash": "5f050f47532234cb371f5609e20ee035"
+  },
+  "src/main/resources/db/migration/V5__create_missing_tables.sql": {
+    "mtime": 1782791518.6447,
+    "ast_hash": "0ede7d431d0f5beec62f5b91ad4a1e11",
+    "semantic_hash": "0ede7d431d0f5beec62f5b91ad4a1e11"
+  },
+  "src/main/resources/db/migration/V6__agent_run_and_privacy.sql": {
+    "mtime": 1783406596.854432,
+    "ast_hash": "252e3c54a18716e9ef14f40f30723265",
+    "semantic_hash": "252e3c54a18716e9ef14f40f30723265"
+  },
+  "src/main/resources/db/migration/V7__fix_prompt_run_jsonb_to_text.sql": {
+    "mtime": 1782870296.5550125,
+    "ast_hash": "6d25b10b1b48e17171f1625db6c253a1",
+    "semantic_hash": "6d25b10b1b48e17171f1625db6c253a1"
+  },
+  "src/main/resources/db/migration/V8__seed_dictionaries.sql": {
+    "mtime": 1783034566.2530396,
+    "ast_hash": "a94f70e88cc59bd9beb3c2479c2b8bc9",
+    "semantic_hash": "a94f70e88cc59bd9beb3c2479c2b8bc9"
+  },
+  "src/main/resources/db/migration/V9__change_task.sql": {
+    "mtime": 1782965224.2566178,
+    "ast_hash": "b86b6f0513082444b473420830d8e65b",
+    "semantic_hash": "b86b6f0513082444b473420830d8e65b"
+  },
+  "src/test/java/io/github/legacygraph/ApiTestExecutorTest.java": {
+    "mtime": 1782732293.5335,
+    "ast_hash": "a00fe3cc032ecb732cfc326047f5bbd4",
+    "semantic_hash": "a00fe3cc032ecb732cfc326047f5bbd4"
+  },
+  "src/test/java/io/github/legacygraph/DatabaseMetadataExtractorTest.java": {
+    "mtime": 1782722036.6106367,
+    "ast_hash": "cd58307e6d8b9b6dbd5c294214f8bb06",
+    "semantic_hash": "cd58307e6d8b9b6dbd5c294214f8bb06"
+  },
+  "src/test/java/io/github/legacygraph/DbAssertionExecutorTest.java": {
+    "mtime": 1782732443.6513746,
+    "ast_hash": "9a6d1b6d425e73b9dbf0532a428de76d",
+    "semantic_hash": "9a6d1b6d425e73b9dbf0532a428de76d"
+  },
+  "src/test/java/io/github/legacygraph/DocUnderstandingAgentTest.java": {
+    "mtime": 1782721414.4450524,
+    "ast_hash": "ed07a6d9c32af7dffaa4d1aad1514dc3",
+    "semantic_hash": "ed07a6d9c32af7dffaa4d1aad1514dc3"
+  },
+  "src/test/java/io/github/legacygraph/DocumentExtractorTest.java": {
+    "mtime": 1782725149.3106916,
+    "ast_hash": "9ea3d4644121e3beeb824dab3502e4d9",
+    "semantic_hash": "9ea3d4644121e3beeb824dab3502e4d9"
+  },
+  "src/test/java/io/github/legacygraph/E2eTestExecutorTest.java": {
+    "mtime": 1782721419.9139314,
+    "ast_hash": "2ad4a34c32629aab9881dc08769c06cb",
+    "semantic_hash": "2ad4a34c32629aab9881dc08769c06cb"
+  },
+  "src/test/java/io/github/legacygraph/FrontendApiExtractorTest.java": {
+    "mtime": 1783043607.6167517,
+    "ast_hash": "82d756ee19f76d36aae80305b0046079",
+    "semantic_hash": "82d756ee19f76d36aae80305b0046079"
+  },
+  "src/test/java/io/github/legacygraph/JavaControllerExtractorTest.java": {
+    "mtime": 1783381415.0696394,
+    "ast_hash": "92e28baecd6dc3c3eb63443aaf3b10ba",
+    "semantic_hash": "92e28baecd6dc3c3eb63443aaf3b10ba"
+  },
+  "src/test/java/io/github/legacygraph/JavaStructureExtractorTest.java": {
+    "mtime": 1783346691.9335673,
+    "ast_hash": "fd61382e2b1363460d5a49e124eb839d",
+    "semantic_hash": "fd61382e2b1363460d5a49e124eb839d"
+  },
+  "src/test/java/io/github/legacygraph/LlmGatewayTest.java": {
+    "mtime": 1783406389.1080096,
+    "ast_hash": "b81a5e23cccade48c79e92e3527eab39",
+    "semantic_hash": "b81a5e23cccade48c79e92e3527eab39"
+  },
+  "src/test/java/io/github/legacygraph/MyBatisXmlExtractorTest.java": {
+    "mtime": 1782750169.860747,
+    "ast_hash": "81ca48bfd4b5a9427db031bc3c1eb207",
+    "semantic_hash": "81ca48bfd4b5a9427db031bc3c1eb207"
+  },
+  "src/test/java/io/github/legacygraph/PiiMaskingServiceTest.java": {
+    "mtime": 1782721193.571882,
+    "ast_hash": "41fbfd97da4cc3d52151e5d467dab32f",
+    "semantic_hash": "41fbfd97da4cc3d52151e5d467dab32f"
+  },
+  "src/test/java/io/github/legacygraph/ServiceCallExtractorTest.java": {
+    "mtime": 1783354483.6033876,
+    "ast_hash": "6d32aa96c15ee6ad89b77e0b5e9842d8",
+    "semantic_hash": "6d32aa96c15ee6ad89b77e0b5e9842d8"
+  },
+  "src/test/java/io/github/legacygraph/ServiceCallSignatureTest.java": {
+    "mtime": 1783354984.4004626,
+    "ast_hash": "af2405842bf397607d2a844f27148a2d",
+    "semantic_hash": "af2405842bf397607d2a844f27148a2d"
+  },
+  "src/test/java/io/github/legacygraph/SqlTableExtractorTest.java": {
+    "mtime": 1782721377.9158986,
+    "ast_hash": "1e6a3666d73b05dcb520d738306c9b5e",
+    "semantic_hash": "1e6a3666d73b05dcb520d738306c9b5e"
+  },
+  "src/test/java/io/github/legacygraph/VectorDocumentQuickTest.java": {
+    "mtime": 1783040259.4575028,
+    "ast_hash": "f4bf22b25a186919fcf44acbd5101e74",
+    "semantic_hash": "f4bf22b25a186919fcf44acbd5101e74"
+  },
+  "src/test/java/io/github/legacygraph/VueRouteExtractorTest.java": {
+    "mtime": 1782721381.2435837,
+    "ast_hash": "e25c50589b1bdb54bd2f624549451c85",
+    "semantic_hash": "e25c50589b1bdb54bd2f624549451c85"
+  },
+  "src/test/java/io/github/legacygraph/agent/ChangeImpactAgentTest.java": {
+    "mtime": 1782977718.0085642,
+    "ast_hash": "4e36edd7b768af88aa233c2fdfedc2f4",
+    "semantic_hash": "4e36edd7b768af88aa233c2fdfedc2f4"
+  },
+  "src/test/java/io/github/legacygraph/agent/ChangeImpactQuestionParserTest.java": {
+    "mtime": 1783354571.506218,
+    "ast_hash": "f5ba8f0ce69f169b644490dc02477a21",
+    "semantic_hash": "f5ba8f0ce69f169b644490dc02477a21"
+  },
+  "src/test/java/io/github/legacygraph/agent/CodeFactAgentTest.java": {
+    "mtime": 1782799922.34022,
+    "ast_hash": "c01cf0cd7ce79717118e458ecc624fc8",
+    "semantic_hash": "c01cf0cd7ce79717118e458ecc624fc8"
+  },
+  "src/test/java/io/github/legacygraph/agent/DbSchemaAnalysisAgentTest.java": {
+    "mtime": 1782978072.9516582,
+    "ast_hash": "21d155adad0dd2eddac6298f9ebb093d",
+    "semantic_hash": "21d155adad0dd2eddac6298f9ebb093d"
+  },
+  "src/test/java/io/github/legacygraph/agent/EnhancedQaAgentTest.java": {
+    "mtime": 1783392843.6900456,
+    "ast_hash": "2661cf350d6f1e9e6dd18d970586ba80",
+    "semantic_hash": "2661cf350d6f1e9e6dd18d970586ba80"
+  },
+  "src/test/java/io/github/legacygraph/agent/FeatureMappingAgentTest.java": {
+    "mtime": 1782732588.051963,
+    "ast_hash": "dbfe9f36323c7aaec2ae8bf4becd7d55",
+    "semantic_hash": "dbfe9f36323c7aaec2ae8bf4becd7d55"
+  },
+  "src/test/java/io/github/legacygraph/agent/GapFinderAgentTest.java": {
+    "mtime": 1782973276.0487888,
+    "ast_hash": "720cf84888dd7e65f539c95869db02f1",
+    "semantic_hash": "720cf84888dd7e65f539c95869db02f1"
+  },
+  "src/test/java/io/github/legacygraph/agent/GraphMergeAgentTest.java": {
+    "mtime": 1783034815.452521,
+    "ast_hash": "5c70d23dabf3c6c3651d37fa23894bf6",
+    "semantic_hash": "5c70d23dabf3c6c3651d37fa23894bf6"
+  },
+  "src/test/java/io/github/legacygraph/agent/GraphRagPlannerAgentTest.java": {
+    "mtime": 1783392787.197413,
+    "ast_hash": "88dd7a0437184bf9f8bd08fb868336ed",
+    "semantic_hash": "88dd7a0437184bf9f8bd08fb868336ed"
+  },
+  "src/test/java/io/github/legacygraph/agent/KnowledgeClaimDraftAgentTest.java": {
+    "mtime": 1782973276.048669,
+    "ast_hash": "0a96f072355ff926848c15ffc3cd578a",
+    "semantic_hash": "0a96f072355ff926848c15ffc3cd578a"
+  },
+  "src/test/java/io/github/legacygraph/agent/MigrationAgentTest.java": {
+    "mtime": 1782977718.0410063,
+    "ast_hash": "098f0a73a0e0bcb90d0814e5767b03ab",
+    "semantic_hash": "098f0a73a0e0bcb90d0814e5767b03ab"
+  },
+  "src/test/java/io/github/legacygraph/agent/PatchPlanAgentTest.java": {
+    "mtime": 1782962757.9916103,
+    "ast_hash": "84f01697329f19be1b4c898ce41021b5",
+    "semantic_hash": "84f01697329f19be1b4c898ce41021b5"
+  },
+  "src/test/java/io/github/legacygraph/agent/Phase4AgentsTest.java": {
+    "mtime": 1782801307.4710891,
+    "ast_hash": "cda089ffdb43a9c71333afc5ea8582f3",
+    "semantic_hash": "cda089ffdb43a9c71333afc5ea8582f3"
+  },
+  "src/test/java/io/github/legacygraph/agent/PrDescriptionAgentTest.java": {
+    "mtime": 1782977962.999064,
+    "ast_hash": "9eac45a8ce6fcd3a44977f96c8ed589d",
+    "semantic_hash": "9eac45a8ce6fcd3a44977f96c8ed589d"
+  },
+  "src/test/java/io/github/legacygraph/agent/QaAgentTest.java": {
+    "mtime": 1783406596.8624034,
+    "ast_hash": "3ba5224f39b59395f2893ede98a3493c",
+    "semantic_hash": "3ba5224f39b59395f2893ede98a3493c"
+  },
+  "src/test/java/io/github/legacygraph/agent/QueryIntentTest.java": {
+    "mtime": 1783392809.1193984,
+    "ast_hash": "e2636f42f42ce2938af55898cee2f4dc",
+    "semantic_hash": "e2636f42f42ce2938af55898cee2f4dc"
+  },
+  "src/test/java/io/github/legacygraph/agent/RefactorAgentTest.java": {
+    "mtime": 1782977718.0113955,
+    "ast_hash": "b7c2e48cae13f51012ef3a25b1334738",
+    "semantic_hash": "b7c2e48cae13f51012ef3a25b1334738"
+  },
+  "src/test/java/io/github/legacygraph/agent/ReportInsightAgentTest.java": {
+    "mtime": 1782800624.9873662,
+    "ast_hash": "f7628d64e0172b5e50f87b40f2dca35c",
+    "semantic_hash": "f7628d64e0172b5e50f87b40f2dca35c"
+  },
+  "src/test/java/io/github/legacygraph/agent/ReviewAgentTest.java": {
+    "mtime": 1782799835.338466,
+    "ast_hash": "f24e8445cd012e422e74ea7301cfe29a",
+    "semantic_hash": "f24e8445cd012e422e74ea7301cfe29a"
+  },
+  "src/test/java/io/github/legacygraph/agent/SqlAdvisorAgentTest.java": {
+    "mtime": 1782800589.8893268,
+    "ast_hash": "0b428eb8b661d632dc1cd509b7289c17",
+    "semantic_hash": "0b428eb8b661d632dc1cd509b7289c17"
+  },
+  "src/test/java/io/github/legacygraph/agent/TestCaseAgentTest.java": {
+    "mtime": 1782878714.0119262,
+    "ast_hash": "7e0a32139a1dbcc93bfb0f0ee73d4623",
+    "semantic_hash": "7e0a32139a1dbcc93bfb0f0ee73d4623"
+  },
+  "src/test/java/io/github/legacygraph/agent/TestFailureAnalysisAgentTest.java": {
+    "mtime": 1782800609.1923966,
+    "ast_hash": "63ea2205115aaaf037ab9e4bdee1ab34",
+    "semantic_hash": "63ea2205115aaaf037ab9e4bdee1ab34"
+  },
+  "src/test/java/io/github/legacygraph/agent/adapter/AddColumnPatchAgentAdapterTest.java": {
+    "mtime": 1783354967.966359,
+    "ast_hash": "4c9c90ef7476ccf04a9e39e07f8b35dc",
+    "semantic_hash": "4c9c90ef7476ccf04a9e39e07f8b35dc"
+  },
+  "src/test/java/io/github/legacygraph/agent/adapter/MigrationAgentAdapterTest.java": {
+    "mtime": 1782978421.296988,
+    "ast_hash": "5da9e95c11ec1e10007128e1189d1164",
+    "semantic_hash": "5da9e95c11ec1e10007128e1189d1164"
+  },
+  "src/test/java/io/github/legacygraph/agent/adapter/RefactorAgentAdapterTest.java": {
+    "mtime": 1782977718.016541,
+    "ast_hash": "db5c19c5395fe5e50743608cc63dbbf5",
+    "semantic_hash": "db5c19c5395fe5e50743608cc63dbbf5"
+  },
+  "src/test/java/io/github/legacygraph/architecture/LayeredArchitectureTest.java": {
+    "mtime": 1783076435.2395773,
+    "ast_hash": "47fccb2dd2ab3ca7a234082272657a80",
+    "semantic_hash": "47fccb2dd2ab3ca7a234082272657a80"
+  },
+  "src/test/java/io/github/legacygraph/builder/BusinessGraphBuilderTest.java": {
+    "mtime": 1783042278.1704998,
+    "ast_hash": "20a66d552e055af77e6859a8a8aa3b28",
+    "semantic_hash": "20a66d552e055af77e6859a8a8aa3b28"
+  },
+  "src/test/java/io/github/legacygraph/builder/EvidenceGraphWriterTest.java": {
+    "mtime": 1783406389.1300206,
+    "ast_hash": "25591a53391651687075c63d08638527",
+    "semantic_hash": "25591a53391651687075c63d08638527"
+  },
+  "src/test/java/io/github/legacygraph/builder/FeatureIdentityNormalizerTest.java": {
+    "mtime": 1782977761.675183,
+    "ast_hash": "1a6fac3957a183d75417c01cbc9cb8f4",
+    "semantic_hash": "1a6fac3957a183d75417c01cbc9cb8f4"
+  },
+  "src/test/java/io/github/legacygraph/builder/FeatureSliceBuilderTest.java": {
+    "mtime": 1782977992.6795518,
+    "ast_hash": "01df1313361cbc165ce521cc2218359d",
+    "semantic_hash": "01df1313361cbc165ce521cc2218359d"
+  },
+  "src/test/java/io/github/legacygraph/builder/FeatureSliceStoreTest.java": {
+    "mtime": 1782977761.660967,
+    "ast_hash": "c76d0353f4554d18750094e497515d8d",
+    "semantic_hash": "c76d0353f4554d18750094e497515d8d"
+  },
+  "src/test/java/io/github/legacygraph/builder/FrontendGraphBuilderTest.java": {
+    "mtime": 1783406389.1526258,
+    "ast_hash": "aef98bfa2fe65b40481c4414fc956357",
+    "semantic_hash": "aef98bfa2fe65b40481c4414fc956357"
+  },
+  "src/test/java/io/github/legacygraph/builder/GraphBuilderTest.java": {
+    "mtime": 1783382368.7481327,
+    "ast_hash": "3989207b71b109c6c00fa534c4e315be",
+    "semantic_hash": "3989207b71b109c6c00fa534c4e315be"
+  },
+  "src/test/java/io/github/legacygraph/builder/GraphWriteReconcilerTest.java": {
+    "mtime": 1782963156.739917,
+    "ast_hash": "920c75ba7c4e13a65e1ae71769164a02",
+    "semantic_hash": "920c75ba7c4e13a65e1ae71769164a02"
+  },
+  "src/test/java/io/github/legacygraph/builder/ScenarioDSLBuilderTest.java": {
+    "mtime": 1782977761.6659145,
+    "ast_hash": "4b0abe0616429be100438795173df515",
+    "semantic_hash": "4b0abe0616429be100438795173df515"
+  },
+  "src/test/java/io/github/legacygraph/builder/TraceGraphAlignerTest.java": {
+    "mtime": 1782838851.271758,
+    "ast_hash": "6d56c2f2ab76d77d70f9d94c444e2c8b",
+    "semantic_hash": "6d56c2f2ab76d77d70f9d94c444e2c8b"
+  },
+  "src/test/java/io/github/legacygraph/config/AsyncConfigTest.java": {
+    "mtime": 1782976651.090947,
+    "ast_hash": "f7fd7a75f4fedaab42a2fd897feb04e8",
+    "semantic_hash": "f7fd7a75f4fedaab42a2fd897feb04e8"
+  },
+  "src/test/java/io/github/legacygraph/config/FlywayConfigTest.java": {
+    "mtime": 1782977916.1885002,
+    "ast_hash": "5e98c138439f254a2a4120302d74518c",
+    "semantic_hash": "5e98c138439f254a2a4120302d74518c"
+  },
+  "src/test/java/io/github/legacygraph/config/H2TestConfig.java": {
+    "mtime": 1783322726.5077617,
+    "ast_hash": "88caa69cc1ef1617bf39465b099d0e4c",
+    "semantic_hash": "88caa69cc1ef1617bf39465b099d0e4c"
+  },
+  "src/test/java/io/github/legacygraph/config/JacksonConfigTest.java": {
+    "mtime": 1782976651.0532465,
+    "ast_hash": "a35f6ea57bee51a55ef6e14617f8699c",
+    "semantic_hash": "a35f6ea57bee51a55ef6e14617f8699c"
+  },
+  "src/test/java/io/github/legacygraph/config/LlmConfigTest.java": {
+    "mtime": 1783074346.2407877,
+    "ast_hash": "d1cffa52c0c08c9110071bbf359ccb23",
+    "semantic_hash": "d1cffa52c0c08c9110071bbf359ccb23"
+  },
+  "src/test/java/io/github/legacygraph/config/MinioConfigTest.java": {
+    "mtime": 1782978365.9812484,
+    "ast_hash": "076d636259522a279f96d8f6bb1e5ea0",
+    "semantic_hash": "076d636259522a279f96d8f6bb1e5ea0"
+  },
+  "src/test/java/io/github/legacygraph/config/MybatisPlusConfigTest.java": {
+    "mtime": 1782974974.9531105,
+    "ast_hash": "3e30f8e70a67432778f7450e99164a96",
+    "semantic_hash": "3e30f8e70a67432778f7450e99164a96"
+  },
+  "src/test/java/io/github/legacygraph/config/Neo4jConfigTest.java": {
+    "mtime": 1782976686.4495506,
+    "ast_hash": "0e9b0b902bf4333bdbc467ec472debb2",
+    "semantic_hash": "0e9b0b902bf4333bdbc467ec472debb2"
+  },
+  "src/test/java/io/github/legacygraph/config/Neo4jInitializerTest.java": {
+    "mtime": 1782977916.2034218,
+    "ast_hash": "31ee8e497d29e11c4c3176fdacb22c3b",
+    "semantic_hash": "31ee8e497d29e11c4c3176fdacb22c3b"
+  },
+  "src/test/java/io/github/legacygraph/config/RedisConfigTest.java": {
+    "mtime": 1782976882.4263675,
+    "ast_hash": "0378b7e674dbcfa20cb3b6422a47c00c",
+    "semantic_hash": "0378b7e674dbcfa20cb3b6422a47c00c"
+  },
+  "src/test/java/io/github/legacygraph/config/SecurityConfigTest.java": {
+    "mtime": 1782976360.338068,
+    "ast_hash": "209753cc312b1ebd7012d66cf237bf0e",
+    "semantic_hash": "209753cc312b1ebd7012d66cf237bf0e"
+  },
+  "src/test/java/io/github/legacygraph/config/WebMvcConfigTest.java": {
+    "mtime": 1782976651.0736463,
+    "ast_hash": "cd0f9313bdbf267c30e3ca9308dc9ddb",
+    "semantic_hash": "cd0f9313bdbf267c30e3ca9308dc9ddb"
+  },
+  "src/test/java/io/github/legacygraph/controller/AgentRunControllerTest.java": {
+    "mtime": 1783095947.3773065,
+    "ast_hash": "40da33378f821a792cdcb4851a60e939",
+    "semantic_hash": "40da33378f821a792cdcb4851a60e939"
+  },
+  "src/test/java/io/github/legacygraph/controller/AuditLogControllerTest.java": {
+    "mtime": 1782729272.6457717,
+    "ast_hash": "b9b487584e9c4af04852c3f69e6753a1",
+    "semantic_hash": "b9b487584e9c4af04852c3f69e6753a1"
+  },
+  "src/test/java/io/github/legacygraph/controller/AuthControllerTest.java": {
+    "mtime": 1782728927.091243,
+    "ast_hash": "a6a9e063b65acf48b16dba22d076fdb8",
+    "semantic_hash": "a6a9e063b65acf48b16dba22d076fdb8"
+  },
+  "src/test/java/io/github/legacygraph/controller/ChangeTaskControllerTest.java": {
+    "mtime": 1782978411.7290354,
+    "ast_hash": "a9241a0d051252849a4f6c316de5636d",
+    "semantic_hash": "a9241a0d051252849a4f6c316de5636d"
+  },
+  "src/test/java/io/github/legacygraph/controller/CodeUnderstandingControllerTest.java": {
+    "mtime": 1783011307.5863655,
+    "ast_hash": "f5ab46b85beaa30be509817b0940dbeb",
+    "semantic_hash": "f5ab46b85beaa30be509817b0940dbeb"
+  },
+  "src/test/java/io/github/legacygraph/controller/EnhancedQaControllerTest.java": {
+    "mtime": 1783074669.1810846,
+    "ast_hash": "238fbacd7e0eb858e9f9514fe9151a8d",
+    "semantic_hash": "238fbacd7e0eb858e9f9514fe9151a8d"
+  },
+  "src/test/java/io/github/legacygraph/controller/EvidenceConflictControllerTest.java": {
+    "mtime": 1783134740.3388,
+    "ast_hash": "705e889e6659d28142b09b8110d20acd",
+    "semantic_hash": "705e889e6659d28142b09b8110d20acd"
+  },
+  "src/test/java/io/github/legacygraph/controller/FactControllerTest.java": {
+    "mtime": 1782729025.4250402,
+    "ast_hash": "24497aad1000f02c63551498d4b11294",
+    "semantic_hash": "24497aad1000f02c63551498d4b11294"
+  },
+  "src/test/java/io/github/legacygraph/controller/GraphDiffControllerTest.java": {
+    "mtime": 1783134740.3614979,
+    "ast_hash": "5d850c27226ba7c3ec11fcc8aa34f27b",
+    "semantic_hash": "5d850c27226ba7c3ec11fcc8aa34f27b"
+  },
+  "src/test/java/io/github/legacygraph/controller/GraphQaControllerTest.java": {
+    "mtime": 1782974905.468312,
+    "ast_hash": "36644138dd04c9cb6f9a894ca4021695",
+    "semantic_hash": "36644138dd04c9cb6f9a894ca4021695"
+  },
+  "src/test/java/io/github/legacygraph/controller/GraphQueryControllerTest.java": {
+    "mtime": 1782787362.0797381,
+    "ast_hash": "f1910f58cb73373eb0e81b4b05b95b5b",
+    "semantic_hash": "f1910f58cb73373eb0e81b4b05b95b5b"
+  },
+  "src/test/java/io/github/legacygraph/controller/GraphQueryControllerUnitTest.java": {
+    "mtime": 1783074241.4346056,
+    "ast_hash": "e38be1bf152ecd4134da6fd08d1cc6d2",
+    "semantic_hash": "e38be1bf152ecd4134da6fd08d1cc6d2"
+  },
+  "src/test/java/io/github/legacygraph/controller/GraphifyControllerTest.java": {
+    "mtime": 1783333820.2841346,
+    "ast_hash": "8b89c9531a359ceb92460cf2128d3084",
+    "semantic_hash": "8b89c9531a359ceb92460cf2128d3084"
+  },
+  "src/test/java/io/github/legacygraph/controller/GraphifyDiffControllerTest.java": {
+    "mtime": 1783333884.8787234,
+    "ast_hash": "17f2ee830efeaee5d66a9418a22dadfe",
+    "semantic_hash": "17f2ee830efeaee5d66a9418a22dadfe"
+  },
+  "src/test/java/io/github/legacygraph/controller/KnowledgeControllerTest.java": {
+    "mtime": 1783387454.3787763,
+    "ast_hash": "c122868ded58ed57473540e21b11122f",
+    "semantic_hash": "c122868ded58ed57473540e21b11122f"
+  },
+  "src/test/java/io/github/legacygraph/controller/LlmAgentControllerTest.java": {
+    "mtime": 1783335105.3969204,
+    "ast_hash": "f12765bf48d538de6bd0b56c6dea3d01",
+    "semantic_hash": "f12765bf48d538de6bd0b56c6dea3d01"
+  },
+  "src/test/java/io/github/legacygraph/controller/LlmProviderControllerTest.java": {
+    "mtime": 1783074346.3355446,
+    "ast_hash": "88a25c104da79d8f0ee1cf6250a6e61b",
+    "semantic_hash": "88a25c104da79d8f0ee1cf6250a6e61b"
+  },
+  "src/test/java/io/github/legacygraph/controller/NotificationControllerTest.java": {
+    "mtime": 1783147819.47999,
+    "ast_hash": "f9a560f9a6716d540e1b88d90f199368",
+    "semantic_hash": "f9a560f9a6716d540e1b88d90f199368"
+  },
+  "src/test/java/io/github/legacygraph/controller/PluginControllerTest.java": {
+    "mtime": 1783134740.3316917,
+    "ast_hash": "bfcf3cae5bf12a8237b8a53fda189c0f",
+    "semantic_hash": "bfcf3cae5bf12a8237b8a53fda189c0f"
+  },
+  "src/test/java/io/github/legacygraph/controller/ProjectControllerTest.java": {
+    "mtime": 1782728927.0923038,
+    "ast_hash": "30b51b5ad7ce5cacbda81788d879abfc",
+    "semantic_hash": "30b51b5ad7ce5cacbda81788d879abfc"
+  },
+  "src/test/java/io/github/legacygraph/controller/ProjectOverviewControllerTest.java": {
+    "mtime": 1782976672.0163538,
+    "ast_hash": "e5da664fff59d71205c9996f3a4de267",
+    "semantic_hash": "e5da664fff59d71205c9996f3a4de267"
+  },
+  "src/test/java/io/github/legacygraph/controller/PromptTemplateControllerTest.java": {
+    "mtime": 1782978394.6925018,
+    "ast_hash": "dc343c0ba1e33d6a40c40debaa0ffd3b",
+    "semantic_hash": "dc343c0ba1e33d6a40c40debaa0ffd3b"
+  },
+  "src/test/java/io/github/legacygraph/controller/QuotaControllerTest.java": {
+    "mtime": 1783134740.486724,
+    "ast_hash": "2cbc6758e86d96892433fc00ae03ce24",
+    "semantic_hash": "2cbc6758e86d96892433fc00ae03ce24"
+  },
+  "src/test/java/io/github/legacygraph/controller/ReportControllerTest.java": {
+    "mtime": 1782908758.742085,
+    "ast_hash": "44c255f7aa05e8463cc35f97f6103ba4",
+    "semantic_hash": "44c255f7aa05e8463cc35f97f6103ba4"
+  },
+  "src/test/java/io/github/legacygraph/controller/ReportExportControllerTest.java": {
+    "mtime": 1783074241.4408102,
+    "ast_hash": "b01f5f99a01e0f5583145139aa4f6884",
+    "semantic_hash": "b01f5f99a01e0f5583145139aa4f6884"
+  },
+  "src/test/java/io/github/legacygraph/controller/ReviewControllerTest.java": {
+    "mtime": 1782896529.8843079,
+    "ast_hash": "3ba83d5c80c79359764afaa281de5eb7",
+    "semantic_hash": "3ba83d5c80c79359764afaa281de5eb7"
+  },
+  "src/test/java/io/github/legacygraph/controller/ScanControllerTest.java": {
+    "mtime": 1782988024.1334147,
+    "ast_hash": "ddb149ea6d5381eff4f1c0bb2a7d15ca",
+    "semantic_hash": "ddb149ea6d5381eff4f1c0bb2a7d15ca"
+  },
+  "src/test/java/io/github/legacygraph/controller/SourceControllerTest.java": {
+    "mtime": 1783343538.8971977,
+    "ast_hash": "da5f2e3f8952491128b9316fad98e6a7",
+    "semantic_hash": "da5f2e3f8952491128b9316fad98e6a7"
+  },
+  "src/test/java/io/github/legacygraph/controller/SystemControllerTest.java": {
+    "mtime": 1783335079.1159346,
+    "ast_hash": "74813aac728eb8f62c7040ada48c92d1",
+    "semantic_hash": "74813aac728eb8f62c7040ada48c92d1"
+  },
+  "src/test/java/io/github/legacygraph/controller/TestCaseControllerTest.java": {
+    "mtime": 1782729268.708623,
+    "ast_hash": "62fcc0fabd73b961081a585ab4f3ec42",
+    "semantic_hash": "62fcc0fabd73b961081a585ab4f3ec42"
+  },
+  "src/test/java/io/github/legacygraph/controller/TestCaseControllerUnitTest.java": {
+    "mtime": 1783042714.7102613,
+    "ast_hash": "12679beeb75db83a8054dea9873c680a",
+    "semantic_hash": "12679beeb75db83a8054dea9873c680a"
+  },
+  "src/test/java/io/github/legacygraph/controller/TraceControllerTest.java": {
+    "mtime": 1782974905.4859736,
+    "ast_hash": "0ea30c2eabce4bd753c3cb72cbee3935",
+    "semantic_hash": "0ea30c2eabce4bd753c3cb72cbee3935"
+  },
+  "src/test/java/io/github/legacygraph/controller/ValidationControllerTest.java": {
+    "mtime": 1782728927.095859,
+    "ast_hash": "de37d84fdda86be4782b2e1b3349dc1e",
+    "semantic_hash": "de37d84fdda86be4782b2e1b3349dc1e"
+  },
+  "src/test/java/io/github/legacygraph/controller/VectorControllerTest.java": {
+    "mtime": 1782728927.0961552,
+    "ast_hash": "bc5b6f5d31745407b4643bbe8d7b89ae",
+    "semantic_hash": "bc5b6f5d31745407b4643bbe8d7b89ae"
+  },
+  "src/test/java/io/github/legacygraph/dao/CypherCatalogTest.java": {
+    "mtime": 1783094368.1129587,
+    "ast_hash": "2998e52c12f5d59ca3064751a6f5d57b",
+    "semantic_hash": "2998e52c12f5d59ca3064751a6f5d57b"
+  },
+  "src/test/java/io/github/legacygraph/dao/Neo4jGraphDaoStructureTest.java": {
+    "mtime": 1782864202.0811021,
+    "ast_hash": "e92e5989b6abdb531076b695d7495ef8",
+    "semantic_hash": "e92e5989b6abdb531076b695d7495ef8"
+  },
+  "src/test/java/io/github/legacygraph/dao/Neo4jGraphDaoTest.java": {
+    "mtime": 1783074669.1812873,
+    "ast_hash": "df13204d9ea471d3f49a74907e056c8d",
+    "semantic_hash": "df13204d9ea471d3f49a74907e056c8d"
+  },
+  "src/test/java/io/github/legacygraph/dao/Neo4jWriteRepositoryTest.java": {
+    "mtime": 1783343618.7439957,
+    "ast_hash": "6d5f3cd38cc5d8b20692baecdb875fde",
+    "semantic_hash": "6d5f3cd38cc5d8b20692baecdb875fde"
+  },
+  "src/test/java/io/github/legacygraph/deployment/GraphifyHealthIndicatorTest.java": {
+    "mtime": 1783319843.0640087,
+    "ast_hash": "a895d7f02903365fe76e6ccfb868a391",
+    "semantic_hash": "a895d7f02903365fe76e6ccfb868a391"
+  },
+  "src/test/java/io/github/legacygraph/deployment/GraphifyOpsMonitorTest.java": {
+    "mtime": 1783319572.6714063,
+    "ast_hash": "ab59b6b8a9a6536282537884a899b41c",
+    "semantic_hash": "ab59b6b8a9a6536282537884a899b41c"
+  },
+  "src/test/java/io/github/legacygraph/dto/AiScanConfigTest.java": {
+    "mtime": 1782958701.5767605,
+    "ast_hash": "f05a3c33efbee3130cf568ecc5edcf55",
+    "semantic_hash": "f05a3c33efbee3130cf568ecc5edcf55"
+  },
+  "src/test/java/io/github/legacygraph/e2e/CodeUnderstandingE2eTest.java": {
+    "mtime": 1783011651.1614046,
+    "ast_hash": "5c8f1d314fdff907f1d8b0c74021f425",
+    "semantic_hash": "5c8f1d314fdff907f1d8b0c74021f425"
+  },
+  "src/test/java/io/github/legacygraph/entity/EntitySerializationTest.java": {
+    "mtime": 1783076411.597368,
+    "ast_hash": "1e63a1e4d412e1ead40efda2132ff0da",
+    "semantic_hash": "1e63a1e4d412e1ead40efda2132ff0da"
+  },
+  "src/test/java/io/github/legacygraph/eval/GraphifyBenchmarkScorerTest.java": {
+    "mtime": 1783320428.8037708,
+    "ast_hash": "75b9231a4a273e3207a07453c8845926",
+    "semantic_hash": "75b9231a4a273e3207a07453c8845926"
+  },
+  "src/test/java/io/github/legacygraph/eval/GraphifyQualityServiceTest.java": {
+    "mtime": 1783333705.185205,
+    "ast_hash": "f6f388b2481b4ea722081de09bc3ce1a",
+    "semantic_hash": "f6f388b2481b4ea722081de09bc3ce1a"
+  },
+  "src/test/java/io/github/legacygraph/event/DomainEventListenerTest.java": {
+    "mtime": 1783094050.9553118,
+    "ast_hash": "62b8fab56a6088fdb3d45db7b7a0f301",
+    "semantic_hash": "62b8fab56a6088fdb3d45db7b7a0f301"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/AdapterCapabilityTest.java": {
+    "mtime": 1782977834.4644895,
+    "ast_hash": "f34c72b9749c77e0978044e442bf4c5a",
+    "semantic_hash": "f34c72b9749c77e0978044e442bf4c5a"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/DocumentAdapterTest.java": {
+    "mtime": 1783145191.270081,
+    "ast_hash": "e728b1a8889938bf1ccdb03da1c14d6f",
+    "semantic_hash": "e728b1a8889938bf1ccdb03da1c14d6f"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/ExtractionAdapterRegistryTest.java": {
+    "mtime": 1783381310.4714482,
+    "ast_hash": "b208084fca1b1ba896c45b66e27777d1",
+    "semantic_hash": "b208084fca1b1ba896c45b66e27777d1"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/ExtractionAdapterTest.java": {
+    "mtime": 1782977834.473853,
+    "ast_hash": "988f4bf476d0c12998cce212ed8c8431",
+    "semantic_hash": "988f4bf476d0c12998cce212ed8c8431"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/ExtractionResultTest.java": {
+    "mtime": 1783003196.583699,
+    "ast_hash": "0512d7f862d454f550a07142d1df1ab3",
+    "semantic_hash": "0512d7f862d454f550a07142d1df1ab3"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/FactPersisterTest.java": {
+    "mtime": 1783049650.927606,
+    "ast_hash": "30feff7417cea8e7d7d6aef80b45f4c4",
+    "semantic_hash": "30feff7417cea8e7d7d6aef80b45f4c4"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/FeatureModuleAdapterTest.java": {
+    "mtime": 1783381695.6250436,
+    "ast_hash": "885e8697afe8c75224248606707db1be",
+    "semantic_hash": "885e8697afe8c75224248606707db1be"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/FullPipelineIntegrationTest.java": {
+    "mtime": 1783354407.4369905,
+    "ast_hash": "0fc8fcacef0b37b64f55ded72c669609",
+    "semantic_hash": "0fc8fcacef0b37b64f55ded72c669609"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/JavaCodeAdapterTest.java": {
+    "mtime": 1782909102.2164602,
+    "ast_hash": "3859a1acfca91b4983c75f9daff9b28c",
+    "semantic_hash": "3859a1acfca91b4983c75f9daff9b28c"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/JavaServiceCallAdapterTest.java": {
+    "mtime": 1783049674.474735,
+    "ast_hash": "f6b485e96d4398c38ad6fe27072aaee6",
+    "semantic_hash": "f6b485e96d4398c38ad6fe27072aaee6"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/MyBatisXmlAdapterTest.java": {
+    "mtime": 1782977877.0265036,
+    "ast_hash": "36123d262c81d985bb43eff16b1dfc34",
+    "semantic_hash": "36123d262c81d985bb43eff16b1dfc34"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/ScanContextTest.java": {
+    "mtime": 1782977877.0212786,
+    "ast_hash": "bbd233ec93b8b2348d4179f3906a85fa",
+    "semantic_hash": "bbd233ec93b8b2348d4179f3906a85fa"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/SourceAssetTest.java": {
+    "mtime": 1783002123.4771712,
+    "ast_hash": "f5e737e7d751e8dc6d777ac44bde2b7b",
+    "semantic_hash": "f5e737e7d751e8dc6d777ac44bde2b7b"
+  },
+  "src/test/java/io/github/legacygraph/extractors/adapter/VueFrontendAdapterTest.java": {
+    "mtime": 1783381333.6985152,
+    "ast_hash": "520b1ef1ca82f6d183d55992a586ca6e",
+    "semantic_hash": "520b1ef1ca82f6d183d55992a586ca6e"
+  },
+  "src/test/java/io/github/legacygraph/federation/CrossRepositoryLinkerTest.java": {
+    "mtime": 1783319344.9911752,
+    "ast_hash": "29a41b607b3a79e86b36346259fbc67b",
+    "semantic_hash": "29a41b607b3a79e86b36346259fbc67b"
+  },
+  "src/test/java/io/github/legacygraph/filter/JwtAuthenticationFilterTest.java": {
+    "mtime": 1783168870.6911075,
+    "ast_hash": "71ab989e51d50ce08911e8bb04423e5b",
+    "semantic_hash": "71ab989e51d50ce08911e8bb04423e5b"
+  },
+  "src/test/java/io/github/legacygraph/governance/GraphifyAccessPolicyTest.java": {
+    "mtime": 1783319160.650542,
+    "ast_hash": "0e98f60c0b0c3abc5b2eda992a17d70d",
+    "semantic_hash": "0e98f60c0b0c3abc5b2eda992a17d70d"
+  },
+  "src/test/java/io/github/legacygraph/governance/GraphifyProvenanceRedactorTest.java": {
+    "mtime": 1783319160.654803,
+    "ast_hash": "d0ac23bc6dc2635ecc67548a465981fd",
+    "semantic_hash": "d0ac23bc6dc2635ecc67548a465981fd"
+  },
+  "src/test/java/io/github/legacygraph/graphify/GraphifyCompatibilityServiceTest.java": {
+    "mtime": 1783321325.717292,
+    "ast_hash": "ac84e0780322e334e359ce5334f9bce6",
+    "semantic_hash": "ac84e0780322e334e359ce5334f9bce6"
+  },
+  "src/test/java/io/github/legacygraph/graphify/GraphifyDiffServiceTest.java": {
+    "mtime": 1783318782.08795,
+    "ast_hash": "62753cd79f6a09ab90f7a7934b7f28c1",
+    "semantic_hash": "62753cd79f6a09ab90f7a7934b7f28c1"
+  },
+  "src/test/java/io/github/legacygraph/graphify/GraphifyImportJobSchedulerTest.java": {
+    "mtime": 1783323331.4602637,
+    "ast_hash": "0f7f0b67f5c1c4caef32aca19d4709b3",
+    "semantic_hash": "0f7f0b67f5c1c4caef32aca19d4709b3"
+  },
+  "src/test/java/io/github/legacygraph/graphify/GraphifyImportJobServiceTest.java": {
+    "mtime": 1783318290.615539,
+    "ast_hash": "24d076aa0f808a5c43d8f11387779519",
+    "semantic_hash": "24d076aa0f808a5c43d8f11387779519"
+  },
+  "src/test/java/io/github/legacygraph/graphify/GraphifyRollbackServiceTest.java": {
+    "mtime": 1783323467.8117566,
+    "ast_hash": "d4662dfe5fa35eb9f32117e1402865f6",
+    "semantic_hash": "d4662dfe5fa35eb9f32117e1402865f6"
+  },
+  "src/test/java/io/github/legacygraph/graphify/GraphifyRunnerTest.java": {
+    "mtime": 1783343513.6848588,
+    "ast_hash": "480079c5d5c0589ab4aa53e236dbee0e",
+    "semantic_hash": "480079c5d5c0589ab4aa53e236dbee0e"
+  },
+  "src/test/java/io/github/legacygraph/integration/graphify/GraphifyCanonicalMapperTest.java": {
+    "mtime": 1783307002.0615606,
+    "ast_hash": "bf9cba4a0977f49363856720d10e26a9",
+    "semantic_hash": "bf9cba4a0977f49363856720d10e26a9"
+  },
+  "src/test/java/io/github/legacygraph/integration/graphify/GraphifyCommandBuilderTest.java": {
+    "mtime": 1783322952.9011042,
+    "ast_hash": "8ffd7238b88631c3b854bed362023e04",
+    "semantic_hash": "8ffd7238b88631c3b854bed362023e04"
+  },
+  "src/test/java/io/github/legacygraph/integration/graphify/GraphifyCompatibilityServiceTest.java": {
+    "mtime": 1783317888.530634,
+    "ast_hash": "c5e9eb5481cc36d9ee1c4b1957134d35",
+    "semantic_hash": "c5e9eb5481cc36d9ee1c4b1957134d35"
+  },
+  "src/test/java/io/github/legacygraph/integration/graphify/GraphifyGraphParserTest.java": {
+    "mtime": 1783305792.468837,
+    "ast_hash": "ac3e75e31028081e05d776b72cda77f6",
+    "semantic_hash": "ac3e75e31028081e05d776b72cda77f6"
+  },
+  "src/test/java/io/github/legacygraph/integration/graphify/GraphifyImportServiceTest.java": {
+    "mtime": 1783317946.8672385,
+    "ast_hash": "c807d7a77a7977a740feaebfaf1c8210",
+    "semantic_hash": "c807d7a77a7977a740feaebfaf1c8210"
+  },
+  "src/test/java/io/github/legacygraph/integration/graphify/GraphifyPropertiesTest.java": {
+    "mtime": 1783323225.7328272,
+    "ast_hash": "229d04b5c232d622950597d83c48992e",
+    "semantic_hash": "229d04b5c232d622950597d83c48992e"
+  },
+  "src/test/java/io/github/legacygraph/integration/graphify/GraphifyRunnerTest.java": {
+    "mtime": 1783307142.1882412,
+    "ast_hash": "cd1579713171e4098d6ae4263383ad50",
+    "semantic_hash": "cd1579713171e4098d6ae4263383ad50"
+  },
+  "src/test/java/io/github/legacygraph/llm/LlmCallExceptionTest.java": {
+    "mtime": 1782977916.2198372,
+    "ast_hash": "89700e63f43dfde2ab9d57382cc8c431",
+    "semantic_hash": "89700e63f43dfde2ab9d57382cc8c431"
+  },
+  "src/test/java/io/github/legacygraph/llm/PromptTemplateContractTest.java": {
+    "mtime": 1783074630.1564145,
+    "ast_hash": "814d6faf16b307922a8ae290742c446a",
+    "semantic_hash": "814d6faf16b307922a8ae290742c446a"
+  },
+  "src/test/java/io/github/legacygraph/llm/PromptTemplateLoaderTest.java": {
+    "mtime": 1783074630.1566243,
+    "ast_hash": "450147cd26db444f69ad2f4b6f7bf0b1",
+    "semantic_hash": "450147cd26db444f69ad2f4b6f7bf0b1"
+  },
+  "src/test/java/io/github/legacygraph/llm/SecretScanServiceTest.java": {
+    "mtime": 1782977916.1947126,
+    "ast_hash": "a6d6d6d3ea6183cd45e371f3bafe952e",
+    "semantic_hash": "a6d6d6d3ea6183cd45e371f3bafe952e"
+  },
+  "src/test/java/io/github/legacygraph/plugin/PluginRegistryTest.java": {
+    "mtime": 1783381162.318775,
+    "ast_hash": "0e0b44971d08fe203b0c2a6932e280b2",
+    "semantic_hash": "0e0b44971d08fe203b0c2a6932e280b2"
+  },
+  "src/test/java/io/github/legacygraph/qa/evaluation/QaAutoEvaluationService.java": {
+    "mtime": 1783074702.337095,
+    "ast_hash": "d57b805043cdd21e7bef07953a42910c",
+    "semantic_hash": "d57b805043cdd21e7bef07953a42910c"
+  },
+  "src/test/java/io/github/legacygraph/qa/evaluation/QaEvaluationResult.java": {
+    "mtime": 1783066206.4603074,
+    "ast_hash": "894b1873136806664480eb92e11e0a32",
+    "semantic_hash": "894b1873136806664480eb92e11e0a32"
+  },
+  "src/test/java/io/github/legacygraph/qa/evaluation/QaEvaluationService.java": {
+    "mtime": 1783074702.3372388,
+    "ast_hash": "b09d3891fe5ae567acc788cec617e2c2",
+    "semantic_hash": "b09d3891fe5ae567acc788cec617e2c2"
+  },
+  "src/test/java/io/github/legacygraph/qa/evaluation/QaTestCase.java": {
+    "mtime": 1783066206.4640124,
+    "ast_hash": "85d9ad95468770e73b84da2e686014a7",
+    "semantic_hash": "85d9ad95468770e73b84da2e686014a7"
+  },
+  "src/test/java/io/github/legacygraph/query/GraphifyQuestionServiceTest.java": {
+    "mtime": 1783324292.4494123,
+    "ast_hash": "0802849430cdc58d35cfd13c4b465be1",
+    "semantic_hash": "0802849430cdc58d35cfd13c4b465be1"
+  },
+  "src/test/java/io/github/legacygraph/repository/RepositoryTest.java": {
+    "mtime": 1783077057.4512837,
+    "ast_hash": "d40891157563097d221e79e1f85eb6d0",
+    "semantic_hash": "d40891157563097d221e79e1f85eb6d0"
+  },
+  "src/test/java/io/github/legacygraph/review/GraphifyReviewRuleEngineTest.java": {
+    "mtime": 1783319037.8793042,
+    "ast_hash": "74bb2dec9a84adfdbcbbc82575164b3e",
+    "semantic_hash": "74bb2dec9a84adfdbcbbc82575164b3e"
+  },
+  "src/test/java/io/github/legacygraph/security/GraphifyProvenanceRedactorTest.java": {
+    "mtime": 1783321363.3395405,
+    "ast_hash": "e3a39a168a0e48b21e8a665708c14bda",
+    "semantic_hash": "e3a39a168a0e48b21e8a665708c14bda"
+  },
+  "src/test/java/io/github/legacygraph/security/HighRiskEndpointSecurityTest.java": {
+    "mtime": 1783381178.9110875,
+    "ast_hash": "7bf8b26ac0d7f85d7da5092be150307b",
+    "semantic_hash": "7bf8b26ac0d7f85d7da5092be150307b"
+  },
+  "src/test/java/io/github/legacygraph/service/AgentRunServiceTest.java": {
+    "mtime": 1783095947.3777351,
+    "ast_hash": "9a140864ccd03ef50a9f50dd3e87bde8",
+    "semantic_hash": "9a140864ccd03ef50a9f50dd3e87bde8"
+  },
+  "src/test/java/io/github/legacygraph/service/AuditLogServiceTest.java": {
+    "mtime": 1783074346.389411,
+    "ast_hash": "5c627f302f13a486fecd6dd07de32302",
+    "semantic_hash": "5c627f302f13a486fecd6dd07de32302"
+  },
+  "src/test/java/io/github/legacygraph/service/CacheServiceTest.java": {
+    "mtime": 1783074346.47697,
+    "ast_hash": "3594435eb2f49c15559cb10886c3f024",
+    "semantic_hash": "3594435eb2f49c15559cb10886c3f024"
+  },
+  "src/test/java/io/github/legacygraph/service/ChangeReportServiceTest.java": {
+    "mtime": 1783074346.4343846,
+    "ast_hash": "73c2e7d9e734ea1a8ce58b2fe0dfd02a",
+    "semantic_hash": "73c2e7d9e734ea1a8ce58b2fe0dfd02a"
+  },
+  "src/test/java/io/github/legacygraph/service/ChangeTaskServiceTest.java": {
+    "mtime": 1783353985.7341685,
+    "ast_hash": "b9f5c00305ef8437effc21d213607aaf",
+    "semantic_hash": "b9f5c00305ef8437effc21d213607aaf"
+  },
+  "src/test/java/io/github/legacygraph/service/ConversationContextManagerTest.java": {
+    "mtime": 1783074630.1570225,
+    "ast_hash": "3c4dcf276f9579952b34278bb67a2278",
+    "semantic_hash": "3c4dcf276f9579952b34278bb67a2278"
+  },
+  "src/test/java/io/github/legacygraph/service/DatabaseMetadataScanServiceTest.java": {
+    "mtime": 1783343561.7378628,
+    "ast_hash": "cea2c26f98761fc6063ed268cd1baffc",
+    "semantic_hash": "cea2c26f98761fc6063ed268cd1baffc"
+  },
+  "src/test/java/io/github/legacygraph/service/DocumentContentServiceTest.java": {
+    "mtime": 1783074346.4178624,
+    "ast_hash": "e74ca2b36d7dcb86e1210f10578c474f",
+    "semantic_hash": "e74ca2b36d7dcb86e1210f10578c474f"
+  },
+  "src/test/java/io/github/legacygraph/service/FeatureSliceSynthesizerTest.java": {
+    "mtime": 1783074346.4139142,
+    "ast_hash": "b08120727bad62e80e9657d525ffd200",
+    "semantic_hash": "b08120727bad62e80e9657d525ffd200"
+  },
+  "src/test/java/io/github/legacygraph/service/GapFinderServiceTest.java": {
+    "mtime": 1783074346.4296165,
+    "ast_hash": "a4acd2e63f3465d4ae66b63341c8f76a",
+    "semantic_hash": "a4acd2e63f3465d4ae66b63341c8f76a"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphCacheInvalidatorTest.java": {
+    "mtime": 1783074346.4102395,
+    "ast_hash": "617daeee3619af6457be134c56dc7f3d",
+    "semantic_hash": "617daeee3619af6457be134c56dc7f3d"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphMergeServiceTest.java": {
+    "mtime": 1783074702.3368437,
+    "ast_hash": "356e312b2f8203e2449334eb3b6091c0",
+    "semantic_hash": "356e312b2f8203e2449334eb3b6091c0"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphPathReadModelTest.java": {
+    "mtime": 1783074346.4571044,
+    "ast_hash": "3c891a6d2b8c5031537208b34d16df54",
+    "semantic_hash": "3c891a6d2b8c5031537208b34d16df54"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphProjectionReadModelTest.java": {
+    "mtime": 1783074346.4021547,
+    "ast_hash": "ec61c84e6d9875280e38f5a204550484",
+    "semantic_hash": "ec61c84e6d9875280e38f5a204550484"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphQueryServiceTest.java": {
+    "mtime": 1783094270.5247333,
+    "ast_hash": "6d28ef3d91935b21c76ac3d4fb34346c",
+    "semantic_hash": "6d28ef3d91935b21c76ac3d4fb34346c"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphRagPlanExecutorTest.java": {
+    "mtime": 1783322853.1120098,
+    "ast_hash": "99ba6fea69245fe1dd9847f8e765fd6f",
+    "semantic_hash": "99ba6fea69245fe1dd9847f8e765fd6f"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphValidatorServiceTest.java": {
+    "mtime": 1783074346.4090016,
+    "ast_hash": "6b15233c08bc8213c46a032b001ab750",
+    "semantic_hash": "6b15233c08bc8213c46a032b001ab750"
+  },
+  "src/test/java/io/github/legacygraph/service/GraphWriteIntentServiceTest.java": {
+    "mtime": 1783093913.6763818,
+    "ast_hash": "c64dce9cdb8dd6670fee7c15e6bf4a2e",
+    "semantic_hash": "c64dce9cdb8dd6670fee7c15e6bf4a2e"
+  },
+  "src/test/java/io/github/legacygraph/service/ImpactSubgraphServiceTest.java": {
+    "mtime": 1783074346.4358852,
+    "ast_hash": "723485e4503b9804777552c5a8568313",
+    "semantic_hash": "723485e4503b9804777552c5a8568313"
+  },
+  "src/test/java/io/github/legacygraph/service/KnowledgeClaimServiceTest.java": {
+    "mtime": 1783322869.629717,
+    "ast_hash": "b4ac73aa2bd98af96930d390a69f49e7",
+    "semantic_hash": "b4ac73aa2bd98af96930d390a69f49e7"
+  },
+  "src/test/java/io/github/legacygraph/service/KnowledgeCompilerTest.java": {
+    "mtime": 1783345601.0858834,
+    "ast_hash": "ff91d270f7277060655437c3c9c6971b",
+    "semantic_hash": "ff91d270f7277060655437c3c9c6971b"
+  },
+  "src/test/java/io/github/legacygraph/service/LlmProviderServiceTest.java": {
+    "mtime": 1783074346.4438627,
+    "ast_hash": "0a3e226dfc73d45f17605081a9399e59",
+    "semantic_hash": "0a3e226dfc73d45f17605081a9399e59"
+  },
+  "src/test/java/io/github/legacygraph/service/MigrationReportServiceTest.java": {
+    "mtime": 1783074346.4455805,
+    "ast_hash": "b3b3f7154a53639035dcd03e194bfea6",
+    "semantic_hash": "b3b3f7154a53639035dcd03e194bfea6"
+  },
+  "src/test/java/io/github/legacygraph/service/Neo4jSyncServiceTest.java": {
+    "mtime": 1783074346.391894,
+    "ast_hash": "b7b83166a0c250a893e406846b3d8c84",
+    "semantic_hash": "b7b83166a0c250a893e406846b3d8c84"
+  },
+  "src/test/java/io/github/legacygraph/service/NotificationServiceTest.java": {
+    "mtime": 1783142315.8446252,
+    "ast_hash": "7b91a00d8b9ec1e262e9e04842730c8d",
+    "semantic_hash": "7b91a00d8b9ec1e262e9e04842730c8d"
+  },
+  "src/test/java/io/github/legacygraph/service/PatchPlanValidatorTest.java": {
+    "mtime": 1783354621.5045772,
+    "ast_hash": "7a4878aa23cce7acfea8676454b5891b",
+    "semantic_hash": "7a4878aa23cce7acfea8676454b5891b"
+  },
+  "src/test/java/io/github/legacygraph/service/PrOrchestratorTest.java": {
+    "mtime": 1783074346.4654033,
+    "ast_hash": "a27a5adcae36962ec12aa7b64bab9cf3",
+    "semantic_hash": "a27a5adcae36962ec12aa7b64bab9cf3"
+  },
+  "src/test/java/io/github/legacygraph/service/ProjectOverviewServiceTest.java": {
+    "mtime": 1783074346.4160745,
+    "ast_hash": "533c9e91057552da9ac7faaf6a8e69d3",
+    "semantic_hash": "533c9e91057552da9ac7faaf6a8e69d3"
+  },
+  "src/test/java/io/github/legacygraph/service/ProjectServiceTest.java": {
+    "mtime": 1783074346.432263,
+    "ast_hash": "6d1f2fe4f04b093b4af1aa437707cde2",
+    "semantic_hash": "6d1f2fe4f04b093b4af1aa437707cde2"
+  },
+  "src/test/java/io/github/legacygraph/service/PromptTemplateServiceTest.java": {
+    "mtime": 1783074346.4631865,
+    "ast_hash": "6e17abd0ff0e3e1c8458f28682e2c7e4",
+    "semantic_hash": "6e17abd0ff0e3e1c8458f28682e2c7e4"
+  },
+  "src/test/java/io/github/legacygraph/service/ReportExportServiceTest.java": {
+    "mtime": 1783343551.0703523,
+    "ast_hash": "29f674f40baeb1e5252bba06ade499e1",
+    "semantic_hash": "29f674f40baeb1e5252bba06ade499e1"
+  },
+  "src/test/java/io/github/legacygraph/service/ReportingServiceTest.java": {
+    "mtime": 1783399415.9195561,
+    "ast_hash": "d35ca5f9140d67cc16ceeb0227d68f63",
+    "semantic_hash": "d35ca5f9140d67cc16ceeb0227d68f63"
+  },
+  "src/test/java/io/github/legacygraph/service/ScanPerformanceReportServiceTest.java": {
+    "mtime": 1783074630.1578107,
+    "ast_hash": "091b01c9aa556d3a673a47b96b65c6ec",
+    "semantic_hash": "091b01c9aa556d3a673a47b96b65c6ec"
+  },
+  "src/test/java/io/github/legacygraph/service/ScanVersionServiceTest.java": {
+    "mtime": 1783074346.4601939,
+    "ast_hash": "259c27306e3c17cec152fba19ea9ad08",
+    "semantic_hash": "259c27306e3c17cec152fba19ea9ad08"
+  },
+  "src/test/java/io/github/legacygraph/service/SourceServiceTest.java": {
+    "mtime": 1783074346.471878,
+    "ast_hash": "71ff70fa11c1a5c392eb639f1cc06a9c",
+    "semantic_hash": "71ff70fa11c1a5c392eb639f1cc06a9c"
+  },
+  "src/test/java/io/github/legacygraph/service/SysConfigServiceTest.java": {
+    "mtime": 1783074346.3996577,
+    "ast_hash": "f064ae5f44f51677567901f6c4fdd0e8",
+    "semantic_hash": "f064ae5f44f51677567901f6c4fdd0e8"
+  },
+  "src/test/java/io/github/legacygraph/service/SysDictServiceTest.java": {
+    "mtime": 1783074346.4213467,
+    "ast_hash": "fb64a52ff3778445b50ca828caf8f8a8",
+    "semantic_hash": "fb64a52ff3778445b50ca828caf8f8a8"
+  },
+  "src/test/java/io/github/legacygraph/service/SysUserServiceTest.java": {
+    "mtime": 1783074346.439956,
+    "ast_hash": "877f42fa5e3c9847e1f2dbe5978c8171",
+    "semantic_hash": "877f42fa5e3c9847e1f2dbe5978c8171"
+  },
+  "src/test/java/io/github/legacygraph/service/TestCaseServiceTest.java": {
+    "mtime": 1783406389.1885138,
+    "ast_hash": "f6e3dfab9b4445fa1150808c016df0a2",
+    "semantic_hash": "f6e3dfab9b4445fa1150808c016df0a2"
+  },
+  "src/test/java/io/github/legacygraph/service/TestResultUpdateServiceTest.java": {
+    "mtime": 1783406389.2119086,
+    "ast_hash": "9afd8b43d6ddf5ec2337bf20b8c671a4",
+    "semantic_hash": "9afd8b43d6ddf5ec2337bf20b8c671a4"
+  },
+  "src/test/java/io/github/legacygraph/service/TokenBlacklistServiceTest.java": {
+    "mtime": 1783074101.33664,
+    "ast_hash": "406c4156448a129e06fb5fc4c3b37f43",
+    "semantic_hash": "406c4156448a129e06fb5fc4c3b37f43"
+  },
+  "src/test/java/io/github/legacygraph/service/TraceIngestionServiceTest.java": {
+    "mtime": 1783074101.3052459,
+    "ast_hash": "2de897bd4c38333b8b9ed27b635911d6",
+    "semantic_hash": "2de897bd4c38333b8b9ed27b635911d6"
+  },
+  "src/test/java/io/github/legacygraph/service/ValidationGateRunnerTest.java": {
+    "mtime": 1783074346.4495654,
+    "ast_hash": "d4f0527f333482f3faa82af123912c87",
+    "semantic_hash": "d4f0527f333482f3faa82af123912c87"
+  },
+  "src/test/java/io/github/legacygraph/service/VectorRetrievalServiceTest.java": {
+    "mtime": 1783074346.4524944,
+    "ast_hash": "64a8334b25610146a71acc642293b605",
+    "semantic_hash": "64a8334b25610146a71acc642293b605"
+  },
+  "src/test/java/io/github/legacygraph/service/VectorizationIntegrationTest.java": {
+    "mtime": 1783322726.517943,
+    "ast_hash": "2557a3b11337f622ccb58653be133e8d",
+    "semantic_hash": "2557a3b11337f622ccb58653be133e8d"
+  },
+  "src/test/java/io/github/legacygraph/service/VectorizationServiceTest.java": {
+    "mtime": 1783142579.8731081,
+    "ast_hash": "50328ee497c27e3255f7d79ca5be19ee",
+    "semantic_hash": "50328ee497c27e3255f7d79ca5be19ee"
+  },
+  "src/test/java/io/github/legacygraph/service/graph/EvidenceConflictServiceTest.java": {
+    "mtime": 1783134740.374124,
+    "ast_hash": "d85ef4ce107eb779f94bcccf1457ea69",
+    "semantic_hash": "d85ef4ce107eb779f94bcccf1457ea69"
+  },
+  "src/test/java/io/github/legacygraph/service/qa/HybridRetrievalServiceTest.java": {
+    "mtime": 1783134740.366946,
+    "ast_hash": "7e74cb084877d9c5ecd5c4b27b9276de",
+    "semantic_hash": "7e74cb084877d9c5ecd5c4b27b9276de"
+  },
+  "src/test/java/io/github/legacygraph/service/qa/ReRankingServiceTest.java": {
+    "mtime": 1783134740.346762,
+    "ast_hash": "55e1599c4a0ff5eeee80ac45d4807cd2",
+    "semantic_hash": "55e1599c4a0ff5eeee80ac45d4807cd2"
+  },
+  "src/test/java/io/github/legacygraph/service/qa/SemanticCacheTest.java": {
+    "mtime": 1783147351.5046616,
+    "ast_hash": "0471a58e29a2e86bd0cef34da8d0d672",
+    "semantic_hash": "0471a58e29a2e86bd0cef34da8d0d672"
+  },
+  "src/test/java/io/github/legacygraph/service/report/ScanResearchReportServiceTest.java": {
+    "mtime": 1783134799.9755387,
+    "ast_hash": "36202e40f4f414645bec19177f36a488",
+    "semantic_hash": "36202e40f4f414645bec19177f36a488"
+  },
+  "src/test/java/io/github/legacygraph/service/systemoverview/SystemOverviewDocumentServiceTest.java": {
+    "mtime": 1783398941.7781265,
+    "ast_hash": "336eb71f8b070a17fff0cc1ca5e57011",
+    "semantic_hash": "336eb71f8b070a17fff0cc1ca5e57011"
+  },
+  "src/test/java/io/github/legacygraph/service/systemoverview/SystemOverviewIngestServiceTest.java": {
+    "mtime": 1783399329.828602,
+    "ast_hash": "d4b800c2884af5b56764a9ae30d39177",
+    "semantic_hash": "d4b800c2884af5b56764a9ae30d39177"
+  },
+  "src/test/java/io/github/legacygraph/service/systemoverview/SystemOverviewServiceTest.java": {
+    "mtime": 1783399329.8277867,
+    "ast_hash": "056400f800377318151e6c63da7cc9e2",
+    "semantic_hash": "056400f800377318151e6c63da7cc9e2"
+  },
+  "src/test/java/io/github/legacygraph/task/AdapterExecutionServiceTest.java": {
+    "mtime": 1782978421.295983,
+    "ast_hash": "780ce3b1acde70953aeed1fcd1977aa5",
+    "semantic_hash": "780ce3b1acde70953aeed1fcd1977aa5"
+  },
+  "src/test/java/io/github/legacygraph/task/AdapterExecutionServiceWriteModeTest.java": {
+    "mtime": 1783381216.503828,
+    "ast_hash": "ce98c39aaadb761e81f290d8447fc00d",
+    "semantic_hash": "ce98c39aaadb761e81f290d8447fc00d"
+  },
+  "src/test/java/io/github/legacygraph/task/AiScanJobWorkerTest.java": {
+    "mtime": 1783398994.363239,
+    "ast_hash": "0c4c9133679edd4fb2de00b785640f2c",
+    "semantic_hash": "0c4c9133679edd4fb2de00b785640f2c"
+  },
+  "src/test/java/io/github/legacygraph/task/AiScanOrchestratorTest.java": {
+    "mtime": 1783404988.9787767,
+    "ast_hash": "5f4a78a8e3218f2b1e57c76726d381d3",
+    "semantic_hash": "5f4a78a8e3218f2b1e57c76726d381d3"
+  },
+  "src/test/java/io/github/legacygraph/task/AssetDiscoveryServiceTest.java": {
+    "mtime": 1783339324.4646425,
+    "ast_hash": "43489c519c3bbf9671009de66f29f83a",
+    "semantic_hash": "43489c519c3bbf9671009de66f29f83a"
+  },
+  "src/test/java/io/github/legacygraph/task/AssetDiscoveryTest.java": {
+    "mtime": 1782977794.7244031,
+    "ast_hash": "41ab2e1180077f1ad65a4d3c759c6ddb",
+    "semantic_hash": "41ab2e1180077f1ad65a4d3c759c6ddb"
+  },
+  "src/test/java/io/github/legacygraph/task/ProjectScannerAdapterTest.java": {
+    "mtime": 1783354457.4469914,
+    "ast_hash": "d2286bd6ac05509e7a7e97ee064e4ffa",
+    "semantic_hash": "d2286bd6ac05509e7a7e97ee064e4ffa"
+  },
+  "src/test/java/io/github/legacygraph/task/ProjectScannerCancelTest.java": {
+    "mtime": 1783307548.2969913,
+    "ast_hash": "65579241ca9e9f1b819e4c0500b2b456",
+    "semantic_hash": "65579241ca9e9f1b819e4c0500b2b456"
+  },
+  "src/test/java/io/github/legacygraph/task/ProjectScannerCoreTest.java": {
+    "mtime": 1783307548.2839081,
+    "ast_hash": "5a082bad2b4caaaf984bd5de522867a2",
+    "semantic_hash": "5a082bad2b4caaaf984bd5de522867a2"
+  },
+  "src/test/java/io/github/legacygraph/task/ProjectScannerFullFlowTest.java": {
+    "mtime": 1783398979.8214877,
+    "ast_hash": "21117e11979e1a4b077efeb04a7da30a",
+    "semantic_hash": "21117e11979e1a4b077efeb04a7da30a"
+  },
+  "src/test/java/io/github/legacygraph/task/ProjectScannerProgressLoggingTest.java": {
+    "mtime": 1783307591.0777438,
+    "ast_hash": "bb9b9c214afb10083d5bd0d831aaca55",
+    "semantic_hash": "bb9b9c214afb10083d5bd0d831aaca55"
+  },
+  "src/test/java/io/github/legacygraph/task/ScanScopeResolverTest.java": {
+    "mtime": 1783343474.1325889,
+    "ast_hash": "1798b260bb49b048d8893689100a7c22",
+    "semantic_hash": "1798b260bb49b048d8893689100a7c22"
+  },
+  "src/test/java/io/github/legacygraph/task/ScanTaskRecorderTest.java": {
+    "mtime": 1782978365.9681487,
+    "ast_hash": "a47e6f675738e9841b1cd69ceecf2839",
+    "semantic_hash": "a47e6f675738e9841b1cd69ceecf2839"
+  },
+  "src/test/java/io/github/legacygraph/task/TestExecutionSchedulerTest.java": {
+    "mtime": 1783074380.3471324,
+    "ast_hash": "0f9fc6f1a3b19d0315919bcadff984a9",
+    "semantic_hash": "0f9fc6f1a3b19d0315919bcadff984a9"
+  },
+  "src/test/java/io/github/legacygraph/understanding/CodeUnderstandingOrchestratorTest.java": {
+    "mtime": 1783074241.4100354,
+    "ast_hash": "863e602d6b0aa6cef8f87bf32775f4da",
+    "semantic_hash": "863e602d6b0aa6cef8f87bf32775f4da"
+  },
+  "src/test/java/io/github/legacygraph/understanding/CodeUnderstandingReportServiceTest.java": {
+    "mtime": 1783047843.9328842,
+    "ast_hash": "44c5c5c2794d57569ac66db54e8d6107",
+    "semantic_hash": "44c5c5c2794d57569ac66db54e8d6107"
+  },
+  "src/test/java/io/github/legacygraph/understanding/EvidenceNormalizerTest.java": {
+    "mtime": 1783010092.3317244,
+    "ast_hash": "71add69f95612e84e8fd9d63767989d6",
+    "semantic_hash": "71add69f95612e84e8fd9d63767989d6"
+  },
+  "src/test/java/io/github/legacygraph/understanding/KnowledgeClaimDraftMapperTest.java": {
+    "mtime": 1783009376.3512294,
+    "ast_hash": "5f717e5a0b1a5d237e1517ac1de8d26c",
+    "semantic_hash": "5f717e5a0b1a5d237e1517ac1de8d26c"
+  },
+  "src/test/java/io/github/legacygraph/understanding/ToolRunRecorderTest.java": {
+    "mtime": 1783009637.601813,
+    "ast_hash": "71c175856dbddfbb36d5c9fcb834e2ff",
+    "semantic_hash": "71c175856dbddfbb36d5c9fcb834e2ff"
+  },
+  "src/test/java/io/github/legacygraph/understanding/tool/ToolConfigPropertiesBindingTest.java": {
+    "mtime": 1783010676.1218061,
+    "ast_hash": "75c161041ea1e2af240ed56b79569e59",
+    "semantic_hash": "75c161041ea1e2af240ed56b79569e59"
+  },
+  "src/test/java/io/github/legacygraph/understanding/tool/ToolHealthServiceTest.java": {
+    "mtime": 1783010024.649794,
+    "ast_hash": "30307bf68f9cd9c7fb00a7cb93993c5d",
+    "semantic_hash": "30307bf68f9cd9c7fb00a7cb93993c5d"
+  },
+  "src/test/java/io/github/legacygraph/understanding/tool/ToolPolicyTest.java": {
+    "mtime": 1783009355.7144384,
+    "ast_hash": "ac527c0543768a3d1a9eb91ee68cf90d",
+    "semantic_hash": "ac527c0543768a3d1a9eb91ee68cf90d"
+  },
+  "src/test/java/io/github/legacygraph/understanding/tool/adapter/CliToolAdapterConfigurationTest.java": {
+    "mtime": 1783010984.9037523,
+    "ast_hash": "c2b32c15b67b6b1f96d141e27aa0a5bb",
+    "semantic_hash": "c2b32c15b67b6b1f96d141e27aa0a5bb"
+  },
+  "src/test/java/io/github/legacygraph/understanding/tool/adapter/CliToolAdapterTest.java": {
+    "mtime": 1783008900.113837,
+    "ast_hash": "4f1e13057acb383099eb7f60c798f326",
+    "semantic_hash": "4f1e13057acb383099eb7f60c798f326"
+  },
+  "src/test/java/io/github/legacygraph/understanding/tool/adapter/McpClientFacadeConfigurationTest.java": {
+    "mtime": 1783011835.0728433,
+    "ast_hash": "48345f126b9130a4dac6e696915edc44",
+    "semantic_hash": "48345f126b9130a4dac6e696915edc44"
+  },
+  "src/test/java/io/github/legacygraph/understanding/tool/adapter/McpCodeGraphAdapterTest.java": {
+    "mtime": 1783008958.879513,
+    "ast_hash": "39e48e9b80c969f4709379b9da3adc88",
+    "semantic_hash": "39e48e9b80c969f4709379b9da3adc88"
+  },
+  "src/test/java/io/github/legacygraph/util/JwtUtilTest.java": {
+    "mtime": 1782976360.3361332,
+    "ast_hash": "e52e5e520d0148a7d33570ae07c85e30",
+    "semantic_hash": "e52e5e520d0148a7d33570ae07c85e30"
+  },
+  "src/test/resources/data-h2.sql": {
+    "mtime": 1782838160.1751244,
+    "ast_hash": "690d605441177692c5a969328840dd6b",
+    "semantic_hash": "690d605441177692c5a969328840dd6b"
+  },
+  "src/test/resources/graphify/graphify-edges-sample.json": {
+    "mtime": 1783305429.6903684,
+    "ast_hash": "cdf7d85d0131b122427f63f9fdea298e",
+    "semantic_hash": "cdf7d85d0131b122427f63f9fdea298e"
+  },
+  "src/test/resources/graphify/graphify-node-link-sample.json": {
+    "mtime": 1783305429.7023902,
+    "ast_hash": "0e2f0551ec7a6c19b3a442bb9443c04b",
+    "semantic_hash": "0e2f0551ec7a6c19b3a442bb9443c04b"
+  },
+  "src/test/resources/qa-evaluation/qa_test_set.json": {
+    "mtime": 1783353902.3925252,
+    "ast_hash": "0a34b024a6318b2c7a2d2eeedc7e823c",
+    "semantic_hash": "0a34b024a6318b2c7a2d2eeedc7e823c"
+  },
+  "src/test/resources/schema-h2.sql": {
+    "mtime": 1783406389.2320156,
+    "ast_hash": "40fc5c99c955d6e9eda18dea23af6715",
+    "semantic_hash": "40fc5c99c955d6e9eda18dea23af6715"
+  },
+  "doc/graphify-contract/graphify-json-contract.md": {
+    "mtime": 1783317999.21394,
+    "ast_hash": "2ba22841f173cc57b0ee2f0e63c91aa9",
+    "semantic_hash": "2ba22841f173cc57b0ee2f0e63c91aa9"
+  },
+  "src/main/resources/application-dev.yml": {
+    "mtime": 1783306244.4834611,
+    "ast_hash": "1fa7c81a2498163e6d590c0c643bf924",
+    "semantic_hash": "1fa7c81a2498163e6d590c0c643bf924"
+  },
+  "src/main/resources/application-prod.yml": {
+    "mtime": 1783073198.9822435,
+    "ast_hash": "291cdac8fd9a5cb8365a1687c17b7a93",
+    "semantic_hash": "291cdac8fd9a5cb8365a1687c17b7a93"
+  },
+  "src/main/resources/application.yml": {
+    "mtime": 1783406389.081906,
+    "ast_hash": "3960a3d3d4c74d324662e7c23d6b7a13",
+    "semantic_hash": "3960a3d3d4c74d324662e7c23d6b7a13"
+  },
+  "src/main/resources/prompts/add-column-parse.txt": {
+    "mtime": 1783353052.8962626,
+    "ast_hash": "efa976d1f981a7d1b97781fa91e51b95",
+    "semantic_hash": "efa976d1f981a7d1b97781fa91e51b95"
+  },
+  "src/main/resources/prompts/add-column-patch.txt": {
+    "mtime": 1783353554.66776,
+    "ast_hash": "69bfbc1bed981aa57115defdb372d680",
+    "semantic_hash": "69bfbc1bed981aa57115defdb372d680"
+  },
+  "src/main/resources/prompts/change-impact.txt": {
+    "mtime": 1782801136.2393656,
+    "ast_hash": "80977964c962d494004e61e892f55e98",
+    "semantic_hash": "80977964c962d494004e61e892f55e98"
+  },
+  "src/main/resources/prompts/code-fact-extraction.txt": {
+    "mtime": 1782799563.159205,
+    "ast_hash": "78ae0997ead400b374f9c80ecce55215",
+    "semantic_hash": "78ae0997ead400b374f9c80ecce55215"
+  },
+  "src/main/resources/prompts/code-review.txt": {
+    "mtime": 1782704546.3849573,
+    "ast_hash": "049587d0c50441df45afeaf161e4b55a",
+    "semantic_hash": "049587d0c50441df45afeaf161e4b55a"
+  },
+  "src/main/resources/prompts/db-schema-analysis.txt": {
+    "mtime": 1782811360.3219068,
+    "ast_hash": "b3a7b33bcdfabee0ac1cd3b9ce73148e",
+    "semantic_hash": "b3a7b33bcdfabee0ac1cd3b9ce73148e"
+  },
+  "src/main/resources/prompts/doc-understanding.txt": {
+    "mtime": 1782799618.240917,
+    "ast_hash": "2c4f3394490b55cb0d8c1e7b718b9c90",
+    "semantic_hash": "2c4f3394490b55cb0d8c1e7b718b9c90"
+  },
+  "src/main/resources/prompts/feature-mapping.txt": {
+    "mtime": 1782799634.6249864,
+    "ast_hash": "bc457f066a2c7b024952b0a7ef321676",
+    "semantic_hash": "bc457f066a2c7b024952b0a7ef321676"
+  },
+  "src/main/resources/prompts/gap-finder.txt": {
+    "mtime": 1782965729.159843,
+    "ast_hash": "d70da2c4553ad7aa9b77a20942bf656d",
+    "semantic_hash": "d70da2c4553ad7aa9b77a20942bf656d"
+  },
+  "src/main/resources/prompts/graph-merge-decision.txt": {
+    "mtime": 1782799652.6264086,
+    "ast_hash": "4aa6133d8680826c8ed8b8c669495ab9",
+    "semantic_hash": "4aa6133d8680826c8ed8b8c669495ab9"
+  },
+  "src/main/resources/prompts/graph-rag-planner.txt": {
+    "mtime": 1782972302.5555205,
+    "ast_hash": "dd8b72b4c5c65887d39e371e25f0bff3",
+    "semantic_hash": "dd8b72b4c5c65887d39e371e25f0bff3"
+  },
+  "src/main/resources/prompts/hyde-generator.txt": {
+    "mtime": 1783058776.1450415,
+    "ast_hash": "1355a421fc954efd681520c2b2aea4c2",
+    "semantic_hash": "1355a421fc954efd681520c2b2aea4c2"
+  },
+  "src/main/resources/prompts/intent-classifier.txt": {
+    "mtime": 1783353091.734887,
+    "ast_hash": "e28f509b1d9f3764bd22915da0d63e70",
+    "semantic_hash": "e28f509b1d9f3764bd22915da0d63e70"
+  },
+  "src/main/resources/prompts/migration-convert.txt": {
+    "mtime": 1782801147.6875958,
+    "ast_hash": "93e61fb280e11be3837533709c4775bb",
+    "semantic_hash": "93e61fb280e11be3837533709c4775bb"
+  },
+  "src/main/resources/prompts/patch-plan.txt": {
+    "mtime": 1782891394.6781113,
+    "ast_hash": "1a329c3d46d54d8a48e741a85127c86f",
+    "semantic_hash": "1a329c3d46d54d8a48e741a85127c86f"
+  },
+  "src/main/resources/prompts/pr-description.txt": {
+    "mtime": 1782801157.4968274,
+    "ast_hash": "20c9c9c079343b6e560229659a8fc926",
+    "semantic_hash": "20c9c9c079343b6e560229659a8fc926"
+  },
+  "src/main/resources/prompts/qa-answer-enhanced.md": {
+    "mtime": 1783060371.5425959,
+    "ast_hash": "a85d2ff268430e679cc58cca6572850c",
+    "semantic_hash": "a85d2ff268430e679cc58cca6572850c"
+  },
+  "src/main/resources/prompts/qa-answer-enhanced.txt": {
+    "mtime": 1783058776.1246438,
+    "ast_hash": "4ebcf4400fde00383b699ba3ab6cd143",
+    "semantic_hash": "4ebcf4400fde00383b699ba3ab6cd143"
+  },
+  "src/main/resources/prompts/qa-answer.txt": {
+    "mtime": 1782800245.0143247,
+    "ast_hash": "1868b3faf8c568fd38cbee9a3bf4b626",
+    "semantic_hash": "1868b3faf8c568fd38cbee9a3bf4b626"
+  },
+  "src/main/resources/prompts/query-rewriter.txt": {
+    "mtime": 1783058776.1385415,
+    "ast_hash": "07ca60a5d5f55fa42270e7ee9d5553e5",
+    "semantic_hash": "07ca60a5d5f55fa42270e7ee9d5553e5"
+  },
+  "src/main/resources/prompts/refactor-suggestion.txt": {
+    "mtime": 1782801124.9638436,
+    "ast_hash": "77597df98604597d66967c4a0ddec846",
+    "semantic_hash": "77597df98604597d66967c4a0ddec846"
+  },
+  "src/main/resources/prompts/report-insight.txt": {
+    "mtime": 1782800449.17143,
+    "ast_hash": "82923ea3bc2bbdf1d6a5594471a76541",
+    "semantic_hash": "82923ea3bc2bbdf1d6a5594471a76541"
+  },
+  "src/main/resources/prompts/review-suggestion.txt": {
+    "mtime": 1782799665.5311284,
+    "ast_hash": "1bb0caf23e252f74352e5c3581c4fa31",
+    "semantic_hash": "1bb0caf23e252f74352e5c3581c4fa31"
+  },
+  "src/main/resources/prompts/sql-advisor.txt": {
+    "mtime": 1782800424.487093,
+    "ast_hash": "41bd83dedad5e688d0910e1f819823cf",
+    "semantic_hash": "41bd83dedad5e688d0910e1f819823cf"
+  },
+  "src/main/resources/prompts/test-case-generation.txt": {
+    "mtime": 1782799730.9422448,
+    "ast_hash": "890a2709a465b42c3c2707f365618140",
+    "semantic_hash": "890a2709a465b42c3c2707f365618140"
+  },
+  "src/main/resources/prompts/test-failure-analysis.txt": {
+    "mtime": 1782800436.8872998,
+    "ast_hash": "4171655eefd91e1f6eff10c6bbcddcc8",
+    "semantic_hash": "4171655eefd91e1f6eff10c6bbcddcc8"
+  },
+  "src/test/resources/application.yml": {
+    "mtime": 1782979205.9594605,
+    "ast_hash": "00d885e11738f916de73c11161fc6cff",
+    "semantic_hash": "00d885e11738f916de73c11161fc6cff"
+  },
+  "src/test/resources/prompts/code_review.txt": {
+    "mtime": 1782721392.1009967,
+    "ast_hash": "d32af3fdf10b39690257983ac3c69dd2",
+    "semantic_hash": "d32af3fdf10b39690257983ac3c69dd2"
+  },
+  "src/test/resources/prompts/hello_prompt.txt": {
+    "mtime": 1782721392.2237225,
+    "ast_hash": "cdc9ade5c860c25f61e6963448c99a8f",
+    "semantic_hash": "cdc9ade5c860c25f61e6963448c99a8f"
+  }
+}

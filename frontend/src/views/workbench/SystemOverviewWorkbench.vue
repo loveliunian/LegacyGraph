@@ -37,6 +37,41 @@
       </div>
     </el-card>
 
+    <el-card shadow="hover" class="mt" v-loading="reportsLoading">
+      <template #header>
+        <div class="card-header">
+          <span>总结文档</span>
+          <el-button :loading="reportGenerating" @click="handleGenerateDocument">
+            生成/刷新文档
+          </el-button>
+        </div>
+      </template>
+      <el-table v-if="systemOverviewReports.length" :data="systemOverviewReports" stripe size="small">
+        <el-table-column prop="reportName" label="文档名称" min-width="220" />
+        <el-table-column prop="versionId" label="扫描版本" width="180" />
+        <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column prop="completedAt" label="完成时间" width="180" />
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              :loading="downloadingReportId === row.id"
+              @click="handleDownloadDocument(row)"
+            >
+              下载 MD
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="暂无系统关系总结文档">
+        <el-button type="primary" :loading="reportGenerating" @click="handleGenerateDocument">
+          生成文档
+        </el-button>
+      </el-empty>
+    </el-card>
+
     <el-card shadow="hover" class="mt" v-if="!showEmpty">
       <template #header>四层映射总表</template>
       
@@ -109,7 +144,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Right } from '@element-plus/icons-vue'
 import {
+  downloadSystemOverviewDocument,
   exportSystemOverviewReport,
+  generateSystemOverviewDocument,
   getCorePaths,
   getSystemOverview,
   ingestBuiltins,
@@ -117,6 +154,8 @@ import {
   type LayerMapping,
   type SystemOverview,
 } from '@/api/system-overview.api'
+import type { Report } from '@/api/report.api'
+import { reportApi } from '@/api/report.api'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,8 +165,12 @@ const overview = ref<SystemOverview>()
 const loaded = ref(false)
 const ingesting = ref(false)
 const exporting = ref(false)
+const reportsLoading = ref(false)
+const reportGenerating = ref(false)
+const downloadingReportId = ref<string>()
 const queryingPaths = ref(false)
 const queriedPaths = ref<string[]>([])
+const systemOverviewReports = ref<Report[]>([])
 
 // 域控件：业务域过滤
 const selectedDomain = ref<string>('')
@@ -229,27 +272,76 @@ async function loadOverview() {
   }
 }
 
+async function loadSystemOverviewReports() {
+  reportsLoading.value = true
+  try {
+    const reports = await reportApi.listReports(projectId)
+    const currentVersion = versionId || ''
+    systemOverviewReports.value = reports
+      .filter(report => report.reportType === 'SYSTEM_OVERVIEW')
+      .filter(report => !currentVersion || report.versionId === currentVersion)
+      .sort((a, b) => new Date(b.completedAt || b.generatedAt || 0).getTime()
+        - new Date(a.completedAt || a.generatedAt || 0).getTime())
+  } catch {
+    ElMessage.error('加载总结文档失败')
+  } finally {
+    reportsLoading.value = false
+  }
+}
+
 async function handleExport() {
   exporting.value = true
   try {
     const data = await exportSystemOverviewReport(projectId, versionId || 'default', 'MD')
-    const raw = data as unknown
-    const payload = raw instanceof Blob ? raw : ((raw as { data?: unknown }).data ?? raw)
-    const blob = payload instanceof Blob
-      ? payload
-      : new Blob([payload as BlobPart], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `system-overview-${projectId}-${versionId || 'default'}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadPayload(data, `system-overview-${projectId}-${versionId || 'default'}.md`)
     ElMessage.success('系统关系总览报告已导出')
   } catch {
     ElMessage.error('导出失败')
   } finally {
     exporting.value = false
   }
+}
+
+async function handleGenerateDocument() {
+  if (!overview.value?.mappings?.length) {
+    ElMessage.warning('请先生成/更新总览，再生成总结文档')
+    return
+  }
+  reportGenerating.value = true
+  try {
+    await generateSystemOverviewDocument(projectId, versionId)
+    await loadSystemOverviewReports()
+    ElMessage.success('总结文档已生成')
+  } catch {
+    ElMessage.error('生成总结文档失败')
+  } finally {
+    reportGenerating.value = false
+  }
+}
+
+async function handleDownloadDocument(report: Report) {
+  downloadingReportId.value = report.id
+  try {
+    const data = await downloadSystemOverviewDocument(projectId, report.id, 'MD')
+    downloadPayload(data, `system-overview-${projectId}-${report.versionId || 'default'}.md`)
+  } catch {
+    ElMessage.error('下载总结文档失败')
+  } finally {
+    downloadingReportId.value = undefined
+  }
+}
+
+function downloadPayload(data: unknown, filename: string) {
+  const payload = data instanceof Blob ? data : ((data as { data?: unknown })?.data ?? data)
+  const blob = payload instanceof Blob
+    ? payload
+    : new Blob([payload as BlobPart], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 async function handleIngest() {
@@ -261,6 +353,8 @@ async function handleIngest() {
       : await ingestFromGraph(projectId, versionId)
     if (r.claimCount > 0 || r.vectorCount > 0) {
       ElMessage.success(`已生成：向量 ${r.vectorCount}，Claim ${r.claimCount}，FAQ ${r.faqCount}`)
+      await generateSystemOverviewDocument(projectId, versionId)
+      await loadSystemOverviewReports()
     } else {
       ElMessage.warning('当前项目扫描图谱中未找到可用的 API 调用链，请先完成代码扫描')
     }
@@ -272,7 +366,9 @@ async function handleIngest() {
   }
 }
 
-onMounted(loadOverview)
+onMounted(async () => {
+  await Promise.all([loadOverview(), loadSystemOverviewReports()])
+})
 </script>
 
 <style scoped>

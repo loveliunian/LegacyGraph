@@ -64,9 +64,55 @@ public class KnowledgeClaimService {
         if (drafts == null || drafts.isEmpty()) {
             return Collections.emptyList();
         }
-        return drafts.stream()
-                .map(this::upsertDraft)
-                .collect(Collectors.toList());
+        // 预加载本版本已有 claim，按 claimKey 建索引，避免逐条 findByClaimKey（selectOne）。
+        // 同批 insert/update 批量化，替代逐条 insert/updateById（远程 DB 往返是大头）。
+        String projectId = drafts.get(0).getProjectId();
+        String versionId = drafts.get(0).getVersionId();
+        Map<String, KnowledgeClaim> existingByKey = new HashMap<>();
+        for (KnowledgeClaim c : claimRepository.selectList(new LambdaQueryWrapper<KnowledgeClaim>()
+                .eq(KnowledgeClaim::getProjectId, projectId)
+                .eq(KnowledgeClaim::getVersionId, versionId))) {
+            existingByKey.put(claimKey(c), c);
+        }
+        List<KnowledgeClaim> toInsert = new ArrayList<>();
+        List<KnowledgeClaim> toUpdate = new ArrayList<>();
+        List<KnowledgeClaim> result = new ArrayList<>(drafts.size());
+        for (KnowledgeClaimDraft draft : drafts) {
+            KnowledgeClaim existing = existingByKey.get(claimKey(draft));
+            if (existing == null) {
+                KnowledgeClaim claim = buildClaimFromDraft(draft);
+                toInsert.add(claim);
+                existingByKey.put(claimKey(claim), claim); // 防同批重复键
+                result.add(claim);
+            } else {
+                if (mergeClaimFields(existing, draft)) {
+                    toUpdate.add(existing);
+                }
+                result.add(existing);
+            }
+        }
+        if (!toInsert.isEmpty()) {
+            claimRepository.insertBatch(toInsert);
+        }
+        if (!toUpdate.isEmpty()) {
+            claimRepository.updateBatch(toUpdate);
+        }
+        return result;
+    }
+
+    /** claim 唯一键：subjectType|subjectKey|predicate|objectType|objectKey（与 findByClaimKey 对齐）。 */
+    private static String claimKey(KnowledgeClaim c) {
+        return str(c.getSubjectType()) + "|" + str(c.getSubjectKey()) + "|" + str(c.getPredicate())
+                + "|" + str(c.getObjectType()) + "|" + str(c.getObjectKey());
+    }
+
+    private static String claimKey(KnowledgeClaimDraft d) {
+        return str(d.getSubjectType()) + "|" + str(d.getSubjectKey()) + "|" + str(d.getPredicate())
+                + "|" + str(d.getObjectType()) + "|" + str(d.getObjectKey());
+    }
+
+    private static String str(String s) {
+        return s == null ? "" : s;
     }
 
     /**
@@ -282,6 +328,14 @@ public class KnowledgeClaimService {
     }
 
     private KnowledgeClaim insertNew(KnowledgeClaimDraft draft) {
+        KnowledgeClaim claim = buildClaimFromDraft(draft);
+        claimRepository.insert(claim);
+        log.debug("Inserted claim: id={}, subject={}:{}, predicate={}", claim.getId(), claim.getSubjectType(), claim.getSubjectKey(), claim.getPredicate());
+        return claim;
+    }
+
+    /** 从 draft 构建 KnowledgeClaim（不落库），供单条 insertNew 与批量 upsertDrafts 复用。 */
+    private KnowledgeClaim buildClaimFromDraft(KnowledgeClaimDraft draft) {
         KnowledgeClaim claim = new KnowledgeClaim();
         claim.setId(UUID.randomUUID().toString());
         claim.setProjectId(draft.getProjectId());
@@ -307,13 +361,18 @@ public class KnowledgeClaimService {
         claim.setCompileStatus("NEW");
         claim.setCreatedAt(LocalDateTime.now());
         claim.setUpdatedAt(LocalDateTime.now());
-
-        claimRepository.insert(claim);
-        log.debug("Inserted claim: id={}, subject={}:{}, predicate={}", claim.getId(), claim.getSubjectType(), claim.getSubjectKey(), claim.getPredicate());
         return claim;
     }
 
     private KnowledgeClaim mergeExisting(KnowledgeClaim existing, KnowledgeClaimDraft draft) {
+        if (mergeClaimFields(existing, draft)) {
+            claimRepository.updateById(existing);
+        }
+        return existing;
+    }
+
+    /** 合并 draft 字段到 existing（不落库），返回是否有实际变更。供单条 mergeExisting 与批量 upsertDrafts 复用。 */
+    private boolean mergeClaimFields(KnowledgeClaim existing, KnowledgeClaimDraft draft) {
         boolean updated = false;
 
         // 合并 evidenceIds
@@ -344,11 +403,7 @@ public class KnowledgeClaimService {
         }
 
         existing.setUpdatedAt(LocalDateTime.now());
-
-        if (updated) {
-            claimRepository.updateById(existing);
-        }
-        return existing;
+        return updated;
     }
 
     /**

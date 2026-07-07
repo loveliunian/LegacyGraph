@@ -100,8 +100,13 @@ public class FeatureModuleAdapter implements ExtractionAdapter {
      * Vue（src/views|pages）返回项目根；Legacy HTML（src/main/html）返回 html 目录本身。
      */
     private Path resolveFrontendRoot(ScanContext context, SourceAsset asset) {
-        if (context.getFrontendDir() != null) {
-            return Paths.get(context.getBaseDir(), context.getFrontendDir());
+        // frontendDir 非空且路径存在时用之；否则（legacy 前端 frontendSubPath 为空 → frontendDir=baseDir，
+        // baseDir/frontendDir 是不存在的无效路径）回退到从 asset 路径推断 src/main/html
+        if (context.getFrontendDir() != null && !context.getFrontendDir().isBlank()) {
+            Path candidate = Paths.get(context.getBaseDir(), context.getFrontendDir());
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
         }
         String path = asset.getRelativePath();
         if (path == null || asset.getFile() == null) {

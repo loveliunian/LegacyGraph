@@ -3,6 +3,8 @@ package io.github.legacygraph.controller;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.systemoverview.LayerMappingDTO;
 import io.github.legacygraph.dto.systemoverview.SystemOverviewDTO;
+import io.github.legacygraph.entity.Report;
+import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import io.github.legacygraph.service.systemoverview.SystemOverviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -10,10 +12,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -30,9 +34,12 @@ import java.util.List;
 public class SystemOverviewController {
 
     private final SystemOverviewService systemOverviewService;
+    private final SystemOverviewDocumentService systemOverviewDocumentService;
 
-    public SystemOverviewController(SystemOverviewService systemOverviewService) {
+    public SystemOverviewController(SystemOverviewService systemOverviewService,
+                                    SystemOverviewDocumentService systemOverviewDocumentService) {
         this.systemOverviewService = systemOverviewService;
+        this.systemOverviewDocumentService = systemOverviewDocumentService;
     }
 
     /**
@@ -72,5 +79,19 @@ public class SystemOverviewController {
             @Parameter(description = "链路终点关键词") @RequestParam(required = false) String to) {
 
         return Result.success(systemOverviewService.getPaths(projectId, versionId, from, to));
+    }
+
+    /**
+     * 为已完成扫描生成/刷新系统关系总览 Markdown 文档。
+     */
+    @PostMapping("/reports/generate")
+    @Operation(summary = "生成系统关系总览文档",
+            description = "把当前系统关系总览沉淀为 SYSTEM_OVERVIEW Markdown 报告，供报告列表下载。")
+    public Result<Report> generateReport(
+            @Parameter(description = "项目ID", required = true) @PathVariable String projectId,
+            @Parameter(description = "扫描版本ID") @RequestParam(required = false) String versionId)
+            throws IOException {
+
+        return Result.success(systemOverviewDocumentService.generateAfterScan(projectId, versionId));
     }
 }

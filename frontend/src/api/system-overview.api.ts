@@ -1,4 +1,5 @@
 import { downloadFile, get, post } from '@/utils/request'
+import type { Report } from './report.api'
 
 /** 单业务域四层映射 */
 export interface LayerMapping {
@@ -67,4 +68,22 @@ export function ingestFromGraph(projectId: string, versionId?: string) {
 /** 导出系统关系总览报告 */
 export function exportSystemOverviewReport(projectId: string, versionId = 'default', format: 'MD' | 'PDF' | 'EXCEL' = 'MD') {
   return downloadFile(`/reports/system-overview/${projectId}/${versionId}`, { format })
+}
+
+/** 生成/刷新扫描完成后沉淀的系统关系总览文档 */
+export function generateSystemOverviewDocument(projectId: string, versionId?: string) {
+  return post<Report>(
+    `/lg/projects/${projectId}/system-overview/reports/generate`,
+    {},
+    { params: { ...(versionId ? { versionId } : {}) } }
+  )
+}
+
+/** 下载扫描完成后沉淀的系统关系总览文档 */
+export function downloadSystemOverviewDocument(
+  projectId: string,
+  reportId: string,
+  format: 'MD' | 'PDF' | 'EXCEL' = 'MD'
+) {
+  return downloadFile(`/lg/projects/${projectId}/reports/${reportId}/download`, { format })
 }

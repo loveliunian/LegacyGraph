@@ -294,49 +294,59 @@ public class AiScanOrchestrator {
         log.info("Starting AI orchestration: projectId={}, versionId={}, config={}",
                 projectId, versionId, config);
 
-        // DOC_EXTRACT 与 CODE_EXTRACT 相互独立，并发执行以重叠耗时：
-        // doc 跑在异步线程（内部用 docExtractExecutor），code 跑在当前线程（内部用 codeExtractExecutor）。
-        // 注意不能把 runDocExtract/runCodeExtract 本身提交到其内部池——会占住池线程等子任务，造成饥饿。
-        updateStep(jobId, ScanStep.INIT);
-        CompletableFuture<Void> docFuture = CompletableFuture.runAsync(
-                () -> runDocExtract(projectId, versionId));
-        runCodeExtract(projectId, versionId);
-        docFuture.join();
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after doc/code extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
-        updateStep(jobId, ScanStep.PARSE_FILES);
+        // enqueue 时创建了 AI_ORCHESTRATION 任务（QUEUED），这里标记 RUNNING
+        markAiOrchestrationRunning(projectId, versionId);
+        boolean succeeded = false;
+        try {
+            // DOC_EXTRACT → CODE_EXTRACT 顺序执行（共享 docExtractExecutor 4 路 LLM）。
+            // 曾试 doc/code 并发 8 路，触发 DeepSeek 限流导致 code 抽取 138s→576s，收益被限流吃掉，改回顺序。
+            updateStep(jobId, ScanStep.INIT);
+            runDocExtract(projectId, versionId);
+            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after doc extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
-        // EXTRACT_FACTS → BUILD_GRAPH (feature mapping)
-        updateStep(jobId, ScanStep.EXTRACT_FACTS);
-        runFeatureCodeMapping(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature-code mapping: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+            // PARSE_FILES → EXTRACT_FACTS (code extract)
+            updateStep(jobId, ScanStep.PARSE_FILES);
+            runCodeExtract(projectId, versionId);
+            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after code extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
-        // BUILD_GRAPH → MERGE_ENTITIES
-        updateStep(jobId, ScanStep.BUILD_GRAPH);
-        runFeatureMapping(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature mapping: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+            // EXTRACT_FACTS → BUILD_GRAPH (feature mapping)
+            updateStep(jobId, ScanStep.EXTRACT_FACTS);
+            runFeatureCodeMapping(projectId, versionId);
+            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature-code mapping: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
 
-        // MERGE_ENTITIES → WRITE_INTENT (test generate)
-        if (config.isAutoGenerateTestCase()) {
-            updateStep(jobId, ScanStep.MERGE_ENTITIES);
-            runTestGenerate(projectId, versionId);
-            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after test generate: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+            // BUILD_GRAPH → MERGE_ENTITIES
+            updateStep(jobId, ScanStep.BUILD_GRAPH);
+            runFeatureMapping(projectId, versionId);
+            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after feature mapping: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+
+            // MERGE_ENTITIES → WRITE_INTENT (test generate)
+            if (config.isAutoGenerateTestCase()) {
+                updateStep(jobId, ScanStep.MERGE_ENTITIES);
+                runTestGenerate(projectId, versionId);
+                if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after test generate: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+            }
+
+            // WRITE_INTENT → ENHANCE (review prepare)
+            updateStep(jobId, ScanStep.WRITE_INTENT);
+            runReviewPrepare(projectId, versionId, config.getMinConfidence());
+            if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after review prepare: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+
+            // ENHANCE → INDEX (knowledge gap + understanding)
+            updateStep(jobId, ScanStep.ENHANCE);
+            runKnowledgeGapScan(projectId, versionId);
+            runScanUnderstandingEnhancement(projectId, versionId);
+
+            // INDEX → COMPLETE
+            updateStep(jobId, ScanStep.INDEX);
+            updateStep(jobId, ScanStep.COMPLETE);
+
+            log.info("AI orchestration completed: versionId={}", versionId);
+            succeeded = true;
+        } finally {
+            // 无论成功/取消/异常，都把 AI_ORCHESTRATION 任务从 QUEUED/RUNNING 推进到终态
+            // （否则前端扫描详情里 AI 智能分析一直显示 QUEUED）
+            completeAiOrchestrationTask(projectId, versionId, succeeded);
         }
-
-        // WRITE_INTENT → ENHANCE (review prepare)
-        updateStep(jobId, ScanStep.WRITE_INTENT);
-        runReviewPrepare(projectId, versionId, config.getMinConfidence());
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after review prepare: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
-
-        // ENHANCE → INDEX (knowledge gap + understanding)
-        updateStep(jobId, ScanStep.ENHANCE);
-        runKnowledgeGapScan(projectId, versionId);
-        runScanUnderstandingEnhancement(projectId, versionId);
-
-        // INDEX → COMPLETE
-        updateStep(jobId, ScanStep.INDEX);
-        updateStep(jobId, ScanStep.COMPLETE);
-
-        log.info("AI orchestration completed: versionId={}", versionId);
     }
 
     /**
@@ -408,7 +418,10 @@ public class AiScanOrchestrator {
                                 cachedExtract("doc", docContent, () -> {
                                     agentCallCounter.increment();
                                     return docUnderstandingAgent.extractBusinessFacts(projectId, docContent, doc.getFilePath());
-                                }, DocUnderstandingAgent.BusinessFactExtraction.class);
+                                }, DocUnderstandingAgent.BusinessFactExtraction.class,
+                                e -> e == null || allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
+                                        e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
+                                        e.getFeatures(), e.getStatusTransitions()));
                         int count = persistBusinessFacts(projectId, versionId, doc, extraction);
                         factCount.addAndGet(count);
                         buildBusinessGraph(projectId, versionId, doc, extraction);
@@ -519,7 +532,8 @@ public class AiScanOrchestrator {
                         String codeContent = truncate(content, CODE_CONTENT_LIMIT);
                         FactExtractionResult result = cachedExtract("code", codeContent,
                                 () -> codeFactAgent.extractFacts(projectId, codeContent, node.getSourcePath()),
-                                FactExtractionResult.class);
+                                FactExtractionResult.class,
+                                r -> r == null || r.getItems() == null || r.getItems().isEmpty());
                         factCount.addAndGet(
                                 persistAndBuildCodeFacts(projectId, versionId, node, result));
                     } catch (Exception e) {
@@ -1255,11 +1269,33 @@ public class AiScanOrchestrator {
      * LLM 抽取结果按内容哈希缓存：同一内容（文档/代码未改动）重扫时复用，跳过 LLM 调用。
      * cacheService 不可用（测试环境）或内容为空时直调 loader。
      */
-    private <T> T cachedExtract(String type, String content, java.util.function.Supplier<T> loader, Class<T> resultType) {
+    private <T> T cachedExtract(String type, String content, java.util.function.Supplier<T> loader,
+                                Class<T> resultType, java.util.function.Predicate<T> isEmpty) {
         if (cacheService == null || content == null || content.isBlank()) {
             return loader.get();
         }
-        return cacheService.getOrLoad("llm:" + type + ":" + sha256(content), resultType, LLM_CACHE_TTL, loader);
+        String key = "llm:" + type + ":" + sha256(content);
+        // 命中且非空才复用；空结果（LLM 返回空/解析失败）视为未命中，重新调 LLM
+        T cached = cacheService.get(key, resultType);
+        if (cached != null && !isEmpty.test(cached)) {
+            return cached;
+        }
+        T loaded = loader.get();
+        // 仅缓存非空结果——空结果不缓存，下次重试，避免把失败锁进缓存
+        if (loaded != null && !isEmpty.test(loaded)) {
+            cacheService.put(key, loaded, LLM_CACHE_TTL);
+        }
+        return loaded;
+    }
+
+    /** 多个 List 全为 null/空时返回 true（用于判定抽取结果是否为空）。 */
+    private static boolean allEmpty(List<?>... lists) {
+        for (List<?> l : lists) {
+            if (l != null && !l.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String sha256(String s) {
@@ -1305,6 +1341,41 @@ public class AiScanOrchestrator {
         } catch (Exception e) {
             log.warn("Failed to find existing AI_ORCHESTRATION task: {}", e.getMessage());
             return null;
+        }
+    }
+
+    /** 将 enqueue 创建的 AI_ORCHESTRATION 任务（QUEUED）标记为 RUNNING。 */
+    private void markAiOrchestrationRunning(String projectId, String versionId) {
+        ScanTask task = findExistingAiOrchestrationTask(projectId, versionId);
+        if (task == null || !"QUEUED".equals(task.getTaskStatus())) {
+            return;
+        }
+        task.setTaskStatus("RUNNING");
+        task.setUpdatedAt(LocalDateTime.now());
+        try {
+            scanTaskRepository.updateById(task);
+        } catch (Exception e) {
+            log.warn("Failed to set AI_ORCHESTRATION to RUNNING: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 完成 AI_ORCHESTRATION 任务（SUCCESS/FAILED），避免一直卡在 QUEUED/RUNNING。
+     * 已是终态（SUCCESS/FAILED/SKIPPED/WARNING）则跳过。
+     */
+    private void completeAiOrchestrationTask(String projectId, String versionId, boolean succeeded) {
+        ScanTask task = findExistingAiOrchestrationTask(projectId, versionId);
+        if (task == null) {
+            return;
+        }
+        String st = task.getTaskStatus();
+        if ("SUCCESS".equals(st) || "FAILED".equals(st) || "SKIPPED".equals(st) || "WARNING".equals(st)) {
+            return;
+        }
+        if (succeeded) {
+            completeTask(task, "AI 智能分析完成", null);
+        } else {
+            completeTask(task, "AI 智能分析未完成（取消或异常）", "cancelled or failed");
         }
     }
 

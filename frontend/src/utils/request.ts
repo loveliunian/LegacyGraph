@@ -147,6 +147,9 @@ request.interceptors.response.use(
     if (response.config?._skipErrorHandler) {
       return res
     }
+    if (response.config?.responseType === 'blob' || res instanceof Blob || res instanceof ArrayBuffer) {
+      return res
+    }
     if (res.code !== 0 && res.code !== 200) {
       if (res.code === 401) {
         return handleTokenExpired(response.config)
