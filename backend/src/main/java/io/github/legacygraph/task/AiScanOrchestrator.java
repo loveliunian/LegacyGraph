@@ -984,7 +984,10 @@ public class AiScanOrchestrator {
                         req.setFeatureKey(node.getNodeKey());
                         req.setFeatureName(node.getNodeName());
                         req.setApiEndpoint(node.getNodeKey());
-                        req.setHttpMethod("GET");
+                        // B5：从 ApiEndpoint 节点名解析真实 HTTP method（节点名形如 "POST /xyBank/unLock"），
+                        // 不再对所有接口硬编码 GET，避免给 POST/PUT/DELETE 接口生成 GET 用例。
+                        // Feature/Controller 节点无 method 概念，回退 GET。
+                        req.setHttpMethod(resolveHttpMethod(node));
 
                         List<GeneratedTestCase> cases = testCaseAgent.generateTestCases(req);
                         for (GeneratedTestCase gen : cases) {
@@ -1003,6 +1006,29 @@ public class AiScanOrchestrator {
             log.error("AI_TEST_GENERATE failed: versionId={}", versionId, e);
             completeTask(task, null, e.getMessage());
         }
+    }
+
+    /**
+     * 从节点名解析 HTTP method。ApiEndpoint 节点名形如 "POST /xyBank/unLock"，
+     * 取首个空格前的 token；非标准 method 或非 ApiEndpoint 节点回退 GET。
+     */
+    private String resolveHttpMethod(GraphNode node) {
+        if (node == null || !"ApiEndpoint".equals(node.getNodeType())) {
+            return "GET";
+        }
+        String name = node.getNodeName();
+        if (name == null || name.isBlank()) {
+            return "GET";
+        }
+        int sp = name.indexOf(' ');
+        if (sp <= 0) {
+            return "GET";
+        }
+        String method = name.substring(0, sp).toUpperCase(java.util.Locale.ROOT);
+        return switch (method) {
+            case "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS" -> method;
+            default -> "GET";
+        };
     }
 
     private void persistTestCase(String projectId, String versionId, GraphNode node,

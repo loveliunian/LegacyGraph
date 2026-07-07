@@ -39,6 +39,15 @@ public class ReportController {
         return Result.success(reports);
     }
 
+    @DeleteMapping("/reports/{reportId}")
+    @Operation(summary = "删除报告", description = "删除指定报告记录及其本地文件（硬删除，不可恢复）")
+    public Result<Boolean> deleteReport(
+            @PathVariable String projectId,
+            @PathVariable String reportId) {
+        boolean deleted = reportingService.deleteReport(reportId);
+        return Result.success(deleted);
+    }
+
     @PostMapping("/reports/migration-readiness/generate")
     @Operation(summary = "生成迁移就绪度报告", description = "评估项目迁移准备程度，统计已确认节点和风险项")
     public Result<MigrationReadinessReport> generateMigrationReport(@PathVariable String projectId) {

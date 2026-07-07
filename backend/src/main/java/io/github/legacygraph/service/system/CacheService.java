@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
@@ -27,12 +28,30 @@ public class CacheService {
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
+    /** 首次缓存操作失败标志：首次打 ERROR+堆栈，后续降 debug，避免日志洪水但保留可观测性 */
+    private final AtomicBoolean firstFailureLogged = new AtomicBoolean(false);
+
     public CacheService(RedisTemplate<String, Object> redisTemplate,
                         StringRedisTemplate stringRedisTemplate,
                         ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 统一的缓存操作失败日志：首次打 ERROR+堆栈（便于定位根因），后续降 debug（避免日志洪水）。
+     *
+     * <p>注：启动期 Redis 连通性健康检查在 {@link CacheHealthChecker} 中，与 CacheService 分离，
+     * 避免 CacheService 被 Mockito mock 时内联 mock-maker 解析 {@code ApplicationReadyEvent} 失败。</p>
+     */
+    private void logFailure(String op, String id, Exception e) {
+        if (firstFailureLogged.compareAndSet(false, true)) {
+            log.error("Redis op '{}' failed for id={} — cache layer degrading silently. "
+                    + "Subsequent cache failures will be logged at DEBUG. Cause:", op, id, e);
+        } else {
+            log.debug("Redis op '{}' failed for id={}: {}", op, id, e.getMessage());
+        }
     }
 
     private String fullKey(String key) {
@@ -56,7 +75,7 @@ public class CacheService {
             // 经由 JSON 多态可能已是目标类型；否则做一次转换兜底
             return objectMapper.convertValue(raw, type);
         } catch (Exception e) {
-            log.warn("Cache get failed (degrade), key={}: {}", key, e.getMessage());
+            logFailure("get", key, e);
             return null;
         }
     }
@@ -71,7 +90,7 @@ public class CacheService {
             }
             redisTemplate.opsForValue().set(fullKey(key), value, ttl);
         } catch (Exception e) {
-            log.warn("Cache put failed (ignored), key={}: {}", key, e.getMessage());
+            logFailure("put", key, e);
         }
     }
 
@@ -95,7 +114,7 @@ public class CacheService {
         try {
             return stringRedisTemplate.opsForValue().get(fullKey(key));
         } catch (Exception e) {
-            log.warn("Cache getString failed (degrade), key={}: {}", key, e.getMessage());
+            logFailure("getString", key, e);
             return null;
         }
     }
@@ -107,7 +126,7 @@ public class CacheService {
             }
             stringRedisTemplate.opsForValue().set(fullKey(key), value, ttl);
         } catch (Exception e) {
-            log.warn("Cache putString failed (ignored), key={}: {}", key, e.getMessage());
+            logFailure("putString", key, e);
         }
     }
 
@@ -115,7 +134,7 @@ public class CacheService {
         try {
             return Boolean.TRUE.equals(stringRedisTemplate.hasKey(fullKey(key)));
         } catch (Exception e) {
-            log.warn("Cache exists failed (treat as absent), key={}: {}", key, e.getMessage());
+            logFailure("exists", key, e);
             return false;
         }
     }
@@ -126,7 +145,7 @@ public class CacheService {
         try {
             redisTemplate.delete(fullKey(key));
         } catch (Exception e) {
-            log.warn("Cache evict failed (ignored), key={}: {}", key, e.getMessage());
+            logFailure("evict", key, e);
         }
     }
 
@@ -142,7 +161,7 @@ public class CacheService {
                 log.debug("Cache evicted {} keys by prefix {}", keys.size(), prefix);
             }
         } catch (Exception e) {
-            log.warn("Cache evictByPrefix failed (ignored), prefix={}: {}", prefix, e.getMessage());
+            logFailure("evictByPrefix", prefix, e);
         }
     }
 }

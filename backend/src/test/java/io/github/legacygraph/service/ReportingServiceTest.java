@@ -398,4 +398,34 @@ class ReportingServiceTest {
             Files.deleteIfExists(markdown);
         }
     }
+
+    @Test
+    void deleteReport_removesRecordAndFile() throws Exception {
+        Path file = Files.createTempFile("lg-report-delete", ".md");
+        Files.writeString(file, "# to be deleted");
+
+        Report report = new Report();
+        report.setId("r1");
+        report.setProjectId("project-1");
+        report.setReportType("SYSTEM_OVERVIEW");
+        report.setFilePath(file.toString());
+        when(reportRepository.selectById("r1")).thenReturn(report);
+        when(reportRepository.deleteById("r1")).thenReturn(1);
+
+        boolean deleted = reportingService.deleteReport("r1");
+
+        assertTrue(deleted);
+        assertTrue(Files.notExists(file), "报告文件应被删除");
+        verify(reportRepository).deleteById("r1");
+    }
+
+    @Test
+    void deleteReport_returnsFalseWhenMissing() {
+        when(reportRepository.selectById("missing")).thenReturn(null);
+
+        boolean deleted = reportingService.deleteReport("missing");
+
+        assertFalse(deleted);
+        verify(reportRepository, never()).deleteById(anyString());
+    }
 }

@@ -624,8 +624,17 @@ public class BusinessGraphBuilder {
                 return 0;
             }
             int min = Math.min(ta.size(), tb.size());
-            // 1-token 集合太弱（如"农信接口调用日志"仅翻出 {nx} 会误匹配所有含 nx 的接口），不做匹配
+            // 单 token 集合：仅当共享 token 足够长(≥4)且被完全包含时才认，
+            // 避免 nx/ab 类短 token 误匹配（"农信接口调用日志"仅翻出 {nx} 会误匹配所有含 nx 的接口），
+            // 同时让单字业务对象名（order/account/user）能与 orders/OrderService 等匹配上。
             if (min < 2) {
+                if (inter == min) {
+                    Set<String> smaller = ta.size() <= tb.size() ? ta : tb;
+                    String sole = smaller.iterator().next();
+                    if (sole != null && sole.length() >= 4) {
+                        return 1.0;
+                    }
+                }
                 return 0;
             }
             // 小集合（<3 token）必须完全包含，杜绝单 token 误匹配
@@ -675,10 +684,31 @@ public class BusinessGraphBuilder {
         // 3) 剩余英文片段
         for (String t : lower.split("[^a-z0-9]+")) {
             if (t.length() >= 2) {
-                tokens.add(t);
+                tokens.add(stem(t));
             }
         }
         return tokens;
+    }
+
+    /**
+     * 粗粒度英文复数词干归一，让 order/orders、service/services、mapper/mappers 折叠为同一 token。
+     * <p>仅对长度≥4 的 token 生效，避免误伤 is/as/us 等短词。规则简单（ies→y、ses/xes→去 es、
+     * s→去 s），不追求语言学正确，只为补 token 重叠匹配在单复数命名上的盲区。</p>
+     */
+    private static String stem(String t) {
+        if (t == null || t.length() < 4) {
+            return t;
+        }
+        if (t.endsWith("ies")) {
+            return t.substring(0, t.length() - 3) + "y";      // categories→category, policies→policy
+        }
+        if (t.endsWith("ses") || t.endsWith("xes")) {
+            return t.substring(0, t.length() - 2);            // classes→class, boxes→box
+        }
+        if (t.endsWith("s") && !t.endsWith("ss")) {
+            return t.substring(0, t.length() - 1);            // orders→order, services→service
+        }
+        return t;
     }
 
     /** 是否含 CJK 汉字（用于 matchTokens 跳过英文名称的词典扫描）。 */

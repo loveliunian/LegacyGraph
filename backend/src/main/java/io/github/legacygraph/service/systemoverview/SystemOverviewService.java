@@ -174,23 +174,31 @@ public class SystemOverviewService {
                     .filter(c -> c.getSubjectKey() != null)
                     .collect(Collectors.groupingBy(KnowledgeClaim::getSubjectKey));
 
+            // 预计算：所有 ApiEndpoint subjectKey + Controller -> 首个 API 路径。
+            // 避免每个 Feature 都全表扫描 ApiEndpoint HANDLED_BY Controller（O(n²)）。
+            Set<String> apiEndpointKeys = new HashSet<>();
+            Map<String, String> controllerToFirstApi = new HashMap<>();
+            for (List<KnowledgeClaim> cl : bySubject.values()) {
+                for (KnowledgeClaim c : cl) {
+                    if (!"ApiEndpoint".equals(c.getSubjectType())) {
+                        continue;
+                    }
+                    apiEndpointKeys.add(c.getSubjectKey());
+                    if ("HANDLED_BY".equals(c.getPredicate()) && c.getObjectKey() != null) {
+                        controllerToFirstApi.putIfAbsent(c.getObjectKey(), c.getSubjectKey());
+                    }
+                }
+            }
+
             List<LayerMappingDTO> mappings = new ArrayList<>();
 
-            // 对每个 BusinessDomain 类型的 subject 构建映射
-            for (Map.Entry<String, List<KnowledgeClaim>> entry : bySubject.entrySet()) {
-                String subjectKey = entry.getKey();
-                List<KnowledgeClaim> subjectClaims = entry.getValue();
-
-                // 检查是否有 BusinessDomain CONTAINS Feature 类型的 claim
-                KnowledgeClaim domainClaim = subjectClaims.stream()
-                        .filter(c -> "BusinessDomain".equals(c.getSubjectType())
-                                && "CONTAINS".equals(c.getPredicate())
-                                && "Feature".equals(c.getObjectType()))
-                        .findFirst()
-                        .orElse(null);
-
-                if (domainClaim == null) {
-                    continue; // 不是 BusinessDomain，跳过
+            // 遍历所有 BusinessDomain CONTAINS Feature 的 Claim —— 每个 Feature 一行映射。
+            // 此前按 subjectKey 分组后每域只 findFirst 取一条，会把同域其余 Feature 全部折叠丢失。
+            for (KnowledgeClaim domainClaim : claims) {
+                if (!"BusinessDomain".equals(domainClaim.getSubjectType())
+                        || !"CONTAINS".equals(domainClaim.getPredicate())
+                        || !"Feature".equals(domainClaim.getObjectType())) {
+                    continue;
                 }
 
                 String domain = domainClaim.getSubjectKey();
@@ -200,7 +208,6 @@ public class SystemOverviewService {
                 List<KnowledgeClaim> featureClaims = bySubject.getOrDefault(feature, Collections.emptyList());
 
                 String controller = null;
-                String apiPath = null;
                 String codeModule = null;
                 List<String> tables = new ArrayList<>();
 
@@ -212,11 +219,14 @@ public class SystemOverviewService {
                     }
                 }
 
+                // Feature 无直接 USES Service 时，回退到 Controller -> Service
+                // （ingest 写的是 Controller IMPLEMENTED_BY Service，故同时接受 IMPLEMENTED_BY / HANDLED_BY）
                 if (codeModule == null && controller != null) {
                     List<KnowledgeClaim> controllerClaims = bySubject.getOrDefault(controller, Collections.emptyList());
                     for (KnowledgeClaim cc : controllerClaims) {
                         if ("Controller".equals(cc.getSubjectType())
-                                && "HANDLED_BY".equals(cc.getPredicate())
+                                && ("IMPLEMENTED_BY".equals(cc.getPredicate())
+                                    || "HANDLED_BY".equals(cc.getPredicate()))
                                 && "Service".equals(cc.getObjectType())) {
                             codeModule = cc.getObjectKey();
                             break;
@@ -224,18 +234,10 @@ public class SystemOverviewService {
                     }
                 }
 
-                // 查找 ApiEndpoint HANDLED_BY Controller
-                for (List<KnowledgeClaim> apiClaims : bySubject.values()) {
-                    for (KnowledgeClaim ac : apiClaims) {
-                        if ("ApiEndpoint".equals(ac.getSubjectType())
-                                && "HANDLED_BY".equals(ac.getPredicate())
-                                && controller != null && controller.equals(ac.getObjectKey())) {
-                            apiPath = ac.getSubjectKey();
-                            break;
-                        }
-                    }
-                    if (apiPath != null) break;
-                }
+                // apiPath：Feature 本身就是 API 端点时（feature key == 某 ApiEndpoint subjectKey）直接用；
+                // 否则取该 Controller 的首个 API（降级，可能并非该 Feature 自身的 API）。
+                String apiPath = apiEndpointKeys.contains(feature) ? feature
+                        : (controller != null ? controllerToFirstApi.get(controller) : null);
 
                 // 查找 Service READS/WRITES Table
                 if (codeModule != null) {

@@ -305,6 +305,15 @@ public class Neo4jGraphDao {
         return projectionRepo.confidenceTrendDaily(projectId, versionId);
     }
 
+    /**
+     * 每个 ApiEndpoint 的实现层回溯（Controller / Service / Table），用于系统关系总览投影。
+     * <p>双向遍历真实边方向，避免有向 BFS 在 Method 处断链。详见
+     * {@link Neo4jProjectionRepository#apiImplementationRelations}。</p>
+     */
+    public List<Map<String, Object>> apiImplementationRelations(String projectId, String versionId) {
+        return projectionRepo.apiImplementationRelations(projectId, versionId);
+    }
+
     public List<Map<String, Object>> confidenceDistribution(String projectId, String versionId) {
         return projectionRepo.confidenceDistribution(projectId, versionId);
     }

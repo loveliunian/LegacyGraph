@@ -174,66 +174,38 @@ public class SystemOverviewIngestService {
     /**
      * 从当前项目图谱回溯每个 API 端点的调用链，抽取 Controller/Service/Table 组装关系行。
      */
-    @SuppressWarnings("unchecked")
     private List<RelationRow> buildRelationsFromGraph(String projectId, String versionId) {
         List<RelationRow> rows = new ArrayList<>();
-        List<Map<String, Object>> endpoints;
+        List<Map<String, Object>> apiRels;
         try {
-            endpoints = graphQueryService.getApiEndpoints(projectId, versionId);
+            apiRels = graphQueryService.getApiImplementationRelations(projectId, versionId);
         } catch (Exception e) {
-            log.warn("Load api endpoints failed for projectId={}: {}", projectId, e.getMessage());
+            log.warn("Load api implementation relations failed for projectId={}: {}", projectId, e.getMessage());
             return rows;
         }
-        if (endpoints == null || endpoints.isEmpty()) {
+        if (apiRels == null || apiRels.isEmpty()) {
             return rows;
         }
 
         int processed = 0;
-        for (Map<String, Object> ep : endpoints) {
+        for (Map<String, Object> r : apiRels) {
             if (processed++ >= MAX_GRAPH_APIS) {
-                log.warn("API endpoints exceed {}, truncating graph-derived overview", MAX_GRAPH_APIS);
+                log.warn("API implementation relations exceed {}, truncating graph-derived overview", MAX_GRAPH_APIS);
                 break;
             }
-            String apiKey = str(ep.get("nodeKey"));
-            String apiName = str(ep.get("displayName"));
+            String apiKey = str(r.get("nodeKey"));
+            String apiName = str(r.get("displayName"));
             if (apiKey == null || apiKey.isBlank()) {
                 continue;
             }
 
-            List<Map<String, Object>> chainList;
-            try {
-                chainList = graphQueryService.getApiCallChain(projectId, versionId, apiKey);
-            } catch (Exception e) {
-                continue;
-            }
-            if (chainList == null || chainList.isEmpty()) {
-                continue;
-            }
-            Object nodesObj = chainList.get(0).get("nodes");
-            if (!(nodesObj instanceof List<?> nodes) || nodes.isEmpty()) {
-                continue;
-            }
-
-            String controller = null;
-            String service = null;
-            List<String> tables = new ArrayList<>();
-            for (Object nodeObj : nodes) {
-                if (!(nodeObj instanceof Map<?, ?> node)) {
-                    continue;
-                }
-                String type = firstLabel((Map<String, Object>) node);
-                String name = nodeDisplayName((Map<String, Object>) node);
-                if (name == null || name.isBlank()) {
-                    continue;
-                }
-                if ("Controller".equals(type) && controller == null) {
-                    controller = name;
-                } else if ("Service".equals(type) && service == null) {
-                    service = name;
-                } else if ("Table".equals(type) && !tables.contains(name)) {
-                    tables.add(name);
-                }
-            }
+            String controller = firstStr(r.get("controllers"));
+            String service = firstStr(r.get("services"));
+            List<String> tables = strList(r.get("tables"));
+            // 仅保留 PG 表（过滤 Neo4j/Redis/MinIO 等非关系存储），与 toClaims 口径一致
+            tables = tables.stream()
+                    .filter(t -> !t.startsWith("Neo4j") && !t.startsWith("Redis") && !t.startsWith("MinIO"))
+                    .collect(java.util.stream.Collectors.toList());
 
             // 至少要抽到代码层或数据层，否则该 API 无投影价值
             if (controller == null && service == null && tables.isEmpty()) {
@@ -248,29 +220,27 @@ public class SystemOverviewIngestService {
         return rows;
     }
 
-    private String firstLabel(Map<String, Object> node) {
-        Object labels = node.get("labels");
-        if (labels instanceof List<?> l && !l.isEmpty()) {
-            return String.valueOf(l.get(0));
+    /** 取列表首元素为字符串，空/非列表返回 null。 */
+    private String firstStr(Object value) {
+        if (value instanceof List<?> list && !list.isEmpty()) {
+            Object first = list.get(0);
+            return first == null ? null : String.valueOf(first);
         }
         return null;
     }
 
-    @SuppressWarnings("unchecked")
-    private String nodeDisplayName(Map<String, Object> node) {
-        Object props = node.get("properties");
-        if (props instanceof Map<?, ?> p) {
-            Map<String, Object> pm = (Map<String, Object>) p;
-            Object dn = pm.get("displayName");
-            if (dn != null && !String.valueOf(dn).isBlank()) {
-                return String.valueOf(dn);
+    /** 把列表元素统一转为字符串列表，非列表返回空列表。 */
+    private List<String> strList(Object value) {
+        if (value instanceof List<?> list) {
+            List<String> result = new ArrayList<>();
+            for (Object o : list) {
+                if (o != null) {
+                    result.add(String.valueOf(o));
+                }
             }
-            Object nn = pm.get("nodeName");
-            if (nn != null && !String.valueOf(nn).isBlank()) {
-                return String.valueOf(nn);
-            }
+            return result;
         }
-        return null;
+        return new ArrayList<>();
     }
 
     private String str(Object o) {

@@ -455,9 +455,11 @@ const formatTime = (time: string) => {
 const formatDuration = (seconds: number) => {
   if (!seconds || seconds <= 0) return '-'
   if (seconds < 1) return '<1s'
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+  // 规整浮点尾数：1065.115 % 60 会得到 45.11500000000001，统一取毫秒(3 位)消除尾数
+  const s = Math.round(seconds * 1000) / 1000
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${Math.round((s % 60) * 1000) / 1000}s`
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
 }
 
 const formatPhaseDuration = (startedAt?: string, finishedAt?: string) => {

@@ -650,6 +650,23 @@ public class GraphQueryService {
         }).toList();
     }
 
+    /**
+     * 每个 ApiEndpoint 的实现层回溯（Controller / Service / Table），用于系统关系总览投影。
+     * <p>
+     * 真实边方向为 ApiEndpoint-HANDLED_BY-&gt;Method，Method 被 Controller/Service/Mapper-CONTAINS-&gt;
+     * 包含，Mapper 经 SqlStatement 访问 Table —— 从 API 出发需双向遍历。旧的有向 BFS
+     * （{@link #getApiCallChain}）在 Method 处断链，且受 200 边上限截断，导致总览投影为空。
+     * 结果缓存（同版本稳定）。
+     * </p>
+     * <p>返回字段：nodeKey / displayName / controllers / services / tables（均为 List&lt;String&gt;）。</p>
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getApiImplementationRelations(String projectId, String versionId) {
+        String key = graphKey(versionId, "api-impl-relations", projectId);
+        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
+                () -> neo4jGraphDao.apiImplementationRelations(projectId, versionId));
+    }
+
     // ==================== 漂移队列 ====================
 
     /**

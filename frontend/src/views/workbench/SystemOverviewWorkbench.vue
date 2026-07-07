@@ -51,7 +51,7 @@
         <el-table-column prop="versionId" label="扫描版本" width="180" />
         <el-table-column prop="status" label="状态" width="120" />
         <el-table-column prop="completedAt" label="完成时间" width="180" />
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button
               link
@@ -61,6 +61,15 @@
               @click="handleDownloadDocument(row)"
             >
               下载 MD
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              :loading="deletingReportId === row.id"
+              @click="handleDeleteDocument(row)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -141,7 +150,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Right } from '@element-plus/icons-vue'
 import {
   downloadSystemOverviewDocument,
@@ -168,6 +177,7 @@ const exporting = ref(false)
 const reportsLoading = ref(false)
 const reportGenerating = ref(false)
 const downloadingReportId = ref<string>()
+const deletingReportId = ref<string>()
 const queryingPaths = ref(false)
 const queriedPaths = ref<string[]>([])
 const systemOverviewReports = ref<Report[]>([])
@@ -328,6 +338,32 @@ async function handleDownloadDocument(report: Report) {
     ElMessage.error('下载总结文档失败')
   } finally {
     downloadingReportId.value = undefined
+  }
+}
+
+async function handleDeleteDocument(report: Report) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除「${report.reportName || report.id}」？该报告文件与记录将被清除，且不可恢复。`,
+      '删除总结文档',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // 用户取消
+  }
+  deletingReportId.value = report.id
+  try {
+    const ok = await reportApi.deleteReport(projectId, report.id)
+    if (ok === false) {
+      ElMessage.warning('该文档记录已不存在，已刷新列表')
+    } else {
+      ElMessage.success('已删除总结文档')
+    }
+    await loadSystemOverviewReports()
+  } catch {
+    ElMessage.error('删除总结文档失败')
+  } finally {
+    deletingReportId.value = undefined
   }
 }
 

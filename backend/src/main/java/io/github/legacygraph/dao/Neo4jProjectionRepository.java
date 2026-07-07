@@ -292,4 +292,47 @@ public class Neo4jProjectionRepository {
         }
         return 0.0;
     }
+
+    /**
+     * 每个 ApiEndpoint 的实现层回溯：Controller / Service / Table。
+     * <p>
+     * 真实边方向：{@code ApiEndpoint -HANDLED_BY-> Method}，Method 被
+     * {@code Controller/Service/Mapper -CONTAINS->} 包含（父→子），Mapper 经
+     * {@code SqlStatement -READS/WRITES-> Table} 访问表。因此从 API 出发需双向遍历：
+     * 沿 HANDLED_BY 到 Method，再沿 INCOMING CONTAINS 找到 Controller/Service/Mapper，
+     * Mapper 沿 EXECUTES→SqlStatement→READS/WRITES 找到 Table；Controller -CALLS-> Service 作为补充。
+     * </p>
+     * <p>
+     * 返回字段：nodeKey / displayName / controllers / services / tables（List&lt;String&gt;）。
+     * 仅返回至少有 Controller/Service/Table 之一的 API（无任何实现的 API 跳过）。
+     * </p>
+     */
+    public List<Map<String, Object>> apiImplementationRelations(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (api:ApiEndpoint {projectId: $projectId, versionId: $versionId}) " +
+                "MATCH (api)-[:HANDLED_BY]->(m:Method) " +
+                "OPTIONAL MATCH (ctrl:Controller)-[:CONTAINS]->(m) " +
+                "OPTIONAL MATCH (svc:Service)-[:CONTAINS]->(m) " +
+                "OPTIONAL MATCH (mapper:Mapper)-[:CONTAINS]->(m) " +
+                "OPTIONAL MATCH (ctrl)-[:CALLS]->(calledSvc:Service) " +
+                "OPTIONAL MATCH (mapper)-[:EXECUTES]->(:SqlStatement)-[:READS|WRITES|JOINS]->(tbl:Table) " +
+                "WITH api, " +
+                "     [x IN collect(DISTINCT ctrl.nodeName) WHERE x IS NOT NULL] AS controllers, " +
+                "     [x IN collect(DISTINCT coalesce(svc.nodeName, calledSvc.nodeName)) WHERE x IS NOT NULL] AS services, " +
+                "     [x IN collect(DISTINCT tbl.nodeName) WHERE x IS NOT NULL] AS tables " +
+                "WHERE size(controllers) > 0 OR size(services) > 0 OR size(tables) > 0 " +
+                "RETURN api.nodeKey AS nodeKey, " +
+                "       coalesce(api.displayName, api.nodeName, api.nodeKey) AS displayName, " +
+                "       controllers, services, tables";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId)));
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
 }

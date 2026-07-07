@@ -822,6 +822,33 @@ public class ReportingService {
         return reportRepository.findByProjectId(projectId);
     }
 
+    /**
+     * 删除报告：删除 lg_reports 记录及其本地文件。
+     * <p>硬删除（lg_reports 无 @TableLogic 软删过滤，findByProjectId 不按 deleted 过滤）。
+     * 文件删除 best-effort，失败仅记日志不阻断记录清理。</p>
+     *
+     * @param reportId 报告 ID
+     * @return true 若记录存在并已删除；false 若记录不存在
+     */
+    @Transactional
+    public boolean deleteReport(String reportId) {
+        Report report = reportRepository.selectById(reportId);
+        if (report == null) {
+            return false;
+        }
+        if (report.getFilePath() != null && !report.getFilePath().isBlank()) {
+            try {
+                Files.deleteIfExists(Path.of(report.getFilePath()));
+            } catch (Exception e) {
+                log.warn("Failed to delete report file {}: {}", report.getFilePath(), e.getMessage());
+            }
+        }
+        reportRepository.deleteById(reportId);
+        log.info("Report deleted: id={}, type={}, projectId={}",
+                reportId, report.getReportType(), report.getProjectId());
+        return true;
+    }
+
     // ========== 辅助方法 ==========
 
     private String getNodeTypeDisplayName(String nodeType) {

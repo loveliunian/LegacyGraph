@@ -1,4 +1,4 @@
-import { get, post } from '@/utils/request'
+import { del, get, post } from '@/utils/request'
 import type { MigrationReadinessReport } from '@/types'
 
 /**
@@ -36,6 +36,16 @@ export const reportApi = {
    */
   listReports: (projectId: string) => {
     return get<Report[]>(`/lg/projects/${encodeURIComponent(projectId)}/reports/list`)
+  },
+
+  /**
+   * 删除报告（含本地文件，硬删除不可恢复）
+   * @param projectId 项目ID
+   * @param reportId 报告ID
+   * @returns 是否删除成功（false 表示记录不存在）
+   */
+  deleteReport: (projectId: string, reportId: string) => {
+    return del<boolean>(`/lg/projects/${encodeURIComponent(projectId)}/reports/${encodeURIComponent(reportId)}`)
   },
 
   /**

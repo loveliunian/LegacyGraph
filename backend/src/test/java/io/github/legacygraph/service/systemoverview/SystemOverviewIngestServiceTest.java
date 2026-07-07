@@ -154,4 +154,60 @@ class SystemOverviewIngestServiceTest {
         assertEquals(1, result.getFaqCount());
         verify(semanticCache).put("p1", "Q1", "A1", "{}");
     }
+
+    /**
+     * ingestFromProjectGraph：从图谱回溯的 API 实现关系应转成四层 Claim。
+     * <p>回归：旧实现走 getApiCallChain（有向 BFS + 200 边上限）在 Method 处断链，
+     * 抽不到 Controller/Service/Table，导致报告为空。现走 getApiImplementationRelations
+     * 双向遍历，应能产出 CONTAINS / IMPLEMENTED_BY / HANDLED_BY 等 Claim。</p>
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void ingestFromProjectGraph_projectsApiImplToFourLayerClaims() {
+        when(graphQueryService.getApiImplementationRelations("p1", "v1")).thenReturn(List.of(
+                java.util.Map.of(
+                        "nodeKey", "GET /order/list",
+                        "displayName", "订单列表",
+                        "controllers", List.of("OrderController"),
+                        "services", List.of("OrderService"),
+                        "tables", List.of("lg_order", "Neo4j")),
+                java.util.Map.of(
+                        "nodeKey", "GET /health",
+                        "displayName", "健康检查",
+                        "controllers", List.of(),      // 无任何实现 → 应被跳过
+                        "services", List.of(),
+                        "tables", List.of())));
+        when(knowledgeClaimService.upsertDrafts(anyList())).thenReturn(List.of(new KnowledgeClaim()));
+
+        SystemOverviewIngestResult result = service.ingestFromProjectGraph("p1", "v1");
+
+        assertEquals(1, result.getVectorCount(), "仅 1 个有实现的 API 应产出 1 条向量");
+        ArgumentCaptor<List<KnowledgeClaimDraft>> captor = ArgumentCaptor.forClass(List.class);
+        verify(knowledgeClaimService).upsertDrafts(captor.capture());
+        List<KnowledgeClaimDraft> drafts = captor.getValue();
+
+        // 业务域由 Controller 名近似：OrderController → Order
+        assertTrue(drafts.stream().anyMatch(d -> "BusinessDomain".equals(d.getSubjectType())
+                && "CONTAINS".equals(d.getPredicate()) && "Feature".equals(d.getObjectType())));
+        assertTrue(drafts.stream().anyMatch(d -> "Feature".equals(d.getSubjectType())
+                && "IMPLEMENTED_BY".equals(d.getPredicate()) && "Controller".equals(d.getObjectType())
+                && "OrderController".equals(d.getObjectKey())));
+        assertTrue(drafts.stream().anyMatch(d -> "ApiEndpoint".equals(d.getSubjectType())
+                && "HANDLED_BY".equals(d.getPredicate()) && "GET /order/list".equals(d.getSubjectKey())));
+        assertTrue(drafts.stream().anyMatch(d -> "READS".equals(d.getPredicate())
+                && "lg_order".equals(d.getObjectKey())));
+        assertFalse(drafts.stream().anyMatch(d -> "Neo4j".equals(d.getObjectKey())),
+                "非 lg_ 表不应生成 READS Claim");
+    }
+
+    @Test
+    void ingestFromProjectGraph_emptyRelationsReturnsZero() {
+        when(graphQueryService.getApiImplementationRelations("p1", "v1")).thenReturn(List.of());
+
+        SystemOverviewIngestResult result = service.ingestFromProjectGraph("p1", "v1");
+
+        assertEquals(0, result.getVectorCount());
+        assertEquals(0, result.getClaimCount());
+        verify(knowledgeClaimService, never()).upsertDrafts(anyList());
+    }
 }

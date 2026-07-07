@@ -114,6 +114,37 @@ class SystemOverviewServiceTest {
         assertTrue(paths.get(0).contains("lg_order"));
     }
 
+    /**
+     * 回归：同业务域下多个 Feature 必须各占一行，不能折叠成一行。
+     * <p>旧实现按 subjectKey 分组后每域只 findFirst 取一条 Feature，
+     * 导致 188 个 API 只出 14 行（每域 1 条）。
+     */
+    @Test
+    void getOverview_emitsOneMappingPerFeatureNotPerDomain() {
+        when(knowledgeClaimService.listClaims(eq("p4"), eq("v4"), any(), any(), isNull(), any(), anyInt()))
+                .thenReturn(List.of(
+                        // 订单域下两个 Feature（feature key 即 API 路径，对齐 ingestFromProjectGraph 的真实形状）
+                        claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "POST /orders", "DOC", "PENDING_CONFIRM"),
+                        claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "POST /orders/refund", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "POST /orders", "IMPLEMENTED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "POST /orders/refund", "IMPLEMENTED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("ApiEndpoint", "POST /orders", "HANDLED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("ApiEndpoint", "POST /orders/refund", "HANDLED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM")
+                ));
+
+        SystemOverviewDTO dto = service.getOverview("p4", "v4");
+
+        // 2 个 CONTAINS Claim → 2 行映射（而非按域折叠成 1 行）
+        assertEquals(2, dto.getMappings().size());
+        assertEquals(1, dto.getTotalDomains(), "仍为 1 个业务域");
+        // apiPath 取 Feature 自身（feature key 命中 ApiEndpoint subjectKey），不再都用 Controller 首个 API
+        List<String> apiPaths = dto.getMappings().stream()
+                .map(LayerMappingDTO::getApiPath)
+                .sorted()
+                .toList();
+        assertEquals(List.of("POST /orders", "POST /orders/refund"), apiPaths);
+    }
+
     private static KnowledgeClaim claim(String subjectType, String subjectKey, String predicate,
                                         String objectType, String objectKey,
                                         String sourceType, String status) {
