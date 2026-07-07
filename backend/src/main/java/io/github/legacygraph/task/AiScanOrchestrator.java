@@ -780,9 +780,22 @@ public class AiScanOrchestrator {
                     request.setApiDefinitions(apiSummary);
                     request.setControllerCode("");
                     request.setPermissionInfo("");
-                    request.setProductDoc("已有功能点:\n" + summarizeNodes(batch));
+                    String batchFeatureSummary = summarizeNodes(batch);
+                    request.setProductDoc("已有功能点:\n" + batchFeatureSummary);
                     try {
-                        FeatureMappingAgent.MappingResult result = featureMappingAgent.mapFeatures(request);
+                        // 缓存特征映射结果：文档/代码稳定（cachedExtract 命中）时 Features/Pages/APIs 稳定，
+                        // 请求内容哈希稳定 → 特征映射命中缓存 → 重扫结果可复现，且省掉这批 LLM 调用。
+                        // 修复前 featureMappingAgent 无缓存，LLM 输出在 30-102 间摆动 3.4×，是扫描方差主因。
+                        String cacheContent = projectId + "|" + pageSummary + "|" + apiSummary + "|" + batchFeatureSummary;
+                        FeatureMappingAgent.MappingResult result = cachedExtract(
+                                "feature-mapping",
+                                cacheContent,
+                                () -> {
+                                    agentCallCounter.increment();
+                                    return featureMappingAgent.mapFeatures(request);
+                                },
+                                FeatureMappingAgent.MappingResult.class,
+                                r -> r == null || r.getMappings() == null || r.getMappings().isEmpty());
                         int mappingCount = result != null && result.getMappings() != null
                                 ? result.getMappings().size() : 0;
                         int persisted = persistFeatureMappings(projectId, versionId, result,

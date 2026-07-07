@@ -208,6 +208,57 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         return agg;
     }
 
+    /**
+     * 计算 AI 编排阶段（AI_ORCHESTRATION，聚合多个 AI_* 子任务）的预计剩余时间。
+     *
+     * <p>AI 阶段运行时拆为 AI_DOC_EXTRACT / AI_CODE_EXTRACT / AI_FEATURE_MAPPING 等子任务，
+     * 非单个 task，原聚合路径硬编码 -1 导致前端"AI 智能分析"不显示 ETA。此处按子任务状态汇总：
+     * <ul>
+     *   <li>已完成/失败子任务：不计剩余</li>
+     *   <li>运行中子任务：有 total/processed items 时用 {@link #computeBlendedEta}（实时+历史混合）；
+     *       无 items 时退化到 max(0, 历史均时 - 已耗时)</li>
+     *   <li>未开始子任务：历史均时（无历史兜底 {@link #DEFAULT_PHASE_FALLBACK_SECONDS}）</li>
+     * </ul>
+     * @return 剩余秒数；无任何可估因子时返回 -1（前端隐藏）
+     */
+    private long computeAiOrchestrationEta(String projectId, List<ScanTask> tasks, AiPhaseAggregate agg) {
+        long eta = 0;
+        boolean hasEstimate = false;
+        LocalDateTime now = LocalDateTime.now();
+        for (ScanTask t : tasks) {
+            String type = t.getTaskType();
+            if (type == null || !type.startsWith("AI_") || "AI_ORCHESTRATION".equals(type)) {
+                continue;
+            }
+            String s = t.getTaskStatus();
+            if (isCompletedTaskStatus(s) || "FAILED".equals(s)) {
+                continue;
+            }
+            if ("RUNNING".equals(s) && t.getStartedAt() != null) {
+                if (t.getTotalItems() != null && t.getTotalItems() > 0
+                        && t.getProcessedItems() != null && t.getProcessedItems() > 0) {
+                    long blended = computeBlendedEta(projectId, t);
+                    if (blended > 0) {
+                        eta += blended;
+                        hasEstimate = true;
+                        continue;
+                    }
+                }
+                long elapsed = Duration.between(t.getStartedAt(), now).getSeconds();
+                Double hist = getHistoricalPhaseDuration(projectId, type);
+                eta += hist != null
+                        ? Math.max(0, Math.round(hist) - elapsed)
+                        : DEFAULT_PHASE_FALLBACK_SECONDS;
+                hasEstimate = true;
+            } else {
+                Double hist = getHistoricalPhaseDuration(projectId, type);
+                eta += hist != null ? Math.round(hist) : DEFAULT_PHASE_FALLBACK_SECONDS;
+                hasEstimate = true;
+            }
+        }
+        return hasEstimate ? eta : -1L;
+    }
+
     private static String generateVersionNo() {
         String datePart = LocalDateTime.now().format(VERSION_DATE_FMT);
         String randPart = Integer.toHexString(ThreadLocalRandom.current().nextInt(0x10000));
@@ -324,7 +375,11 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                     tp.setProcessedItems(agg.completed);
                     tp.setStartedAt(agg.startedAt);
                     tp.setFinishedAt(agg.finishedAt);
-                    tp.setEstimatedSecondsRemaining(-1L);
+                    // AI 聚合阶段 RUNNING 时按子任务历史均时汇总 ETA；终态不显示
+                    tp.setEstimatedSecondsRemaining(
+                            "RUNNING".equals(agg.status)
+                                    ? computeAiOrchestrationEta(projectId, tasks, agg)
+                                    : -1L);
                     if (isCompletedTaskStatus(agg.status)) {
                         completedTasks++;
                     }

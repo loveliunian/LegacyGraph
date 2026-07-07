@@ -39,4 +39,6 @@ jwt:
 logging:
   level:
     io.github.legacygraph: debug
+    # 向量查询/向量化每次调用都打日志太吵，单独降到 info 静默（仅显式 debug 时才看）
+    io.github.legacygraph.service.qa: info
     org.springframework.security: info

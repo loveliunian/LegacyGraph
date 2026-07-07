@@ -100,7 +100,7 @@ public class VectorRetrievalService {
      * 语义搜索 - 对查询向量化，返回相似度最高的 topK 文档
      */
     public List<VectorDocument> semanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
-        log.info("Semantic search: projectId={}, query={}, topK={}", projectId, query, topK);
+        log.debug("Semantic search: projectId={}, query={}, topK={}", projectId, query, topK);
         String effectiveVersionId = resolveVersionId(projectId, versionId);
 
         // 缓存优先：相同 (project, version, query, topK, chunkType) 复用
@@ -142,7 +142,7 @@ public class VectorRetrievalService {
      * 查找相似节点 - 根据节点名称/描述的向量表示，查找相似节点
      */
     public List<GraphNode> findSimilarNodes(String projectId, String versionId, String searchText, double similarityThreshold) {
-        log.info("Find similar nodes: projectId={}, searchText={}, threshold={}", projectId, searchText, similarityThreshold);
+        log.debug("Find similar nodes: projectId={}, searchText={}, threshold={}", projectId, searchText, similarityThreshold);
         String effectiveVersionId = resolveVersionId(projectId, versionId);
 
         if (embeddingModel == null) {
@@ -183,7 +183,7 @@ public class VectorRetrievalService {
                 }
             }
 
-            log.info("Found {} similar nodes for '{}'", result.size(), searchText);
+            log.debug("Found {} similar nodes for '{}'", result.size(), searchText);
             return result;
         } catch (Exception e) {
             log.error("Find similar nodes failed: {}", e.getMessage(), e);

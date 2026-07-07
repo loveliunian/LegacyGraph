@@ -51,8 +51,17 @@
         <el-table-column prop="versionId" label="扫描版本" width="180" />
         <el-table-column prop="status" label="状态" width="120" />
         <el-table-column prop="completedAt" label="完成时间" width="180" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              :loading="previewingReportId === row.id"
+              @click="handlePreviewDocument(row)"
+            >
+              预览
+            </el-button>
             <el-button
               link
               type="primary"
@@ -144,6 +153,24 @@
         </el-button>
       </el-empty>
     </el-card>
+
+    <!-- Markdown 预览弹窗 -->
+    <el-dialog
+      v-model="previewVisible"
+      :title="previewTitle"
+      width="80%"
+      top="5vh"
+      destroy-on-close
+      class="md-preview-dialog"
+    >
+      <div v-if="previewLoading" class="preview-loading">
+        <el-skeleton :rows="10" animated />
+      </div>
+      <div v-else-if="previewError" class="preview-error">
+        <el-result icon="error" title="加载失败" :sub-title="previewError" />
+      </div>
+      <div v-else class="markdown-body" v-html="previewHtml" />
+    </el-dialog>
   </div>
 </template>
 
@@ -152,6 +179,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Right } from '@element-plus/icons-vue'
+import { Marked } from 'marked'
+import DOMPurify from 'dompurify'
 import {
   downloadSystemOverviewDocument,
   exportSystemOverviewReport,
@@ -178,6 +207,16 @@ const reportsLoading = ref(false)
 const reportGenerating = ref(false)
 const downloadingReportId = ref<string>()
 const deletingReportId = ref<string>()
+const previewingReportId = ref<string>()
+const previewVisible = ref(false)
+const previewTitle = ref('')
+const previewLoading = ref(false)
+const previewError = ref('')
+const previewHtml = ref('')
+
+// Markdown 渲染器（与 DocumentList 对齐：GFM + breaks + DOMPurify 防 XSS）
+const marked = new Marked()
+marked.setOptions({ gfm: true, breaks: true })
 const queryingPaths = ref(false)
 const queriedPaths = ref<string[]>([])
 const systemOverviewReports = ref<Report[]>([])
@@ -341,6 +380,26 @@ async function handleDownloadDocument(report: Report) {
   }
 }
 
+async function handlePreviewDocument(report: Report) {
+  previewVisible.value = true
+  previewTitle.value = report.reportName || '总结文档预览'
+  previewLoading.value = true
+  previewError.value = ''
+  previewHtml.value = ''
+  previewingReportId.value = report.id
+  try {
+    const blob = await downloadSystemOverviewDocument(projectId, report.id, 'MD')
+    const markdown = await (blob instanceof Blob ? blob.text() : String(blob ?? ''))
+    const html = marked.parse(markdown) as string
+    previewHtml.value = DOMPurify.sanitize(html)
+  } catch (err: any) {
+    previewError.value = err?.message || '加载总结文档失败'
+  } finally {
+    previewLoading.value = false
+    previewingReportId.value = undefined
+  }
+}
+
 async function handleDeleteDocument(report: Report) {
   try {
     await ElMessageBox.confirm(
@@ -449,5 +508,76 @@ onMounted(async () => {
   gap: 8px;
   align-items: center;
   margin-bottom: 12px;
+}
+
+.preview-loading,
+.preview-error {
+  padding: 20px 0;
+}
+
+/* Markdown 预览内容（与 DocumentList 对齐）*/
+.markdown-body {
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #303133;
+  max-height: 72vh;
+  overflow: auto;
+}
+.markdown-body :deep(h1) {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 20px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e4e7ed;
+}
+.markdown-body :deep(h2) {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 18px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #ebeef5;
+}
+.markdown-body :deep(h3) {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 14px 0 8px;
+}
+.markdown-body :deep(p) {
+  margin: 0 0 10px;
+}
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 24px;
+  margin: 0 0 10px;
+}
+.markdown-body :deep(li) {
+  margin-bottom: 4px;
+}
+.markdown-body :deep(blockquote) {
+  margin: 0 0 10px;
+  padding: 8px 16px;
+  border-left: 4px solid #5e5ce6;
+  background: #f5f5ff;
+  color: #606266;
+}
+.markdown-body :deep(table) {
+  width: 100%;
+  margin: 12px 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid #dcdfe6;
+  text-align: left;
+}
+.markdown-body :deep(th) {
+  background: #f5f7fa;
+  font-weight: 600;
+}
+.markdown-body :deep(tr:hover) {
+  background: #f5f7fa;
 }
 </style>
