@@ -1,7 +1,10 @@
 package io.github.legacygraph.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.common.PageQuery;
+import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.gap.GapTaskView;
 import io.github.legacygraph.entity.GapTask;
@@ -44,11 +47,11 @@ public class KnowledgeController {
     }
 
     /**
-     * 查询 Claim 列表（支持多条件过滤）。
+     * 查询 Claim 列表（支持多条件过滤，分页）。
      */
     @GetMapping("/claims")
-    @Operation(summary = "查询知识断言列表", description = "按 projectId/versionId/subjectType/predicate/status/sourceType 过滤 Claim")
-    public Result<List<KnowledgeClaim>> listClaims(
+    @Operation(summary = "查询知识断言列表", description = "按 projectId/versionId/subjectType/predicate/status/sourceType 过滤 Claim（分页）")
+    public Result<PageResult<KnowledgeClaim>> listClaims(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID")
@@ -61,12 +64,19 @@ public class KnowledgeController {
             @RequestParam(required = false) String status,
             @Parameter(description = "来源类型")
             @RequestParam(required = false) String sourceType,
-            @Parameter(description = "返回条数上限（默认100，最大500）")
-            @RequestParam(defaultValue = "100") int limit) {
+            PageQuery query) {
 
-        List<KnowledgeClaim> claims = knowledgeClaimService.listClaims(
-                projectId, versionId, subjectType, predicate, status, sourceType, limit);
-        return Result.success(claims);
+        Page<KnowledgeClaim> page = knowledgeClaimService.listClaimsPaged(
+                projectId, versionId, subjectType, predicate, status, sourceType,
+                query.getPageNum(), query.getPageSize());
+
+        PageResult<KnowledgeClaim> result = PageResult.of(
+                page.getRecords(),
+                page.getTotal(),
+                query.getPageNum(),
+                query.getPageSize()
+        );
+        return Result.success(result);
     }
 
     /**
@@ -88,11 +98,11 @@ public class KnowledgeController {
     }
 
     /**
-     * 查询 GapTask 列表（支持多条件过滤）。
+     * 查询 GapTask 列表（支持多条件过滤，分页）。
      */
     @GetMapping("/gaps")
-    @Operation(summary = "查询知识缺口列表", description = "按 projectId/versionId/gapType/status/severity 过滤 GapTask")
-    public Result<List<GapTaskView>> listGaps(
+    @Operation(summary = "查询知识缺口列表", description = "按 projectId/versionId/gapType/status/severity 过滤 GapTask（分页）")
+    public Result<PageResult<GapTaskView>> listGaps(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             @Parameter(description = "扫描版本ID")
@@ -103,12 +113,20 @@ public class KnowledgeController {
             @RequestParam(required = false) String status,
             @Parameter(description = "严重度")
             @RequestParam(required = false) String severity,
-            @Parameter(description = "返回条数上限（默认100，最大500）")
-            @RequestParam(defaultValue = "100") int limit) {
+            PageQuery query) {
 
-        List<GapTask> gaps = gapFinderService.listGaps(projectId, versionId, gapType, status, severity, limit);
-        List<GapTaskView> views = gaps.stream().map(this::toView).collect(Collectors.toList());
-        return Result.success(views);
+        Page<GapTask> page = gapFinderService.listGapsPaged(
+                projectId, versionId, gapType, status, severity,
+                query.getPageNum(), query.getPageSize());
+
+        List<GapTaskView> views = page.getRecords().stream().map(this::toView).collect(Collectors.toList());
+        PageResult<GapTaskView> result = PageResult.of(
+                views,
+                page.getTotal(),
+                query.getPageNum(),
+                query.getPageSize()
+        );
+        return Result.success(result);
     }
 
     /**

@@ -58,18 +58,22 @@ public class FeatureModuleExtractor {
     public List<FeatureModuleFact> extractModules(Path frontendRoot) throws IOException {
         List<FeatureModuleFact> modules = new ArrayList<>();
 
-        // 查找 views 或 pages 目录
-        Path viewsDir = frontendRoot.resolve("src/views");
-        if (!Files.exists(viewsDir)) {
-            viewsDir = frontendRoot.resolve("src/pages");
+        // Vue：src/views 或 src/pages
+        Path modulesRoot = frontendRoot.resolve("src/views");
+        if (!Files.exists(modulesRoot)) {
+            modulesRoot = frontendRoot.resolve("src/pages");
         }
-        if (!Files.exists(viewsDir)) {
-            log.debug("No views or pages directory found in {}", frontendRoot);
+        // Legacy HTML 前端：frontendRoot 本身即 html 目录（如 src/main/html），一级子目录为功能模块
+        if (!Files.exists(modulesRoot) && isLegacyHtmlFrontend(frontendRoot)) {
+            modulesRoot = frontendRoot;
+        }
+        if (!Files.exists(modulesRoot)) {
+            log.debug("No views/pages or legacy html dir found in {}", frontendRoot);
             return modules;
         }
 
         // 遍历一级子目录
-        try (Stream<Path> dirs = Files.list(viewsDir)) {
+        try (Stream<Path> dirs = Files.list(modulesRoot)) {
             dirs.filter(Files::isDirectory)
                 .forEach(dir -> {
                     try {
@@ -83,8 +87,34 @@ public class FeatureModuleExtractor {
                 });
         }
 
-        log.info("Extracted {} feature modules from {}", modules.size(), viewsDir);
+        log.info("Extracted {} feature modules from {}", modules.size(), modulesRoot);
         return modules;
+    }
+
+    /**
+     * Legacy HTML 前端判定：目录的某个一级子目录含 .html 页面
+     * （排除 css/js/img 等纯资源目录，确认这是页面型前端）。
+     */
+    private boolean isLegacyHtmlFrontend(Path dir) {
+        if (dir == null) {
+            return false;
+        }
+        try (Stream<Path> subs = Files.list(dir)) {
+            return subs.filter(Files::isDirectory).anyMatch(this::dirContainsHtmlPages);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private boolean dirContainsHtmlPages(Path dir) {
+        try (Stream<Path> files = Files.list(dir)) {
+            return files.anyMatch(p -> {
+                String n = p.toString().toLowerCase();
+                return n.endsWith(".html") || n.endsWith(".htm");
+            });
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     /**
@@ -97,18 +127,19 @@ public class FeatureModuleExtractor {
         List<FeatureFact> features = new ArrayList<>();
         String moduleName = moduleDir.getFileName().toString();
 
-        // 遍历 .vue 和 .tsx/.jsx 文件（不截流 views 文件）
+        // 遍历页面文件（.vue/.tsx/.jsx；Legacy 前端含 .html/.htm）
         try (Stream<Path> files = Files.walk(moduleDir)) {
             files.filter(p -> {
                 String name = p.toString().toLowerCase();
-                return name.endsWith(".vue") || name.endsWith(".tsx") || name.endsWith(".jsx");
+                return name.endsWith(".vue") || name.endsWith(".tsx") || name.endsWith(".jsx")
+                        || name.endsWith(".html") || name.endsWith(".htm");
             })
                  .filter(Files::isRegularFile)
                  .forEach(file -> {
                      FeatureFact feature = new FeatureFact();
                      String fileName = file.getFileName().toString();
                      // 去掉扩展名
-                     String featureName = fileName.replaceAll("\\.(vue|tsx|jsx)$", "");
+                     String featureName = fileName.replaceAll("\\.(vue|tsx|jsx|html|htm)$", "");
                      feature.setFeatureName(featureName);
                      feature.setFeaturePath(file.toString());
                      feature.setModuleName(moduleName);
@@ -136,20 +167,25 @@ public class FeatureModuleExtractor {
         module.setModuleName(moduleDir.getFileName().toString());
         module.setModulePath(moduleDir.toString());
 
-        // 统计页面数量（包含 .vue/.tsx/.jsx）
+        // 统计页面数量（.vue/.tsx/.jsx；Legacy 前端含 .html/.htm）
         List<String> pages = new ArrayList<>();
         try (Stream<Path> files = Files.walk(moduleDir)) {
             files.filter(p -> {
                 String name = p.toString().toLowerCase();
-                return name.endsWith(".vue") || name.endsWith(".tsx") || name.endsWith(".jsx");
+                return name.endsWith(".vue") || name.endsWith(".tsx") || name.endsWith(".jsx")
+                        || name.endsWith(".html") || name.endsWith(".htm");
             })
                  .filter(Files::isRegularFile)
                  .forEach(p -> pages.add(p.toString()));
         }
+        // 无页面的目录（如 css/js/img 资源目录）不作为功能模块
+        if (pages.isEmpty()) {
+            return null;
+        }
         module.setPages(pages);
         module.setPageCount(pages.size());
 
-        // 尝试从 README 或 index.vue 推断描述
+        // 尝试从 README / index.vue / index.html 推断描述
         Path readme = moduleDir.resolve("README.md");
         if (Files.exists(readme)) {
             String content = Files.readString(readme);
@@ -157,8 +193,12 @@ public class FeatureModuleExtractor {
         } else {
             Path indexVue = moduleDir.resolve("index.vue");
             if (Files.exists(indexVue)) {
-                String content = Files.readString(indexVue);
-                module.setDescription(extractDescription(content));
+                module.setDescription(extractDescription(Files.readString(indexVue)));
+            } else {
+                Path indexHtml = moduleDir.resolve("index.html");
+                if (Files.exists(indexHtml)) {
+                    module.setDescription(extractDescription(Files.readString(indexHtml)));
+                }
             }
         }
 

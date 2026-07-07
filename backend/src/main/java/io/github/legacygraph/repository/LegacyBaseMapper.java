@@ -40,4 +40,23 @@ public interface LegacyBaseMapper<T> extends BaseMapper<T> {
             }
         );
     }
+
+    /**
+     * 批量更新实体列表，使用 MyBatis 批量模式提升性能。
+     */
+    default boolean updateBatch(List<T> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return true;
+        }
+        Class<?> entityClass = entities.get(0).getClass();
+        return SqlHelper.executeBatch(
+            entityClass,
+            LogFactory.getLog(entityClass),
+            sqlSession -> {
+                for (T entity : entities) {
+                    updateById(entity);
+                }
+            }
+        );
+    }
 }

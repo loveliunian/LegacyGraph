@@ -27,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -219,7 +221,31 @@ public class TestCaseController {
                 tc.setCaseName(genCase.getCaseName() != null ? genCase.getCaseName() : node.getNodeName() + " 测试");
                 tc.setCaseType(genCase.getCaseType() != null ? genCase.getCaseType().name() : "API");
                 tc.setTargetNodeId(node.getId());
-                tc.setSteps(genCase.getSteps() != null ? String.join("\\n", genCase.getSteps()) : "");
+                
+                // steps 字段是 JSON 类型，需要序列化为 JSON 数组
+                if (genCase.getSteps() != null && !genCase.getSteps().isEmpty()) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    try {
+                        tc.setSteps(mapper.writeValueAsString(genCase.getSteps()));
+                    } catch (Exception e) {
+                        tc.setSteps("[]");
+                    }
+                } else {
+                    tc.setSteps("[]");
+                }
+                
+                // preconditions 字段也是 JSON 类型
+                if (genCase.getPreconditions() != null && !genCase.getPreconditions().isEmpty()) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    try {
+                        tc.setPreconditions(mapper.writeValueAsString(genCase.getPreconditions()));
+                    } catch (Exception e) {
+                        tc.setPreconditions("[]");
+                    }
+                } else {
+                    tc.setPreconditions("[]");
+                }
+                
                 tc.setExpectedResult("验证接口返回符合预期");
                 tc.setStatus("ENABLED");
                 tc.setGeneratedBy("LLM");

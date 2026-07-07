@@ -1,6 +1,9 @@
 package io.github.legacygraph.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.common.PageQuery;
+import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.gap.GapTaskView;
 import io.github.legacygraph.entity.GapTask;
@@ -38,14 +41,20 @@ class KnowledgeControllerTest {
     void listClaimsPassesFiltersToService() {
         KnowledgeClaim claim = new KnowledgeClaim();
         claim.setId("claim-1");
-        when(knowledgeClaimService.listClaims("project-1", "v1", "Feature", "IMPLEMENTS",
-                "PENDING_CONFIRM", "DOC_AI", 20)).thenReturn(List.of(claim));
+        Page<KnowledgeClaim> mockPage = new Page<>();
+        mockPage.setRecords(List.of(claim));
+        mockPage.setTotal(1L);
+        when(knowledgeClaimService.listClaimsPaged("project-1", "v1", "Feature", "IMPLEMENTS",
+                "PENDING_CONFIRM", "DOC_AI", 1, 20)).thenReturn(mockPage);
 
-        Result<List<KnowledgeClaim>> result = controller.listClaims("project-1", "v1", "Feature",
-                "IMPLEMENTS", "PENDING_CONFIRM", "DOC_AI", 20);
+        PageQuery query = new PageQuery();
+        query.setPageNum(1);
+        query.setPageSize(20);
+        Result<PageResult<KnowledgeClaim>> result = controller.listClaims("project-1", "v1", "Feature",
+                "IMPLEMENTS", "PENDING_CONFIRM", "DOC_AI", query);
 
         assertEquals(0, result.getCode());
-        assertEquals(List.of(claim), result.getData());
+        assertEquals(List.of(claim), result.getData().getList());
     }
 
     @Test
@@ -75,16 +84,23 @@ class KnowledgeControllerTest {
         gap.setRelatedNodeIds("[\"node-1\"]");
         gap.setEvidenceIds("[\"ev-1\"]");
         gap.setPriorityScore(BigDecimal.valueOf(0.8));
-        when(gapFinderService.listGaps("project-1", "v1", "doc_only_feature", "OPEN",
-                "HIGH", 10)).thenReturn(List.of(gap));
+        
+        Page<GapTask> mockPage = new Page<>();
+        mockPage.setRecords(List.of(gap));
+        mockPage.setTotal(1L);
+        when(gapFinderService.listGapsPaged("project-1", "v1", "doc_only_feature", "OPEN",
+                "HIGH", 1, 10)).thenReturn(mockPage);
 
-        Result<List<GapTaskView>> result = controller.listGaps("project-1", "v1",
-                "doc_only_feature", "OPEN", "HIGH", 10);
+        PageQuery query = new PageQuery();
+        query.setPageNum(1);
+        query.setPageSize(10);
+        Result<PageResult<GapTaskView>> result = controller.listGaps("project-1", "v1",
+                "doc_only_feature", "OPEN", "HIGH", query);
 
         assertEquals(0, result.getCode());
-        assertEquals(List.of("claim-1"), result.getData().get(0).getRelatedClaimIds());
-        assertEquals(List.of("node-1"), result.getData().get(0).getRelatedNodeIds());
-        assertEquals(List.of("ev-1"), result.getData().get(0).getEvidenceIds());
+        assertEquals(List.of("claim-1"), result.getData().getList().get(0).getRelatedClaimIds());
+        assertEquals(List.of("node-1"), result.getData().getList().get(0).getRelatedNodeIds());
+        assertEquals(List.of("ev-1"), result.getData().getList().get(0).getEvidenceIds());
     }
 
     @Test

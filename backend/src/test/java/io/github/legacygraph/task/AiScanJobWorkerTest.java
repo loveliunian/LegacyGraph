@@ -3,7 +3,9 @@ package io.github.legacygraph.task;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.entity.AiScanJob;
+import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.AiScanJobRepository;
+import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -31,8 +33,10 @@ class AiScanJobWorkerTest {
         ProjectScanner projectScanner = mock(ProjectScanner.class);
         io.github.legacygraph.repository.ScanVersionRepository scanVersionRepository = 
             mock(io.github.legacygraph.repository.ScanVersionRepository.class);
+        SystemOverviewDocumentService systemOverviewDocumentService = mock(SystemOverviewDocumentService.class);
         AiScanJobWorker worker = new AiScanJobWorker(aiScanJobRepository, aiScanOrchestrator, 
             objectMapper, projectScanner, scanVersionRepository);
+        worker.setSystemOverviewDocumentService(systemOverviewDocumentService);
 
         AiScanConfig config = new AiScanConfig();
         config.setEnableAi(true);
@@ -46,6 +50,7 @@ class AiScanJobWorkerTest {
         job.setCreatedAt(LocalDateTime.now().minusMinutes(1));
 
         when(aiScanJobRepository.selectList(any())).thenReturn(List.of(job));
+        when(scanVersionRepository.selectById("version-1")).thenReturn(new ScanVersion());
         List<String> statusUpdates = new ArrayList<>();
         List<LocalDateTime> finishedAtUpdates = new ArrayList<>();
         doAnswer(invocation -> {
@@ -66,5 +71,6 @@ class AiScanJobWorkerTest {
                 org.mockito.Mockito.argThat(AiScanConfig::isEnableAi),
                 any(),
                 any());
+        verify(systemOverviewDocumentService).generateAfterScan("project-1", "version-1");
     }
 }

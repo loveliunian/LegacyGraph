@@ -7,7 +7,7 @@
           <div class="header-actions">
             <el-button :loading="exporting" @click="handleExport">导出 MD</el-button>
             <el-button type="primary" :loading="ingesting" @click="handleIngest">
-              导入事实底座
+              {{ ingestLabel }}
             </el-button>
           </div>
         </div>
@@ -37,7 +37,7 @@
       </div>
     </el-card>
 
-    <el-card shadow="hover" class="mt">
+    <el-card shadow="hover" class="mt" v-if="!showEmpty">
       <template #header>四层映射总表</template>
       
       <!-- from/to 路径查询 -->
@@ -81,11 +81,24 @@
       </el-table>
     </el-card>
 
-    <el-card shadow="hover" class="mt">
+    <el-card shadow="hover" class="mt" v-if="!showEmpty">
       <template #header>核心贯穿链路（业务→功能→代码→数据）</template>
       <ul class="paths">
         <li v-for="(p, i) in displayPaths" :key="i">{{ p }}</li>
       </ul>
+    </el-card>
+
+    <!-- 空状态：当前项目尚无系统关系总览数据 -->
+    <el-card shadow="hover" class="mt" v-if="showEmpty">
+      <el-empty description="当前项目暂无系统关系总览数据">
+        <template #description>
+          <p>当前项目暂无系统关系总览数据。</p>
+          <p class="empty-hint">请先完成代码/文档扫描并生成四层关系，或点击下方按钮基于当前项目扫描结果生成总览。</p>
+        </template>
+        <el-button type="primary" :loading="ingesting" @click="handleIngest">
+          基于当前项目生成总览
+        </el-button>
+      </el-empty>
     </el-card>
   </div>
 </template>
@@ -100,6 +113,7 @@ import {
   getCorePaths,
   getSystemOverview,
   ingestBuiltins,
+  ingestFromGraph,
   type LayerMapping,
   type SystemOverview,
 } from '@/api/system-overview.api'
@@ -109,6 +123,7 @@ const router = useRouter()
 const projectId = (route.params.projectId as string) || 'self'
 const versionId = (route.query.versionId as string) || undefined
 const overview = ref<SystemOverview>()
+const loaded = ref(false)
 const ingesting = ref(false)
 const exporting = ref(false)
 const queryingPaths = ref(false)
@@ -124,6 +139,12 @@ const domains = computed(() => {
   if (!overview.value?.mappings) return []
   return [...new Set(overview.value.mappings.map(m => m.businessDomain))]
 })
+
+// 加载完成且无四层映射数据时展示空状态引导
+const showEmpty = computed(() => loaded.value && !(overview.value?.mappings?.length))
+
+// self（LegacyGraph 自身）导入内置底座；真实项目基于扫描图谱生成总览
+const ingestLabel = computed(() => (projectId === 'self' ? '导入事实底座' : '生成/更新总览'))
 
 // 计算属性：过滤后的映射
 const filteredMappings = computed(() => {
@@ -203,6 +224,8 @@ async function loadOverview() {
     queriedPaths.value = []
   } catch {
     ElMessage.error('加载系统关系总览失败')
+  } finally {
+    loaded.value = true
   }
 }
 
@@ -232,11 +255,18 @@ async function handleExport() {
 async function handleIngest() {
   ingesting.value = true
   try {
-    const r = await ingestBuiltins(projectId, versionId)
-    ElMessage.success(`已导入：向量 ${r.vectorCount}，Claim ${r.claimCount}，FAQ ${r.faqCount}`)
+    // self（LegacyGraph 自身）用内置底座；真实项目基于当前项目扫描图谱生成
+    const r = projectId === 'self'
+      ? await ingestBuiltins(projectId, versionId)
+      : await ingestFromGraph(projectId, versionId)
+    if (r.claimCount > 0 || r.vectorCount > 0) {
+      ElMessage.success(`已生成：向量 ${r.vectorCount}，Claim ${r.claimCount}，FAQ ${r.faqCount}`)
+    } else {
+      ElMessage.warning('当前项目扫描图谱中未找到可用的 API 调用链，请先完成代码扫描')
+    }
     await loadOverview()
   } catch {
-    ElMessage.error('导入失败')
+    ElMessage.error('生成失败')
   } finally {
     ingesting.value = false
   }
@@ -270,6 +300,11 @@ onMounted(loadOverview)
   margin: 0;
   padding-left: 20px;
   line-height: 1.8;
+}
+.empty-hint {
+  color: #909399;
+  font-size: 13px;
+  margin-top: 4px;
 }
 .filter-bar {
   margin-top: 12px;

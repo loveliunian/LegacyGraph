@@ -7,17 +7,20 @@ import io.github.legacygraph.dto.systemoverview.SystemOverviewIngestRequest.Rela
 import io.github.legacygraph.dto.systemoverview.SystemOverviewIngestResult;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.entity.VectorDocument;
+import io.github.legacygraph.service.graph.GraphQueryService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import io.github.legacygraph.service.qa.SemanticCache;
 import io.github.legacygraph.service.qa.VectorRetrievalService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 系统关系总览事实底座导入服务。
@@ -39,11 +42,15 @@ public class SystemOverviewIngestService {
     private final VectorRetrievalService vectorRetrievalService;
     private final KnowledgeClaimService knowledgeClaimService;
     private final SemanticCache semanticCache;
+    private final GraphQueryService graphQueryService;
 
     /** 向量分片类型标识，区分系统关系总览与普通 DOC/CODE 分片 */
     public static final String CHUNK_TYPE = "SYSTEM_OVERVIEW";
 
     private static final String EXTRACTOR = "SystemOverviewIngest";
+
+    /** 从图谱生成总览时，单次最多处理的 API 端点数（防止超大项目一次性拉爆 Neo4j）。 */
+    private static final int MAX_GRAPH_APIS = 500;
 
     /**
      * 导入请求中的关系行与 FAQ。
@@ -51,6 +58,7 @@ public class SystemOverviewIngestService {
      * 向量按内容 upsert；语义缓存按 question 去重（SemanticCache 内部处理）。
      */
     @Transactional
+    @CacheEvict(cacheNames = "system-overview", allEntries = true)
     public SystemOverviewIngestResult ingest(SystemOverviewIngestRequest request) {
         String projectId = request.getProjectId();
         String versionId = resolveVersion(request.getVersionId());
@@ -128,6 +136,156 @@ public class SystemOverviewIngestService {
                 .relations(buildBuiltinRelations())
                 .faqs(buildBuiltinFaqs())
                 .build());
+    }
+
+    /**
+     * 基于当前项目的真实扫描图谱生成系统关系总览。
+     * <p>
+     * 从 Neo4j 图谱按 API 端点回溯调用链（ApiEndpoint → Controller → Service → Table），
+     * 组装为四层关系行后走 {@link #ingest} 通路写入 Claim，供 {@code SystemOverviewService}
+     * 动态投影。与内置底座（LegacyGraph 自身硬编码）不同，这里的数据完全来自当前项目扫描结果。
+     * </p>
+     * <p>
+     * 说明：代码图谱不含"业务域"层，此处用 Controller 名（去 Controller 后缀）作为业务域近似；
+     * 若项目已通过文档理解产出真实业务域，可后续叠加。
+     * </p>
+     */
+    @Transactional
+    public SystemOverviewIngestResult ingestFromProjectGraph(String projectId, String versionId) {
+        List<RelationRow> rows = buildRelationsFromGraph(projectId, versionId);
+        if (rows.isEmpty()) {
+            log.info("No graph-derived relations for projectId={}, versionId={} (empty scan graph?)",
+                    projectId, versionId);
+            return SystemOverviewIngestResult.builder()
+                    .projectId(projectId)
+                    .versionId(resolveVersion(versionId))
+                    .vectorCount(0).claimCount(0).faqCount(0).skipped(0)
+                    .build();
+        }
+        log.info("Graph-derived {} relation rows for projectId={}, versionId={}",
+                rows.size(), projectId, versionId);
+        return ingest(SystemOverviewIngestRequest.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .relations(rows)
+                .build());
+    }
+
+    /**
+     * 从当前项目图谱回溯每个 API 端点的调用链，抽取 Controller/Service/Table 组装关系行。
+     */
+    @SuppressWarnings("unchecked")
+    private List<RelationRow> buildRelationsFromGraph(String projectId, String versionId) {
+        List<RelationRow> rows = new ArrayList<>();
+        List<Map<String, Object>> endpoints;
+        try {
+            endpoints = graphQueryService.getApiEndpoints(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("Load api endpoints failed for projectId={}: {}", projectId, e.getMessage());
+            return rows;
+        }
+        if (endpoints == null || endpoints.isEmpty()) {
+            return rows;
+        }
+
+        int processed = 0;
+        for (Map<String, Object> ep : endpoints) {
+            if (processed++ >= MAX_GRAPH_APIS) {
+                log.warn("API endpoints exceed {}, truncating graph-derived overview", MAX_GRAPH_APIS);
+                break;
+            }
+            String apiKey = str(ep.get("nodeKey"));
+            String apiName = str(ep.get("displayName"));
+            if (apiKey == null || apiKey.isBlank()) {
+                continue;
+            }
+
+            List<Map<String, Object>> chainList;
+            try {
+                chainList = graphQueryService.getApiCallChain(projectId, versionId, apiKey);
+            } catch (Exception e) {
+                continue;
+            }
+            if (chainList == null || chainList.isEmpty()) {
+                continue;
+            }
+            Object nodesObj = chainList.get(0).get("nodes");
+            if (!(nodesObj instanceof List<?> nodes) || nodes.isEmpty()) {
+                continue;
+            }
+
+            String controller = null;
+            String service = null;
+            List<String> tables = new ArrayList<>();
+            for (Object nodeObj : nodes) {
+                if (!(nodeObj instanceof Map<?, ?> node)) {
+                    continue;
+                }
+                String type = firstLabel((Map<String, Object>) node);
+                String name = nodeDisplayName((Map<String, Object>) node);
+                if (name == null || name.isBlank()) {
+                    continue;
+                }
+                if ("Controller".equals(type) && controller == null) {
+                    controller = name;
+                } else if ("Service".equals(type) && service == null) {
+                    service = name;
+                } else if ("Table".equals(type) && !tables.contains(name)) {
+                    tables.add(name);
+                }
+            }
+
+            // 至少要抽到代码层或数据层，否则该 API 无投影价值
+            if (controller == null && service == null && tables.isEmpty()) {
+                continue;
+            }
+
+            String domain = deriveDomain(controller, apiName);
+            String capability = notBlank(apiName) ? apiName : apiKey;
+            rows.add(row(domain, capability, capability, controller, apiKey, service,
+                    String.join(",", tables), "HANDLED_BY", "CODE", 0.85));
+        }
+        return rows;
+    }
+
+    private String firstLabel(Map<String, Object> node) {
+        Object labels = node.get("labels");
+        if (labels instanceof List<?> l && !l.isEmpty()) {
+            return String.valueOf(l.get(0));
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String nodeDisplayName(Map<String, Object> node) {
+        Object props = node.get("properties");
+        if (props instanceof Map<?, ?> p) {
+            Map<String, Object> pm = (Map<String, Object>) p;
+            Object dn = pm.get("displayName");
+            if (dn != null && !String.valueOf(dn).isBlank()) {
+                return String.valueOf(dn);
+            }
+            Object nn = pm.get("nodeName");
+            if (nn != null && !String.valueOf(nn).isBlank()) {
+                return String.valueOf(nn);
+            }
+        }
+        return null;
+    }
+
+    private String str(Object o) {
+        return o == null ? null : String.valueOf(o);
+    }
+
+    /** 代码图谱无业务域层：用 Controller 名（去 Controller 后缀）近似，退化时用 API 名。 */
+    private String deriveDomain(String controller, String apiName) {
+        if (notBlank(controller)) {
+            String d = controller.replaceAll("Controller$", "").trim();
+            if (!d.isBlank()) {
+                return d;
+            }
+        }
+        return notBlank(apiName) ? apiName : "未分类";
     }
 
     // ──────────── 关系 → Claim 转换 ────────────

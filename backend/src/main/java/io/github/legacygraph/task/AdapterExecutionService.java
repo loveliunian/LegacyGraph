@@ -87,7 +87,7 @@ public class AdapterExecutionService {
                 .baseDir(baseDir)
                 .backendDir(backendDir)
                 .frontendDir(frontendDir)
-                .config(Map.of())
+                .config(new java.util.concurrent.ConcurrentHashMap<>())
                 .build();
 
         ScanTask task = taskRecorder.createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
@@ -204,7 +204,8 @@ public class AdapterExecutionService {
         // 使用实际发现的总数作为进度统计的 totalItems
         int progressTotal = discoveredCount > 0 ? discoveredCount : total;
         taskRecorder.logProgress(task, 0, progressTotal, "adapter candidate files", null);
-        int maxConcurrency = Math.max(1, Integer.getInteger("legacy-graph.scan.adapter-concurrency", 8));
+        // 统一并发配置：默认 16（与 ProjectScanner 保持一致）
+        int maxConcurrency = Math.max(1, Integer.getInteger("legacy-graph.scan.adapter-concurrency", 16));
         Semaphore semaphore = new Semaphore(maxConcurrency);
         AtomicInteger visited = new AtomicInteger(0);
         AtomicInteger processed = new AtomicInteger(0);

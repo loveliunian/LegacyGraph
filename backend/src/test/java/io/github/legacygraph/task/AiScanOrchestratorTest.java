@@ -301,7 +301,7 @@ class AiScanOrchestratorTest {
                 .thenReturn(List.of());
 
         FeatureMappingAgent.MappingResult mapping = new FeatureMappingAgent.MappingResult();
-        when(featureMappingAgent.mapFeatures(any())).thenReturn(mapping);
+        lenient().when(featureMappingAgent.mapFeatures(any())).thenReturn(mapping);
 
         GeneratedTestCase gc = new GeneratedTestCase();
         gc.setCaseName("下单-正常");
@@ -346,15 +346,12 @@ class AiScanOrchestratorTest {
 
         GraphNode page = node(NodeType.Page.name(), "page:/order", "订单页", 0.9);
         GraphNode api = node(NodeType.ApiEndpoint.name(), "api:/order", "下单接口", 0.9);
+        GraphNode feature = node(NodeType.Feature.name(), "feature:订单提交", "订单提交", 0.9);
         when(documentRepository.selectList(any())).thenReturn(List.of());
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), any(), any(), any(), anyInt()))
                 .thenReturn(List.of(page));
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt()))
                 .thenReturn(List.of(api));
-        when(neo4jGraphDao.findNode(eq("proj-1"), eq("v1"), eq(NodeType.Page.name()), eq("page:/order")))
-                .thenReturn(java.util.Optional.of(page));
-        when(neo4jGraphDao.findNode(eq("proj-1"), eq("v1"), eq(NodeType.ApiEndpoint.name()), eq("api:/order")))
-                .thenReturn(java.util.Optional.of(api));
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), isNull(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
         // 新增步骤：runCodeExtract 查询 Service/Controller（返回空，跳过代码抽取）
@@ -362,9 +359,9 @@ class AiScanOrchestratorTest {
                 any(), any(), any(), anyInt())).thenReturn(List.of());
         lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Controller.name()),
                 any(), any(), any(), anyInt())).thenReturn(List.of());
-        // 新增步骤：runFeatureCodeMapping 查询 Feature/Table/Service/Mapper（返回空，跳过）
+        // Feature 节点作为功能映射的边起点（businessAction=订单提交 按 nodeName 解析到该节点）
         lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
-                any(), any(), any(), anyInt())).thenReturn(List.of());
+                any(), any(), any(), anyInt())).thenReturn(List.of(feature));
         lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.BusinessObject.name()),
                 any(), any(), any(), anyInt())).thenReturn(List.of());
         lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Table.name()),
@@ -387,14 +384,22 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
+        // 一条映射（同时含 pageKey+apiKey）落地为 2 条边：
+        // Feature IMPLEMENTED_BY ApiEndpoint + Feature EXPOSED_BY Page，起点均为 Feature
         ArgumentCaptor<GraphEdgeClaim> claimCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(evidenceGraphWriter).upsertEdge(claimCaptor.capture());
-        GraphEdgeClaim claim = claimCaptor.getValue();
-        assertEquals(page.getId(), claim.getFromNodeId());
-        assertEquals(api.getId(), claim.getToNodeId());
-        assertEquals(EdgeType.CALLS.name(), claim.getEdgeType());
-        assertEquals("AI_FEATURE_MAPPING", claim.getSourceType());
-        assertEquals("PENDING_CONFIRM", claim.getStatus());
+        verify(evidenceGraphWriter, times(2)).upsertEdge(claimCaptor.capture());
+        List<GraphEdgeClaim> claims = claimCaptor.getAllValues();
+        assertTrue(claims.stream().allMatch(c -> feature.getId().equals(c.getFromNodeId())));
+        assertTrue(claims.stream().allMatch(c -> "AI_FEATURE_MAPPING".equals(c.getSourceType())));
+        assertTrue(claims.stream().allMatch(c -> "PENDING_CONFIRM".equals(c.getStatus())));
+        // Feature → ApiEndpoint（IMPLEMENTED_BY）
+        assertTrue(claims.stream().anyMatch(c ->
+                EdgeType.IMPLEMENTED_BY.name().equals(c.getEdgeType())
+                        && api.getId().equals(c.getToNodeId())));
+        // Feature → Page（EXPOSED_BY）
+        assertTrue(claims.stream().anyMatch(c ->
+                EdgeType.EXPOSED_BY.name().equals(c.getEdgeType())
+                        && page.getId().equals(c.getToNodeId())));
 
         ArgumentCaptor<ReviewRecord> reviewCaptor = ArgumentCaptor.forClass(ReviewRecord.class);
         verify(reviewRecordRepository).insert(reviewCaptor.capture());
@@ -453,9 +458,11 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
-        ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
-        verify(factRepository, times(7)).upsert(factCaptor.capture());
-        List<String> factTypes = factCaptor.getAllValues().stream().map(Fact::getFactType).toList();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Fact>> factsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(factRepository, atLeastOnce()).batchUpsert(factsCaptor.capture());
+        List<String> factTypes = factsCaptor.getAllValues().stream()
+                .flatMap(List::stream).map(Fact::getFactType).toList();
         assertTrue(factTypes.contains("BUSINESS_DOMAIN"));
         assertTrue(factTypes.contains("BUSINESS_PROCESS"));
         assertTrue(factTypes.contains("BUSINESS_OBJECT"));
@@ -523,9 +530,10 @@ class AiScanOrchestratorTest {
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
         // 验证：CODE_FEATURE 事实已保存，sourceType=CODE_AI
-        ArgumentCaptor<Fact> factCaptor = ArgumentCaptor.forClass(Fact.class);
-        verify(factRepository, atLeastOnce()).upsert(factCaptor.capture());
-        List<Fact> codeFacts = factCaptor.getAllValues().stream()
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Fact>> factsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(factRepository, atLeastOnce()).batchUpsert(factsCaptor.capture());
+        List<Fact> codeFacts = factsCaptor.getAllValues().stream().flatMap(List::stream)
                 .filter(f -> "CODE_FEATURE".equals(f.getFactType()))
                 .toList();
         assertFalse(codeFacts.isEmpty(), "Should persist at least one CODE_FEATURE fact");

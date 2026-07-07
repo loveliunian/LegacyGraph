@@ -74,4 +74,28 @@ public class SystemOverviewIngestController {
         SystemOverviewIngestResult result = ingestService.ingestBuiltins(projectId, versionId);
         return Result.success(result);
     }
+
+    /**
+     * 基于当前项目真实扫描图谱生成系统关系总览。
+     * <p>
+     * 从 Neo4j 图谱回溯 ApiEndpoint → Controller → Service → Table 调用链，组装四层关系写入 Claim。
+     * 与 {@code ingest-builtins}（LegacyGraph 自身硬编码）不同，数据完全来自当前项目扫描结果。
+     * </p>
+     */
+    @PostMapping("/ingest-from-graph")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "从当前项目图谱生成系统关系总览",
+            description = "回溯当前项目 API 调用链（Controller/Service/Table）生成四层关系 Claim，供总览动态投影。")
+    public Result<SystemOverviewIngestResult> ingestFromGraph(
+            @Parameter(description = "项目ID", required = true)
+            @RequestParam String projectId,
+            @Parameter(description = "扫描版本ID（默认 default）", required = false)
+            @RequestParam(required = false) String versionId) {
+
+        if (projectId == null || projectId.isBlank()) {
+            return Result.badRequest("projectId is required");
+        }
+        SystemOverviewIngestResult result = ingestService.ingestFromProjectGraph(projectId, versionId);
+        return Result.success(result);
+    }
 }

@@ -34,6 +34,7 @@ import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
 import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 import io.github.legacygraph.service.scan.DatabaseMetadataScanService;
+import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -90,6 +91,7 @@ public class ProjectScanner {
     private final GraphifyImportService graphifyImportService;
     private ScanScopeResolver scanScopeResolver;
     private AssetDiscoveryService assetDiscoveryService;
+    private SystemOverviewDocumentService systemOverviewDocumentService;
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -222,6 +224,11 @@ public class ProjectScanner {
                                  AssetDiscoveryService assetDiscoveryService) {
         this.scanScopeResolver = scanScopeResolver;
         this.assetDiscoveryService = assetDiscoveryService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSystemOverviewDocumentService(SystemOverviewDocumentService systemOverviewDocumentService) {
+        this.systemOverviewDocumentService = systemOverviewDocumentService;
     }
 
     /**
@@ -388,43 +395,64 @@ public class ProjectScanner {
                 }
             }
 
-            // === 0. 自动发现：数据库连接、子路径、文档 ===
-            log.info("Scan still running: projectId={}, versionId={}, phase=DISCOVERY, detail=starting auto-discovery phase",
+            // === 0. 自动发现：数据库连接、子路径、文档（并行化优化） ===
+            log.info("Scan still running: projectId={}, versionId={}, phase=DISCOVERY, detail=starting parallel auto-discovery phase",
                     projectId, versionId);
 
-            // 0a. 从代码中自动发现数据库连接配置
-            ScanTask dbDiscoveryTask = createTask(projectId, versionId, "DB_DISCOVERY", "数据库连接自动发现");
-            int dbCount = discoverDbConnections(projectId, baseDir, dbDiscoveryTask);
-            completeTask(dbDiscoveryTask, "Discovered " + dbCount + " database connections", null);
-            log.info("Auto-discovered {} database connections", dbCount);
-
-            if (isCancelled(versionId)) return;
-
-            // 0b. 自动检测前后端子路径，回填 CodeRepo
-            ScanTask pathDiscoveryTask = createTask(projectId, versionId, "PATH_DISCOVERY", "前后端路径自动检测");
-            int pathCount = discoverSubPaths(projectId, baseDir);
-            completeTask(pathDiscoveryTask, "Updated " + pathCount + " repo sub-paths", null);
-            log.info("Auto-detected sub-paths for {} repos", pathCount);
-
-            if (isCancelled(versionId)) return;
-
-            // 0c. 自动发现文档文件（仅在未指定 scanTypes 或包含 DOC_PARSE 时执行）
+            // 并行执行三个独立的发现阶段：DB_DISCOVERY / PATH_DISCOVERY / DOC_DISCOVERY
             boolean shouldScanDocs = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("DOC_PARSE");
-            if (shouldScanDocs) {
-                ScanTask docDiscoveryTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
-                int docCount = attachPlanDocuments(projectId, versionId, resolvedPlan);
-                if (baseDir != null && !baseDir.isBlank()) {
-                    int maxDocs = resolvedPlan != null ? resolvedPlan.getMaxDocs() : 50;
-                    docCount += discoverDocuments(projectId, versionId, baseDir, docDiscoveryTask, maxDocs);
+
+            final ScanTask dbDiscoveryTask = createTask(projectId, versionId, "DB_DISCOVERY", "数据库连接自动发现");
+            final ScanTask pathDiscoveryTask = createTask(projectId, versionId, "PATH_DISCOVERY", "前后端路径自动检测");
+            final ScanTask docDiscoveryTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
+            final String discoveryBaseDir = baseDir;
+
+            // 并行执行三阶段
+            java.util.concurrent.Future<Integer> dbDiscoveryFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                if (isCancelled(versionId)) return 0;
+                int count = discoverDbConnections(projectId, discoveryBaseDir, dbDiscoveryTask);
+                completeTask(dbDiscoveryTask, "Discovered " + count + " database connections", null);
+                log.info("Auto-discovered {} database connections", count);
+                return count;
+            });
+
+            java.util.concurrent.Future<Integer> pathDiscoveryFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                if (isCancelled(versionId)) return 0;
+                int count = discoverSubPaths(projectId, discoveryBaseDir);
+                completeTask(pathDiscoveryTask, "Updated " + count + " repo sub-paths", null);
+                log.info("Auto-detected sub-paths for {} repos", count);
+                return count;
+            });
+
+            java.util.concurrent.Future<Integer> docDiscoveryFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                if (isCancelled(versionId)) return 0;
+                if (shouldScanDocs) {
+                    int docCount = attachPlanDocuments(projectId, versionId, resolvedPlan);
+                    if (discoveryBaseDir != null && !discoveryBaseDir.isBlank()) {
+                        int maxDocs = resolvedPlan != null ? resolvedPlan.getMaxDocs() : 50;
+                        docCount += discoverDocuments(projectId, versionId, discoveryBaseDir, docDiscoveryTask, maxDocs);
+                    }
+                    completeTask(docDiscoveryTask, "Discovered " + docCount + " documents", null);
+                    log.info("Auto-discovered {} documents", docCount);
+                    return docCount;
+                } else {
+                    log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=skipped (DOC_PARSE not in scanTypes)",
+                            projectId, versionId);
+                    completeTask(docDiscoveryTask, "未选择文档扫描类型，已跳过", null, "SKIPPED");
+                    return 0;
                 }
-                completeTask(docDiscoveryTask, "Discovered " + docCount + " documents", null);
-                log.info("Auto-discovered {} documents", docCount);
-            } else {
-                log.info("Scan still running: projectId={}, versionId={}, phase=DOC_DISCOVERY, detail=skipped (DOC_PARSE not in scanTypes)",
-                        projectId, versionId);
-                ScanTask skippedDocTask = createTask(projectId, versionId, "DOC_DISCOVERY", "文档自动发现");
-                completeTask(skippedDocTask, "未选择文档扫描类型，已跳过", null, "SKIPPED");
+            });
+
+            // 等待所有发现阶段完成（最多 60 秒超时）
+            try {
+                dbDiscoveryFuture.get(60, java.util.concurrent.TimeUnit.SECONDS);
+                pathDiscoveryFuture.get(60, java.util.concurrent.TimeUnit.SECONDS);
+                docDiscoveryFuture.get(60, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (java.util.concurrent.ExecutionException e) {
+                log.warn("Parallel discovery phase failed: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+            } catch (java.util.concurrent.TimeoutException e) {
+                log.warn("Parallel discovery phase timed out after 60s");
             }
 
             if (isCancelled(versionId)) return;
@@ -485,34 +513,50 @@ public class ProjectScanner {
                 List<DbConnection> dbConnections = dbConnectionSnapshot;
 
                 if (!dbConnections.isEmpty()) {
-                    log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=scanning {} databases",
+                    log.info("Scan still running: projectId={}, versionId={}, phase=DATABASE_SCAN, detail=scanning {} databases in parallel",
                             projectId, versionId, dbConnections.size());
                     ScanTask dbTask = createTask(projectId, versionId, "DATABASE_SCAN", "数据库元数据扫描");
-                    int totalTables = 0;
-                    int processedConnections = 0;
+                    
+                    // 并行扫描多个数据库连接
+                    java.util.concurrent.atomic.AtomicInteger totalTables = new java.util.concurrent.atomic.AtomicInteger(0);
+                    java.util.concurrent.atomic.AtomicInteger processedConnections = new java.util.concurrent.atomic.AtomicInteger(0);
                     logTaskProgress(dbTask, 0, dbConnections.size(), "database connections");
-                    for (DbConnection conn : dbConnections) {
-                        if (isCancelled(versionId)) break;
-                        // === 自动纠偏：dbType 与 port 不匹配时修正 ===
-                        autoCorrectDbTypeAndPort(conn);
+                    
+                    java.util.List<java.util.concurrent.CompletableFuture<Void>> futures = dbConnections.stream()
+                            .map(conn -> java.util.concurrent.CompletableFuture.runAsync(() -> {
+                                if (isCancelled(versionId)) return;
+                                // === 自动纠偏：dbType 与 port 不匹配时修正 ===
+                                autoCorrectDbTypeAndPort(conn);
+                                try {
+                                    DataSource dataSource = createDataSource(conn);
+                                    int maxDbTables = resolvedPlan != null ? resolvedPlan.getMaxDbTables() : 0;
+                                    int tables = scanDatabaseMetadata(projectId, versionId, dataSource, conn, maxDbTables);
+                                    totalTables.addAndGet(tables);
+                                } catch (Exception e) {
+                                    log.warn("Failed to scan database connection id={} host={}:{}/{} dbType={}: {}",
+                                            conn.getId(), conn.getHost(), conn.getPort(),
+                                            conn.getDatabaseName(), conn.getDbType(), e.getMessage());
+                                } finally {
+                                    int processed = processedConnections.incrementAndGet();
+                                    logTaskProgress(dbTask, processed, dbConnections.size(), "database connections");
+                                }
+                            }))
+                            .toList();
+                    
+                    // 等待所有数据库扫描完成
+                    for (java.util.concurrent.Future<Void> future : futures) {
                         try {
-                            DataSource dataSource = createDataSource(conn);
-                            int maxDbTables = resolvedPlan != null ? resolvedPlan.getMaxDbTables() : 0;
-                            totalTables += scanDatabaseMetadata(projectId, versionId, dataSource, conn, maxDbTables);
+                            future.get();
                         } catch (Exception e) {
-                            log.warn("Failed to scan database connection id={} host={}:{}/{} dbType={}: {}",
-                                    conn.getId(), conn.getHost(), conn.getPort(),
-                                    conn.getDatabaseName(), conn.getDbType(), e.getMessage());
-                        } finally {
-                            processedConnections++;
-                            logTaskProgress(dbTask, processedConnections, dbConnections.size(), "database connections");
+                            log.warn("Database scan future failed: {}", e.getMessage());
                         }
                     }
-                    completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables + " tables", null);
-                    log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables);
+                    
+                    completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables.get() + " tables", null);
+                    log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables.get());
 
                     // LLM 语义增强：异步执行，不阻塞扫描主流程
-                    if (totalTables > 0) {
+                    if (totalTables.get() > 0) {
                         // 标记 AI 增强为 PENDING
                         updateScanVersionAiStatus(versionId, "PENDING");
                         CompletableFuture.runAsync(() -> {
@@ -602,6 +646,7 @@ public class ProjectScanner {
             // 6. 扫描后 AI 编排
             // DOC_PARSE 未显式指定 AI 开关时默认开启 AI；显式 enableAi=false 必须被尊重。
             if (isCancelled(versionId)) return;
+            boolean aiEnabled = false;
             try {
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=starting",
                         projectId, versionId);
@@ -612,7 +657,8 @@ public class ProjectScanner {
                         aiEnableDefault,
                         aiAutoGenerateTestCaseDefault,
                         aiMinConfidenceDefault);
-                if (aiConfig.isEnableAi()) {
+                aiEnabled = aiConfig.isEnableAi();
+                if (aiEnabled) {
                     aiScanOrchestrator.enqueue(projectId, versionId, aiConfig);
                 } else {
                     aiScanOrchestrator.recordSkipped(projectId, versionId);
@@ -627,12 +673,22 @@ public class ProjectScanner {
             if (version != null) {
                 // 最终检查：如果在 AI 编排期间被取消，不要覆盖 DB 中的 CANCELLED
                 if (!isCancelled(versionId)) {
-                    version.setScanStatus("SUCCESS");
+                    // 如果有 AI 任务（enqueue 已执行），版本状态由 AiScanJobWorker 在 AI 完成后更新
+                    // 这样总耗时才能包含 AI 编排时间
+                    if (aiEnabled) {
+                        version.setScanStatus("RUNNING");
+                        log.info("Scan base phase done, version stays RUNNING until AI completes: versionId={}", versionId);
+                    } else {
+                        version.setScanStatus("SUCCESS");
+                        version.setFinishedAt(LocalDateTime.now());
+                    }
                 }
-                version.setFinishedAt(LocalDateTime.now());
                 // 回写节点/边/事实/子任务统计快照，供列表接口零 IO 读取
                 applyStatsSnapshot(version, projectId, versionId);
                 scanVersionRepository.updateById(version);
+            }
+            if (!aiEnabled && !isCancelled(versionId)) {
+                generateSystemOverviewDocument(projectId, versionId);
             }
 
             // 扫描完成汇总：输出 Neo4j 节点数，快速判断图谱是否有数据
@@ -780,6 +836,19 @@ public class ProjectScanner {
             version.setStatsUpdatedAt(LocalDateTime.now());
         } catch (Exception e) {
             log.warn("applyStatsSnapshot unexpected failure versionId={}: {}", versionId, e.getMessage());
+        }
+    }
+
+    void generateSystemOverviewDocument(String projectId, String versionId) {
+        if (systemOverviewDocumentService == null) {
+            log.debug("SystemOverviewDocumentService not available, skip markdown generation: versionId={}", versionId);
+            return;
+        }
+        try {
+            systemOverviewDocumentService.generateAfterScan(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("Failed to generate system overview markdown after scan: versionId={}, error={}",
+                    versionId, e.getMessage());
         }
     }
 
@@ -1486,7 +1555,7 @@ public class ProjectScanner {
                 .baseDir(baseDir)
                 .backendDir(backendDir)
                 .frontendDir(frontendDir)
-                .config(Map.of())
+                .config(new java.util.concurrent.ConcurrentHashMap<>())
                 .build();
 
         if (assetDiscoveryService != null) {

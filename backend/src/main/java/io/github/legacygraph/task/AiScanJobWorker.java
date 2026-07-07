@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.entity.AiScanJob;
 import io.github.legacygraph.repository.AiScanJobRepository;
+import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +26,7 @@ public class AiScanJobWorker {
     private final ObjectMapper objectMapper;
     private final ProjectScanner projectScanner;
     private final io.github.legacygraph.repository.ScanVersionRepository scanVersionRepository;
+    private SystemOverviewDocumentService systemOverviewDocumentService;
 
     public AiScanJobWorker(AiScanJobRepository aiScanJobRepository,
                            AiScanOrchestrator aiScanOrchestrator,
@@ -35,6 +38,11 @@ public class AiScanJobWorker {
         this.objectMapper = objectMapper;
         this.projectScanner = projectScanner;
         this.scanVersionRepository = scanVersionRepository;
+    }
+
+    @Autowired(required = false)
+    void setSystemOverviewDocumentService(SystemOverviewDocumentService systemOverviewDocumentService) {
+        this.systemOverviewDocumentService = systemOverviewDocumentService;
     }
 
     /**
@@ -73,13 +81,18 @@ public class AiScanJobWorker {
             log.info("AI scan job completed: jobId={}", job.getId());
             
             // AI 任务完成后，刷新 ScanVersion 的统计数据（节点/边/事实数量）
+            // 并更新版本的 finishedAt 和状态，确保总耗时包含 AI 编排时间
             try {
                 io.github.legacygraph.entity.ScanVersion version = scanVersionRepository.selectById(job.getVersionId());
                 if (version != null) {
                     projectScanner.applyStatsSnapshot(version, job.getProjectId(), job.getVersionId());
+                    // 更新版本的完成时间和状态
+                    version.setFinishedAt(LocalDateTime.now());
+                    version.setScanStatus("SUCCESS");
                     scanVersionRepository.updateById(version);
-                    log.info("ScanVersion stats refreshed after AI job: versionId={}, nodeCount={}", 
-                            job.getVersionId(), version.getNodeCount());
+                    log.info("ScanVersion updated after AI job: versionId={}, nodeCount={}, finishedAt={}", 
+                            job.getVersionId(), version.getNodeCount(), version.getFinishedAt());
+                    generateSystemOverviewDocument(job.getProjectId(), job.getVersionId());
                 }
             } catch (Exception statEx) {
                 log.warn("Failed to refresh ScanVersion stats after AI job: versionId={}, error={}", 
@@ -105,6 +118,20 @@ public class AiScanJobWorker {
         } catch (Exception e) {
             log.warn("Failed to parse AI scan job config, using defaults: {}", e.getMessage());
             return new AiScanConfig();
+        }
+    }
+
+    private void generateSystemOverviewDocument(String projectId, String versionId) {
+        if (systemOverviewDocumentService == null) {
+            log.debug("SystemOverviewDocumentService not available, skip AI completion markdown generation: versionId={}",
+                    versionId);
+            return;
+        }
+        try {
+            systemOverviewDocumentService.generateAfterScan(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("Failed to generate system overview markdown after AI completion: versionId={}, error={}",
+                    versionId, e.getMessage());
         }
     }
 }

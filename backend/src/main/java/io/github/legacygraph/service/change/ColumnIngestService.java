@@ -67,12 +67,11 @@ public class ColumnIngestService {
             if (patch.getFilePath() == null || patch.getPatchText() == null) continue;
             if (!patch.getFilePath().endsWith(".sql")) continue;
             Matcher m = ALTER_ADD_PATTERN.matcher(patch.getPatchText());
-            if (m.find()) {
+            while (m.find()) {
                 String tableName = m.group(1);
                 String columnName = m.group(2);
                 String columnType = m.group(3).trim();
                 ingestAddedColumn(projectId, versionId, tableName, columnName, columnType);
-                return;
             }
         }
         log.warn("ColumnIngest: no ALTER TABLE ADD COLUMN found in plan patches for project {}", projectId);

@@ -18,7 +18,7 @@
           <el-option
             v-for="item in versions"
             :key="item.id"
-            :label="item.createdAt + ' - ' + item.nodeCount + '节点 ' + item.edgeCount + '关系'"
+            :label="formatTime(item.createdAt) + ' - ' + item.nodeCount + '节点 ' + item.edgeCount + '关系'"
             :value="item.id"
           />
         </el-select>
@@ -341,6 +341,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import dayjs from 'dayjs'
 import {
   Connection,
   Refresh,
@@ -568,6 +569,11 @@ function normalizeStatusGroup(status?: string): string {
   if (value === 'PENDING_CONFIRM' || value === 'PENDING') return 'pending'
   if (value === 'REJECTED') return 'rejected'
   return status || ''
+}
+
+function formatTime(time: string): string {
+  if (!time) return '-'
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
 function resetFilters() {

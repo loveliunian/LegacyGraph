@@ -41,6 +41,19 @@ public class EnhancedQaController {
     public SseEmitter askStream(@RequestBody QaStreamRequest request) {
         SseEmitter emitter = new SseEmitter(120_000L);
         
+        // 校验必填参数
+        if (request.getProjectId() == null || request.getProjectId().isBlank()) {
+            try {
+                emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter.event()
+                    .name("error")
+                    .data("{\"message\":\"projectId 不能为空\"}"));
+                emitter.complete();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+            return emitter;
+        }
+        
         // 异步执行（使用受控 TaskExecutor，替代裸线程）
         taskExecutor.execute(() -> enhancedQaAgent.answerStream(
             request.getProjectId(),
@@ -49,7 +62,7 @@ public class EnhancedQaController {
             request.getConversationId(),
             emitter
         ));
-
+        
         return emitter;
     }
 

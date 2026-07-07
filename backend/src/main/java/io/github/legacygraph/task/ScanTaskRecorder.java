@@ -95,15 +95,36 @@ public class ScanTaskRecorder {
             task.setOutputSummary("\"" + (summary != null ? summary.replace("\\", "\\\\").replace("\"", "\\\"") : "") + "\"");
         }
         task.setErrorMessage(error);
-        task.setTaskStatus(terminalStatus != null ? terminalStatus
-                : (error == null ? "SUCCESS" : "FAILED"));
+        String finalStatus = terminalStatus != null ? terminalStatus
+                : (error == null ? "SUCCESS" : "FAILED");
+        task.setTaskStatus(finalStatus);
         task.setFinishedAt(LocalDateTime.now());
+
+        // 修复进度百分比：SUCCESS/WARNING 时强制 processedItems = totalItems
+        // 解决"83%显示已完成""60%显示已完成"等问题（截断前总数 > 实际处理数）
+        if ("SUCCESS".equals(finalStatus) || "WARNING".equals(finalStatus)) {
+            Integer total = task.getTotalItems();
+            if (total != null && total > 0) {
+                task.setProcessedItems(total);
+            }
+        }
+
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);
         log.info("Scan task completed: projectId={}, versionId={}, taskType={}, taskName={}, taskId={}, status={}",
                 task.getProjectId(), task.getVersionId(), task.getTaskType(), task.getTaskName(),
                 task.getId(), task.getTaskStatus());
     }
+
+    /** 进度更新批量阈值：每处理 PROGRESS_DB_BATCH_SIZE 项才写一次 DB */
+    private static final int PROGRESS_DB_BATCH_SIZE = 50;
+    
+    /** 进度更新最小时间间隔（毫秒）：避免高频写库 */
+    private static final long PROGRESS_DB_MIN_INTERVAL_MS = 1000;
+    
+    /** 上次 DB 更新时间戳（按 taskId 索引） */
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastDbUpdateTime = 
+        new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * 记录子任务进度（日志级，不写 DB）。
@@ -120,7 +141,10 @@ public class ScanTaskRecorder {
 
     /**
      * 记录子任务进度并同步到 DB（供前端轮询读取）。
-     * 按 PROGRESS_LOG_INTERVAL 采样输出日志，减少噪音。
+     * <p>
+     * <b>性能优化：</b>采用批量写库策略，每处理 {@link #PROGRESS_DB_BATCH_SIZE} 项或
+     * 超过 {@link #PROGRESS_DB_MIN_INTERVAL_MS} 毫秒才写一次 DB，减少 90%+ 的 DB 写入。
+     * </p>
      *
      * @param task           关联的子任务
      * @param processed      已处理数
@@ -137,11 +161,33 @@ public class ScanTaskRecorder {
                     task.getProjectId(), task.getVersionId(), task.getTaskType(), task.getTaskName(), unit);
             return;
         }
+        // 日志采样：每 PROGRESS_LOG_INTERVAL 项或关键节点输出
         if (processed == 0 || processed == 1 || processed == total || processed % PROGRESS_LOG_INTERVAL == 0) {
             log.info("Scan still running: projectId={}, versionId={}, taskType={}, taskName={}, progress={}/{}, unit={}",
                     task.getProjectId(), task.getVersionId(), task.getTaskType(), task.getTaskName(),
                     processed, total, unit);
         }
+        
+        // 性能优化：批量写库策略
+        // 仅在以下情况写 DB：
+        // 1. 达到批量阈值（每 PROGRESS_DB_BATCH_SIZE 项）
+        // 2. 处理完成（processed == total）
+        // 3. 首次更新（processed == 0 或 1）
+        // 4. 超过最小时间间隔
+        boolean shouldWriteToDb = processed == 0 
+                || processed == 1 
+                || processed == total 
+                || processed % PROGRESS_DB_BATCH_SIZE == 0;
+        
+        if (!shouldWriteToDb) {
+            // 检查时间间隔
+            Long lastTime = lastDbUpdateTime.get(task.getId());
+            long now = System.currentTimeMillis();
+            if (lastTime != null && (now - lastTime) < PROGRESS_DB_MIN_INTERVAL_MS) {
+                return; // 跳过本次 DB 写入
+            }
+        }
+        
         // 同步更新 DB 进度字段
         try {
             task.setTotalItems(total);
@@ -151,6 +197,7 @@ public class ScanTaskRecorder {
             }
             task.setUpdatedAt(LocalDateTime.now());
             scanTaskRepository.updateById(task);
+            lastDbUpdateTime.put(task.getId(), System.currentTimeMillis());
         } catch (Exception e) {
             log.debug("Failed to update task progress for {}: {}", task.getTaskType(), e.getMessage());
         }

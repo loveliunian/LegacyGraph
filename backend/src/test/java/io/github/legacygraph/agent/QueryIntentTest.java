@@ -37,5 +37,15 @@ class QueryIntentTest {
     void structuralAndRelational_requirePlanner() {
         assertTrue(QueryIntent.STRUCTURAL.requiresPlanner());
         assertTrue(QueryIntent.RELATIONAL.requiresPlanner());
+        assertTrue(QueryIntent.FACT_LOOKUP.requiresPlanner());
+        assertTrue(QueryIntent.COMPARATIVE.requiresPlanner());
+    }
+
+    @Test
+    void factLookupAndComparative_requirePlanner() {
+        assertTrue(QueryIntent.FACT_LOOKUP.requiresPlanner(),
+                "FACT_LOOKUP 走 GraphRAG Planner 获取结构化事实检索");
+        assertTrue(QueryIntent.COMPARATIVE.requiresPlanner(),
+                "COMPARATIVE 走 GraphRAG Planner 支持跨版本对比");
     }
 }

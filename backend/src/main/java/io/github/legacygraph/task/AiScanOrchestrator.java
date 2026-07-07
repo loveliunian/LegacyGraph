@@ -34,12 +34,14 @@ import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.service.scan.DocumentContentService;
 import io.github.legacygraph.service.graph.GapFinderService;
+import io.github.legacygraph.service.system.CacheService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import io.github.legacygraph.service.qa.VectorizationService;
 import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -48,12 +50,15 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -131,20 +136,36 @@ public class AiScanOrchestrator {
     /** 向量化分片参数 */
     private static final int VECTOR_CHUNK_SIZE = 2000;
     private static final int VECTOR_OVERLAP = 200;
+    /** LLM 功能映射每批 Feature 数：一次性喂全量 Feature 会导致 LLM 输出截断返回 0 条，分批调用。 */
+    private static final int FEATURE_MAPPING_BATCH_SIZE = 80;
     /** 当前使用的 embedding 模型名 */
     private static final String EMBEDDING_MODEL_NAME = "bge-m3";
 
+    /** LLM 抽取结果缓存 TTL（按内容哈希缓存；未改动的文档/代码重扫时复用，跳过 LLM 调用） */
+    private static final Duration LLM_CACHE_TTL = Duration.ofDays(7);
+
     private final ExecutorService docExtractExecutor = Executors.newFixedThreadPool(DOC_EXTRACT_PARALLELISM);
+    /** 代码抽取独立线程池：与文档抽取并发执行（DOC/CODE 独立，各自 4 线程，峰值 8 路 LLM） */
+    private final ExecutorService codeExtractExecutor = Executors.newFixedThreadPool(DOC_EXTRACT_PARALLELISM);
+
+    /** LLM 抽取缓存（Redis，可选；测试环境为 null 时降级为直调 LLM） */
+    @Autowired(required = false)
+    private CacheService cacheService;
 
     @PreDestroy
     public void shutdown() {
         docExtractExecutor.shutdown();
+        codeExtractExecutor.shutdown();
         try {
             if (!docExtractExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
                 docExtractExecutor.shutdownNow();
             }
+            if (!codeExtractExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                codeExtractExecutor.shutdownNow();
+            }
         } catch (InterruptedException e) {
             docExtractExecutor.shutdownNow();
+            codeExtractExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
@@ -215,6 +236,20 @@ public class AiScanOrchestrator {
         job.setUpdatedAt(LocalDateTime.now());
         aiScanJobRepository.insert(job);
         log.info("AI scan job enqueued: projectId={}, versionId={}, jobId={}", projectId, versionId, job.getId());
+
+        // 创建 AI_ORCHESTRATION 类型的 ScanTask（状态为 QUEUED）
+        // 让前端进度 API 能实时看到该阶段，避免显示为"已跳过"
+        ScanTask aiTask = scanTaskRecorder.createTask(projectId, versionId, "AI_ORCHESTRATION", "AI智能分析");
+        // 立即标记为 QUEUED（createTask 默认是 RUNNING）
+        aiTask.setTaskStatus("QUEUED");
+        aiTask.setUpdatedAt(LocalDateTime.now());
+        try {
+            scanTaskRepository.updateById(aiTask);
+        } catch (Exception e) {
+            log.warn("Failed to set AI_ORCHESTRATION task to QUEUED: {}", e.getMessage());
+        }
+        log.info("Created AI_ORCHESTRATION ScanTask (QUEUED): projectId={}, versionId={}, taskId={}",
+                projectId, versionId, aiTask.getId());
     }
 
     /**
@@ -236,7 +271,11 @@ public class AiScanOrchestrator {
                             BooleanSupplier isCancelled, String jobId) {
         if (config == null || !config.isEnableAi()) {
             log.info("AI orchestration skipped (enableAi=false): versionId={}", versionId);
-            ScanTask skipTask = createTask(projectId, versionId, "AI_ORCHESTRATION", "AI 编排");
+            // 尝试复用已创建的 AI_ORCHESTRATION task（由 enqueue() 创建）
+            ScanTask skipTask = findExistingAiOrchestrationTask(projectId, versionId);
+            if (skipTask == null) {
+                skipTask = createTask(projectId, versionId, "AI_ORCHESTRATION", "AI 编排");
+            }
             completeTask(skipTask,
                     "⚠ AI 编排已跳过：enableAi=false（未启用 AI 归纳）。"
                     + "业务图谱（业务域/流程/功能/对象/角色）将不会生成。"
@@ -255,15 +294,16 @@ public class AiScanOrchestrator {
         log.info("Starting AI orchestration: projectId={}, versionId={}, config={}",
                 projectId, versionId, config);
 
-        // 状态机：INIT → PARSE_FILES (doc extract)
+        // DOC_EXTRACT 与 CODE_EXTRACT 相互独立，并发执行以重叠耗时：
+        // doc 跑在异步线程（内部用 docExtractExecutor），code 跑在当前线程（内部用 codeExtractExecutor）。
+        // 注意不能把 runDocExtract/runCodeExtract 本身提交到其内部池——会占住池线程等子任务，造成饥饿。
         updateStep(jobId, ScanStep.INIT);
-        runDocExtract(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after doc extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
-
-        // PARSE_FILES → EXTRACT_FACTS (code extract)
-        updateStep(jobId, ScanStep.PARSE_FILES);
+        CompletableFuture<Void> docFuture = CompletableFuture.runAsync(
+                () -> runDocExtract(projectId, versionId));
         runCodeExtract(projectId, versionId);
-        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after code extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+        docFuture.join();
+        if (isCancelled != null && isCancelled.getAsBoolean()) { log.info("AI orchestration cancelled after doc/code extract: versionId={}", versionId); updateStep(jobId, ScanStep.FAILED); return; }
+        updateStep(jobId, ScanStep.PARSE_FILES);
 
         // EXTRACT_FACTS → BUILD_GRAPH (feature mapping)
         updateStep(jobId, ScanStep.EXTRACT_FACTS);
@@ -363,10 +403,12 @@ public class AiScanOrchestrator {
                     CompletableFuture.runAsync(() ->
                             vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content));
                     try {
-                        agentCallCounter.increment();
+                        String docContent = truncate(content, DOC_CONTENT_LIMIT);
                         DocUnderstandingAgent.BusinessFactExtraction extraction =
-                                docUnderstandingAgent.extractBusinessFacts(projectId,
-                                        truncate(content, DOC_CONTENT_LIMIT), doc.getFilePath());
+                                cachedExtract("doc", docContent, () -> {
+                                    agentCallCounter.increment();
+                                    return docUnderstandingAgent.extractBusinessFacts(projectId, docContent, doc.getFilePath());
+                                }, DocUnderstandingAgent.BusinessFactExtraction.class);
                         int count = persistBusinessFacts(projectId, versionId, doc, extraction);
                         factCount.addAndGet(count);
                         buildBusinessGraph(projectId, versionId, doc, extraction);
@@ -474,8 +516,10 @@ public class AiScanOrchestrator {
                     CompletableFuture.runAsync(() ->
                             vectorizeContent(projectId, versionId, "CODE", node.getSourcePath(), content));
                     try {
-                        FactExtractionResult result = codeFactAgent.extractFacts(
-                                projectId, truncate(content, CODE_CONTENT_LIMIT), node.getSourcePath());
+                        String codeContent = truncate(content, CODE_CONTENT_LIMIT);
+                        FactExtractionResult result = cachedExtract("code", codeContent,
+                                () -> codeFactAgent.extractFacts(projectId, codeContent, node.getSourcePath()),
+                                FactExtractionResult.class);
                         factCount.addAndGet(
                                 persistAndBuildCodeFacts(projectId, versionId, node, result));
                     } catch (Exception e) {
@@ -510,7 +554,7 @@ public class AiScanOrchestrator {
         if (result == null || result.getItems() == null || result.getItems().isEmpty()) {
             return 0;
         }
-        int count = 0;
+        List<Fact> facts = new ArrayList<>();
         DocUnderstandingAgent.BusinessFactExtraction bridge =
                 new DocUnderstandingAgent.BusinessFactExtraction();
         for (FactExtractionResult.FactItem item : result.getItems()) {
@@ -521,12 +565,11 @@ public class AiScanOrchestrator {
                     ? item.getConfidence().doubleValue() : 0.6;
             String key = item.getKey() != null && !item.getKey().isBlank()
                     ? item.getKey() : "code-feature:" + item.getName();
-            if (saveAiFact(projectId, versionId, "CODE_FEATURE", key, item.getName(),
-                    node.getSourcePath(), item, confidence, SourceType.CODE_AI.name())) {
-                count++;
-            }
+            addFact(facts, buildFact(projectId, versionId, "CODE_FEATURE", key, item.getName(),
+                    node.getSourcePath(), item, confidence, SourceType.CODE_AI.name()));
             bridge.getFeatures().add(item.getName());
         }
+        int count = saveAiFactsBatch(facts);
         // 复用 P0-B 的功能清单落图路径
         if (!bridge.getFeatures().isEmpty() && businessGraphBuilder != null) {
             try {
@@ -598,42 +641,34 @@ public class AiScanOrchestrator {
         if (extraction == null) {
             return 0;
         }
-        int count = 0;
+        // 收集本批次所有 Fact，一次性 batchUpsert（替代逐条 upsert 的远程 DB 往返）
+        List<Fact> facts = new ArrayList<>();
         if (extraction.getBusinessDomains() != null) {
             for (DocUnderstandingAgent.BusinessDomain domain : extraction.getBusinessDomains()) {
                 String key = "domain:" + nonBlank(domain.getName(), domain.getDescription());
-                if (saveAiFact(projectId, versionId, "BUSINESS_DOMAIN", key, domain.getName(),
-                        doc.getFilePath(), domain, domain.getConfidence(), SourceType.DOC_AI.name())) {
-                    count++;
-                }
+                addFact(facts, buildFact(projectId, versionId, "BUSINESS_DOMAIN", key, domain.getName(),
+                        doc.getFilePath(), domain, domain.getConfidence(), SourceType.DOC_AI.name()));
             }
         }
         if (extraction.getBusinessProcesses() != null) {
             for (DocUnderstandingAgent.BusinessProcess process : extraction.getBusinessProcesses()) {
                 String key = process.getKey() != null ? process.getKey()
                         : "process:" + process.getName();
-                double confidence = process.getConfidence();
-                if (saveAiFact(projectId, versionId, "BUSINESS_PROCESS", key, process.getName(),
-                        doc.getFilePath(), process, confidence, SourceType.DOC_AI.name())) {
-                    count++;
-                }
+                addFact(facts, buildFact(projectId, versionId, "BUSINESS_PROCESS", key, process.getName(),
+                        doc.getFilePath(), process, process.getConfidence(), SourceType.DOC_AI.name()));
             }
         }
         if (extraction.getBusinessObjects() != null) {
             for (DocUnderstandingAgent.BusinessObject obj : extraction.getBusinessObjects()) {
-                if (saveAiFact(projectId, versionId, "BUSINESS_OBJECT", "object:" + obj.getName(),
-                        obj.getName(), doc.getFilePath(), obj, obj.getConfidence(), SourceType.DOC_AI.name())) {
-                    count++;
-                }
+                addFact(facts, buildFact(projectId, versionId, "BUSINESS_OBJECT", "object:" + obj.getName(),
+                        obj.getName(), doc.getFilePath(), obj, obj.getConfidence(), SourceType.DOC_AI.name()));
             }
         }
         if (extraction.getBusinessRules() != null) {
             for (DocUnderstandingAgent.BusinessRule rule : extraction.getBusinessRules()) {
                 String key = "rule:" + nonBlank(rule.getName(), rule.getExpression());
-                if (saveAiFact(projectId, versionId, "BUSINESS_RULE", key, rule.getName(),
-                        doc.getFilePath(), rule, rule.getConfidence(), SourceType.DOC_AI.name())) {
-                    count++;
-                }
+                addFact(facts, buildFact(projectId, versionId, "BUSINESS_RULE", key, rule.getName(),
+                        doc.getFilePath(), rule, rule.getConfidence(), SourceType.DOC_AI.name()));
             }
         }
         if (extraction.getRoles() != null) {
@@ -641,10 +676,8 @@ public class AiScanOrchestrator {
                 if (role == null || role.isBlank()) {
                     continue;
                 }
-                if (saveAiFact(projectId, versionId, "BUSINESS_ROLE", "role:" + role,
-                        role, doc.getFilePath(), role, 0.7, SourceType.DOC_AI.name())) {
-                    count++;
-                }
+                addFact(facts, buildFact(projectId, versionId, "BUSINESS_ROLE", "role:" + role,
+                        role, doc.getFilePath(), role, 0.7, SourceType.DOC_AI.name()));
             }
         }
         if (extraction.getStatusTransitions() != null) {
@@ -656,10 +689,8 @@ public class AiScanOrchestrator {
                 String name = nonBlank(transition.getBusinessObject(), "对象") + " "
                         + nonBlank(transition.getFromStatus(), "?") + " -> "
                         + nonBlank(transition.getToStatus(), "?");
-                if (saveAiFact(projectId, versionId, "STATUS_TRANSITION", key, name,
-                        doc.getFilePath(), transition, transition.getConfidence(), SourceType.DOC_AI.name())) {
-                    count++;
-                }
+                addFact(facts, buildFact(projectId, versionId, "STATUS_TRANSITION", key, name,
+                        doc.getFilePath(), transition, transition.getConfidence(), SourceType.DOC_AI.name()));
             }
         }
         if (extraction.getFeatures() != null) {
@@ -667,13 +698,11 @@ public class AiScanOrchestrator {
                 if (feature == null || feature.isBlank()) {
                     continue;
                 }
-                if (saveAiFact(projectId, versionId, "FEATURE", "feature:" + feature,
-                        feature, doc.getFilePath(), feature, 0.7, SourceType.DOC_AI.name())) {
-                    count++;
-                }
+                addFact(facts, buildFact(projectId, versionId, "FEATURE", "feature:" + feature,
+                        feature, doc.getFilePath(), feature, 0.7, SourceType.DOC_AI.name()));
             }
         }
-        return count;
+        return saveAiFactsBatch(facts);
     }
 
     private void buildBusinessGraph(String projectId, String versionId, Document doc,
@@ -699,34 +728,64 @@ public class AiScanOrchestrator {
     private void runFeatureMapping(String projectId, String versionId) {
         ScanTask task = createTask(projectId, versionId, "AI_FEATURE_MAPPING", "功能映射对齐");
         try {
-            // 收集已有 Feature 节点作为映射锚点，避免 LLM 凭空生成映射
+            // 收集全部 Feature / Page / ApiEndpoint 节点（limit=0 表示不限）
             List<GraphNode> features = neo4jGraphDao.queryNodes(projectId, versionId,
-                    NodeType.Feature.name(), null, null, null, 100);
-            // 收集前端页面节点与后端 API 节点作为映射输入
+                    NodeType.Feature.name(), null, null, null, 0);
             List<GraphNode> pages = neo4jGraphDao.queryNodes(projectId, versionId,
-                    NodeType.Page.name(), null, null, null, 50);
+                    NodeType.Page.name(), null, null, null, 0);
             List<GraphNode> apis = neo4jGraphDao.queryNodes(projectId, versionId,
-                    NodeType.ApiEndpoint.name(), null, null, null, 50);
+                    NodeType.ApiEndpoint.name(), null, null, null, 0);
 
             if (pages.isEmpty() && apis.isEmpty()) {
                 completeTask(task, "无可映射的页面/接口节点，跳过", null);
                 return;
             }
 
-            FeatureMappingAgent.MappingRequest request = new FeatureMappingAgent.MappingRequest();
-            request.setProjectId(projectId);
-            request.setVueCode(summarizeNodes(pages));
-            request.setApiDefinitions(summarizeNodes(apis));
-            request.setControllerCode("");
-            request.setPermissionInfo("");
-            // 将已有 Feature 节点作为产品文档上下文传入，让 LLM 以 Feature 为锚点做映射
-            request.setProductDoc(features.isEmpty() ? "" : "已有功能点:\n" + summarizeNodes(features));
+            // 构建 nodeKey / nodeName(小写) → 节点 的查找表，落地时按 LLM 返回的 key 或 name 解析
+            Map<String, GraphNode> featureMap = buildNodeIndex(features);
+            Map<String, GraphNode> pageMap = buildNodeIndex(pages);
+            Map<String, GraphNode> apiMap = buildNodeIndex(apis);
 
-            FeatureMappingAgent.MappingResult result = featureMappingAgent.mapFeatures(request);
-            int mappingCount = result != null && result.getMappings() != null
-                    ? result.getMappings().size() : 0;
-            int persistedCount = persistFeatureMappings(projectId, versionId, result);
-            completeTask(task, "AI 生成功能映射 " + mappingCount + " 条，落地待确认关系/审核 " + persistedCount + " 条", null);
+            // 分批调 LLM：一次性喂全量 Feature 会导致 LLM 输出截断（实测 347 个一次喂返回 0 条）。
+            // 每批只放 FEATURE_MAPPING_BATCH_SIZE 个 Feature 作为映射锚点，Page/API 作为目标全量传入。
+            String pageSummary = summarizeNodes(pages);
+            String apiSummary = summarizeNodes(apis);
+            // 分批并发调 LLM（复用 docExtractExecutor，此时 doc/code 抽取已结束、池空闲），
+            // 避免顺序 5 批把耗时拉长。结果用 AtomicInteger 累加。
+            AtomicInteger totalMappings = new AtomicInteger(0);
+            AtomicInteger totalPersisted = new AtomicInteger(0);
+            AtomicInteger batches = new AtomicInteger(0);
+            List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
+            for (int i = 0; i < features.size(); i += FEATURE_MAPPING_BATCH_SIZE) {
+                List<GraphNode> batch = features.subList(i,
+                        Math.min(i + FEATURE_MAPPING_BATCH_SIZE, features.size()));
+                batchFutures.add(CompletableFuture.runAsync(() -> {
+                    FeatureMappingAgent.MappingRequest request = new FeatureMappingAgent.MappingRequest();
+                    request.setProjectId(projectId);
+                    request.setVueCode(pageSummary);
+                    request.setApiDefinitions(apiSummary);
+                    request.setControllerCode("");
+                    request.setPermissionInfo("");
+                    request.setProductDoc("已有功能点:\n" + summarizeNodes(batch));
+                    try {
+                        FeatureMappingAgent.MappingResult result = featureMappingAgent.mapFeatures(request);
+                        int mappingCount = result != null && result.getMappings() != null
+                                ? result.getMappings().size() : 0;
+                        int persisted = persistFeatureMappings(projectId, versionId, result,
+                                featureMap, pageMap, apiMap);
+                        totalMappings.addAndGet(mappingCount);
+                        totalPersisted.addAndGet(persisted);
+                        int b = batches.incrementAndGet();
+                        log.info("AI feature mapping batch {}: {} mappings, {} edges persisted",
+                                b, mappingCount, persisted);
+                    } catch (Exception e) {
+                        log.warn("AI feature mapping batch {} failed: {}", batches.get() + 1, e.getMessage());
+                    }
+                }, docExtractExecutor));
+            }
+            CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0])).join();
+            completeTask(task, "AI 生成功能映射 " + totalMappings.get() + " 条（" + batches.get()
+                    + " 批），落地 Feature→Page/API 边 " + totalPersisted.get() + " 条", null);
         } catch (Exception e) {
             log.error("AI_FEATURE_MAPPING failed: versionId={}", versionId, e);
             completeTask(task, null, e.getMessage());
@@ -734,7 +793,10 @@ public class AiScanOrchestrator {
     }
 
     private int persistFeatureMappings(String projectId, String versionId,
-                                       FeatureMappingAgent.MappingResult result) {
+                                       FeatureMappingAgent.MappingResult result,
+                                       Map<String, GraphNode> featureMap,
+                                       Map<String, GraphNode> pageMap,
+                                       Map<String, GraphNode> apiMap) {
         if (result == null || result.getMappings() == null) {
             return 0;
         }
@@ -744,55 +806,141 @@ public class AiScanOrchestrator {
                 continue;
             }
             try {
-                GraphEdge edge = createPendingFeatureEdge(projectId, versionId, mapping);
-                if (edge != null) {
-                    persisted++;
-                    if (createMappingReviewRecord(projectId, versionId, mapping, edge.getId())) {
-                        persisted++;
-                    }
+                List<GraphEdge> edges = createPendingFeatureEdges(projectId, versionId, mapping,
+                        featureMap, pageMap, apiMap);
+                if (!edges.isEmpty()) {
+                    persisted += edges.size();
+                    // 为首条边建审核记录（一条映射只产一条审核，避免噪声）
+                    createMappingReviewRecord(projectId, versionId, mapping, edges.get(0).getId());
                 } else {
-                    log.debug("Skipping review record: no edge created for mapping pageKey={} apiKey={}",
-                            mapping.getPageKey(), mapping.getApiKey());
+                    log.debug("No edge created for mapping businessAction={} pageKey={} apiKey={}",
+                            mapping.getBusinessAction(), mapping.getPageKey(), mapping.getApiKey());
                 }
             } catch (Exception e) {
                 log.warn("Failed to persist AI feature mapping edge: {}", e.getMessage());
             }
         }
+        // claim 草稿仍落库（审计/后续编译用）；direct 模式下边由上面直接写入 Neo4j
         upsertClaimDrafts(projectId, versionId,
                 featureMappingAgent.toClaimDrafts(projectId, versionId, result));
         return persisted;
     }
 
-    private GraphEdge createPendingFeatureEdge(String projectId, String versionId,
-                                               FeatureMappingAgent.Mapping mapping) throws Exception {
-        if (mapping.getPageKey() == null || mapping.getPageKey().isBlank()
-                || mapping.getApiKey() == null || mapping.getApiKey().isBlank()) {
-            return null;
+    /**
+     * 将一条 LLM 功能映射落地为 Feature→ApiEndpoint / Feature→Page 边。
+     * <p>修正原实现的三处问题：
+     * <ul>
+     *   <li>不再要求 pageKey 与 apiKey 同时存在——有 apiKey 就建 Feature IMPLEMENTED_BY ApiEndpoint，
+     *       有 pageKey 就建 Feature EXPOSED_BY Page（原实现缺一个就整条丢弃，导致 50 条映射落地 0 条）。</li>
+     *   <li>边起点改为 Feature 而非 Page（原实现建 Page CALLS ApiEndpoint，Feature 业务概念根本没被连上）。</li>
+     *   <li>Feature 节点按 nodeKey 与 nodeName 双重解析（Feature 的 nodeKey 来源不一：DOC_AI 用 "feature:"，
+     *       CODE_AI 用 "code-feature:"，LLM 返回的可能是 name 也可能是 key）。</li>
+     * </ul>
+     */
+    private List<GraphEdge> createPendingFeatureEdges(String projectId, String versionId,
+                                                      FeatureMappingAgent.Mapping mapping,
+                                                      Map<String, GraphNode> featureMap,
+                                                      Map<String, GraphNode> pageMap,
+                                                      Map<String, GraphNode> apiMap) throws Exception {
+        List<GraphEdge> created = new ArrayList<>();
+        // 解析 Feature：优先 businessAction，回退 apiKey/pageKey（LLM 偶尔不填 businessAction）
+        GraphNode feature = resolveNode(featureMap, mapping.getBusinessAction(), "feature:");
+        if (feature == null) {
+            feature = resolveNode(featureMap, mapping.getApiKey(), "feature:");
         }
-        GraphNode page = neo4jGraphDao.findNode(projectId, versionId, NodeType.Page.name(), mapping.getPageKey())
-                .orElse(null);
-        GraphNode api = neo4jGraphDao.findNode(projectId, versionId, NodeType.ApiEndpoint.name(), mapping.getApiKey())
-                .orElse(null);
-        if (page == null || api == null) {
-            return null;
+        if (feature == null) {
+            feature = resolveNode(featureMap, mapping.getPageKey(), "feature:");
+        }
+        if (feature == null) {
+            log.debug("Feature mapping dropped: feature not found for businessAction={}",
+                    mapping.getBusinessAction());
+            return created;
         }
 
-        String edgeKey = "ai-feature:" + mapping.getPageKey() + "->" + mapping.getApiKey();
+        BigDecimal confidence = BigDecimal.valueOf(normalizeConfidence(mapping.getConfidence()));
 
-        // 统一走 EvidenceGraphWriter：去重 + 证据继承 + 状态裁决
+        // Feature → ApiEndpoint（IMPLEMENTED_BY）
+        if (mapping.getApiKey() != null && !mapping.getApiKey().isBlank()) {
+            GraphNode api = resolveNode(apiMap, mapping.getApiKey(), null);
+            if (api != null) {
+                GraphEdge edge = upsertMappingEdge(projectId, versionId, feature, api,
+                        EdgeType.IMPLEMENTED_BY.name(),
+                        "ai-feature:" + feature.getNodeKey() + "->implemented_by->" + api.getNodeKey(),
+                        confidence, mapping);
+                if (edge != null) {
+                    created.add(edge);
+                }
+            }
+        }
+        // Feature → Page（EXPOSED_BY）
+        if (mapping.getPageKey() != null && !mapping.getPageKey().isBlank()) {
+            GraphNode page = resolveNode(pageMap, mapping.getPageKey(), null);
+            if (page != null) {
+                GraphEdge edge = upsertMappingEdge(projectId, versionId, feature, page,
+                        EdgeType.EXPOSED_BY.name(),
+                        "ai-feature:" + feature.getNodeKey() + "->exposed_by->" + page.getNodeKey(),
+                        confidence, mapping);
+                if (edge != null) {
+                    created.add(edge);
+                }
+            }
+        }
+        return created;
+    }
+
+    /** 构建 nodeKey + nodeName(小写) → 节点 的查找表，支持按 key 或 name 解析。 */
+    private Map<String, GraphNode> buildNodeIndex(List<GraphNode> nodes) {
+        Map<String, GraphNode> idx = new HashMap<>();
+        if (nodes == null) {
+            return idx;
+        }
+        for (GraphNode n : nodes) {
+            if (n.getNodeKey() != null && !n.getNodeKey().isBlank()) {
+                idx.putIfAbsent(n.getNodeKey(), n);
+            }
+            if (n.getNodeName() != null && !n.getNodeName().isBlank()) {
+                idx.putIfAbsent(n.getNodeName().toLowerCase(), n);
+            }
+        }
+        return idx;
+    }
+
+    /** 从查找表解析节点：先按原值（key），再按 prefix+原值（如 "feature:"+name），最后按小写 name。 */
+    private GraphNode resolveNode(Map<String, GraphNode> map, String keyOrName, String keyPrefix) {
+        if (map == null || map.isEmpty() || keyOrName == null || keyOrName.isBlank()) {
+            return null;
+        }
+        GraphNode n = map.get(keyOrName);
+        if (n != null) {
+            return n;
+        }
+        if (keyPrefix != null) {
+            n = map.get(keyPrefix + keyOrName);
+            if (n != null) {
+                return n;
+            }
+        }
+        return map.get(keyOrName.toLowerCase());
+    }
+
+    /** 统一走 EvidenceGraphWriter：去重 + 证据继承 + 状态裁决。 */
+    private GraphEdge upsertMappingEdge(String projectId, String versionId,
+                                        GraphNode from, GraphNode to,
+                                        String edgeType, String edgeKey,
+                                        BigDecimal confidence,
+                                        FeatureMappingAgent.Mapping mapping) throws Exception {
         GraphEdgeClaim claim = GraphEdgeClaim.builder()
                 .projectId(projectId)
                 .versionId(versionId)
-                .fromNodeId(page.getId())
-                .toNodeId(api.getId())
-                .edgeType(EdgeType.CALLS.name())
+                .fromNodeId(from.getId())
+                .toNodeId(to.getId())
+                .edgeType(edgeType)
                 .edgeKey(edgeKey)
                 .sourceType("AI_FEATURE_MAPPING")
-                .confidence(BigDecimal.valueOf(normalizeConfidence(mapping.getConfidence())))
+                .confidence(confidence)
                 .status("PENDING_CONFIRM")
                 .properties(objectMapper.writeValueAsString(mapping))
                 .build();
-
         return evidenceGraphWriter.upsertEdge(claim);
     }
 
@@ -1003,9 +1151,10 @@ public class AiScanOrchestrator {
         }
     }
 
-    private boolean saveAiFact(String projectId, String versionId, String factType, String factKey,
-                               String factName, String sourcePath, Object data, double confidence,
-                               String sourceType) {
+    /** 构建 Fact（不落库）；序列化失败返回 null。供单条 saveAiFact 与批量 saveAiFactsBatch 复用。 */
+    private Fact buildFact(String projectId, String versionId, String factType, String factKey,
+                           String factName, String sourcePath, Object data, double confidence,
+                           String sourceType) {
         try {
             Fact fact = new Fact();
             fact.setId(UUID.randomUUID().toString());
@@ -1023,11 +1172,47 @@ public class AiScanOrchestrator {
             fact.setCreatedBy("ai-orchestrator");
             fact.setCreatedAt(LocalDateTime.now());
             fact.setUpdatedAt(LocalDateTime.now());
+            return fact;
+        } catch (Exception e) {
+            log.warn("Failed to build AI fact {}: {}", factKey, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 单条 upsert（保留给非批量场景）；批量请用 saveAiFactsBatch。 */
+    private boolean saveAiFact(String projectId, String versionId, String factType, String factKey,
+                               String factName, String sourcePath, Object data, double confidence,
+                               String sourceType) {
+        Fact fact = buildFact(projectId, versionId, factType, factKey, factName,
+                sourcePath, data, confidence, sourceType);
+        if (fact == null) {
+            return false;
+        }
+        try {
             factRepository.upsert(fact);
             return true;
         } catch (Exception e) {
             log.warn("Failed to save AI fact {}: {}", factKey, e.getMessage());
             return false;
+        }
+    }
+
+    /** 批量 upsert：单次 DB 往返替代逐条 upsert。返回受影响行数。 */
+    private int saveAiFactsBatch(List<Fact> facts) {
+        if (facts == null || facts.isEmpty()) {
+            return 0;
+        }
+        try {
+            return factRepository.batchUpsert(facts);
+        } catch (Exception e) {
+            log.warn("Failed to batch save {} AI facts: {}", facts.size(), e.getMessage());
+            return 0;
+        }
+    }
+
+    private void addFact(List<Fact> facts, Fact fact) {
+        if (fact != null) {
+            facts.add(fact);
         }
     }
 
@@ -1066,6 +1251,31 @@ public class AiScanOrchestrator {
         return s.length() <= max ? s : s.substring(0, max);
     }
 
+    /**
+     * LLM 抽取结果按内容哈希缓存：同一内容（文档/代码未改动）重扫时复用，跳过 LLM 调用。
+     * cacheService 不可用（测试环境）或内容为空时直调 loader。
+     */
+    private <T> T cachedExtract(String type, String content, java.util.function.Supplier<T> loader, Class<T> resultType) {
+        if (cacheService == null || content == null || content.isBlank()) {
+            return loader.get();
+        }
+        return cacheService.getOrLoad("llm:" + type + ":" + sha256(content), resultType, LLM_CACHE_TTL, loader);
+    }
+
+    private static String sha256(String s) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(s.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(s.hashCode());
+        }
+    }
+
     private String mappingTargetId(FeatureMappingAgent.Mapping mapping) {
         return nonBlank(mapping.getPageKey(), "-") + "->" + nonBlank(mapping.getApiKey(), "-");
     }
@@ -1079,6 +1289,23 @@ public class AiScanOrchestrator {
             return 0.7;
         }
         return Math.min(1.0, Math.max(0.0, confidence));
+    }
+
+    /**
+     * 查找已存在的 AI_ORCHESTRATION 类型的 ScanTask（由 enqueue() 预创建）。
+     */
+    private ScanTask findExistingAiOrchestrationTask(String projectId, String versionId) {
+        try {
+            LambdaQueryWrapper<ScanTask> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(ScanTask::getProjectId, projectId)
+                    .eq(ScanTask::getVersionId, versionId)
+                    .eq(ScanTask::getTaskType, "AI_ORCHESTRATION")
+                    .last("LIMIT 1");
+            return scanTaskRepository.selectOne(wrapper);
+        } catch (Exception e) {
+            log.warn("Failed to find existing AI_ORCHESTRATION task: {}", e.getMessage());
+            return null;
+        }
     }
 
     private ScanTask createTask(String projectId, String versionId, String taskType, String taskName) {

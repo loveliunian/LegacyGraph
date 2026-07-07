@@ -67,7 +67,7 @@ public class GraphRagPlannerAgent {
      * @return GraphRagPlan 查询计划，包含子问题、Claim 过滤、路径查询与所需证据类型
      */
     public GraphRagPlan plan(String projectId, String question,
-                             List<KnowledgeClaim> relevantClaims) {
+                             List<KnowledgeClaim> relevantClaims, QueryIntent intent) {
         // 1. 防御性校验
         if (question == null || question.isBlank()) {
             log.warn("GraphRagPlannerAgent: empty question for projectId={}", projectId);
@@ -78,7 +78,7 @@ public class GraphRagPlannerAgent {
         AgentEnvelope<PlanInput> envelope = buildEnvelope(projectId, question, relevantClaims);
 
         // 3. 构建 Prompt 变量
-        Map<String, String> variables = buildVariables(question, relevantClaims);
+        Map<String, String> variables = buildVariables(question, relevantClaims, intent);
 
         // 4. 调用 LLM
         GraphRagPlan plan;
@@ -155,11 +155,15 @@ public class GraphRagPlannerAgent {
      * <p>将 question 与 KnowledgeClaim 摘要注入模板占位符。</p>
      */
     private Map<String, String> buildVariables(String question,
-                                               List<KnowledgeClaim> relevantClaims) {
+                                               List<KnowledgeClaim> relevantClaims,
+                                               QueryIntent intent) {
         Map<String, String> vars = new HashMap<>();
         vars.put("question", question);
         vars.put("claims", claimsToJson(relevantClaims));
         vars.put("claimCount", String.valueOf(relevantClaims != null ? relevantClaims.size() : 0));
+        if (intent != null) {
+            vars.put("intent", intent.name());
+        }
         return vars;
     }
 

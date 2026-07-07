@@ -6,6 +6,7 @@ import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -36,12 +37,21 @@ public class SystemOverviewService {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /** 自身分析项目标识：仅该项目在无 Claim 数据时才回退到内置（LegacyGraph 自身）映射。 */
+    private static final String SELF_PROJECT_ID = "self";
+
     /**
      * 全量四层关系总览。
      * <p>
      * M2 修复：优先从 lg_knowledge_claim 动态投影，无 Claim 数据时回退到内置映射。
      * </p>
+     * <p>
+     * 性能：结论性总览低频变更，结果缓存到 Redis（cacheNames=system-overview），
+     * 写入侧（{@code SystemOverviewIngestService.ingest}）显式失效，短 TTL 兜底防漏失效。
+     * </p>
      */
+    @Cacheable(cacheNames = "system-overview",
+            key = "#projectId + ':' + (#versionId != null ? #versionId : 'default')")
     public SystemOverviewDTO getOverview(String projectId, String versionId) {
         List<LayerMappingDTO> mappings = buildDynamicMappings(projectId, versionId);
         int totalDomains = (int) mappings.stream()
@@ -124,6 +134,11 @@ public class SystemOverviewService {
         sb.append("\n> 核心链路：BusinessDomain CONTAINS Feature EXPOSED_BY ApiEndpoint HANDLED_BY Controller ");
         sb.append("IMPLEMENTED_BY Service CALLS Mapper EXECUTES SqlStatement READS/WRITES Table HAS_COLUMN Column\n");
 
+        sb.append("\n## 4. QA 文档基础\n\n");
+        sb.append("- 本报告沉淀资料扫描后的业务/功能/代码/数据关系，可作为后续 QA 文档生成的事实基础。\n");
+        sb.append("- QA 文档应优先引用业务域、功能、Controller/API、代码模块、数据表与核心贯穿链路。\n");
+        sb.append("- 对未覆盖或低置信关系，应回到 Claim、证据或图谱查询确认，避免把推断写成已确认事实。\n");
+
         return sb.toString();
     }
 
@@ -143,7 +158,7 @@ public class SystemOverviewService {
 
             if (claims == null || claims.isEmpty()) {
                 log.debug("No claims found for projectId={}, falling back to builtin mappings", projectId);
-                return buildBuiltinMappings();
+                return fallbackMappings(projectId);
             }
 
             claims = claims.stream()
@@ -151,7 +166,7 @@ public class SystemOverviewService {
                     .collect(Collectors.toList());
             if (claims.isEmpty()) {
                 log.debug("No usable overview claims found for projectId={}, falling back to builtin mappings", projectId);
-                return buildBuiltinMappings();
+                return fallbackMappings(projectId);
             }
 
             // 按 subjectKey 聚合
@@ -242,7 +257,7 @@ public class SystemOverviewService {
 
             if (mappings.isEmpty()) {
                 log.debug("Dynamic projection yielded no mappings, falling back to builtin");
-                return buildBuiltinMappings();
+                return fallbackMappings(projectId);
             }
 
             log.info("Dynamic projection: {} mappings from {} claims", mappings.size(), claims.size());
@@ -250,11 +265,28 @@ public class SystemOverviewService {
 
         } catch (Exception e) {
             log.warn("Failed to build dynamic mappings, falling back to builtin: {}", e.getMessage());
-            return buildBuiltinMappings();
+            return fallbackMappings(projectId);
         }
     }
 
     // ──────────── 内置映射（对齐 02 §0.1，确定性，CODE 来源）────────────
+
+    /**
+     * 无 Claim 数据时的回退策略。
+     * <p>
+     * 内置映射（{@link #buildBuiltinMappings()}）描述的是 LegacyGraph 自身结构，
+     * 仅对自身分析项目（{@value #SELF_PROJECT_ID}）有意义。其他真实业务项目在尚未
+     * 生成/导入系统关系总览数据时，返回空列表 —— 避免把本项目（LegacyGraph 自身）
+     * 的结构误当作当前项目的结论展示给用户。
+     * </p>
+     */
+    private List<LayerMappingDTO> fallbackMappings(String projectId) {
+        if (SELF_PROJECT_ID.equals(projectId)) {
+            return buildBuiltinMappings();
+        }
+        log.debug("Project {} has no system-overview data, returning empty (no self-builtin fallback)", projectId);
+        return Collections.emptyList();
+    }
 
     private List<LayerMappingDTO> buildBuiltinMappings() {
         return Arrays.asList(

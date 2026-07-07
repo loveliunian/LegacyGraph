@@ -30,6 +30,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -733,16 +735,24 @@ public class ReportingService {
             throw new IllegalArgumentException("Report not found: " + reportId);
         }
 
-        // 委托给 ReportExportService
-        ReportExportService.ReportType reportType = switch (report.getReportType()) {
-            case "MIGRATION_READINESS" -> ReportExportService.ReportType.MIGRATION_READINESS;
-            case "CONFIDENCE_TREND" -> ReportExportService.ReportType.CONFIDENCE_TREND;
-            case "TEST_COVERAGE" -> ReportExportService.ReportType.TEST_COVERAGE;
-            case "GRAPH_QUALITY" -> ReportExportService.ReportType.GRAPH_QUALITY;
-            default -> throw new IllegalArgumentException("Unknown report type: " + report.getReportType());
-        };
+        if (isMarkdown(format) && report.getFilePath() != null && !report.getFilePath().isBlank()) {
+            Path reportPath = Path.of(report.getFilePath());
+            if (Files.isRegularFile(reportPath)) {
+                return Files.readAllBytes(reportPath);
+            }
+            log.debug("Report filePath is not a local file, fallback to dynamic export: {}", report.getFilePath());
+        }
 
-        ReportExportService.ExportFormat exportFormat = switch (format.toUpperCase()) {
+        // 委托给 ReportExportService
+        ReportExportService.ReportType reportType;
+        try {
+            reportType = ReportExportService.ReportType.valueOf(report.getReportType());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown report type: " + report.getReportType(), e);
+        }
+
+        String normalizedFormat = format == null || format.isBlank() ? "MD" : format;
+        ReportExportService.ExportFormat exportFormat = switch (normalizedFormat.toUpperCase()) {
             case "MD", "MARKDOWN" -> ReportExportService.ExportFormat.MD;
             case "PDF" -> ReportExportService.ExportFormat.PDF;
             case "EXCEL", "XLSX" -> ReportExportService.ExportFormat.EXCEL;
@@ -750,6 +760,12 @@ public class ReportingService {
         };
 
         return reportExportService.exportReport(report.getProjectId(), report.getVersionId(), reportType, exportFormat);
+    }
+
+    private boolean isMarkdown(String format) {
+        return format == null || format.isBlank()
+                || "MD".equalsIgnoreCase(format)
+                || "MARKDOWN".equalsIgnoreCase(format);
     }
 
     /**

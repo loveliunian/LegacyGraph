@@ -133,6 +133,39 @@ public class KnowledgeClaimService {
     }
 
     /**
+     * 分页查询 Claim 列表。
+     */
+    public com.baomidou.mybatisplus.extension.plugins.pagination.Page<KnowledgeClaim> listClaimsPaged(
+            String projectId, String versionId,
+            String subjectType, String predicate,
+            String status, String sourceType,
+            int pageNum, int pageSize) {
+        LambdaQueryWrapper<KnowledgeClaim> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(KnowledgeClaim::getProjectId, projectId);
+        if (versionId != null && !versionId.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getVersionId, versionId);
+        }
+        if (subjectType != null && !subjectType.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getSubjectType, subjectType);
+        }
+        if (predicate != null && !predicate.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getPredicate, predicate);
+        }
+        if (status != null && !status.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getStatus, status);
+        }
+        if (sourceType != null && !sourceType.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getSourceType, sourceType);
+        }
+        wrapper.orderByDesc(KnowledgeClaim::getConfidence);
+
+        return claimRepository.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(pageNum, pageSize),
+                wrapper
+        );
+    }
+
+    /**
      * 按 subjectKey 精准查询 Claim（GraphRAG Claim 查询专用）。
      * <p>
      * 与 {@link #listClaims} 的区别：以 subjectKey 集合为驱动，DB 层用 IN 过滤，

@@ -18,6 +18,7 @@ import io.github.legacygraph.integration.graphify.GraphifyImportService;
 import io.github.legacygraph.integration.graphify.GraphifyRunResult;
 import io.github.legacygraph.integration.graphify.GraphifyRunner;
 import io.github.legacygraph.repository.*;
+import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -77,6 +78,7 @@ class ProjectScannerFullFlowTest {
     @Mock private ExtractionAdapter vueAdapter;
     @Mock private GraphifyRunner graphifyRunner;
     @Mock private GraphifyImportService graphifyImportService;
+    @Mock private SystemOverviewDocumentService systemOverviewDocumentService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private ProjectScanner scanner;
@@ -109,6 +111,7 @@ class ProjectScannerFullFlowTest {
                 graphifyRunner,
                 graphifyImportService
         );
+        scanner.setSystemOverviewDocumentService(systemOverviewDocumentService);
 
         // 默认 mock 行为
         lenient().when(scanTaskRepository.insert(any(ScanTask.class))).thenAnswer(inv -> {
@@ -387,6 +390,9 @@ class ProjectScannerFullFlowTest {
 
         // ===== 验证 8: ScanVersion 被持久化 =====
         verify(scanVersionRepository).updateById(version);
+
+        // ===== 验证 9: 扫描成功后生成用户可下载的系统关系总结 Markdown =====
+        verify(systemOverviewDocumentService).generateAfterScan(PROJECT_ID, VERSION_ID);
     }
 
     @Test
@@ -420,6 +426,7 @@ class ProjectScannerFullFlowTest {
 
         // Graphify 不应被调用（扫描在 DB_DISCOVERY 检查点后提前返回）
         verify(graphifyRunner, never()).run(any());
+        verify(systemOverviewDocumentService, never()).generateAfterScan(anyString(), anyString());
     }
 
     @Test

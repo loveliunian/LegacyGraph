@@ -53,7 +53,8 @@ export interface KnowledgeClaimQuery {
   predicate?: string
   status?: string
   sourceType?: string
-  limit?: number
+  pageNum?: number
+  pageSize?: number
 }
 
 export interface GapTaskQuery {
@@ -61,7 +62,16 @@ export interface GapTaskQuery {
   gapType?: string
   status?: string
   severity?: string
-  limit?: number
+  pageNum?: number
+  pageSize?: number
+}
+
+export interface PageResult<T> {
+  list: T[]
+  total: number
+  pageNum: number
+  pageSize: number
+  totalPages: number
 }
 
 export const knowledgeApi = {

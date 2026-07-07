@@ -755,8 +755,14 @@ public class LlmGateway {
                         callback.onError(error);
                     },
                     () -> {
-                        callback.onComplete(fullResponse.toString());
-                        log.info("Stream completed, total length: {}", fullResponse.length());
+                        String finalText = fullResponse.toString().trim();
+                        if (finalText.isEmpty()) {
+                            log.error("Stream completed but response is empty (possible rate limit or API error)");
+                            callback.onError(new LlmCallException("LLM 返回空响应，可能触发了 API 限流，请稍后重试", null, false, null));
+                        } else {
+                            callback.onComplete(fullResponse.toString());
+                            log.info("Stream completed, total length: {}", fullResponse.length());
+                        }
                     }
             );
         } catch (Exception e) {

@@ -105,7 +105,7 @@ class EnhancedQaAgentTest {
     }
 
     @Test
-    void streamAnswer_usesHydeInHybridRetrievalAndDoesNotPlanFactLookup() {
+    void streamAnswer_usesHydeInHybridRetrievalAndDoesPlanFactLookup() {
         stubConversationContext();
         when(semanticCache.get("proj-1", "OrderService 有哪些方法？")).thenReturn(null);
         when(intentClassifier.classify(eq("proj-1"), anyString(), anyList()))
@@ -114,6 +114,17 @@ class EnhancedQaAgentTest {
                 .thenReturn(List.of("OrderService method list"));
         when(hydeGenerator.generateHypotheticalDocument("proj-1", "OrderService 有哪些方法？"))
                 .thenReturn("OrderService exposes createOrder and cancelOrder methods.");
+
+        KnowledgeClaim claim = new KnowledgeClaim();
+        claim.setSubjectKey("OrderService");
+        claim.setObjectKey("方法列表");
+        when(knowledgeClaimService.listClaims("proj-1", "v1", null, null, null, null, 200))
+                .thenReturn(List.of(claim));
+        GraphRagPlan plan = GraphRagPlan.builder().needsHumanReview(false).build();
+        when(plannerAgent.plan("proj-1", "OrderService 有哪些方法？", List.of(claim), QueryIntent.FACT_LOOKUP))
+                .thenReturn(plan);
+        when(planExecutor.execute(eq("proj-1"), eq("v1"), any(), any()))
+                .thenReturn(GraphRagExecutionResult.builder().build());
 
         VectorDocument doc = new VectorDocument();
         doc.setId(1L);
@@ -141,7 +152,7 @@ class EnhancedQaAgentTest {
                 eq("proj-1"), eq("v1"), eq("OrderService 有哪些方法？"), variantsCaptor.capture(), eq(20));
         assertTrue(variantsCaptor.getValue().contains("OrderService method list"));
         assertTrue(variantsCaptor.getValue().contains("OrderService exposes createOrder and cancelOrder methods."));
-        verify(plannerAgent, never()).plan(anyString(), anyString(), anyList());
+        verify(plannerAgent).plan("proj-1", "OrderService 有哪些方法？", List.of(claim), QueryIntent.FACT_LOOKUP);
     }
 
     @Test
@@ -180,7 +191,7 @@ class EnhancedQaAgentTest {
         when(knowledgeClaimService.listClaims("proj-1", "v1", null, null, null, null, 200))
                 .thenReturn(List.of(claim));
         GraphRagPlan plan = GraphRagPlan.builder().needsHumanReview(false).build();
-        when(plannerAgent.plan("proj-1", "订单创建涉及哪些表？", List.of(claim))).thenReturn(plan);
+        when(plannerAgent.plan("proj-1", "订单创建涉及哪些表？", List.of(claim), QueryIntent.STRUCTURAL)).thenReturn(plan);
         when(planExecutor.execute(eq("proj-1"), eq("v1"), any(), any()))
                 .thenReturn(GraphRagExecutionResult.builder().build());
         when(hybridRetrievalService.retrieve(eq("proj-1"), eq("v1"), anyString(), anyList(), eq(20)))
@@ -197,7 +208,7 @@ class EnhancedQaAgentTest {
         agent.answerStream("proj-1", "v1", "订单创建涉及哪些表？", null, new RecordingSseEmitter());
 
         verify(knowledgeClaimService).listClaims("proj-1", "v1", null, null, null, null, 200);
-        verify(plannerAgent).plan("proj-1", "订单创建涉及哪些表？", List.of(claim));
+        verify(plannerAgent).plan("proj-1", "订单创建涉及哪些表？", List.of(claim), QueryIntent.STRUCTURAL);
     }
 
     private void stubConversation() {

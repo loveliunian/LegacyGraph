@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -34,9 +35,22 @@ public class FeatureModuleAdapter implements ExtractionAdapter {
     @Override
     public boolean supports(ScanContext context, SourceAsset asset) {
         String path = asset.getRelativePath();
-        if (path == null || !path.endsWith("index.vue")) return false;
-        // 仅在 views/xxx/index.vue 或 pages/xxx/index.vue 时触发，避免重复扫描
-        return path.matches(".*(/views/|/pages/)[^/]+/index\\.vue$");
+        if (path == null) return false;
+        // Vue：views/<module>/index.vue 或 pages/<module>/index.vue
+        if (path.endsWith("index.vue") && path.matches(".*(/views/|/pages/)[^/]+/index\\.vue$")) {
+            return true;
+        }
+        // Legacy HTML 前端：src/main/html 下的 .js 触发目录级扫描
+        // （.html 未被 isAdapterCandidate 收录，借已发现的 .js 资产作触发；extract 内按 html 根目录去重）
+        if (path.endsWith(".js") && path.contains("src/main/html/")) {
+            return true;
+        }
+        // 兼容：若后续将 .html 纳入候选，顶层 .html 也可触发
+        if ((path.endsWith(".html") || path.endsWith(".htm"))
+                && path.matches(".*src/main/html/[^/]+\\.(html|htm)$")) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -45,6 +59,10 @@ public class FeatureModuleAdapter implements ExtractionAdapter {
             // 确定前端根目录
             Path frontendRoot = resolveFrontendRoot(context, asset);
             if (frontendRoot == null || !Files.exists(frontendRoot)) {
+                return ExtractionResult.builder().processedAssets(0).build();
+            }
+            // 同一前端根目录只扫一次（多个顶层 .html / 多个 index.vue 都会触发 supports）
+            if (!markRootScanned(context, frontendRoot)) {
                 return ExtractionResult.builder().processedAssets(0).build();
             }
 
@@ -78,7 +96,8 @@ public class FeatureModuleAdapter implements ExtractionAdapter {
     }
 
     /**
-     * 从当前 asset 路径推断前端根目录
+     * 从当前 asset 路径推断前端根目录。
+     * Vue（src/views|pages）返回项目根；Legacy HTML（src/main/html）返回 html 目录本身。
      */
     private Path resolveFrontendRoot(ScanContext context, SourceAsset asset) {
         if (context.getFrontendDir() != null) {
@@ -90,6 +109,7 @@ public class FeatureModuleAdapter implements ExtractionAdapter {
         }
         String normalized = path.replace('\\', '/');
         String[] segments = normalized.split("/");
+        // Vue: src/views 或 src/pages —— 返回项目根（src 的父目录）
         for (int i = 0; i < segments.length - 1; i++) {
             boolean isFrontendSource = "src".equals(segments[i])
                     && i + 1 < segments.length
@@ -103,7 +123,39 @@ public class FeatureModuleAdapter implements ExtractionAdapter {
                 return root;
             }
         }
+        // Legacy HTML: src/main/html —— 返回 html 目录本身
+        for (int i = 2; i < segments.length; i++) {
+            if ("html".equals(segments[i])
+                    && "main".equals(segments[i - 1]) && "src".equals(segments[i - 2])) {
+                Path htmlDir = asset.getFile().toAbsolutePath();
+                int levelsFromFileToHtml = segments.length - 1 - i;
+                for (int level = 0; level < levelsFromFileToHtml; level++) {
+                    htmlDir = htmlDir.getParent();
+                }
+                return htmlDir;
+            }
+        }
         return null;
+    }
+
+    /**
+     * 标记某前端根目录已扫描。返回 true 表示首次（应继续），false 表示已扫过（跳过，避免重复）。
+     * 退化：context 无 config 或 config 不可变时返回 true（不 dedup，结果仍幂等）。
+     */
+    @SuppressWarnings("unchecked")
+    private boolean markRootScanned(ScanContext context, Path root) {
+        Map<String, Object> cfg = context.getConfig();
+        if (cfg == null) {
+            return true;
+        }
+        try {
+            Set<Path> scanned = (Set<Path>) cfg.computeIfAbsent(
+                    "featureModule.scannedRoots",
+                    k -> java.util.concurrent.ConcurrentHashMap.newKeySet());
+            return scanned.add(root.toAbsolutePath().normalize());
+        } catch (UnsupportedOperationException e) {
+            return true;
+        }
     }
 
     @Override

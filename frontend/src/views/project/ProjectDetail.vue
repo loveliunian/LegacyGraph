@@ -24,6 +24,11 @@
             <span>项目概览</span>
           </el-menu-item>
 
+          <el-menu-item :index="`/projects/${projectId}/system-overview`">
+            <el-icon><Grid /></el-icon>
+            <span>系统关系总览</span>
+          </el-menu-item>
+
           <el-menu-item :index="`/projects/${projectId}/qa`">
             <el-icon><ChatDotRound /></el-icon>
             <span>QA 问答</span>
@@ -85,7 +90,8 @@ import {
   DocumentChecked,
   VideoPlay,
   Tools,
-  ChatDotRound
+  ChatDotRound,
+  Grid
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'

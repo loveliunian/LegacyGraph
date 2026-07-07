@@ -39,9 +39,9 @@ class SystemOverviewServiceTest {
 
     @Test
     void getOverview_returns12DomainsAnd5Paths() {
-        SystemOverviewDTO dto = service.getOverview("p1", "v1");
+        SystemOverviewDTO dto = service.getOverview("self", "v1");
 
-        assertEquals("p1", dto.getProjectId());
+        assertEquals("self", dto.getProjectId());
         assertEquals(12, dto.getMappings().size());
         assertEquals(5, dto.getCorePaths().size());
         assertEquals(12, dto.getTotalDomains());
@@ -49,7 +49,7 @@ class SystemOverviewServiceTest {
 
     @Test
     void getDomain_fuzzyMatchByCapability() {
-        List<LayerMappingDTO> rows = service.getDomain("p1", "v1", "QA");
+        List<LayerMappingDTO> rows = service.getDomain("self", "v1", "QA");
 
         assertFalse(rows.isEmpty());
         assertTrue(rows.stream().allMatch(m ->
@@ -58,13 +58,13 @@ class SystemOverviewServiceTest {
 
     @Test
     void getDomain_blankReturnsAll() {
-        List<LayerMappingDTO> rows = service.getDomain("p1", "v1", "");
+        List<LayerMappingDTO> rows = service.getDomain("self", "v1", "");
         assertEquals(12, rows.size());
     }
 
     @Test
     void generateMarkdown_containsKeySections() {
-        String md = service.generateMarkdown("p1", "v1");
+        String md = service.generateMarkdown("self", "v1");
 
         assertTrue(md.contains("系统关系总览报告"));
         assertTrue(md.contains("业务域映射总表"));

@@ -190,8 +190,9 @@ public class EnhancedQaAgent {
             if (intent.requiresPlanner()) {
                 try {
                     sendEvent(emitter, "thinking", Map.of("stage", "planning_graph_rag"));
-                    List<KnowledgeClaim> relevantClaims = loadRelevantClaims(projectId, versionId, question);
-                    plan = plannerAgent.plan(projectId, question, relevantClaims);
+                    String plannerVersionId = intent == QueryIntent.COMPARATIVE ? null : versionId;
+                    List<KnowledgeClaim> relevantClaims = loadRelevantClaims(projectId, plannerVersionId, question, intent);
+                    plan = plannerAgent.plan(projectId, question, relevantClaims, intent);
                     log.debug("GraphRAG plan generated: {} sub-questions", 
                         plan.getSubQuestions() != null ? plan.getSubQuestions().size() : 0);
 
@@ -542,8 +543,15 @@ public class EnhancedQaAgent {
         return ctx.toString();
     }
 
-    private List<KnowledgeClaim> loadRelevantClaims(String projectId, String versionId, String question) {
+    /**
+     * 加载与问题相关的 KnowledgeClaim，用于 GraphRAG 规划。
+     * <p>COMPARATIVE 意图时 versionId 传 null，拉取所有版本的 Claim 以支持跨版本对比。</p>
+     */
+    private List<KnowledgeClaim> loadRelevantClaims(String projectId, String versionId, String question, QueryIntent intent) {
         try {
+            if (intent == QueryIntent.COMPARATIVE) {
+                log.info("COMPARATIVE intent: loading all-version claims for cross-version comparison");
+            }
             // 先取较多样本，再按 query 相关性筛选
             List<KnowledgeClaim> allClaims = knowledgeClaimService.listClaims(
                 projectId, versionId, null, null, null, null, 200

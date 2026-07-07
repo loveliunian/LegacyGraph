@@ -54,9 +54,14 @@ export function getCorePaths(projectId: string, versionId?: string, from?: strin
   )
 }
 
-/** 一键导入内置事实底座（12 业务域映射 + 核心 FAQ） */
+/** 一键导入内置事实底座（12 业务域映射 + 核心 FAQ）—— 仅用于 LegacyGraph 自身（self） */
 export function ingestBuiltins(projectId = 'self', versionId?: string) {
   return post<IngestResult>('/lg/system-overview/ingest-builtins', {}, { params: { projectId, ...(versionId ? { versionId } : {}) } })
+}
+
+/** 基于当前项目真实扫描图谱生成系统关系总览（Controller/Service/Table 四层关系） */
+export function ingestFromGraph(projectId: string, versionId?: string) {
+  return post<IngestResult>('/lg/system-overview/ingest-from-graph', {}, { params: { projectId, ...(versionId ? { versionId } : {}) } })
 }
 
 /** 导出系统关系总览报告 */

@@ -59,7 +59,7 @@ class GraphRagPlannerAgentTest {
         claim.setSubjectKey("feature:订单创建");
         claim.setPredicate("HAS_API");
 
-        GraphRagPlan result = agent.plan("project-1", "订单创建流程", List.of(claim));
+        GraphRagPlan result = agent.plan("project-1", "订单创建流程", List.of(claim), QueryIntent.STRUCTURAL);
 
         assertNotNull(result);
         assertFalse(result.isNeedsHumanReview());
@@ -73,7 +73,7 @@ class GraphRagPlannerAgentTest {
      */
     @Test
     void planWithEmptyQuestion_returnsEmptyPlan() {
-        GraphRagPlan result = agent.plan("project-1", "   ", List.of());
+        GraphRagPlan result = agent.plan("project-1", "   ", List.of(), QueryIntent.STRUCTURAL);
 
         assertNotNull(result);
         assertTrue(result.isNeedsHumanReview());
@@ -90,7 +90,7 @@ class GraphRagPlannerAgentTest {
                 eq(GraphRagPlan.class)))
                 .thenThrow(new LlmCallException("调用失败", new RuntimeException("超时"), true, 1L));
 
-        GraphRagPlan result = agent.plan("project-1", "用户权限", List.of());
+        GraphRagPlan result = agent.plan("project-1", "用户权限", List.of(), QueryIntent.RELATIONAL);
 
         assertNotNull(result);
         assertTrue(result.isNeedsHumanReview());

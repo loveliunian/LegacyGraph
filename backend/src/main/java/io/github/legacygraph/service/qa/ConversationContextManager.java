@@ -32,9 +32,13 @@ public class ConversationContextManager {
      * 获取或创建对话会话
      */
     public QaConversation getOrCreateConversation(String projectId, String sessionId, String conversationId) {
+        if (projectId == null || projectId.isBlank()) {
+            throw new IllegalArgumentException("projectId 不能为空");
+        }
+
         if (conversationId != null && !conversationId.isBlank()) {
             QaConversation existing = conversationRepository.selectById(conversationId);
-            if (existing != null && existing.getProjectId().equals(projectId)) {
+            if (existing != null && projectId.equals(existing.getProjectId())) {
                 return existing;
             }
         }

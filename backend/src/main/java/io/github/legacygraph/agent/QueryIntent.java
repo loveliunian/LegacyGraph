@@ -33,7 +33,8 @@ public enum QueryIntent {
      * 是否需要使用 GraphRagPlanner
      */
     public boolean requiresPlanner() {
-        return this == STRUCTURAL || this == RELATIONAL;
+        return this == STRUCTURAL || this == RELATIONAL
+            || this == FACT_LOOKUP || this == COMPARATIVE;
     }
 
     /**

@@ -7,6 +7,7 @@ import io.github.legacygraph.dto.ReportInsight;
 import io.github.legacygraph.dto.report.GraphQualityReport;
 import io.github.legacygraph.dto.report.MigrationReadinessReport;
 import io.github.legacygraph.dto.report.TestCoverageReport;
+import io.github.legacygraph.entity.Report;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.TestCase;
@@ -22,6 +23,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -346,5 +350,52 @@ class ReportingServiceTest {
         verify(reportInsightAgent).generateInsights(eq("project-1"),
                 argThat(metrics -> metrics.contains("totalNodes=2")),
                 argThat(gaps -> gaps.contains("highConfidenceUncovered") && gaps.contains("isolatedNodes")));
+    }
+
+    @Test
+    void exportReport_supportsPersistedSystemOverviewReport() throws Exception {
+        Report report = new Report();
+        report.setId("report-1");
+        report.setProjectId("project-1");
+        report.setVersionId("version-1");
+        report.setReportType("SYSTEM_OVERVIEW");
+        when(reportRepository.selectById("report-1")).thenReturn(report);
+        when(reportExportService.exportReport(
+                "project-1",
+                "version-1",
+                ReportExportService.ReportType.SYSTEM_OVERVIEW,
+                ReportExportService.ExportFormat.MD))
+                .thenReturn("# 系统关系总览".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        byte[] result = reportingService.exportReport("report-1", "MD");
+
+        assertEquals("# 系统关系总览", new String(result, java.nio.charset.StandardCharsets.UTF_8));
+        verify(reportExportService).exportReport(
+                "project-1",
+                "version-1",
+                ReportExportService.ReportType.SYSTEM_OVERVIEW,
+                ReportExportService.ExportFormat.MD);
+    }
+
+    @Test
+    void exportReport_readsPersistedMarkdownFileBeforeDynamicExport() throws Exception {
+        Path markdown = Files.createTempFile("system-overview-", ".md");
+        Files.writeString(markdown, "# 扫描完成关系总结", StandardCharsets.UTF_8);
+        try {
+            Report report = new Report();
+            report.setId("report-file-1");
+            report.setProjectId("project-1");
+            report.setVersionId("version-1");
+            report.setReportType("SYSTEM_OVERVIEW");
+            report.setFilePath(markdown.toString());
+            when(reportRepository.selectById("report-file-1")).thenReturn(report);
+
+            byte[] result = reportingService.exportReport("report-file-1", null);
+
+            assertEquals("# 扫描完成关系总结", new String(result, StandardCharsets.UTF_8));
+            verify(reportExportService, never()).exportReport(anyString(), anyString(), any(), any());
+        } finally {
+            Files.deleteIfExists(markdown);
+        }
     }
 }

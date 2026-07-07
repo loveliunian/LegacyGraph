@@ -88,6 +88,8 @@ public class RedisConfig implements CachingConfigurer {
         // 易变视图：短 TTL 兜底（写时已显式失效，TTL 仅防漏失效）
         perCache.put("project-overview", base.entryTtl(Duration.ofMinutes(1)));
         perCache.put("validation-report", base.entryTtl(Duration.ofMinutes(5)));
+        // 系统关系总览：结论性视图，写时（ingest）显式失效，10 分钟 TTL 兜底
+        perCache.put("system-overview", base.entryTtl(Duration.ofMinutes(10)));
         // 稳定数据：长 TTL
         perCache.put("llm-provider-default", base.entryTtl(Duration.ofHours(6)));
         perCache.put("prompt-templates", base.entryTtl(Duration.ofHours(6)));

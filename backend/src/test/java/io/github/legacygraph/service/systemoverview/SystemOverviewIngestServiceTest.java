@@ -7,6 +7,7 @@ import io.github.legacygraph.dto.systemoverview.SystemOverviewIngestRequest.Rela
 import io.github.legacygraph.dto.systemoverview.SystemOverviewIngestResult;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.entity.VectorDocument;
+import io.github.legacygraph.service.graph.GraphQueryService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import io.github.legacygraph.service.qa.SemanticCache;
 import io.github.legacygraph.service.qa.VectorRetrievalService;
@@ -39,11 +40,14 @@ class SystemOverviewIngestServiceTest {
     @Mock
     private SemanticCache semanticCache;
 
+    @Mock
+    private GraphQueryService graphQueryService;
+
     private SystemOverviewIngestService service;
 
     @BeforeEach
     void setUp() {
-        service = new SystemOverviewIngestService(vectorRetrievalService, knowledgeClaimService, semanticCache);
+        service = new SystemOverviewIngestService(vectorRetrievalService, knowledgeClaimService, semanticCache, graphQueryService);
     }
 
     @Test
@@ -107,9 +111,9 @@ class SystemOverviewIngestServiceTest {
         verify(knowledgeClaimService).upsertDrafts(captor.capture());
         List<KnowledgeClaimDraft> drafts = captor.getValue();
 
-        // CONTAINS + IMPLEMENTED_BY + HANDLED_BY + USES + READS/WRITES/MAPS_TO(lg_test) = 7；Neo4j 被跳过
+        // CONTAINS + IMPLEMENTED_BY(Feature→Controller) + IMPLEMENTED_BY(Controller→Service) + USES + READS/WRITES/MAPS_TO(lg_test) = 7；Neo4j 被跳过
         assertEquals(7, drafts.size());
-        assertTrue(drafts.stream().anyMatch(d -> "HANDLED_BY".equals(d.getPredicate())
+        assertTrue(drafts.stream().anyMatch(d -> "IMPLEMENTED_BY".equals(d.getPredicate())
                 && "TestService".equals(d.getObjectKey())));
         assertTrue(drafts.stream().anyMatch(d -> "READS".equals(d.getPredicate())
                 && "lg_test".equals(d.getObjectKey())));

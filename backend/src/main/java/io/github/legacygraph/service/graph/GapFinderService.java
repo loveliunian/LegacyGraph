@@ -132,16 +132,51 @@ public class GapFinderService {
         // 7. tool_evidence_insufficient — 检查最近工具运行状态，是否缺少外部工具证据
         newGaps.addAll(scanToolEvidenceInsufficient(projectId, versionId, allClaims));
 
-        // 幂等写入
+        // 幂等写入：预加载本版本已有 GapTask，按 gapType+gapKey 建索引，
+        // 避免逐条 selectOne（远程 DB 往返是大头，827 条 = 1654 次往返）。批量 insert/update。
+        Map<String, GapTask> existingByKey = new HashMap<>();
+        for (GapTask g : gapTaskRepository.selectList(new LambdaQueryWrapper<GapTask>()
+                .eq(GapTask::getProjectId, projectId)
+                .eq(GapTask::getVersionId, versionId))) {
+            existingByKey.put(g.getGapType() + ":" + g.getGapKey(), g);
+        }
         int created = 0;
         int reopened = 0;
+        List<GapTask> toInsert = new ArrayList<>();
+        List<GapTask> toUpdate = new ArrayList<>();
         for (GapTask gap : newGaps) {
-            String action = upsertGap(gap);
-            switch (action) {
-                case "CREATED" -> created++;
-                case "REOPENED" -> reopened++;
-                case "UNCHANGED" -> unchanged++;
+            String key = gap.getGapType() + ":" + gap.getGapKey();
+            GapTask existing = existingByKey.get(key);
+            if (existing == null) {
+                toInsert.add(gap);
+                existingByKey.put(key, gap); // 防同批重复键
+                created++;
+            } else if ("RESOLVED".equals(existing.getStatus()) || "WONT_FIX".equals(existing.getStatus())) {
+                // 之前已关闭，但缺口仍存在 → 重新打开
+                existing.setStatus("REOPENED");
+                existing.setDescription(gap.getDescription());
+                existing.setRelatedClaimIds(gap.getRelatedClaimIds());
+                existing.setRelatedNodeIds(gap.getRelatedNodeIds());
+                existing.setEvidenceIds(gap.getEvidenceIds());
+                existing.setUpdatedAt(LocalDateTime.now());
+                toUpdate.add(existing);
+                reopened++;
+            } else {
+                // OPEN / REOPENED / IN_PROGRESS — 更新描述和关联信息
+                existing.setDescription(gap.getDescription());
+                existing.setRelatedClaimIds(gap.getRelatedClaimIds());
+                existing.setRelatedNodeIds(gap.getRelatedNodeIds());
+                existing.setEvidenceIds(gap.getEvidenceIds());
+                existing.setUpdatedAt(LocalDateTime.now());
+                toUpdate.add(existing);
+                unchanged++;
             }
+        }
+        if (!toInsert.isEmpty()) {
+            gapTaskRepository.insertBatch(toInsert);
+        }
+        if (!toUpdate.isEmpty()) {
+            gapTaskRepository.updateBatch(toUpdate);
         }
 
         Map<String, Integer> byType = newGaps.stream()
@@ -182,6 +217,35 @@ public class GapFinderService {
         wrapper.last("LIMIT " + normalizedLimit(limit));
 
         return gapTaskRepository.selectList(wrapper);
+    }
+
+    /**
+     * 分页查询 GapTask 列表。
+     */
+    public com.baomidou.mybatisplus.extension.plugins.pagination.Page<GapTask> listGapsPaged(
+            String projectId, String versionId,
+            String gapType, String status,
+            String severity, int pageNum, int pageSize) {
+        LambdaQueryWrapper<GapTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(GapTask::getProjectId, projectId);
+        if (versionId != null && !versionId.isEmpty()) {
+            wrapper.eq(GapTask::getVersionId, versionId);
+        }
+        if (gapType != null && !gapType.isEmpty()) {
+            wrapper.eq(GapTask::getGapType, gapType);
+        }
+        if (status != null && !status.isEmpty()) {
+            wrapper.eq(GapTask::getStatus, status);
+        }
+        if (severity != null && !severity.isEmpty()) {
+            wrapper.eq(GapTask::getSeverity, severity);
+        }
+        wrapper.orderByDesc(GapTask::getPriorityScore);
+
+        return gapTaskRepository.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(pageNum, pageSize),
+                wrapper
+        );
     }
 
     /**
