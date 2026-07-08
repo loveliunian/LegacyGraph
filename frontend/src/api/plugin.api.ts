@@ -21,8 +21,7 @@ export const pluginApi = {
    * 查询所有已注册插件
    */
   listAll(params?: PluginQueryParams): Promise<PluginDescriptor[]> {
-    const query = params?.type ? `?type=${params.type}` : ''
-    return get(`/lg/plugins${encodeURIComponent(query)}`)
+    return get('/lg/plugins', params)
   },
 
   /**

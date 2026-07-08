@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ReportInsight;
 import io.github.legacygraph.dto.report.ConfidenceTrendReport;

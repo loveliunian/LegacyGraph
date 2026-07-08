@@ -431,6 +431,12 @@ public class BusinessGraphBuilder {
         if (featEmb == null || targetEmb == null) {
             return tokenScore;
         }
+        // 门控：token 重叠 < 0.15 时跳过向量分。避免中文 Feature 与英文 API 仅靠 bge-m3
+        // 跨语言余弦（0.5-0.7 的语义背景噪声）大量误匹配，导致 IMPLEMENTED_BY 膨胀 10×。
+        // 334 Feature × 197 API = 65,798 对，18% 误匹配 = 11,750 条噪声边。
+        if (tokenScore < 0.15) {
+            return tokenScore;
+        }
         double cosine = cosineSimilarity(featEmb, targetEmb);
         return Math.max(tokenScore, cosine);
     }

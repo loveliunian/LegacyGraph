@@ -189,18 +189,6 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'menu.riskDetail' }
           },
           {
-            path: 'audit/logs',
-            name: 'AuditLogList',
-            component: () => import('@/views/audit/LogList.vue'),
-            meta: { title: 'menu.auditLogs' }
-          },
-          {
-            path: 'audit/logs/:id',
-            name: 'AuditLogDetail',
-            component: () => import('@/views/audit/LogDetail.vue'),
-            meta: { title: 'menu.logDetail' }
-          },
-          {
             path: 'workbench',
             name: 'EvidenceWorkbench',
             component: () => import('@/views/workbench/EvidenceWorkbench.vue'),
@@ -339,6 +327,18 @@ const routes: RouteRecordRaw[] = [
             name: 'PluginManagement',
             component: () => import('@/views/system/PluginManagement.vue'),
             meta: { title: '插件管理' }
+          },
+          {
+            path: 'audit-logs',
+            name: 'AuditLogList',
+            component: () => import('@/views/audit/LogList.vue'),
+            meta: { title: 'menu.auditLogs' }
+          },
+          {
+            path: 'audit-logs/:id',
+            name: 'AuditLogDetail',
+            component: () => import('@/views/audit/LogDetail.vue'),
+            meta: { title: 'menu.logDetail' }
           }
         ]
       },

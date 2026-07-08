@@ -608,7 +608,7 @@ public class Neo4jWriteRepository {
                 """, Map.of("srcId", sourceNodeId, "pid", projectId, "vid", versionId));
                 while (outRels.hasNext()) {
                     var row = outRels.next();
-                    String relType = row.get("relType").asString();
+                    String relType = CypherCatalog.safeIdentifier(row.get("relType").asString(), "edgeType");
                     String targetId = row.get("targetId").asString();
                     // 检查 canon 到同一 target 的同类型边是否已存在
                     var check = tx.run("""
@@ -633,7 +633,7 @@ public class Neo4jWriteRepository {
                 """, Map.of("srcId", sourceNodeId, "pid", projectId, "vid", versionId));
                 while (inRels.hasNext()) {
                     var row = inRels.next();
-                    String relType = row.get("relType").asString();
+                    String relType = CypherCatalog.safeIdentifier(row.get("relType").asString(), "edgeType");
                     String sId = row.get("sourceId").asString();
                     var check = tx.run("""
                         MATCH (s {id: $sId})-[r]->(canon {id: $canonId})

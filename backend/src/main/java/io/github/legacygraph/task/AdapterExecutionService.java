@@ -299,7 +299,8 @@ public class AdapterExecutionService {
                 || name.endsWith(".ts") || name.endsWith(".js") || name.endsWith(".md")
                 || name.endsWith(".txt") || name.endsWith(".rst") || name.endsWith(".adoc")
                 || name.endsWith(".py") || name.endsWith(".yml") || name.endsWith(".yaml")
-                || name.endsWith(".properties") || name.endsWith(".sql");
+                || name.endsWith(".properties") || name.endsWith(".sql")
+                || name.endsWith(".html") || name.endsWith(".htm");
     }
 
     /** 从文件路径构造 SourceAsset */

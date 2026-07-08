@@ -356,6 +356,14 @@ public class Neo4jGraphDao {
         return projectionRepo.tableAccessRelations(projectId, versionId);
     }
 
+    /**
+     * 查询真实 BusinessDomain 节点及其 CONTAINS 目标，用于系统关系总览摄入。
+     * 详见 {@link Neo4jProjectionRepository#businessDomainContains}。
+     */
+    public List<Map<String, Object>> businessDomainContains(String projectId, String versionId) {
+        return projectionRepo.businessDomainContains(projectId, versionId);
+    }
+
     public List<Map<String, Object>> confidenceDistribution(String projectId, String versionId) {
         return projectionRepo.confidenceDistribution(projectId, versionId);
     }

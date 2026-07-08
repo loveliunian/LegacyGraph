@@ -178,17 +178,11 @@ const topMenus: TopMenuItem[] = [
     icon: markRaw(FolderOpened)
   },
   {
-    index: 'system',
+    index: '/system/users',
     label: '系统',
+    path: '/system/users',
     icon: markRaw(Setting),
-    roles: ['ADMIN'],
-    children: [
-      { label: '用户管理', path: '/system/users' },
-      { label: '字典管理', path: '/system/dictionaries' },
-      { label: '系统配置', path: '/system/settings' },
-      { label: 'LLM 提供商', path: '/system/llm' },
-      { label: '提示词管理', path: '/system/prompts' }
-    ]
+    roles: ['ADMIN']
   }
 ]
 
@@ -198,7 +192,7 @@ const visibleTopMenus = computed(() =>
 
 const activeTopMenu = computed(() => {
   const currentPath = router.currentRoute.value.path
-  if (currentPath.startsWith('/system')) return currentPath
+  if (currentPath.startsWith('/system')) return '/system/users'
   if (currentPath.startsWith('/projects')) return '/projects'
   return '/dashboard'
 })

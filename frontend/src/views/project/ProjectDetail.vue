@@ -187,8 +187,7 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
         { label: '测试用例', path: `${basePath}/test-cases`, routeNames: ['TestCaseEditorNew', 'TestCaseEditorEdit'] },
         { label: '测试执行', path: `${basePath}/test-runs`, routeNames: ['TestRunDetail'] },
         { label: '验证报告', path: `${basePath}/validation` },
-        { label: '迁移风险', path: `${basePath}/migration/risks`, routeNames: ['MigrationRiskDetail'] },
-        { label: '操作日志', path: `${basePath}/audit/logs`, routeNames: ['AuditLogDetail'] }
+        { label: '迁移风险', path: `${basePath}/migration/risks`, routeNames: ['MigrationRiskDetail'] }
       ]
     },
     {

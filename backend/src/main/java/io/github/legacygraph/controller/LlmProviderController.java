@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.entity.LlmProvider;
 import io.github.legacygraph.llm.LlmGateway;
@@ -66,6 +67,7 @@ public class LlmProviderController {
     /**
      * 保存或更新提供商
      */
+    @Log(value = "创建LLM提供商", type = Log.OperationType.CREATE)
     @PostMapping
     @Operation(summary = "新增或更新 LLM 提供商")
     public Result<LlmProvider> save(

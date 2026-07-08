@@ -410,11 +410,11 @@ const detailDialogVisible = ref(false)
 const createDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
 const detailProgress = ref<any>(null)
-const DETAIL_POLL_INTERVAL = 2000
+const DETAIL_POLL_INTERVAL = 10000 // 详情轮询 10 秒
 let detailPollTimer: ReturnType<typeof setInterval> | null = null
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
-const POLL_INTERVAL = 100000
+const POLL_INTERVAL = 20000 // 列表轮询 20 秒（仅运行中）
 
 const hasRunningTasks = computed(() =>
   versionList.value.some(v => v.status === 'RUNNING')
@@ -685,6 +685,11 @@ const handlePageChange = (page: number) => {
 const startPolling = () => {
   if (pollTimer) return
   pollTimer = setInterval(() => {
+    // 无运行中任务时自动停轮询
+    if (!hasRunningTasks.value) {
+      stopPolling()
+      return
+    }
     loadVersionList(undefined, true)
   }, POLL_INTERVAL)
 }

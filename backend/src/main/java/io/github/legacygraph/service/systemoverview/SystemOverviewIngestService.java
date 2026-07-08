@@ -142,12 +142,8 @@ public class SystemOverviewIngestService {
      * 基于当前项目的真实扫描图谱生成系统关系总览。
      * <p>
      * 从 Neo4j 图谱按 API 端点回溯调用链（ApiEndpoint → Controller → Service → Table），
-     * 组装为四层关系行后走 {@link #ingest} 通路写入 Claim，供 {@code SystemOverviewService}
-     * 动态投影。与内置底座（LegacyGraph 自身硬编码）不同，这里的数据完全来自当前项目扫描结果。
-     * </p>
-     * <p>
-     * 说明：代码图谱不含"业务域"层，此处用 Controller 名（去 Controller 后缀）作为业务域近似；
-     * 若项目已通过文档理解产出真实业务域，可后续叠加。
+     * 同时读取真实 BusinessDomain 节点补齐业务域层，组装为四层关系行后走 {@link #ingest} 通路
+     * 写入 Claim，供 {@code SystemOverviewService} 动态投影。
      * </p>
      */
     @Transactional
@@ -162,7 +158,7 @@ public class SystemOverviewIngestService {
                     .vectorCount(0).claimCount(0).faqCount(0).skipped(0)
                     .build();
         }
-        log.info("Graph-derived {} relation rows for projectId={}, versionId={}",
+        log.info("Graph-derived {} relation rows (incl. BusinessDomain) for projectId={}, versionId={}",
                 rows.size(), projectId, versionId);
         return ingest(SystemOverviewIngestRequest.builder()
                 .projectId(projectId)
@@ -172,10 +168,44 @@ public class SystemOverviewIngestService {
     }
 
     /**
-     * 从当前项目图谱回溯每个 API 端点的调用链，抽取 Controller/Service/Table 组装关系行。
+     * 从当前项目图谱回溯每个 API 端点的调用链，并读取真实 BusinessDomain 节点补齐业务域层。
      */
     private List<RelationRow> buildRelationsFromGraph(String projectId, String versionId) {
         List<RelationRow> rows = new ArrayList<>();
+
+        // ── 1. 从 Neo4j 读取真实 BusinessDomain 节点及其 CONTAINS 目标 ──
+        List<Map<String, Object>> domainRels = null;
+        try {
+            domainRels = graphQueryService.getBusinessDomainContains(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("Load BusinessDomain CONTAINS relations failed for projectId={}: {}", projectId, e.getMessage());
+        }
+        if (domainRels != null && !domainRels.isEmpty()) {
+            for (Map<String, Object> r : domainRels) {
+                String domainName = str(r.get("domainDisplayName"));
+                if (domainName == null || domainName.isBlank()) {
+                    continue;
+                }
+                @SuppressWarnings("unchecked")
+                List<String> features = (List<String>) r.get("features");
+                if (features != null && !features.isEmpty()) {
+                    for (String feature : features) {
+                        if (feature == null || feature.isBlank()) {
+                            continue;
+                        }
+                        rows.add(row(domainName, feature, feature, null, null, null,
+                                null, "CONTAINS", "GRAPH", 0.90));
+                    }
+                } else {
+                    // 无 CONTAINS 目标时，仍注册域本身（避免 totalDomains 漏计）
+                    rows.add(row(domainName, domainName, domainName, null, null, null,
+                            null, "CONTAINS", "GRAPH", 0.90));
+                }
+            }
+            log.info("Loaded {} BusinessDomain nodes from Neo4j for projectId={}", domainRels.size(), projectId);
+        }
+
+        // ── 2. API 调用链回溯（Controller/Service/Table）──
         List<Map<String, Object>> apiRels = null;
         try {
             apiRels = graphQueryService.getApiImplementationRelations(projectId, versionId);

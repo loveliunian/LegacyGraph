@@ -18,23 +18,6 @@
         <el-tag type="warning">链路 {{ overview?.corePaths?.length ?? 0 }}</el-tag>
       </div>
       
-      <!-- 域控件：业务域过滤 -->
-      <div class="filter-bar">
-        <el-select 
-          v-model="selectedDomain" 
-          placeholder="选择业务域" 
-          clearable 
-          style="width: 200px"
-          @change="handleDomainChange"
-        >
-          <el-option 
-            v-for="domain in domains" 
-            :key="domain" 
-            :label="domain" 
-            :value="domain" 
-          />
-        </el-select>
-      </div>
     </el-card>
 
     <el-card shadow="hover" class="mt" v-loading="reportsLoading">
@@ -47,10 +30,17 @@
         </div>
       </template>
       <el-table v-if="systemOverviewReports.length" :data="systemOverviewReports" stripe size="small">
-        <el-table-column prop="reportName" label="文档名称" min-width="220" />
-        <el-table-column prop="versionId" label="扫描版本" width="180" />
-        <el-table-column prop="status" label="状态" width="120" />
-        <el-table-column prop="completedAt" label="完成时间" width="180" />
+        <el-table-column prop="reportName" label="文档名称" width="160" show-overflow-tooltip />
+        <el-table-column prop="versionId" label="扫描版本" width="150" show-overflow-tooltip />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">{{ dictLabel('report_status', row.status) }}</template>
+        </el-table-column>
+        <el-table-column label="完成时间" width="180">
+          <template #default="{ row }">
+            <span v-if="row.completedAt">{{ formatTime(row.completedAt) }}</span>
+            <span v-else class="text-gray">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button
@@ -59,8 +49,7 @@
               size="small"
               :loading="previewingReportId === row.id"
               @click="handlePreviewDocument(row)"
-            >
-              预览
+            >预览
             </el-button>
             <el-button
               link
@@ -68,8 +57,7 @@
               size="small"
               :loading="downloadingReportId === row.id"
               @click="handleDownloadDocument(row)"
-            >
-              下载 MD
+            >下载
             </el-button>
             <el-button
               link
@@ -77,8 +65,7 @@
               size="small"
               :loading="deletingReportId === row.id"
               @click="handleDeleteDocument(row)"
-            >
-              删除
+            >删除
             </el-button>
           </template>
         </el-table-column>
@@ -182,6 +169,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Right } from '@element-plus/icons-vue'
 import { Marked } from 'marked'
+import dayjs from 'dayjs'
 import DOMPurify from 'dompurify'
 import {
   downloadSystemOverviewDocument,
@@ -224,16 +212,8 @@ const queryingPaths = ref(false)
 const queriedPaths = ref<string[]>([])
 const systemOverviewReports = ref<Report[]>([])
 
-// 域控件：业务域过滤
-const selectedDomain = ref<string>('')
 const pathFrom = ref<string>('')
 const pathTo = ref<string>('')
-
-// 计算属性：提取所有业务域
-const domains = computed(() => {
-  if (!overview.value?.mappings) return []
-  return [...new Set(overview.value.mappings.map(m => m.businessDomain))]
-})
 
 // 加载完成且无四层映射数据时展示空状态引导
 const showEmpty = computed(() => loaded.value && !(overview.value?.mappings?.length))
@@ -245,11 +225,6 @@ const ingestLabel = computed(() => (projectId === 'self' ? '导入事实底座' 
 const filteredMappings = computed(() => {
   if (!overview.value?.mappings) return []
   let filtered = overview.value.mappings
-  
-  // 按业务域过滤
-  if (selectedDomain.value) {
-    filtered = filtered.filter(m => m.businessDomain === selectedDomain.value)
-  }
   
   // 按路径查询过滤（起点和终点）
   if (pathFrom.value || pathTo.value) {
@@ -274,13 +249,12 @@ const filteredMappings = computed(() => {
 
 const displayPaths = computed(() => queriedPaths.value.length > 0 ? queriedPaths.value : overview.value?.corePaths ?? [])
 
-function includesText(value: string | undefined | null, keyword: string) {
-  return (value ?? '').includes(keyword)
+function formatTime(time: string): string {
+  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 }
 
-// 域变更处理
-function handleDomainChange(domain: string) {
-  selectedDomain.value = domain
+function includesText(value: string | undefined | null, keyword: string) {
+  return (value ?? '').includes(keyword)
 }
 
 // 路径查询处理
@@ -500,17 +474,20 @@ onMounted(async () => {
   font-size: 13px;
   margin-top: 4px;
 }
-.filter-bar {
-  margin-top: 12px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
+.text-gray {
+  color: #909399;
 }
 .path-query {
   display: flex;
   gap: 8px;
   align-items: center;
   margin-bottom: 12px;
+}
+
+/* 总结文档操作按钮间距 */
+:deep(.el-table__body) .el-button--small.is-link {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .preview-loading,

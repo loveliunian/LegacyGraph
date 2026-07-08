@@ -238,7 +238,8 @@ public class Neo4jProjectionRepository {
         try (Session session = neo4jDriver.session()) {
             String cypher =
                 "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
-                "RETURN date(n.createdAt) AS date, " +
+                "  AND n.createdAt IS NOT NULL " +
+                "RETURN date(substring(toString(n.createdAt), 0, 10)) AS date, " +
                 "       coalesce(avg(n.confidence), 0.0) AS avgConfidence, " +
                 "       count(*) AS newNodes, " +
                 "       count(CASE WHEN n.status IN ['CONFIRMED', 'APPROVED'] THEN 1 END) AS confirmedNodes " +
@@ -354,6 +355,36 @@ public class Neo4jProjectionRepository {
                 "       coalesce(nullIf(mp.displayName, ''), nullIf(mp.nodeName, ''), mp.nodeKey) AS mapperName, " +
                 "       [x IN collect(DISTINCT coalesce(nullIf(t.nodeName, ''), t.nodeKey)) WHERE x IS NOT NULL] AS tables " +
                 "ORDER BY mapperName";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId)));
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
+
+    /**
+     * 查询 Neo4j 中真实 BusinessDomain 节点及其 CONTAINS 关系所连接的目标（Feature 等）。
+     * <p>
+     * 用于 {@code SystemOverviewIngestService} 从图谱回溯业务域→功能的 Claim，
+     * 替代原先仅靠 Controller 名近似业务域的做法，让系统关系总览的"业务域"统计与统一图谱一致。
+     * </p>
+     * <p>返回字段：domainName / domainDisplayName / features（List&lt;String&gt;，CONTAINS 目标节点名）。</p>
+     */
+    public List<Map<String, Object>> businessDomainContains(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (bd:BusinessDomain {projectId: $projectId, versionId: $versionId}) " +
+                "OPTIONAL MATCH (bd)-[:CONTAINS]->(target) " +
+                "WITH bd, target " +
+                "WHERE target IS NULL OR target:Feature OR target:BusinessProcess OR target:BusinessObject " +
+                "RETURN coalesce(bd.displayName, bd.nodeName) AS domainDisplayName, " +
+                "       coalesce(bd.nodeName, bd.nodeKey) AS domainName, " +
+                "       [x IN collect(DISTINCT coalesce(nullIf(target.nodeName, ''), target.nodeKey)) " +
+                "         WHERE x IS NOT NULL] AS features";
             Result result = session.run(cypher, Map.of(
                     "projectId", projectId,
                     "versionId", normalizeId(versionId)));

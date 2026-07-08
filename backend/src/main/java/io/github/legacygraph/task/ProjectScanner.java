@@ -586,6 +586,35 @@ public class ProjectScanner {
                     completeTask(dbTask, "Scanned " + dbConnections.size() + " databases, " + totalTables.get() + " tables", null);
                     log.info("Completed database metadata scan, {} databases, {} tables", dbConnections.size(), totalTables.get());
 
+                    // SQL 字段 ↔ DB 元数据字段交叉对比
+                    if (graphBuilder != null) {
+                        try {
+                            int[] stats = graphBuilder.crossValidateSqlVsDbColumns(projectId, versionId);
+                            log.info("Column cross-validation: sqlOnly={}, dbOnly={}, matched={}",
+                                    stats[0], stats[1], stats[2]);
+                        } catch (Exception e) {
+                            log.warn("Column cross-validation failed (non-blocking): {}", e.getMessage());
+                        }
+                        // 从代码提取字段级数据血缘 + 节点增强（后台异步，不阻塞主扫描管线）
+                        if (baseDir != null && !baseDir.isBlank()) {
+                            final String asyncPid = projectId;
+                            final String asyncVid = versionId;
+                            final java.nio.file.Path repoPath = java.nio.file.Path.of(baseDir);
+                            CompletableFuture.runAsync(() -> {
+                                log.info("Background extraction started: projectId={}", asyncPid);
+                                int total = 0;
+                                try { total += graphBuilder.extractEntityColumns(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("Entity columns: {}", e.getMessage()); }
+                                try { total += graphBuilder.extractResultMapColumns(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("ResultMap: {}", e.getMessage()); }
+                                try { total += graphBuilder.extractJdbcColumns(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("JDBC: {}", e.getMessage()); }
+                                try { total += graphBuilder.extractHtmlAjaxButtons(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("AJAX: {}", e.getMessage()); }
+                                try { total += graphBuilder.extractValueConfigItems(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("Config: {}", e.getMessage()); }
+                                try { total += graphBuilder.extractHttpClientSystems(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("HttpClient: {}", e.getMessage()); }
+                                try { total += graphBuilder.extractHtmlMenus(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("Menu: {}", e.getMessage()); }
+                                log.info("Background extraction done: {} items (projectId={})", total, asyncPid);
+                            });
+                        }
+                    }
+
                     // LLM 语义增强：异步执行，不阻塞扫描主流程
                     if (totalTables.get() > 0) {
                         // 标记 AI 增强为 PENDING
@@ -1807,7 +1836,9 @@ public class ProjectScanner {
                 || name.endsWith(".docx")
                 || name.endsWith(".txt")
                 || name.endsWith(".rst")
-                || name.endsWith(".adoc");
+                || name.endsWith(".adoc")
+                || name.endsWith(".html")
+                || name.endsWith(".htm");
     }
 
     private SourceAsset toSourceAsset(Path root, Path file) {

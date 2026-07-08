@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.legacygraph.agent.TestCaseAgent;
 import io.github.legacygraph.common.PageQuery;
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.GenerateTestCasesRequest;

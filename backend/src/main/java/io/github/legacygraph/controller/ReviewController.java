@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.ReviewConfirmRequest;
 import io.github.legacygraph.dto.ReviewCreateRequest;
@@ -186,6 +187,7 @@ public class ReviewController {
         return Result.success(record);
     }
 
+    @Log(value = "审核确认图谱节点", type = Log.OperationType.REVIEW)
     @PostMapping("/confirm")
     @Operation(summary = "确认审核通过")
     public Result<Void> confirmReview(
@@ -241,6 +243,7 @@ public class ReviewController {
         return Result.success();
     }
 
+    @Log(value = "审核驳回图谱节点", type = Log.OperationType.REVIEW)
     @PostMapping("/reject")
     @Operation(summary = "驳回审核")
     public Result<Void> rejectReview(
@@ -296,6 +299,7 @@ public class ReviewController {
         return Result.success();
     }
 
+    @Log(value = "批量审核确认", type = Log.OperationType.REVIEW)
     @PostMapping("/batch-confirm")
     @Operation(summary = "批量确认")
     public Result<Void> batchConfirm(

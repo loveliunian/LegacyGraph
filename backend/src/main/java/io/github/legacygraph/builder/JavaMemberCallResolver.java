@@ -278,11 +278,12 @@ public class JavaMemberCallResolver {
             }
         }
 
-        // 端点：方法级优先，回退类级
+        // 端点：方法级优先，回退类级（与 resolveOne 一致）
+        GraphNode toNode = targetMethodNode; // 方法节点已通过 god-node 验证
+        // 同时查找类级节点用于备选（方法节点不存在时回退）
         String targetFqn = owningFqn(targetMethodNode.getNodeKey());
         GraphNode targetClassNode = fqnToClassNode.get(targetFqn);
         if (targetClassNode == null) {
-            // 尝试简单名查找
             String simple = simpleName(targetFqn);
             if (simple != null) {
                 List<GraphNode> simpleCands = simpleNameToClassNodes.get(simple);
@@ -291,7 +292,10 @@ public class JavaMemberCallResolver {
                 }
             }
         }
-        GraphNode toNode = targetClassNode != null ? targetClassNode : targetMethodNode;
+        // 方法级优先，类级回退
+        if (targetClassNode != null && toNode == null) {
+            toNode = targetClassNode;
+        }
         if (fromNode.getId().equals(toNode.getId())) {
             return null; // 自调用
         }

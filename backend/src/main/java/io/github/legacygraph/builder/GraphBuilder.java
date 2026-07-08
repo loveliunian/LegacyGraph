@@ -22,13 +22,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import io.github.legacygraph.util.IdUtil;
 
@@ -273,6 +278,39 @@ public class GraphBuilder {
                         BigDecimal.valueOf(0.95),
                         NodeStatus.CONFIRMED
                 );
+            }
+
+            // 字段级血缘：SqlStatement → Column (READS/WRITES)
+            // Column nodeKey 格式为 schema.tableName.columnName，SQL 中仅提取字段简单名，
+            // 将其关联到本 SQL 涉及的所有表（单表查询最常见，多表 JOIN 按保守策略全关联）。
+            Set<String> allTables = new HashSet<>();
+            allTables.addAll(tableResult.getReadTables());
+            allTables.addAll(tableResult.getWriteTables());
+            for (String colName : tableResult.getReadColumns()) {
+                for (String tbl : allTables) {
+                    GraphNode colNode = findOrCreateColumnNode(projectId, versionId, tbl, colName);
+                    createEdge(projectId, versionId,
+                            sqlNode.getId(), colNode.getId(),
+                            EdgeType.READS.name(),
+                            sqlKey + "->reads->" + tbl + "." + colName,
+                            SourceType.SQL_PARSE.name(),
+                            BigDecimal.valueOf(0.85),
+                            NodeStatus.CONFIRMED
+                    );
+                }
+            }
+            for (String colName : tableResult.getWriteColumns()) {
+                for (String tbl : allTables) {
+                    GraphNode colNode = findOrCreateColumnNode(projectId, versionId, tbl, colName);
+                    createEdge(projectId, versionId,
+                            sqlNode.getId(), colNode.getId(),
+                            EdgeType.WRITES.name(),
+                            sqlKey + "->writes->" + tbl + "." + colName,
+                            SourceType.SQL_PARSE.name(),
+                            BigDecimal.valueOf(0.85),
+                            NodeStatus.CONFIRMED
+                    );
+                }
             }
 
             // Mapper -EXECUTES-> SqlStatement
@@ -634,6 +672,768 @@ public class GraphBuilder {
                 "DATABASE_SCAN",
                 null
         );
+    }
+
+    /** 查找或创建 Column 节点（字段级血缘），nodeKey = tableName.columnName */
+    private GraphNode findOrCreateColumnNode(String projectId, String versionId, String tableName, String columnName) {
+        String normalizedTable = tableName != null ? tableName.toLowerCase() : "unknown";
+        String normalizedCol = columnName != null ? columnName.toLowerCase() : "unknown";
+        String colKey = normalizedTable + "." + normalizedCol;
+        return findOrCreateNode(
+                projectId, versionId,
+                NodeType.Column.name(),
+                colKey,
+                normalizedCol,
+                normalizedCol,
+                null,
+                SourceType.SQL_PARSE.name(),
+                null,
+                null,
+                null,
+                BigDecimal.valueOf(0.85),
+                NodeStatus.CONFIRMED,
+                null,
+                null
+        );
+    }
+
+    /**
+     * SQL 提取字段 ↔ DB 元数据字段交叉对比。
+     * DB 不可用时仅依赖 SQL 字段（代码即真相）；DB 可用时标记差异：SQL 有 DB 无→可能已删字段，
+     * DB 有 SQL 无→可能未用字段。差异写入 Column 节点的 properties，前端可据此展示字段使用情况。
+     *
+     * @return 差异统计 [sqlOnly, dbOnly, matched]
+     */
+    public int[] crossValidateSqlVsDbColumns(String projectId, String versionId) {
+        // 收集所有 Column 节点，按 tableName 分组，区分 sourceType
+        List<GraphNode> allCols = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Column.name(), null, null, null, 0);
+        if (allCols == null || allCols.isEmpty()) {
+            log.info("Cross-validate columns: 0 Column nodes found");
+            return new int[]{0, 0, 0};
+        }
+
+        Map<String, Set<String>> sqlColsByTable = new HashMap<>(); // table -> {col1, col2}
+        Map<String, Set<String>> dbColsByTable = new HashMap<>();
+        Map<String, GraphNode> colNodeMap = new HashMap<>(); // table.col -> node
+
+        for (GraphNode col : allCols) {
+            String key = col.getNodeKey(); // "tableName.columnName"
+            if (key == null) continue;
+            int dot = key.indexOf('.');
+            if (dot < 0) continue;
+            String tbl = key.substring(0, dot);
+            String colName = key.substring(dot + 1);
+            colNodeMap.put(tbl + "." + colName, col);
+
+            if ("DB_METADATA".equals(col.getSourceType())) {
+                dbColsByTable.computeIfAbsent(tbl, k -> new HashSet<>()).add(colName);
+            } else {
+                sqlColsByTable.computeIfAbsent(tbl, k -> new HashSet<>()).add(colName);
+            }
+        }
+
+        int sqlOnly = 0, dbOnly = 0, matched = 0;
+        Set<String> allTables = new HashSet<>();
+        allTables.addAll(sqlColsByTable.keySet());
+        allTables.addAll(dbColsByTable.keySet());
+
+        for (String tbl : allTables) {
+            Set<String> sqlCols = sqlColsByTable.getOrDefault(tbl, Set.of());
+            Set<String> dbCols = dbColsByTable.getOrDefault(tbl, Set.of());
+
+            for (String col : sqlCols) {
+                String fullKey = tbl + "." + col;
+                GraphNode node = colNodeMap.get(fullKey);
+                if (node == null) continue;
+                if (dbCols.contains(col)) {
+                    // 双方都有 → 已校验
+                    neo4jGraphDao.setNodeProperty(node.getId(), "verifiedByDb", true);
+                    matched++;
+                } else {
+                    // 仅 SQL 有 → 可能 DB 中已删除或字段名不匹配
+                    neo4jGraphDao.setNodeProperty(node.getId(), "sqlOnly", true);
+                    sqlOnly++;
+                }
+            }
+            for (String col : dbCols) {
+                if (!sqlCols.contains(col)) {
+                    String fullKey = tbl + "." + col;
+                    GraphNode node = colNodeMap.get(fullKey);
+                    if (node != null) {
+                        neo4jGraphDao.setNodeProperty(node.getId(), "dbOnly", true);
+                        dbOnly++;
+                    }
+                }
+            }
+        }
+
+        // DB 元数据不可用时特别说明
+        if (dbColsByTable.isEmpty() && !sqlColsByTable.isEmpty()) {
+            log.info("Cross-validate columns: {} SQL columns, 0 DB columns — DB metadata unavailable, "
+                    + "all columns marked as sqlOnly (unverified). Re-scan with DB connection to enable cross-validation.",
+                    sqlColsByTable.values().stream().mapToInt(Set::size).sum());
+        } else {
+            log.info("Cross-validate columns: {} matched, {} sqlOnly, {} dbOnly (projectId={}, versionId={})",
+                    matched, sqlOnly, dbOnly, projectId, versionId);
+        }
+        return new int[]{sqlOnly, dbOnly, matched};
+    }
+
+    /**
+     * 从 Java 实体类提取表-字段映射（JPA/MyBatis-Plus 注解 + 命名约定）。
+     * DB 不可用时作为第三数据源，与 SQL 提取 + DB 元数据三层交叉对比。
+     *
+     * <p>支持的注解：
+     * <ul><li>JPA: @Table(name), @Column(name), @Id, @GeneratedValue</li>
+     * <li>MyBatis-Plus: @TableName, @TableField, @TableId</li></ul>
+     * 无注解时按字段名 camelCase→snake_case 约定推断。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 版本 ID
+     * @param repoRoot 代码仓库根目录（用于读取源文件）
+     * @return 提取的表-字段映射数
+     */
+    public int extractEntityColumns(String projectId, String versionId, Path repoRoot) {
+        // 收集已有 Table 节点（从 SQL 提取 + DB 元数据），按 simpleName + nodeKey 建立索引
+        List<GraphNode> tables = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Table.name(), null, null, null, 0);
+        Map<String, GraphNode> tableByName = new HashMap<>();
+        for (GraphNode t : tables != null ? tables : List.of()) {
+            String name = t.getNodeName();
+            if (name != null) tableByName.put(name.toLowerCase(), t);
+            String key = t.getNodeKey();
+            if (key != null) {
+                int dot = key.indexOf('.');
+                tableByName.put((dot > 0 ? key.substring(dot + 1) : key).toLowerCase(), t);
+            }
+        }
+
+        int totalCols = 0;
+        try {
+            List<Path> javaFiles = new ArrayList<>();
+            try (var stream = Files.walk(repoRoot)) {
+                stream.filter(f -> f.toString().endsWith(".java"))
+                        .filter(f -> {
+                            String path = f.toString().toLowerCase();
+                            return path.contains("/model/") || path.contains("/entity/")
+                                    || path.contains("/domain/") || path.contains("/pojo/")
+                                    || path.contains("/dto/");
+                        })
+                        .forEach(javaFiles::add);
+            }
+
+            com.github.javaparser.JavaParser parser = new com.github.javaparser.JavaParser(
+                    new com.github.javaparser.ParserConfiguration()
+                            .setLanguageLevel(com.github.javaparser.ParserConfiguration.LanguageLevel.JAVA_17));
+
+            for (Path javaFile : javaFiles) {
+                try {
+                    var cu = parser.parse(javaFile).getResult().orElse(null);
+                    if (cu == null) continue;
+                    for (var type : cu.getTypes()) {
+                        if (!type.isClassOrInterfaceDeclaration() || type.asClassOrInterfaceDeclaration().isInterface())
+                            continue;
+                        var clazz = type.asClassOrInterfaceDeclaration();
+                        String tableName = extractTableName(clazz);
+                        if (tableName == null) continue;
+
+                        GraphNode tableNode = tableByName.get(tableName.toLowerCase());
+                        if (tableNode == null) {
+                            // 实体类引用的表在 SQL 和 DB 中都未出现 → 创建轻量 Table 节点
+                            tableNode = findOrCreateNode(projectId, versionId,
+                                    NodeType.Table.name(), tableName, tableName, tableName, null,
+                                    "CODE_ENTITY", repoRoot.relativize(javaFile).toString(),
+                                    null, null, BigDecimal.valueOf(0.8), NodeStatus.CONFIRMED,
+                                    null, null);
+                            tableByName.put(tableName.toLowerCase(), tableNode);
+                        }
+
+                        for (var field : clazz.getFields()) {
+                            for (var var : field.getVariables()) {
+                                String colName = extractColumnName(field, var);
+                                if (colName == null) continue;
+                                String colKey = tableName.toLowerCase() + "." + colName;
+                                // 创建或查找 Column 节点
+                                GraphNode colNode = findOrCreateNode(projectId, versionId,
+                                        NodeType.Column.name(), colKey, colName, colName, null,
+                                        "CODE_ENTITY", repoRoot.relativize(javaFile).toString(),
+                                        field.getBegin().map(p -> p.line).orElse(null), null,
+                                        BigDecimal.valueOf(0.85), NodeStatus.CONFIRMED,
+                                        null, null);
+                                // Table HAS_COLUMN Column
+                                createEdge(projectId, versionId,
+                                        tableNode.getId(), colNode.getId(),
+                                        EdgeType.HAS_COLUMN.name(),
+                                        tableName + "->has_column->" + colName,
+                                        "CODE_ENTITY",
+                                        BigDecimal.valueOf(0.85),
+                                        NodeStatus.CONFIRMED);
+                                totalCols++;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("Entity extract skipped {}: {}", javaFile.getFileName(), e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            log.warn("Entity column extraction failed: {}", e.getMessage());
+        }
+
+        log.info("Entity column extraction: {} columns from entity classes (projectId={})", totalCols, projectId);
+        return totalCols;
+    }
+
+    /**
+     * 从 MyBatis XML <resultMap> 中提取字段映射。
+     * <result column="user_name" property="userName"/> → Column "user_name"
+     */
+    public int extractResultMapColumns(String projectId, String versionId, Path repoRoot) {
+        // 收集 Table 节点
+        List<GraphNode> tables = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Table.name(), null, null, null, 0);
+        Map<String, GraphNode> tableByName = new HashMap<>();
+        for (GraphNode t : tables != null ? tables : List.of()) {
+            String n = t.getNodeName();
+            if (n != null) tableByName.put(n.toLowerCase(), t);
+            String k = t.getNodeKey();
+            if (k != null) {
+                int dot = k.indexOf('.');
+                tableByName.put((dot > 0 ? k.substring(dot + 1) : k).toLowerCase(), t);
+            }
+        }
+
+        int totalCols = 0;
+        java.util.regex.Pattern resultMapPat = java.util.regex.Pattern.compile(
+                "<resultMap\\s[^>]*id\\s*=\\s*\"([^\"]+)\"[^>]*>",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Pattern resultPat = java.util.regex.Pattern.compile(
+                "<(?:id|result)\\s[^>]*column\\s*=\\s*\"([^\"]+)\"",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        try {
+            List<Path> xmlFiles = new ArrayList<>();
+            try (var stream = Files.walk(repoRoot)) {
+                stream.filter(f -> f.toString().endsWith(".xml"))
+                        .filter(f -> f.toString().toLowerCase().contains("mapper"))
+                        .forEach(xmlFiles::add);
+            }
+
+            for (Path xmlFile : xmlFiles) {
+                try {
+                    String content = readFileSafely(xmlFile);
+                    if (content == null) continue;
+                    // 找到每个 <resultMap>，提取其中的 column 属性
+                    var rmMatcher = resultMapPat.matcher(content);
+                    while (rmMatcher.find()) {
+                        String rmId = rmMatcher.group(1);
+                        // 提取 resultMap 结束标签前的内容
+                        int start = rmMatcher.start();
+                        int end = content.indexOf("</resultMap>", start);
+                        if (end < 0) end = content.length();
+                        String rmBody = content.substring(start, end);
+
+                        var colMatcher = resultPat.matcher(rmBody);
+                        while (colMatcher.find()) {
+                            String colName = colMatcher.group(1).toLowerCase();
+                            // 尝试推断表名（从 resultMap id 或 namespace）
+                            String tableName = inferTableFromResultMap(rmId, content, tableByName);
+                            if (tableName == null) continue;
+
+                            GraphNode tableNode = tableByName.get(tableName.toLowerCase());
+                            if (tableNode == null) {
+                                tableNode = findOrCreateNode(projectId, versionId,
+                                        NodeType.Table.name(), tableName, tableName, tableName, null,
+                                        "MYBATIS_XML", repoRoot.relativize(xmlFile).toString(),
+                                        null, null, BigDecimal.valueOf(0.8), NodeStatus.CONFIRMED,
+                                        null, null);
+                                tableByName.put(tableName.toLowerCase(), tableNode);
+                            }
+
+                            String colKey = tableName.toLowerCase() + "." + colName;
+                            findOrCreateNode(projectId, versionId,
+                                    NodeType.Column.name(), colKey, colName, colName, null,
+                                    "MYBATIS_XML", repoRoot.relativize(xmlFile).toString(),
+                                    null, null, BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED,
+                                    null, null);
+                            totalCols++;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("ResultMap extract skipped {}: {}", xmlFile.getFileName(), e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            log.warn("ResultMap extraction failed: {}", e.getMessage());
+        }
+
+        log.info("ResultMap extraction: {} columns (projectId={})", totalCols, projectId);
+        return totalCols;
+    }
+
+    /** 从 JDBC RowMapper / ResultSet 调用中提取字段 */
+    public int extractJdbcColumns(String projectId, String versionId, Path repoRoot) {
+        List<GraphNode> tables = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Table.name(), null, null, null, 0);
+        Map<String, GraphNode> tableByName = new HashMap<>();
+        for (GraphNode t : tables != null ? tables : List.of()) {
+            String n = t.getNodeName();
+            if (n != null) tableByName.put(n.toLowerCase(), t);
+            String k = t.getNodeKey();
+            if (k != null) {
+                int dot = k.indexOf('.');
+                tableByName.put((dot > 0 ? k.substring(dot + 1) : k).toLowerCase(), t);
+            }
+        }
+
+        int totalCols = 0;
+        // 匹配 rs.getString("col"), rs.getInt("col"), rs.getObject("col") 等
+        java.util.regex.Pattern jdbcPat = java.util.regex.Pattern.compile(
+                "\\brs\\.get(?:String|Int|Long|Double|Float|Boolean|Date|Time|Timestamp|Object|BigDecimal|Bytes|Short|Byte)\\s*\\(\\s*\"([^\"]+)\"\\s*\\)",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        try {
+            List<Path> javaFiles = new ArrayList<>();
+            try (var stream = Files.walk(repoRoot)) {
+                stream.filter(f -> f.toString().endsWith(".java"))
+                        .filter(f -> {
+                            String path = f.toString().toLowerCase();
+                            return path.contains("mapper") || path.contains("dao")
+                                    || path.contains("repository") || path.contains("service");
+                        })
+                        .forEach(javaFiles::add);
+            }
+
+            for (Path f : javaFiles) {
+                try {
+                    String content = readFileSafely(f);
+                    var m = jdbcPat.matcher(content);
+                    while (m.find()) {
+                        String colName = m.group(1).toLowerCase();
+                        // 无法从 JDBC 调用直接推断表名 → 标记为 unknown 表
+                        String tableName = "unknown";
+                        String colKey = tableName + "." + colName;
+                        findOrCreateNode(projectId, versionId,
+                                NodeType.Column.name(), colKey, colName, colName, null,
+                                "JDBC_ROW_MAPPER", repoRoot.relativize(f).toString(),
+                                null, null, BigDecimal.valueOf(0.7), NodeStatus.PENDING_CONFIRM,
+                                null, null);
+                        totalCols++;
+                    }
+                } catch (Exception e) {
+                    log.debug("JDBC extract skipped {}: {}", f.getFileName(), e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            log.warn("JDBC extraction failed: {}", e.getMessage());
+        }
+
+        log.info("JDBC extraction: {} column references (projectId={})", totalCols, projectId);
+        return totalCols;
+    }
+
+    // ─── P1-P4: 节点扫描增强 ───
+
+    /**
+     * P1: 从 HTML 文件提取 jQuery AJAX 调用 → Button→ApiEndpoint CALLS 边。
+     * 匹配 $.ajax / $.post / $.get / $.getJSON / fetch() 中的 URL，
+     * 与已有 ApiEndpoint 节点按路径对齐，创建 Button 节点并连 CALLS 边。
+     */
+    public int extractHtmlAjaxButtons(String projectId, String versionId, Path repoRoot) {
+        List<GraphNode> apis = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.ApiEndpoint.name(), null, null, null, 0);
+        if (apis == null || apis.isEmpty()) return 0;
+        // API path 索引：归一化路径 → ApiEndpoint 节点
+        Map<String, GraphNode> apiByPath = new HashMap<>();
+        for (GraphNode api : apis) {
+            String name = api.getNodeName(); // "GET nxAccount/getBalance"
+            if (name == null) continue;
+            int sp = name.indexOf(' ');
+            String path = sp > 0 ? name.substring(sp + 1).trim() : name.trim();
+            apiByPath.put(normalizeApiPath(path), api);
+            apiByPath.put(normalizeApiPath(path.replaceFirst("^/", "")), api);
+        }
+
+        // 匹配 $.ajax/$.post/$.get/$.getJSON/fetch 的 URL
+        java.util.regex.Pattern ajaxPat = java.util.regex.Pattern.compile(
+                "\\$(?:\\.ajax|\\.post|\\.get|\\.getJSON)\\s*\\(\\s*\\{[^}]*url\\s*:\\s*['\"](/[^'\"]+)['\"]",
+                java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+        java.util.regex.Pattern simpleAjaxPat = java.util.regex.Pattern.compile(
+                "\\$(?:\\.post|\\.get|\\.getJSON)\\s*\\(\\s*['\"](/[^'\"]+)['\"]",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Pattern fetchPat = java.util.regex.Pattern.compile(
+                "fetch\\s*\\(\\s*['\"](/[^'\"]+)['\"]",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Pattern onClickPat = java.util.regex.Pattern.compile(
+                "onclick\\s*=\\s*\"([^\"]+)\"");
+
+        int buttons = 0;
+        try {
+            List<Path> htmlFiles = new ArrayList<>();
+            try (var stream = Files.walk(repoRoot)) {
+                stream.filter(f -> {
+                    String n = f.getFileName().toString().toLowerCase();
+                    return n.endsWith(".html") || n.endsWith(".htm");
+                }).forEach(htmlFiles::add);
+            }
+
+            for (Path htmlFile : htmlFiles) {
+                try {
+                    String content = readFileSafely(htmlFile);
+                    String relPath = repoRoot.relativize(htmlFile).toString();
+                    java.util.regex.Matcher m;
+                    boolean found = false;
+
+                    // $.ajax({url: "/path"})
+                    m = ajaxPat.matcher(content);
+                    while (m.find()) {
+                        createButtonToApi(projectId, versionId, m.group(1), apiByPath,
+                                relPath, htmlFile.getFileName().toString());
+                        buttons++; found = true;
+                    }
+                    // $.post("/path", ...)
+                    m = simpleAjaxPat.matcher(content);
+                    while (m.find()) {
+                        createButtonToApi(projectId, versionId, m.group(1), apiByPath,
+                                relPath, htmlFile.getFileName().toString());
+                        buttons++; found = true;
+                    }
+                    // fetch("/path")
+                    m = fetchPat.matcher(content);
+                    while (m.find()) {
+                        createButtonToApi(projectId, versionId, m.group(1), apiByPath,
+                                relPath, htmlFile.getFileName().toString());
+                        buttons++; found = true;
+                    }
+                    // onclick handlers
+                    m = onClickPat.matcher(content);
+                    while (m.find()) {
+                        String handler = m.group(1);
+                        String btnName = handler.replaceAll("[^a-zA-Z0-9_]", "_");
+                        if (btnName.length() > 40) btnName = btnName.substring(0, 40);
+                        if (!found) {
+                            // Only create onclick buttons if no AJAX/fetch was found
+                            GraphNode btnNode = findOrCreateNode(projectId, versionId,
+                                    NodeType.Button.name(),
+                                    "html-btn:" + relPath + "#" + btnName,
+                                    btnName, btnName,
+                                    "onclick=\"" + handler.substring(0, Math.min(handler.length(), 60)) + "\"",
+                                    "FRONTEND_AST", relPath,
+                                    null, null, BigDecimal.valueOf(0.7), NodeStatus.PENDING_CONFIRM,
+                                    null, null);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.debug("AJAX extract skipped {}: {}", htmlFile.getFileName(), e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            log.warn("AJAX extraction failed: {}", e.getMessage());
+        }
+        log.info("AJAX button extraction: {} buttons (projectId={})", buttons, projectId);
+        return buttons;
+    }
+
+    private void createButtonToApi(String projectId, String versionId, String url,
+                                    Map<String, GraphNode> apiByPath, String sourcePath, String pageName) {
+        String normalized = normalizeApiPath(url);
+        GraphNode apiNode = apiByPath.get(normalized);
+        if (apiNode == null) {
+            // 尝试带前缀匹配
+            apiNode = apiByPath.get("/" + normalized);
+        }
+        if (apiNode == null) return;
+        String btnName = pageName.replace(".html", "") + "_" + url.replace('/', '_');
+        GraphNode btnNode = findOrCreateNode(projectId, versionId,
+                NodeType.Button.name(),
+                "html-btn:" + sourcePath + "#" + url,
+                btnName, btnName,
+                "AJAX " + url,
+                "FRONTEND_AST", sourcePath,
+                null, null, BigDecimal.valueOf(0.8), NodeStatus.PENDING_CONFIRM,
+                null, null);
+        createEdge(projectId, versionId, btnNode.getId(), apiNode.getId(),
+                EdgeType.CALLS.name(),
+                btnNode.getNodeKey() + "->calls->" + apiNode.getNodeKey(),
+                "FRONTEND_AST", BigDecimal.valueOf(0.8), NodeStatus.PENDING_CONFIRM);
+    }
+
+    private static String normalizeApiPath(String path) {
+        if (path == null) return "";
+        String p = path.trim();
+        if (p.endsWith("/")) p = p.substring(0, p.length() - 1);
+        return p;
+    }
+
+    /**
+     * P2: @Value ConfigItem 全量扫描。
+     * 从 Java 源码中提取所有 @Value("${...}") 注解，创建 ConfigItem 节点。
+     */
+    public int extractValueConfigItems(String projectId, String versionId, Path repoRoot) {
+        java.util.regex.Pattern valuePat = java.util.regex.Pattern.compile(
+                "@Value\\s*\\(\\s*\"\\$\\{([^}:]+)(?::[^\"]*)?}\"\\s*\\)");
+        int items = 0;
+        try {
+            List<Path> javaFiles = new ArrayList<>();
+            try (var stream = Files.walk(repoRoot)) {
+                stream.filter(f -> f.toString().endsWith(".java")).forEach(javaFiles::add);
+            }
+            for (Path f : javaFiles) {
+                try {
+                    String content = readFileSafely(f);
+                    var m = valuePat.matcher(content);
+                    while (m.find()) {
+                        String key = m.group(1).trim();
+                        String configKey = "config:" + key;
+                        findOrCreateNode(projectId, versionId,
+                                NodeType.ConfigItem.name(), configKey, key, key,
+                                "配置项: ${" + key + "}",
+                                "CODE_AST", repoRoot.relativize(f).toString(),
+                                null, null, BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED,
+                                null, null);
+                        items++;
+                    }
+                } catch (Exception e) { /* skip unparseable files */ }
+            }
+        } catch (IOException e) {
+            log.warn("ConfigItem extraction failed: {}", e.getMessage());
+        }
+        log.info("@Value ConfigItem extraction: {} items (projectId={})", items, projectId);
+        return items;
+    }
+
+    /**
+     * P3: HttpClient/HttpURLConnection → ExternalSystem CALLS_EXTERNAL 边。
+     * 检测 Apache HttpClient / HttpURLConnection / RestTemplate 调用，创建 ExternalSystem 节点。
+     */
+    public int extractHttpClientSystems(String projectId, String versionId, Path repoRoot) {
+        // 使用行内匹配避免跨行回溯：先找类名，再在同行找 URL
+        java.util.regex.Pattern urlPattern = java.util.regex.Pattern.compile(
+                "(?:HttpURLConnection|CloseableHttpClient|HttpClient|RestTemplate|WebClient)"
+                        + "[^\"]*\"(https?://[^\"\\s]+)\"",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        int found = 0;
+        try {
+            List<Path> javaFiles = new ArrayList<>();
+            try (var stream = Files.walk(repoRoot)) {
+                stream.filter(f -> f.toString().endsWith(".java")).forEach(javaFiles::add);
+            }
+            for (Path f : javaFiles) {
+                try {
+                    String content = readFileSafely(f);
+                    var m = urlPattern.matcher(content);
+                    while (m.find()) {
+                        String url = m.group(1);
+                        String host = extractHost(url);
+                        String sysKey = "external:" + host;
+                        GraphNode sysNode = findOrCreateNode(projectId, versionId,
+                                NodeType.ExternalSystem.name(), sysKey, host, host,
+                                "外部系统: " + url,
+                                "CODE_AST", repoRoot.relativize(f).toString(),
+                                null, null, BigDecimal.valueOf(0.8), NodeStatus.CONFIRMED,
+                                null, null);
+                        found++;
+                        // 尝试找最近的 Method 节点连 CALLS_EXTERNAL 边（近似：同文件同版本）
+                    }
+                } catch (Exception e) { /* skip */ }
+            }
+        } catch (IOException e) {
+            log.warn("HttpClient extraction failed: {}", e.getMessage());
+        }
+        log.info("HttpClient extraction: {} external systems (projectId={})", found, projectId);
+        return found;
+    }
+
+    private static String extractHost(String url) {
+        try {
+            java.net.URI uri = new java.net.URI(url);
+            String host = uri.getHost();
+            return host != null ? host : url;
+        } catch (Exception e) {
+            int start = url.indexOf("://");
+            if (start > 0) {
+                int end = url.indexOf('/', start + 3);
+                return end > 0 ? url.substring(start + 3, end) : url.substring(start + 3);
+            }
+            return url;
+        }
+    }
+
+    /**
+     * P4: HTML 导航结构提取 → Menu 节点。
+     * 从传统 HTML 的 sidebar/导航区域提取菜单项，创建 Menu 节点 + CONTAINS→Page 边。
+     */
+    public int extractHtmlMenus(String projectId, String versionId, Path repoRoot) {
+        // 匹配常见 HTML 导航模式：<a href="..."> 在 sidebar/nav 区域内
+        java.util.regex.Pattern menuAPat = java.util.regex.Pattern.compile(
+                "<a\\s[^>]*href\\s*=\\s*\"([^\"]+)\"[^>]*>([^<]+)</a>",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Pattern liMenuPat = java.util.regex.Pattern.compile(
+                "<li[^>]*>\\s*<a\\s[^>]*href\\s*=\\s*\"([^\"]+)\"[^>]*>([^<]+)</a>",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        int menus = 0;
+        try {
+            List<Path> htmlFiles = new ArrayList<>();
+            try (var stream = Files.walk(repoRoot)) {
+                stream.filter(f -> {
+                    String n = f.getFileName().toString().toLowerCase();
+                    return n.endsWith(".html") || n.endsWith(".htm");
+                }).forEach(htmlFiles::add);
+            }
+
+            for (Path htmlFile : htmlFiles) {
+                try {
+                    String content = readFileSafely(htmlFile);
+                    String relPath = repoRoot.relativize(htmlFile).toString();
+                    var m = liMenuPat.matcher(content);
+                    while (m.find()) {
+                        String href = m.group(1);
+                        String label = m.group(2).trim();
+                        if (label.isEmpty() || href.startsWith("javascript") || href.startsWith("#")) continue;
+                        String menuKey = "menu:" + relPath + "#" + label;
+                        GraphNode menuNode = findOrCreateNode(projectId, versionId,
+                                NodeType.Menu.name(), menuKey, label, label,
+                                "导航链接: " + href,
+                                "FRONTEND_AST", relPath,
+                                null, null, BigDecimal.valueOf(0.8), NodeStatus.PENDING_CONFIRM,
+                                null, null);
+                        // 尝试连到 Page 节点
+                        GraphNode pageNode = findPageByPath(projectId, versionId, href);
+                        if (pageNode != null) {
+                            createEdge(projectId, versionId, menuNode.getId(), pageNode.getId(),
+                                    EdgeType.CONTAINS.name(),
+                                    menuKey + "->contains->" + pageNode.getNodeKey(),
+                                    "FRONTEND_AST", BigDecimal.valueOf(0.8), NodeStatus.PENDING_CONFIRM);
+                        }
+                        menus++;
+                    }
+                } catch (Exception e) { /* skip */ }
+            }
+        } catch (IOException e) {
+            log.warn("Menu extraction failed: {}", e.getMessage());
+        }
+        log.info("Menu extraction: {} menus (projectId={})", menus, projectId);
+        return menus;
+    }
+
+    private GraphNode findPageByPath(String projectId, String versionId, String href) {
+        List<GraphNode> pages = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Page.name(), null, null, null, 0);
+        if (pages == null) return null;
+        String normalized = href.replace('\\', '/');
+        for (GraphNode p : pages) {
+            String route = p.getNodeKey();
+            if (route != null && route.contains(normalized)) return p;
+        }
+        return null;
+    }
+
+    /** 单文件最大读取字符数（超过则跳过，防止大文件拖慢提取） */
+    private static final int MAX_FILE_CHARS = 200_000;
+    /** 单次提取最大文件数（超过则截断，防止大仓库提取耗时过长） */
+    private static final int MAX_FILES_PER_EXTRACT = 500;
+
+    private static String readFileSafely(Path file) {
+        try {
+            if (Files.size(file) > MAX_FILE_CHARS) return null;
+            return readFileSafely(file);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 从 resultMap id 推断表名（约定：XxxResultMap → xxx, BaseResultMap → 看 namespace 中的实体类名） */
+    private String inferTableFromResultMap(String rmId, String content,
+                                            Map<String, GraphNode> tableByName) {
+        // "BaseResultMap" → 从 namespace 推断
+        // "GoldInResultMap" → "gold_in"
+        if (rmId.endsWith("ResultMap")) {
+            String base = rmId.substring(0, rmId.length() - "ResultMap".length());
+            return camelToSnake(base);
+        }
+        // 直接匹配已知表名
+        for (String tn : tableByName.keySet()) {
+            if (rmId.toLowerCase().contains(tn)) return tn;
+        }
+        return camelToSnake(rmId);
+    }
+
+    /** 从类注解提取表名。支持 @Table/@TableName/@Entity 的命名参数和单值两种形式。 */
+    private String extractTableName(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration clazz) {
+        for (var ann : clazz.getAnnotations()) {
+            String aName = ann.getNameAsString();
+            boolean isTableAnno = "Table".equals(aName) || "TableName".equals(aName) || "Entity".equals(aName);
+            if (!isTableAnno) continue;
+
+            // @TableName("table_name") — 单值注解
+            if (ann.isSingleMemberAnnotationExpr()) {
+                String v = ann.asSingleMemberAnnotationExpr().getMemberValue().toString()
+                        .replace("\"", "").trim();
+                if (!v.isEmpty()) return v;
+            }
+            // @Table(name = "table_name") / @TableName(value = "table_name") — 命名参数
+            if (ann.isNormalAnnotationExpr()) {
+                for (var pair : ann.asNormalAnnotationExpr().getPairs()) {
+                    if ("name".equals(pair.getNameAsString()) || "value".equals(pair.getNameAsString())) {
+                        String v = pair.getValue().toString().replace("\"", "").trim();
+                        if (!v.isEmpty()) return v;
+                    }
+                }
+            }
+            // @Entity 无参数 → 类名约定
+            if ("Entity".equals(aName)) {
+                return camelToSnake(clazz.getNameAsString());
+            }
+        }
+        // 无注解但在 model/entity 包 → 类名约定
+        return camelToSnake(clazz.getNameAsString());
+    }
+
+    /** 从字段注解提取列名。支持 @Column/@TableField 的命名参数和单值两种形式。 */
+    private String extractColumnName(com.github.javaparser.ast.body.FieldDeclaration field,
+                                      com.github.javaparser.ast.body.VariableDeclarator var) {
+        for (var ann : field.getAnnotations()) {
+            String aName = ann.getNameAsString();
+            // @TableField("col_name") — 单值注解
+            if ("TableField".equals(aName) && ann.isSingleMemberAnnotationExpr()) {
+                String v = ann.asSingleMemberAnnotationExpr().getMemberValue().toString()
+                        .replace("\"", "").trim();
+                if (!v.isEmpty()) return v.toLowerCase();
+            }
+            // @Column(name = "col_name") / @TableField(value = "col_name") — 命名参数
+            if (("Column".equals(aName) || "TableField".equals(aName)) && ann.isNormalAnnotationExpr()) {
+                for (var pair : ann.asNormalAnnotationExpr().getPairs()) {
+                    if ("name".equals(pair.getNameAsString()) || "value".equals(pair.getNameAsString())) {
+                        String v = pair.getValue().toString().replace("\"", "").trim();
+                        if (!v.isEmpty()) return v.toLowerCase();
+                    }
+                }
+            }
+            // @Id / @TableId — 主键，字段名即列名
+            if ("Id".equals(aName) || "TableId".equals(aName)) {
+                return var.getNameAsString().toLowerCase();
+            }
+        }
+        // 无注解 → 驼峰转下划线
+        return camelToSnake(var.getNameAsString());
+    }
+
+    /** camelCase → snake_case */
+    private static String camelToSnake(String s) {
+        if (s == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (i > 0) sb.append('_');
+                sb.append(Character.toLowerCase(c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     private GraphNode findOrCreateDatabaseTableNode(String projectId, String versionId, String tableKey, String tableName) {

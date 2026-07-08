@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.gap.GapTaskView;
 import io.github.legacygraph.entity.GapTask;

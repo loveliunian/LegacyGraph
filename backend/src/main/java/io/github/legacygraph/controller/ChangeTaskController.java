@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.graph.PatchPlan;
@@ -33,6 +34,7 @@ public class ChangeTaskController {
     }
 
     /** 创建 bugfix/refactor/upgrade 任务 */
+    @Log(value = "创建变更任务", type = Log.OperationType.CREATE)
     @PostMapping
     @Operation(summary = "创建变更任务")
     public Result<ChangeTask> create(@RequestBody CreateChangeTaskRequest req) {

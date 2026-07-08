@@ -55,7 +55,7 @@ public class EvidenceItem {
      * 从图谱节点构建证据项
      */
     private static String graphJumpUrl(String projectId, String nodeId) {
-        return "#/projects/" + projectId + "/graph/unified?highlight=" + nodeId;
+        return "/projects/" + projectId + "/graph/unified?highlight=" + nodeId;
     }
 
     public static EvidenceItem fromGraphNode(String projectId, String nodeId, String nodeName,
@@ -83,7 +83,7 @@ public class EvidenceItem {
         item.setExcerpt(content != null ?
             (content.length() > 200 ? content.substring(0, 200) + "..." : content) :
             "");
-        item.setJumpUrl("#/projects/" + projectId + "/documents?highlight=" + chunkId);
+        item.setJumpUrl("/projects/" + projectId + "/documents?highlight=" + chunkId);
         item.setNodeType(chunkType);
         item.setSourceFile(sourceUri);
         item.setRetrievalMethod("VECTOR");
@@ -102,7 +102,7 @@ public class EvidenceItem {
                 ? (excerpt.length() > 200 ? excerpt.substring(0, 200) + "..." : excerpt)
                 : "");
         item.setJumpUrl(claimId != null && !claimId.isBlank()
-                ? "#/projects/" + projectId + "/graph/unified?claim=" + claimId
+                ? "/projects/" + projectId + "/graph/unified?claim=" + claimId
                 : graphJumpUrl(projectId, nodeKey != null ? nodeKey : ""));
         item.setNodeType(card.getSourceType());
         item.setSourceFile(card.getSourcePath());

@@ -114,34 +114,16 @@
                 <div
                   v-if="msg.evidences && msg.evidences.length > 0"
                   class="message-evidences">
-                  <p class="evidence-title">📎 引用证据（{{ msg.evidences.length }} 条）：</p>
-                  <div
-                    v-for="(ev, ei) in msg.evidences"
-                    :key="ei"
-                    class="evidence-item">
-                    <el-tag
-                      size="small"
-                      :type="ev.sourceKind === 'GRAPH_NODE' ? 'success' : 'warning'">
-                      {{ ev.sourceKind === 'GRAPH_NODE' ? '图谱节点' : '文档片段' }}
-                    </el-tag>
-                    <a
-                      v-if="ev.jumpUrl"
-                      :href="ev.jumpUrl"
-                      target="_blank"
-                      class="evidence-title-text evidence-link"
-                    >
-                      {{ ev.title }}
-                      <el-icon><Link /></el-icon>
-                    </a>
+                  <span class="evidence-label">来源</span>
+                  <template v-for="(ev, ei) in msg.evidences" :key="ei">
                     <span
-                      v-else
-                      class="evidence-title-text">{{ ev.title }}</span>
-                    <p
-                      v-if="ev.excerpt"
-                      class="evidence-excerpt">
-                      {{ ev.excerpt }}
-                    </p>
-                  </div>
+                      v-if="isEvidenceCited(msg.content, ei + 1)"
+                      :title="(ev.title || '') + '\n' + (ev.sourceFile || ev.sourcePath || '') + (ev.excerpt ? '\n\n' + ev.excerpt : '')"
+                      class="evidence-chip"
+                      :class="{ 'chip-graph': ev.sourceKind === 'GRAPH_NODE', 'chip-doc': ev.sourceKind !== 'GRAPH_NODE' }"
+                      @click="openEvidence(ev)"
+                    >{{ ei + 1 }}</span>
+                  </template>
                 </div>
                 <div
                   v-if="msg.confidence != null"
@@ -246,14 +228,15 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, Link, ArrowLeft, ArrowRight, Fold } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, ArrowLeft, ArrowRight, Fold } from '@element-plus/icons-vue'
 import { qaApi, type QaConversation, type EvidenceItem } from '@/api/qa.api'
 import { changeTaskApi } from '@/api/change-task.api'
 import { mapQaHistoryMessages } from './qaMessageMapper'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const projectId = route.params.projectId as string
 
 interface Message {
@@ -285,6 +268,34 @@ const exampleQuestions = [
 ]
 
 import DOMPurify from 'dompurify'
+
+// 点击证据标签：解析 jumpUrl 为应用内路由并跳转
+const openEvidence = (ev: EvidenceItem) => {
+  let url = ev.jumpUrl || ''
+  if (!url || url === '#') return
+  // 清理旧格式 #/projects/... → /projects/...
+  url = url.replace(/^#/, '')
+  // 尝试解析为内部路由
+  const match = url.match(/^\/projects\/([^/?]+)(\/.*)/)
+  if (match) {
+    const [, pid, pathWithQuery] = match
+    const [path, queryStr] = pathWithQuery.split('?')
+    const query: Record<string, string> = {}
+    if (queryStr) {
+      queryStr.split('&').forEach(p => { const [k, v] = p.split('='); if (k) query[k] = v || '' })
+    }
+    router.push({ path: `/projects/${pid}${path}`, query })
+  } else {
+    window.open(url, '_blank')
+  }
+}
+
+// 检查回答中是否引用了第 N 个来源（匹配 [来源N] 或 [N]）
+const isEvidenceCited = (content: string, n: number): boolean => {
+  if (!content) return true  // 无内容时显示全部
+  const patterns = [`[来源${n}]`, `[${n}]`, `[来源 ${n}]`]
+  return patterns.some(p => content.includes(p))
+}
 
 const renderMarkdown = (text: string) => {
   if (!text) return ''
@@ -760,38 +771,44 @@ onMounted(async () => {
 }
 
 .message-evidences {
-  margin-top: 8px;
-  padding: 10px;
-  background: #fafafa;
-  border-radius: 6px;
-  border: 1px solid #ebeef5;
-}
-
-.evidence-title {
-  font-size: 12px;
-  color: #909399;
-  margin: 0 0 8px 0;
-}
-
-.evidence-item {
-  margin-bottom: 6px;
+  margin-top: 6px;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
-.evidence-title-text {
-  font-size: 13px;
-  color: #303133;
-}
-
-.evidence-excerpt {
-  width: 100%;
-  margin: 4px 0 0 0;
-  font-size: 12px;
+.evidence-label {
+  font-size: 11px;
   color: #909399;
-  line-height: 1.4;
+}
+
+.evidence-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.evidence-chip:hover {
+  opacity: 0.75;
+}
+
+.chip-graph {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
+.chip-doc {
+  background: #fff7e6;
+  color: #d48806;
 }
 
 .message-confidence {
@@ -904,18 +921,6 @@ onMounted(async () => {
 @keyframes blink {
   0%, 50% { opacity: 1; }
   51%, 100% { opacity: 0; }
-}
-
-.evidence-link {
-  color: #1890ff;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.evidence-link:hover {
-  text-decoration: underline;
 }
 
 .message-actions {

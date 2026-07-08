@@ -860,6 +860,18 @@ public class GraphQueryService {
                 () -> neo4jGraphDao.tableAccessRelations(projectId, versionId));
     }
 
+    /**
+     * 查询真实 BusinessDomain 节点及其 CONTAINS 目标（Feature/Process/Object），
+     * 用于系统关系总览摄入，替代原先仅靠 Controller 名近似业务域的做法。
+     * 结果缓存（同版本稳定）。
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getBusinessDomainContains(String projectId, String versionId) {
+        String key = graphKey(versionId, "business-domain-contains", projectId);
+        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
+                () -> neo4jGraphDao.businessDomainContains(projectId, versionId));
+    }
+
     // ==================== 漂移队列 ====================
 
     /**

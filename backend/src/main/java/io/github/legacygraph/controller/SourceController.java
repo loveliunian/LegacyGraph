@@ -2,6 +2,7 @@ package io.github.legacygraph.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.PageQuery;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
@@ -241,6 +242,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "创建成功，返回代码仓库ID"),
             @ApiResponse(responseCode = "400", description = "参数验证失败")
     })
+    @Log(value = "创建代码仓库", type = Log.OperationType.CREATE)
     public Result<String> createRepo(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -290,6 +292,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "更新成功"),
             @ApiResponse(responseCode = "404", description = "代码仓库不存在")
     })
+    @Log(value = "更新代码仓库配置", type = Log.OperationType.UPDATE)
     public Result<Void> updateRepo(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -340,6 +343,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "删除成功"),
             @ApiResponse(responseCode = "404", description = "代码仓库不存在")
     })
+    @Log(value = "删除代码仓库", type = Log.OperationType.DELETE)
     public Result<Void> deleteRepo(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -367,6 +371,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "测试完成，返回测试结果"),
             @ApiResponse(responseCode = "404", description = "代码仓库不存在")
     })
+    @Log(value = "测试代码仓库连接", type = Log.OperationType.CREATE)
     public Result<Map<String, Object>> testRepoConnection(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -426,6 +431,7 @@ public class SourceController {
      */
     @PostMapping("/repos/test-url")
     @Operation(summary = "测试 Git URL 连通性", description = "快速验证 Git 地址是否可达，无需先保存仓库配置")
+    @Log(value = "测试Git URL连通性", type = Log.OperationType.CREATE)
     public Result<Map<String, Object>> testRepoUrl(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -485,6 +491,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "拉取完成"),
             @ApiResponse(responseCode = "404", description = "代码仓库不存在")
     })
+    @Log(value = "拉取代码仓库", type = Log.OperationType.CREATE)
     public Result<Void> pullRepo(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -590,6 +597,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "扫描已启动"),
             @ApiResponse(responseCode = "404", description = "代码仓库不存在")
     })
+    @Log(value = "扫描代码仓库", type = Log.OperationType.CREATE)
     public Result<Map<String, Object>> scanRepo(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -696,6 +704,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "创建成功，返回数据库连接ID"),
             @ApiResponse(responseCode = "400", description = "参数验证失败")
     })
+    @Log(value = "创建数据库连接", type = Log.OperationType.CREATE)
     public Result<String> createDatabase(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -738,6 +747,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "更新成功"),
             @ApiResponse(responseCode = "404", description = "数据库连接不存在")
     })
+    @Log(value = "更新数据库连接配置", type = Log.OperationType.UPDATE)
     public Result<Void> updateDatabase(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -780,6 +790,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "删除成功"),
             @ApiResponse(responseCode = "404", description = "数据库连接不存在")
     })
+    @Log(value = "删除数据库连接", type = Log.OperationType.DELETE)
     public Result<Void> deleteDatabase(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -807,6 +818,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "测试完成，返回测试结果"),
             @ApiResponse(responseCode = "404", description = "数据库连接不存在")
     })
+    @Log(value = "测试数据库连接", type = Log.OperationType.CREATE)
     public Result<Map<String, Object>> testDbConnection(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -848,6 +860,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "扫描完成，返回表数量"),
             @ApiResponse(responseCode = "404", description = "数据库连接不存在")
     })
+    @Log(value = "扫描数据库表结构", type = Log.OperationType.CREATE)
     public Result<Map<String, Object>> scanSchema(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -1006,6 +1019,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "上传成功，返回文档ID"),
             @ApiResponse(responseCode = "400", description = "文件为空、大小超限或不支持的文件类型")
     })
+    @Log(value = "上传文档", type = Log.OperationType.CREATE)
     public Result<String> uploadDocument(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -1243,6 +1257,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "解析完成，返回事实数量"),
             @ApiResponse(responseCode = "404", description = "文档不存在")
     })
+    @Log(value = "解析文档", type = Log.OperationType.CREATE)
     public Result<Map<String, Object>> parseDocument(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -1390,6 +1405,7 @@ public class SourceController {
             @ApiResponse(responseCode = "200", description = "删除成功"),
             @ApiResponse(responseCode = "404", description = "文档不存在")
     })
+    @Log(value = "删除文档", type = Log.OperationType.DELETE)
     @org.springframework.transaction.annotation.Transactional  // M2 修复：添加事务保护
     public Result<Void> deleteDocument(
             @Parameter(description = "项目ID", required = true)

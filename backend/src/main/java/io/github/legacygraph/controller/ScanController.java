@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.github.legacygraph.dto.ScanProgressResponse;
@@ -53,6 +54,7 @@ public class ScanController {
      * @param request 创建扫描版本请求
      * @return 新创建的扫描版本ID
      */
+@Log(value = "启动扫描", type = Log.OperationType.SCAN)
     @PostMapping
     @Operation(summary = "创建扫描版本", description = "在指定项目下创建一个新的扫描版本，用于后续知识图谱扫描")
     @ApiResponses(value = {
@@ -182,6 +184,7 @@ public class ScanController {
      * @param versionId 扫描版本ID
      * @return 成功结果
      */
+    @Log(value = "删除扫描版本", type = Log.OperationType.DELETE)
     @DeleteMapping("/{versionId}")
     @Operation(summary = "删除扫描版本", description = "删除指定的扫描版本及其关联的所有扫描任务数据")
     @ApiResponses(value = {

@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
@@ -33,7 +34,7 @@ public class LogAspect {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AuditLogRepository auditLogRepository;
 
-    public LogAspect(AuditLogRepository auditLogRepository) {
+    public LogAspect(@Autowired(required = false) AuditLogRepository auditLogRepository) {
         this.auditLogRepository = auditLogRepository;
     }
 
@@ -223,7 +224,8 @@ public class LogAspect {
 
         AuditLog auditLog = new AuditLog();
         auditLog.setTraceId(traceId);
-        auditLog.setOperation(operation);
+        auditLog.setOperation(operation != null && !operation.isEmpty() ? operation : methodObj.getName());
+        auditLog.setOperationType(operationType.name());
         auditLog.setMethod(method);
         auditLog.setRequestUri(requestUri);
         auditLog.setRequestMethod(requestMethod);
@@ -277,15 +279,37 @@ public class LogAspect {
         try {
             org.springframework.security.core.Authentication auth =
                     org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getPrincipal() instanceof String) {
-                String userId = (String) auth.getPrincipal();
-                auditLog.setOperatorId(userId);
-                auditLog.setOperatorName(userId); // 可后续改为从 DB 查用户名
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+                Object principal = auth.getPrincipal();
+                if (principal instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+                    auditLog.setOperatorId(ud.getUsername());
+                    auditLog.setOperatorName(ud.getUsername());
+                } else if (principal instanceof String s) {
+                    auditLog.setOperatorId(s);
+                    auditLog.setOperatorName(s);
+                } else {
+                    auditLog.setOperatorId(principal.toString());
+                    auditLog.setOperatorName(principal.toString());
+                }
             }
         } catch (Exception e) {
-            log.warn("获取当前用户信息失败", e);
+            // 非请求上下文或无认证信息，忽略
         }
 
-        auditLogRepository.insert(auditLog);
+        // 设置 User-Agent
+        try {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                String ua = attributes.getRequest().getHeader("User-Agent");
+                if (ua != null && ua.length() > 500) ua = ua.substring(0, 500);
+                auditLog.setUserAgent(ua);
+            }
+        } catch (Exception e) {
+            // 忽略
+        }
+
+        if (auditLogRepository != null) {
+            auditLogRepository.insert(auditLog);
+        }
     }
 }

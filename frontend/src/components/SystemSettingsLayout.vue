@@ -23,6 +23,12 @@
       <el-tab-pane
         label="提示词管理"
         name="prompts" />
+      <el-tab-pane
+        label="插件管理"
+        name="plugins" />
+      <el-tab-pane
+        label="操作日志"
+        name="audit-logs" />
     </el-tabs>
 
     <div class="system-content">
@@ -44,7 +50,10 @@ const routeToTab: Record<string, string> = {
   SystemDictionaryList: 'dictionaries',
   SystemSettings: 'settings',
   LlmProviderSettings: 'llm',
-  PromptTemplateList: 'prompts'
+  PromptTemplateList: 'prompts',
+  PluginManagement: 'plugins',
+  AuditLogList: 'audit-logs',
+  AuditLogDetail: 'audit-logs'
 }
 
 // tab name → 路由名
@@ -53,7 +62,9 @@ const tabToRoute: Record<string, string> = {
   dictionaries: 'SystemDictionaryList',
   settings: 'SystemSettings',
   llm: 'LlmProviderSettings',
-  prompts: 'PromptTemplateList'
+  prompts: 'PromptTemplateList',
+  plugins: 'PluginManagement',
+  'audit-logs': 'AuditLogList'
 }
 
 const activeTab = ref(routeToTab[route.name as string] || 'dictionaries')

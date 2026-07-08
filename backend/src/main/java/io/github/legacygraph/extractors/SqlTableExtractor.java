@@ -1,6 +1,9 @@
 package io.github.legacygraph.extractors;
 
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.delete.Delete;
@@ -9,7 +12,10 @@ import net.sf.jsqlparser.statement.select.Join;
 import net.sf.jsqlparser.statement.select.ParenthesedSelect;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.statement.select.SelectItem;
+import net.sf.jsqlparser.statement.select.SelectVisitorAdapter;
 import net.sf.jsqlparser.statement.update.Update;
+import net.sf.jsqlparser.statement.update.UpdateSet;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,6 +37,10 @@ public class SqlTableExtractor {
         private Set<String> readTables = new HashSet<>();
         private Set<String> writeTables = new HashSet<>();
         private Set<String> joinTables = new HashSet<>();
+        /** 读取的具体字段名（简单名，小写，不含表前缀） */
+        private Set<String> readColumns = new HashSet<>();
+        /** 写入的具体字段名 */
+        private Set<String> writeColumns = new HashSet<>();
         private String sqlType;
     }
 
@@ -118,21 +128,91 @@ public class SqlTableExtractor {
     }
 
     /**
-     * 根据语句类型分发到对应的表提取方法。
+     * 根据语句类型分发到对应的表提取方法，同时提取字段引用。
      */
     private void classifyStatement(Statement statement, SqlTableResult result) {
-        if (statement instanceof Select) {
+        if (statement instanceof Select s) {
             result.setSqlType("SELECT");
-            extractSelectTables((Select) statement, result);
-        } else if (statement instanceof Insert) {
+            extractSelectTables(s, result);
+            extractSelectColumns(s, result);
+        } else if (statement instanceof Insert i) {
             result.setSqlType("INSERT");
-            extractInsertTables((Insert) statement, result);
-        } else if (statement instanceof Update) {
+            extractInsertTables(i, result);
+            extractInsertColumns(i, result);
+        } else if (statement instanceof Update u) {
             result.setSqlType("UPDATE");
-            extractUpdateTables((Update) statement, result);
-        } else if (statement instanceof Delete) {
+            extractUpdateTables(u, result);
+            extractUpdateColumns(u, result);
+        } else if (statement instanceof Delete d) {
             result.setSqlType("DELETE");
-            extractDeleteTables((Delete) statement, result);
+            extractDeleteTables(d, result);
+        }
+    }
+
+    /** 提取 SELECT 字段列表（读字段）+ WHERE 条件中的字段 */
+    private void extractSelectColumns(Select select, SqlTableResult result) {
+        if (select.getSelectBody() instanceof PlainSelect ps) {
+            if (ps.getSelectItems() != null) {
+                for (SelectItem si : ps.getSelectItems()) {
+                    collectColumns(si, result.getReadColumns());
+                }
+            }
+            if (ps.getWhere() != null) {
+                collectColumns(ps.getWhere(), result.getReadColumns());
+            }
+        }
+    }
+
+    /** 提取 INSERT 字段列表（写字段） */
+    private void extractInsertColumns(Insert insert, SqlTableResult result) {
+        if (insert.getColumns() != null) {
+            for (Column col : insert.getColumns()) {
+                result.getWriteColumns().add(col.getColumnName().toLowerCase());
+            }
+        }
+        if (insert.getSelect() != null && insert.getSelect().getSelectBody() instanceof PlainSelect ps) {
+            extractSelectColumns(insert.getSelect(), result);
+        }
+    }
+
+    /** 提取 UPDATE SET 字段（写字段）+ WHERE 字段（读字段） */
+    private void extractUpdateColumns(Update update, SqlTableResult result) {
+        if (update.getUpdateSets() != null) {
+            for (UpdateSet us : update.getUpdateSets()) {
+                for (Column col : us.getColumns()) {
+                    result.getWriteColumns().add(col.getColumnName().toLowerCase());
+                }
+            }
+        }
+        if (update.getWhere() != null) {
+            collectColumns(update.getWhere(), result.getReadColumns());
+        }
+    }
+
+    /** 递归收集 AST 节点中所有 Column 引用 */
+    private void collectColumns(Object node, Set<String> target) {
+        if (node == null) return;
+        if (node instanceof Column col) {
+            target.add(col.getColumnName().toLowerCase());
+            return;
+        }
+        if (node instanceof Expression expr) {
+            expr.accept(new ExpressionVisitorAdapter() {
+                @Override
+                public void visit(Column col) {
+                    super.visit(col);
+                    target.add(col.getColumnName().toLowerCase());
+                }
+            });
+        }
+        if (node instanceof SelectItem si) {
+            si.getExpression().accept(new ExpressionVisitorAdapter() {
+                @Override
+                public void visit(Column col) {
+                    super.visit(col);
+                    target.add(col.getColumnName().toLowerCase());
+                }
+            });
         }
     }
 

@@ -24,9 +24,14 @@ public class AuditLog {
     private String traceId;
 
     /**
-     * 操作名称
+     * 操作名称（描述）
      */
     private String operation;
+
+    /**
+     * 操作类型：INSERT/UPDATE/DELETE/QUERY/LOGIN/OTHER
+     */
+    private String operationType;
 
     /**
      * 方法签名（DB 列名: method）

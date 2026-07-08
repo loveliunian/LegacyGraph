@@ -81,6 +81,8 @@ public class MybatisPlusConfig {
         sqlSessionFactoryBean.setPlugins(mybatisPlusInterceptor());
         // 注册 PostgreSQL UUID 类型处理器
         com.baomidou.mybatisplus.core.MybatisConfiguration ibatisConfiguration = new com.baomidou.mybatisplus.core.MybatisConfiguration();
+        // 显式设置 SQL 日志实现，否则自定义 SqlSessionFactory 会覆盖 yml 中的 log-impl 配置
+        ibatisConfiguration.setLogImpl(org.apache.ibatis.logging.slf4j.Slf4jImpl.class);
         // 不要全局注册给 String.class，这会导致所有 String 参数都被当作 UUID 处理
         // 正确的方式是在实体类的 UUID 字段上显式指定 @TypeHandler
         sqlSessionFactoryBean.setConfiguration(ibatisConfiguration);

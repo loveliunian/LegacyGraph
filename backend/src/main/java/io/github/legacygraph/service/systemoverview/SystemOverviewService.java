@@ -63,7 +63,7 @@ public class SystemOverviewService {
                 .projectId(projectId)
                 .versionId(versionId)
                 .mappings(mappings)
-                .corePaths(buildCorePaths())
+                .corePaths(buildCorePaths(mappings))
                 .totalDomains(totalDomains)
                 .build();
     }
@@ -83,7 +83,7 @@ public class SystemOverviewService {
      * 核心贯穿链路（业务→功能→代码→数据）。
      */
     public List<String> getPaths(String projectId, String versionId) {
-        return buildCorePaths();
+        return buildCorePaths(buildDynamicMappings(projectId, versionId));
     }
 
     /**
@@ -124,7 +124,7 @@ public class SystemOverviewService {
         }
 
         sb.append("\n## 2. 核心贯穿链路\n\n");
-        for (String path : buildCorePaths()) {
+        for (String path : buildCorePaths(mappings)) {
             sb.append("- ").append(path).append("\n");
         }
 
@@ -326,14 +326,50 @@ public class SystemOverviewService {
         );
     }
 
-    private List<String> buildCorePaths() {
-        return Arrays.asList(
-                "扫描→图谱：Project → ScanVersion → Adapter → GraphBuilder → EvidenceGraphWriter → Neo4j/证据表",
-                "QA问答：question → IntentClassifier → HybridRetrieval → ReRanker → GraphRagPlanExecutor → LlmGateway → QA表",
-                "测试回写：Feature → TestCase → TestExecutor → Table/Method → 置信度回写",
-                "变更影响：Table ← READS/WRITE ← SQL ← Mapper ← Service ← HANDLED_BY ← Api ← Feature",
-                "Graphify导入：graph.json → Compatibility → Import → GraphMergeAgent → Neo4j"
-        );
+    /**
+     * 核心贯穿链路：从四层映射行动态生成，每行若有完整链条则拼接。
+     * 格式："业务域 → 能力/功能 → Controller/API → 代码模块 → 数据表"
+     * 无映射数据时回退为空列表。
+     */
+    private List<String> buildCorePaths(List<LayerMappingDTO> mappings) {
+        if (mappings == null || mappings.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> paths = new ArrayList<>();
+        for (LayerMappingDTO m : mappings) {
+            StringBuilder sb = new StringBuilder();
+            if (notBlankStr(m.getBusinessDomain())) {
+                sb.append(m.getBusinessDomain());
+            }
+            String feature = notBlankStr(m.getCapability()) ? m.getCapability() : m.getFeature();
+            if (feature != null) {
+                if (sb.length() > 0) sb.append(" → ");
+                sb.append(feature);
+            }
+            if (notBlankStr(m.getController())) {
+                if (sb.length() > 0) sb.append(" → ");
+                sb.append(m.getController());
+            } else if (notBlankStr(m.getApiPath())) {
+                if (sb.length() > 0) sb.append(" → ");
+                sb.append(m.getApiPath());
+            }
+            if (notBlankStr(m.getCodeModule())) {
+                if (sb.length() > 0) sb.append(" → ");
+                sb.append(m.getCodeModule());
+            }
+            if (m.getDataTables() != null && !m.getDataTables().isEmpty()) {
+                if (sb.length() > 0) sb.append(" → ");
+                sb.append(String.join(",", m.getDataTables()));
+            }
+            if (sb.length() > 0) {
+                paths.add(sb.toString());
+            }
+        }
+        return paths;
+    }
+
+    private boolean notBlankStr(String s) {
+        return s != null && !s.isBlank();
     }
 
     private boolean isUsableOverviewClaim(KnowledgeClaim claim) {

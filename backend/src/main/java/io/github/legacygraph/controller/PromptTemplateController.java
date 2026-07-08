@@ -1,5 +1,6 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.entity.PromptTemplate;
@@ -56,6 +57,7 @@ public class PromptTemplateController {
         return Result.success(template);
     }
 
+    @Log(value = "创建提示词模板", type = Log.OperationType.CREATE)
     @PostMapping
     @Operation(summary = "创建提示词模板")
     public Result<PromptTemplate> create(@RequestBody PromptTemplate template) {
@@ -71,6 +73,7 @@ public class PromptTemplateController {
         return Result.success(created);
     }
 
+    @Log(value = "更新提示词模板", type = Log.OperationType.UPDATE)
     @PutMapping("/{id}")
     @Operation(summary = "更新提示词模板（创建新版本）")
     public Result<PromptTemplate> update(
@@ -85,6 +88,7 @@ public class PromptTemplateController {
         return Result.success(updated);
     }
 
+    @Log(value = "切换提示词状态", type = Log.OperationType.UPDATE)
     @PutMapping("/{id}/toggle")
     @Operation(summary = "切换模板激活状态")
     public Result<Void> toggleActive(
@@ -97,6 +101,7 @@ public class PromptTemplateController {
         return Result.success();
     }
 
+    @Log(value = "删除提示词模板", type = Log.OperationType.DELETE)
     @DeleteMapping("/{id}")
     @Operation(summary = "删除提示词模板")
     public Result<Void> delete(
@@ -109,6 +114,7 @@ public class PromptTemplateController {
         return Result.success();
     }
 
+    @Log(value = "刷新提示词缓存", type = Log.OperationType.OTHER)
     @PostMapping("/cache/refresh")
     @Operation(summary = "刷新模板缓存")
     public Result<Void> refreshCache() {

@@ -324,15 +324,39 @@ public class EnhancedQaAgent {
                 @Override
                 public void onComplete(String fullText) {
                     try {
-                        // 尝试从 JSON 格式响应中提取 answer 字段（outputSchema 模板会要求 LLM 输出 JSON）
+                        // 尝试从 LLM 响应中提取可读文本
                         String displayText = fullText;
                         try {
                             var jsonNode = objectMapper.readTree(fullText);
+                            // 优先提取 answer 字段
                             if (jsonNode.has("answer")) {
                                 displayText = jsonNode.get("answer").asText();
+                            } else if (jsonNode.isArray()) {
+                                // 纯数组 → 转为列表
+                                StringBuilder sb = new StringBuilder();
+                                for (var item : jsonNode) {
+                                    sb.append("- ").append(item.asText()).append("\n");
+                                }
+                                displayText = sb.toString();
+                            } else if (jsonNode.isObject() && jsonNode.size() <= 3) {
+                                // 小对象（如 {table_list:[...], source:"..."}) → 扁平化
+                                StringBuilder sb = new StringBuilder();
+                                jsonNode.fields().forEachRemaining(e -> {
+                                    if (e.getValue().isArray()) {
+                                        sb.append("**").append(e.getKey()).append("**：\n");
+                                        for (var item : e.getValue()) {
+                                            sb.append("- ").append(item.asText()).append("\n");
+                                        }
+                                    } else if (e.getValue().isTextual()) {
+                                        sb.append(e.getValue().asText()).append("\n");
+                                    }
+                                });
+                                displayText = sb.toString().trim();
+                                if (displayText.isEmpty()) displayText = fullText;
                             }
+                            // 大 JSON 对象 → 保留原文（让模型自然语言指令生效）
                         } catch (Exception ignored) {
-                            // 非 JSON 格式，使用原始文本
+                            // 非 JSON，直接用
                         }
 
                         stageTimings.put("llm_generate", System.currentTimeMillis() - generateStart);

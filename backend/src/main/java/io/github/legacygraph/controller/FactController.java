@@ -6,6 +6,7 @@ import io.github.legacygraph.agent.CodeFactAgent;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.common.PageQuery;
+import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.PageResult;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.FactExtractionResult;
@@ -265,6 +266,7 @@ public class FactController {
 
     // ==================== 事实抽取接口 ====================
 
+    @Log(value = "提取代码事实", type = Log.OperationType.CREATE)
     @PostMapping("/extract/facts/code")
     @Operation(summary = "从代码片段抽取事实", description = "调用LLM从代码片段中抽取业务事实")
     public Result<FactExtractionResult> extractCodeFacts(
@@ -277,6 +279,7 @@ public class FactController {
         return Result.success(result);
     }
 
+    @Log(value = "提取文档事实", type = Log.OperationType.CREATE)
     @PostMapping("/extract/facts/doc")
     @Operation(summary = "从文档片段抽取事实", description = "调用LLM从文本文档中抽取业务事实")
     public Result<DocUnderstandingAgent.BusinessFactExtraction> extractDocFacts(
@@ -314,6 +317,7 @@ public class FactController {
 
     // ==================== 手动创建业务事实接口（不依赖AI） ====================
 
+    @Log(value = "手动创建事实", type = Log.OperationType.CREATE)
     @PostMapping("/facts/manual")
     @Operation(summary = "手动创建业务事实", description = "不依赖AI，手动创建业务域/流程/对象/规则事实并落图")
     public Result<DocUnderstandingAgent.BusinessFactExtraction> createManualBusinessFacts(

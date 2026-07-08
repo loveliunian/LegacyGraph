@@ -3,9 +3,13 @@ package io.github.legacygraph.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 /**
  * 系统用户实体
@@ -53,9 +57,23 @@ public class SysUser {
     private String roles;
 
     /**
-     * 权限（逗号分隔）
+     * 权限（逗号分隔），支持前端传数组或字符串
      */
     private String permissions;
+
+    /** 兼容前端传数组格式：["admin","user"] → "admin,user" */
+    @JsonSetter("permissions")
+    public void setPermissionsJson(JsonNode node) {
+        if (node == null || node.isNull()) {
+            this.permissions = null;
+        } else if (node.isArray()) {
+            this.permissions = StreamSupport.stream(node.spliterator(), false)
+                    .map(JsonNode::asText)
+                    .collect(Collectors.joining(","));
+        } else {
+            this.permissions = node.asText();
+        }
+    }
 
     /**
      * 状态: ACTIVE/DISABLED
