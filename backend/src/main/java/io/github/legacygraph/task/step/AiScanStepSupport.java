@@ -42,8 +42,8 @@ import java.util.function.Supplier;
 @Component
 public class AiScanStepSupport {
 
-    /** LLM 并发上限（DeepSeek 8 路限流，留 4 路给其他调用；虚拟线程 I/O 阻塞不占 OS 线程） */
-    public static final int DOC_EXTRACT_PARALLELISM = 4;
+    /** LLM 并发上限（4GB 堆实测 DOC+CODE 各 2 路不 OOM；DeepSeek 8 路限流，2+2=4 安全） */
+    public static final int DOC_EXTRACT_PARALLELISM = 2;
 
     /** 向量化分片参数 */
     private static final int VECTOR_CHUNK_SIZE = 2000;

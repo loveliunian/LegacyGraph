@@ -228,7 +228,7 @@ public class LogAspect {
         auditLog.setRequestMethod(requestMethod);
         auditLog.setClientIp(clientIp);
         auditLog.setDurationMs(durationMs);
-        auditLog.setStatus(throwable == null ? "SUCCESS" : "FAILED");
+        auditLog.setStatus(throwable == null ? "success" : "fail");
         auditLog.setCreatedAt(LocalDateTime.now());
 
         // 记录请求参数（过滤敏感信息）

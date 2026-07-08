@@ -111,7 +111,16 @@ public class DatabaseMetadataScanService {
                     filteredTables.size() - limitedTables.size());
             return limitedTables.size();
         } catch (Exception e) {
-            log.error("Failed to extract database metadata for schema {}", effectiveSchema, e);
+            String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+            // 连接/认证失败 → WARN（DB 不可达是预期场景），异常错误 → ERROR
+            if (msg.contains("connection") || msg.contains("timeout") || msg.contains("refused")
+                    || msg.contains("authentication") || msg.contains("password")) {
+                log.warn("DB metadata unavailable for schema {} (DB unreachable): {}", effectiveSchema, msg);
+            } else if (msg.contains("does not exist") || msg.contains("not found") || msg.contains("no tables")) {
+                log.info("DB metadata empty for schema {}: {}", effectiveSchema, msg);
+            } else {
+                log.error("Failed to extract database metadata for schema {}: {}", effectiveSchema, msg);
+            }
             return 0;
         }
     }

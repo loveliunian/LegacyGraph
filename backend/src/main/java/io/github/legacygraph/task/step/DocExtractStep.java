@@ -146,6 +146,16 @@ public class DocExtractStep implements AiScanStepExecutor {
                         });
                     }
                     try {
+                        // 内存保护：堆快满时跳过 LLM 调用，避免 OOM 中断扫描
+                        if (!isMemoryHealthy()) {
+                            log.warn("Skipping doc extract for {} (low memory: {}MB free)",
+                                    doc.getDocName(), Runtime.getRuntime().freeMemory() / 1024 / 1024);
+                            doc.setParseStatus("FAILED");
+                            doc.setErrorMessage("Low memory, skipped");
+                            doc.setUpdatedAt(java.time.LocalDateTime.now());
+                            try { documentRepository.updateById(doc); } catch (Exception ignored) {}
+                            return;
+                        }
                         // A3：大文档分段并行抽取再合并，既全覆盖又并发提速。
                         // 小文档（≤ DOC_CONTENT_LIMIT）保持原路径——单次 LLM 调用。
                         DocUnderstandingAgent.BusinessFactExtraction extraction;

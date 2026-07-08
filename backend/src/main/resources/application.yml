@@ -62,7 +62,7 @@ spring:
       maximum-pool-size: 30
       idle-timeout: 30000
       pool-name: LegacyGraphHikariCP
-      max-lifetime: 1800000
+      max-lifetime: 600000
       connection-timeout: 10000
       leak-detection-threshold: 120000
       data-source-properties:
@@ -94,6 +94,8 @@ spring:
           max-wait: 2000ms
           max-idle: 8
           min-idle: 4
+      timeout: 5000ms
+      connect-timeout: 3000ms
 
   # Jackson 配置
   jackson:

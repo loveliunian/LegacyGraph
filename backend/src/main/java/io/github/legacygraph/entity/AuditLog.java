@@ -1,7 +1,6 @@
 package io.github.legacygraph.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -23,74 +22,46 @@ public class AuditLog {
      */
     private String traceId;
 
-    /**
-     * 操作名称（描述）
-     */
+    /** 操作名称（描述） */
     private String operation;
 
-    /**
-     * 操作类型：INSERT/UPDATE/DELETE/QUERY/LOGIN/OTHER
-     */
+    /** 操作类型：CREATE/UPDATE/DELETE/QUERY/LOGIN/OTHER */
     private String operationType;
 
-    /**
-     * 方法签名（DB 列名: method）
-     */
+    /** 方法签名 */
     private String method;
 
-    /**
-     * 请求URI
-     */
+    /** 请求URI */
     private String requestUri;
 
-    /**
-     * 请求方法
-     */
+    /** 请求方法(GET/POST/PUT/DELETE) */
     private String requestMethod;
 
-    /**
-     * 客户端IP
-     */
+    /** 客户端IP */
     private String clientIp;
 
-    /**
-     * User-Agent
-     */
+    /** User-Agent */
     private String userAgent;
 
-    /**
-     * 操作人ID
-     */
+    /** 操作人ID */
     private String operatorId;
 
-    /**
-     * 操作人名称
-     */
+    /** 操作人名称 */
     private String operatorName;
 
-    /**
-     * 状态: SUCCESS/FAILED
-     */
+    /** 状态: success/fail */
     private String status;
 
-    /**
-     * 执行耗时(毫秒)
-     */
+    /** 执行耗时(毫秒) */
     private Long durationMs;
 
-    /**
-     * 请求参数
-     */
+    /** 请求参数 */
     private String requestParams;
 
-    /**
-     * 返回结果
-     */
+    /** 返回结果 */
     private String responseResult;
 
-    /**
-     * 异常堆栈
-     */
+    /** 异常堆栈 */
     private String errorStack;
 
     /**

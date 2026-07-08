@@ -147,8 +147,8 @@
           <template #default="{ row }">
             <el-tag
               size="small"
-              :type="getModuleType(row.module)">
-              {{ getModuleLabel(row.module) }}
+              :type="getModuleType(row.module || '')">
+              {{ getModuleLabel(row.module || '') }}
             </el-tag>
           </template>
         </el-table-column>
@@ -159,22 +159,22 @@
           <template #default="{ row }">
             <el-tag
               size="small"
-              :type="getActionType(row.action)">
-              {{ getActionLabel(row.action) }}
+              :type="getActionType(row.action || '')">
+              {{ getActionLabel(row.action || '') }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column
-          prop="description"
+          prop="operation"
           label="操作描述"
           min-width="200"
           show-overflow-tooltip />
         <el-table-column
-          prop="username"
+          prop="operatorName"
           label="操作人"
           width="120" />
         <el-table-column
-          prop="ip"
+          prop="clientIp"
           label="IP地址"
           width="140" />
         <el-table-column
@@ -190,7 +190,7 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="duration"
+          prop="durationMs"
           label="耗时(ms)"
           width="100"
           align="right" />
@@ -242,24 +242,24 @@
         <el-descriptions-item label="操作模块">
           <el-tag
             size="small"
-            :type="getModuleType(currentLog.module)">
-            {{ getModuleLabel(currentLog.module) }}
+            :type="getModuleType(currentLog.module || '')">
+            {{ getModuleLabel(currentLog.module || '') }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="操作类型">
           <el-tag
             size="small"
-            :type="getActionType(currentLog.action)">
-            {{ getActionLabel(currentLog.action) }}
+            :type="getActionType(currentLog.action || '')">
+            {{ getActionLabel(currentLog.action || '') }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item
           label="操作描述"
           :span="2">
-          {{ currentLog.description }}
+          {{ currentLog.operation }}
         </el-descriptions-item>
         <el-descriptions-item label="操作人">
-          {{ currentLog.username }}
+          {{ currentLog.operatorName }}
         </el-descriptions-item>
         <el-descriptions-item label="操作结果">
           <el-tag
@@ -286,24 +286,24 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="请求URL">
-          {{ currentLog.url }}
+          {{ currentLog.requestUri }}
         </el-descriptions-item>
         <el-descriptions-item
           label="请求参数"
           :span="2">
-          <pre class="code-pre">{{ currentLog.params }}</pre>
+          <pre class="code-pre">{{ currentLog.requestParams }}</pre>
         </el-descriptions-item>
         <el-descriptions-item
-          v-if="currentLog.result"
+          v-if="currentLog.responseResult"
           label="响应结果"
           :span="2">
-          <pre class="code-pre">{{ currentLog.result }}</pre>
+          <pre class="code-pre">{{ currentLog.responseResult }}</pre>
         </el-descriptions-item>
         <el-descriptions-item
-          v-if="currentLog.errorMessage"
+          v-if="currentLog.errorStack"
           label="错误信息"
           :span="2">
-          <pre class="code-pre error">{{ currentLog.errorMessage }}</pre>
+          <pre class="code-pre error">{{ currentLog.errorStack }}</pre>
         </el-descriptions-item>
         <el-descriptions-item label="耗时">
           {{ currentLog.duration }} ms
@@ -331,20 +331,25 @@ import type { PageResult } from '@/types'
 
 interface AuditLog {
   id: string
-  module: string
-  action: string
-  description: string
-  username: string
-  ip: string
+  operation: string
+  operationType: string
+  operatorName: string
+  clientIp: string
   status: string
-  duration: number
+  durationMs: number
   createdAt: string
   userAgent?: string
   method?: string
-  url?: string
-  params?: string
-  result?: string
-  errorMessage?: string
+  requestUri?: string
+  requestMethod?: string
+  requestParams?: string
+  responseResult?: string
+  errorStack?: string
+  // 前端派生字段（兼容旧代码）
+  module?: string
+  action?: string
+  ip?: string
+  duration?: number
 }
 
 const loading = ref(false)
@@ -403,6 +408,19 @@ function getActionLabel(action: string): string {
   return actionMap[action]?.label || actionMap.default.label
 }
 
+// 从 method "SourceController#createRepo" 提取控制器简单名 → "source"
+function extractModule(method: string): string {
+  if (!method) return ''
+  const controller = method.split('#')[0] || ''
+  const lower = controller.toLowerCase()
+  if (lower.includes('system') || lower.includes('user') || lower.includes('prompt') || lower.includes('llm') || lower.includes('plugin') || lower.includes('audit')) return 'system'
+  if (lower.includes('scan') || lower.includes('graphify')) return 'scan'
+  if (lower.includes('graph') || lower.includes('knowledge') || lower.includes('review') || lower.includes('fact')) return 'graph'
+  if (lower.includes('report')) return 'report'
+  if (lower.includes('source') || lower.includes('database') || lower.includes('document')) return 'graph'
+  return ''
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -419,7 +437,14 @@ async function loadData() {
     }
 
     const res = await auditApi.list(params) as PageResult<AuditLog>
-    tableData.value = res.list
+    // 派生前端展示字段
+    tableData.value = res.list.map(item => ({
+      ...item,
+      // module: 从 method（类名#方法名）提取控制器的简单名
+      module: extractModule(item.method || ''),
+      // action: 映射 operationType → 前端筛选项
+      action: (item.operationType || '').toLowerCase(),
+    }))
     pagination.total = res.total
   } catch (e) {
     ElMessage.error('获取操作日志失败')
@@ -443,7 +468,11 @@ function handleReset() {
 }
 
 function handleDetail(row: AuditLog) {
-  currentLog.value = row
+  currentLog.value = {
+    ...row,
+    module: extractModule(row.method || ''),
+    action: (row.operationType || '').toLowerCase(),
+  }
   detailVisible.value = true
 }
 
@@ -459,11 +488,11 @@ async function handleExport() {
       { key: 'id', title: '日志ID' },
       { key: 'module', title: '操作模块', formatter: (v: string) => getModuleLabel(v) },
       { key: 'action', title: '操作类型', formatter: (v: string) => getActionLabel(v) },
-      { key: 'description', title: '操作描述' },
-      { key: 'username', title: '操作人' },
-      { key: 'ip', title: 'IP地址' },
+      { key: 'operation', title: '操作描述' },
+      { key: 'operatorName', title: '操作人' },
+      { key: 'clientIp', title: 'IP地址' },
       { key: 'status', title: '操作结果', formatter: (v: string) => v === 'success' ? '成功' : '失败' },
-      { key: 'duration', title: '耗时(ms)' },
+      { key: 'durationMs', title: '耗时(ms)' },
       { key: 'createdAt', title: '操作时间' }
     ]
 
