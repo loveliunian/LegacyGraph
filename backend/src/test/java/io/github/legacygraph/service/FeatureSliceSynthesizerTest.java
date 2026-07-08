@@ -6,7 +6,6 @@ import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -33,7 +32,6 @@ import io.github.legacygraph.service.graph.KnowledgeClaimService;
  * </p>
  */
 @ExtendWith(MockitoExtension.class)
-@Disabled("子代理自动生成，Mock 需要微调")
 class FeatureSliceSynthesizerTest {
 
     @Mock
@@ -149,6 +147,12 @@ class FeatureSliceSynthesizerTest {
                 isNull(), isNull(), isNull(), eq(500)))
                 .thenReturn(Collections.emptyList());
 
+        // 先用通用 stub 兜底（其他边类型返回空）
+        // Mockito 规则：通用 stub 先定义，后面具体 stub 覆盖
+        lenient().when(neo4jGraphDao.queryEdges(anyString(), anyString(), anyString(),
+                isNull(), anyString(), isNull(), isNull(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
         // 入口边
         GraphEdge entranceEdge = new GraphEdge();
         entranceEdge.setFromNodeId("feat-1");
@@ -170,11 +174,6 @@ class FeatureSliceSynthesizerTest {
         when(neo4jGraphDao.findNodeById("api-1")).thenReturn(Optional.of(apiNode));
         when(neo4jGraphDao.findNodeById("svc-1")).thenReturn(Optional.of(serviceNode));
 
-        // 其他边类型返回空
-        when(neo4jGraphDao.queryEdges(anyString(), anyString(), anyString(),
-                isNull(), anyString(), isNull(), isNull(), anyInt()))
-                .thenReturn(Collections.emptyList());
-
         FeatureSlice slice = synthesizer.synthesizeFeatureSlice("proj-1", "v1", "user-management");
 
         assertNotNull(slice);
@@ -194,7 +193,7 @@ class FeatureSliceSynthesizerTest {
         when(knowledgeClaimService.listClaims(eq("proj-1"), eq("v1"), eq("Feature"),
                 isNull(), isNull(), isNull(), eq(500)))
                 .thenReturn(Collections.emptyList());
-        when(neo4jGraphDao.queryEdges(anyString(), anyString(), anyString(),
+        lenient().when(neo4jGraphDao.queryEdges(anyString(), anyString(), anyString(),
                 isNull(), eq("feat-1"), isNull(), isNull(), eq(50)))
                 .thenReturn(Collections.emptyList());
 

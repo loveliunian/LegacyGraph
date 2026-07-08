@@ -14,6 +14,8 @@ import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.repository.DocChunkRepository;
 import io.github.legacygraph.terminology.TerminologyService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +43,10 @@ public class BusinessGraphBuilder {
     private final EvidenceGraphWriter writer;
     private final FeatureIdentityNormalizer featureIdentityNormalizer;
     private final TerminologyService terminologyService;
+
+    /** 向量语义匹配（bge-m3 @ Ollama）；不可用时回退纯 token 匹配，永不劣化 */
+    @Autowired(required = false)
+    private EmbeddingModel embeddingModel;
 
     public BusinessGraphBuilder(Neo4jGraphDao neo4jGraphDao,
                               DocChunkRepository docChunkRepository,
@@ -296,6 +302,8 @@ public class BusinessGraphBuilder {
 
     /**
      * 功能映射：将文档中的功能映射到已有的前端页面和后端接口。
+     * <p>双路径打分：token 重叠（跨语言 TerminologyService）+ 向量语义（bge-m3 @ Ollama），
+     * 取 max(tokenScore, cosineSimilarity) 为最终分。向量路径不可用时回退纯 token 匹配，永不劣化。</p>
      * <p>收集所有匹配边后批量 MERGE，避免逐条创建导致的大量 Neo4j 往返。</p>
      */
     @Transactional
@@ -312,6 +320,17 @@ public class BusinessGraphBuilder {
         List<GraphNode> apis = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.ApiEndpoint.name(), null, null, null, 0);
 
+        // B1：预计算所有唯一名称的 embedding（Feature/Page/API），扫描级缓存避免笛卡尔积重算。
+        // 单次 embed 失败（Ollama 抖动）→ catch 后 nameToEmbedding 不含该名称，
+        // 下游仅用 token 分，永不因 embedding 不可用而抛异常。
+        Map<String, float[]> nameToEmbedding = precomputeEmbeddings(docFeatures, pages, apis);
+        boolean vectorAvailable = !nameToEmbedding.isEmpty();
+        if (vectorAvailable) {
+            log.info("Vector semantic matching enabled: {} names embedded", nameToEmbedding.size());
+        } else {
+            log.info("Vector semantic matching unavailable (EmbeddingModel not ready), using token-only matching");
+        }
+
         List<GraphEdge> candidateEdges = new ArrayList<>();
         // 预计算每个名称的 token 集合（按名去重缓存），避免在 feature×page×api 笛卡尔积里重复分词
         Map<String, Set<String>> tokensByName = new HashMap<>();
@@ -322,6 +341,7 @@ public class BusinessGraphBuilder {
                 continue;
             }
             Set<String> featTokens = tokensByName.computeIfAbsent(featureName, terminologyService::tokenize);
+            float[] featEmb = nameToEmbedding.get(featureName);
 
             // 匹配Page
             for (GraphNode page : safeList(pages)) {
@@ -330,7 +350,8 @@ public class BusinessGraphBuilder {
                     continue;
                 }
                 Set<String> pageTokens = tokensByName.computeIfAbsent(pageName, terminologyService::tokenize);
-                double score = terminologyService.similarityOfTokens(featTokens, pageTokens, featureName, pageName);
+                double tokenScore = terminologyService.similarityOfTokens(featTokens, pageTokens, featureName, pageName);
+                double score = maxTokenAndVector(tokenScore, featEmb, nameToEmbedding.get(pageName));
                 if (score > 0.6) {
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), page.getId(),
@@ -349,7 +370,8 @@ public class BusinessGraphBuilder {
                     continue;
                 }
                 Set<String> apiTokens = tokensByName.computeIfAbsent(apiName, terminologyService::tokenize);
-                double score = terminologyService.similarityOfTokens(featTokens, apiTokens, featureName, apiName);
+                double tokenScore = terminologyService.similarityOfTokens(featTokens, apiTokens, featureName, apiName);
+                double score = maxTokenAndVector(tokenScore, featEmb, nameToEmbedding.get(apiName));
                 if (score > 0.5) {
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), api.getId(),
@@ -370,6 +392,59 @@ public class BusinessGraphBuilder {
         int mappedCount = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
         log.info("Mapped {} feature-doc to code (batch merged)", mappedCount);
         return mappedCount;
+    }
+
+    /**
+     * B1：预计算所有唯一名称的 embedding，扫描级缓存。
+     * 单名称 embed 失败（Ollama 抖动）→ 跳过该名称，不影响其他。
+     */
+    private Map<String, float[]> precomputeEmbeddings(List<GraphNode> features, List<GraphNode> pages, List<GraphNode> apis) {
+        if (embeddingModel == null) {
+            return Map.of();
+        }
+        Map<String, float[]> result = new HashMap<>();
+        for (GraphNode node : safeList(features)) {
+            embedOne(normalizeSearchName(node), result);
+        }
+        for (GraphNode node : safeList(pages)) {
+            embedOne(normalizeSearchName(node), result);
+        }
+        for (GraphNode node : safeList(apis)) {
+            embedOne(normalizeSearchName(node), result);
+        }
+        return result;
+    }
+
+    private void embedOne(String name, Map<String, float[]> cache) {
+        if (name == null || name.isBlank() || cache.containsKey(name)) {
+            return;
+        }
+        try {
+            cache.put(name, embeddingModel.embed(name));
+        } catch (Exception e) {
+            log.debug("Embedding failed for '{}' (Ollama jitter), fallback to token score: {}", name, e.getMessage());
+        }
+    }
+
+    /** 取 token 分与向量余弦相似度的最大值；任一路不可用时回退另一路。 */
+    private static double maxTokenAndVector(double tokenScore, float[] featEmb, float[] targetEmb) {
+        if (featEmb == null || targetEmb == null) {
+            return tokenScore;
+        }
+        double cosine = cosineSimilarity(featEmb, targetEmb);
+        return Math.max(tokenScore, cosine);
+    }
+
+    /** 余弦相似度（两个已归一化的 bge-m3 向量，可直接点积）。 */
+    private static double cosineSimilarity(float[] a, float[] b) {
+        if (a.length != b.length) {
+            return 0.0;
+        }
+        double dot = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            dot += (double) a[i] * b[i];
+        }
+        return dot; // bge-m3 输出已归一化，点积即余弦
     }
 
     /**
@@ -444,6 +519,66 @@ public class BusinessGraphBuilder {
         }
         int totalMapped = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
         log.info("Mapped business-object: {} edges (batch merged, projectId={})", totalMapped, projectId);
+        return totalMapped;
+    }
+
+    /**
+     * P2：业务域 ↔ 代码实体对齐。
+     *
+     * <p>将文档抽取的 BusinessDomain（如"账户管理"）按名称相似度对齐到 Controller/Service
+     * 代码实体（如 NxAccountController / NxAccountService），建立 {@link EdgeType#CONTAINS} 桥接边，
+     * 连通业务域层与代码层，降低业务域 100% 孤立率。</p>
+     */
+    @Transactional
+    public int mapBusinessDomainsToCode(String projectId, String versionId) {
+        List<GraphNode> domains = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.BusinessDomain.name(), null, null, null, 0);
+        if (domains == null || domains.isEmpty()) {
+            log.info("Skip domain-code mapping: no business domains found");
+            return 0;
+        }
+
+        List<GraphNode> controllers = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Controller.name(), null, null, null, 0);
+        List<GraphNode> services = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Service.name(), null, null, null, 0);
+
+        List<GraphNode> codeEntities = new ArrayList<>();
+        if (controllers != null) codeEntities.addAll(controllers);
+        if (services != null) codeEntities.addAll(services);
+
+        if (codeEntities.isEmpty()) {
+            log.info("Skip domain-code mapping: no controllers/services found");
+            return 0;
+        }
+
+        List<GraphEdge> candidateEdges = new ArrayList<>();
+        for (GraphNode domain : domains) {
+            String domainName = normalizeSearchName(domain);
+            if (domainName.isBlank()) continue;
+            for (GraphNode code : codeEntities) {
+                String codeName = normalizeSearchName(code);
+                if (codeName.isBlank()) continue;
+                double score = terminologyService.calculateSimilarity(domainName, codeName);
+                double threshold = 0.55; // 业务域名通常比对象名更长，阈值略低
+                if (score > threshold) {
+                    candidateEdges.add(buildEdgePOJO(projectId, versionId,
+                            domain.getId(), code.getId(),
+                            EdgeType.CONTAINS.name(),
+                            domain.getNodeKey() + "->contains->" + code.getNodeKey(),
+                            SourceType.AI_INFERENCE.name(),
+                            BigDecimal.valueOf(score * 0.75),
+                            score >= 0.75 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
+                }
+            }
+        }
+
+        if (candidateEdges.isEmpty()) {
+            log.info("Mapped domain-code: 0 edges (no matches, projectId={})", projectId);
+            return 0;
+        }
+        int totalMapped = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
+        log.info("Mapped domain-code: {} edges (batch merged, projectId={})", totalMapped, projectId);
         return totalMapped;
     }
 

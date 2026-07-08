@@ -42,14 +42,16 @@ class GapFinderServiceTest {
     void scanGaps_createsDocOnlyFeatureGapWhenFeatureHasNoImplementation() {
         when(claimRepository.selectList(any())).thenReturn(List.of(
                 claim("c1", "Feature", "feature:订单创建", "DESCRIBED_BY", "Evidence", "doc.md", "DOC_AI")));
-        when(gapTaskRepository.selectOne(any())).thenReturn(null);
+        when(gapTaskRepository.selectList(any())).thenReturn(List.of());
 
         GapFinderService.GapScanResult result = service.scanGaps("project-1", "v1");
 
         assertTrue(result.getCreated() >= 1);
-        ArgumentCaptor<GapTask> gapCaptor = ArgumentCaptor.forClass(GapTask.class);
-        verify(gapTaskRepository, atLeastOnce()).insert(gapCaptor.capture());
-        assertTrue(gapCaptor.getAllValues().stream()
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GapTask>> batchCaptor = ArgumentCaptor.forClass(List.class);
+        verify(gapTaskRepository, atLeastOnce()).insertBatch(batchCaptor.capture());
+        assertTrue(batchCaptor.getAllValues().stream()
+                .flatMap(List::stream)
                 .anyMatch(g -> "doc_only_feature".equals(g.getGapType())
                         && "feature:订单创建".equals(g.getGapKey())
                         && g.getDescription() != null));
@@ -60,13 +62,15 @@ class GapFinderServiceTest {
         when(claimRepository.selectList(any())).thenReturn(List.of(
                 claim("c1", "Feature", "feature:订单创建", "DESCRIBED_BY", "Evidence", "doc.md", "DOC_AI"),
                 claim("c2", "Feature", "feature:订单创建", "IMPLEMENTS", "ApiEndpoint", "POST /orders", "CODE_AI")));
-        when(gapTaskRepository.selectOne(any())).thenReturn(null);
+        when(gapTaskRepository.selectList(any())).thenReturn(List.of());
 
         service.scanGaps("project-1", "v1");
 
-        ArgumentCaptor<GapTask> gapCaptor = ArgumentCaptor.forClass(GapTask.class);
-        verify(gapTaskRepository, atLeastOnce()).insert(gapCaptor.capture());
-        assertFalse(gapCaptor.getAllValues().stream()
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GapTask>> batchCaptor = ArgumentCaptor.forClass(List.class);
+        verify(gapTaskRepository, atLeastOnce()).insertBatch(batchCaptor.capture());
+        assertFalse(batchCaptor.getAllValues().stream()
+                .flatMap(List::stream)
                 .anyMatch(g -> "doc_only_feature".equals(g.getGapType())));
     }
 
@@ -80,13 +84,21 @@ class GapFinderServiceTest {
         existing.setGapType("doc_only_feature");
         existing.setGapKey("feature:订单创建");
         existing.setPriorityScore(BigDecimal.valueOf(0.5));
-        when(gapTaskRepository.selectOne(any())).thenReturn(existing);
+        // 代码已改为 selectList 批量加载，不再用 selectOne
+        when(gapTaskRepository.selectList(any())).thenReturn(List.of(existing));
 
         GapFinderService.GapScanResult result = service.scanGaps("project-1", "v1");
 
-        assertTrue(result.getReopened() >= 1);
+        assertTrue(result.getReopened() >= 1, "reopened should be >= 1 but was " + result.getReopened());
         assertEquals("REOPENED", existing.getStatus());
-        verify(gapTaskRepository, atLeastOnce()).updateById(existing);
+        // 代码已改为 updateBatch 批量更新
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GapTask>> updateCaptor = ArgumentCaptor.forClass(List.class);
+        verify(gapTaskRepository, atLeastOnce()).updateBatch(updateCaptor.capture());
+        assertTrue(updateCaptor.getAllValues().stream()
+                .flatMap(List::stream)
+                .anyMatch(g -> "REOPENED".equals(g.getStatus())
+                        && "doc_only_feature".equals(g.getGapType())));
     }
 
     private KnowledgeClaim claim(String id, String subjectType, String subjectKey, String predicate,

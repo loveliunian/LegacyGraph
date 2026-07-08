@@ -217,13 +217,14 @@ public class SqlTableExtractor {
     }
 
     /**
-     * 获取表名（去掉schema）
+     * 获取表名（去 schema，统一小写，与 DB metadata 的 Table nodeKey 对齐）。
+     * PostgreSQL 返回小写表名，SQL 中可能混写（CALL_JMZX_LOG vs call_jmzx_log），
+     * 不归一会导致同一张表被当作不同 Table 节点、READS/WRITES 边落空。
      */
     private String getTableName(Table table) {
-        String name = table.getName();
+        String name = table.getName().toLowerCase();
         if (table.getSchemaName() != null) {
-            // 保留schema.table格式用于nodeKey
-            return table.getSchemaName() + "." + name;
+            return table.getSchemaName().toLowerCase() + "." + name;
         }
         return name;
     }
@@ -263,11 +264,11 @@ public class SqlTableExtractor {
             result.setSqlType("DELETE");
         }
 
-        // 提取 FROM 后的表名
+        // 提取 FROM 后的表名（统一小写，与 DB metadata Table nodeKey 对齐）
         Pattern fromPattern = Pattern.compile("\\bFROM\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
         java.util.regex.Matcher fromMatcher = fromPattern.matcher(sql);
         while (fromMatcher.find()) {
-            String tableName = fromMatcher.group(1);
+            String tableName = fromMatcher.group(1).toLowerCase();
             if (!isReservedWord(tableName)) {
                 result.getReadTables().add(tableName);
             }
@@ -277,7 +278,7 @@ public class SqlTableExtractor {
         Pattern joinPattern = Pattern.compile("\\bJOIN\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
         java.util.regex.Matcher joinMatcher = joinPattern.matcher(sql);
         while (joinMatcher.find()) {
-            String tableName = joinMatcher.group(1);
+            String tableName = joinMatcher.group(1).toLowerCase();
             if (!isReservedWord(tableName)) {
                 result.getJoinTables().add(tableName);
                 result.getReadTables().add(tableName); // JOIN 表也是读表
@@ -288,7 +289,7 @@ public class SqlTableExtractor {
         Pattern insertPattern = Pattern.compile("\\bINSERT\\s+INTO\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
         java.util.regex.Matcher insertMatcher = insertPattern.matcher(sql);
         while (insertMatcher.find()) {
-            String tableName = insertMatcher.group(1);
+            String tableName = insertMatcher.group(1).toLowerCase();
             if (!isReservedWord(tableName)) {
                 result.getWriteTables().add(tableName);
             }
@@ -298,7 +299,7 @@ public class SqlTableExtractor {
         Pattern updatePattern = Pattern.compile("\\bUPDATE\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
         java.util.regex.Matcher updateMatcher = updatePattern.matcher(sql);
         while (updateMatcher.find()) {
-            String tableName = updateMatcher.group(1);
+            String tableName = updateMatcher.group(1).toLowerCase();
             if (!isReservedWord(tableName)) {
                 result.getWriteTables().add(tableName);
             }
@@ -308,7 +309,7 @@ public class SqlTableExtractor {
         Pattern deletePattern = Pattern.compile("\\bDELETE\\s+FROM\\s+([a-zA-Z_][a-zA-Z0-9_.]+)", Pattern.CASE_INSENSITIVE);
         java.util.regex.Matcher deleteMatcher = deletePattern.matcher(sql);
         while (deleteMatcher.find()) {
-            String tableName = deleteMatcher.group(1);
+            String tableName = deleteMatcher.group(1).toLowerCase();
             if (!isReservedWord(tableName)) {
                 result.getWriteTables().add(tableName);
             }

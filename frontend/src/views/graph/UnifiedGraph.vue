@@ -79,6 +79,18 @@
             </div>
           </template>
 
+          <!-- 空视图诊断信息 -->
+          <el-alert
+            v-if="emptyReasons && emptyReasons.length > 0"
+            type="warning"
+            title="图谱数据为空 — 诊断信息"
+            :closable="false"
+            style="margin: 12px">
+            <ul style="margin: 4px 0; padding-left: 20px">
+              <li v-for="(reason, idx) in emptyReasons" :key="idx">{{ reason }}</li>
+            </ul>
+          </el-alert>
+
           <GraphViewerOptimized
             :nodes="filteredNodesForTemplate"
             :edges="filteredEdgesForTemplate"
@@ -391,6 +403,7 @@ const selectedNode = ref<Node | null>(null)
 const evidenceDrawerVisible = ref(false)
 const nodeEvidence = ref<Evidence[]>([])
 const versions = ref<ScanVersion[]>([])
+const emptyReasons = ref<string[] | null>(null)
 
 const nodeTypes = [
   { value: 'BusinessDomain', label: '业务域', color: '#67c23a' },
@@ -626,12 +639,20 @@ async function loadGraph(versionId: string) {
       }
     }))
 
-    ElMessage.success(`已加载 ${data.nodeCount || 0} 节点, ${data.edgeCount || 0} 关系`)
+    // 存储空视图诊断原因供模板展示
+    emptyReasons.value = data.emptyReasons || null
+
+    if ((data.nodeCount || 0) === 0 && emptyReasons.value) {
+      ElMessage.warning('图谱数据为空，详见诊断信息')
+    } else {
+      ElMessage.success(`已加载 ${data.nodeCount || 0} 节点, ${data.edgeCount || 0} 关系`)
+    }
   } catch (error) {
     console.error('加载图谱失败', error)
     ElMessage.error('加载图谱失败')
     internalNodes.value = []
     internalEdges.value = []
+    emptyReasons.value = null
   } finally {
     loading.value = false
   }

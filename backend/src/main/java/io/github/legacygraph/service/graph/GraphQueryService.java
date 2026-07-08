@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -327,10 +328,31 @@ public class GraphQueryService {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence, String statusFilter) {
+        // 不缓存空结果 — 扫描过程中访问会缓存空图，导致扫描完成后仍返回空数据
         String key = graphKey(versionId, "unified",
                 String.valueOf(minConfidence), String.valueOf(statusFilter));
-        return cacheService.getOrLoad(key, Map.class, GRAPH_CACHE_TTL,
-                () -> getUnifiedGraphUncached(versionId, minConfidence, statusFilter));
+        Map<String, Object> cached = cacheService.get(key, Map.class);
+        if (cached != null) {
+            // 命中缓存 → 检查是否空结果缓存；空结果不返回，回源重查
+            Object nodeCount = cached.get("nodeCount");
+            if (nodeCount instanceof Integer && (Integer) nodeCount > 0) {
+                return cached;
+            }
+            if (nodeCount instanceof Long && (Long) nodeCount > 0) {
+                return cached;
+            }
+            // 空缓存 → 失效并回源
+            cacheService.evict(key);
+        }
+        Map<String, Object> fresh = getUnifiedGraphUncached(versionId, minConfidence, statusFilter);
+        // 仅缓存有数据的结果
+        Object freshCount = fresh.get("nodeCount");
+        boolean hasData = (freshCount instanceof Integer && (Integer) freshCount > 0)
+                || (freshCount instanceof Long && (Long) freshCount > 0);
+        if (hasData) {
+            cacheService.put(key, fresh, GRAPH_CACHE_TTL);
+        }
+        return fresh;
     }
 
     private Map<String, Object> getUnifiedGraphUncached(String versionId, Double minConfidence, String statusFilter) {

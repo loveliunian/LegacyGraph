@@ -22,6 +22,7 @@ import io.github.legacygraph.service.qa.HybridRetrievalService;
 import io.github.legacygraph.service.qa.ReRankingService;
 import io.github.legacygraph.service.qa.SemanticCache;
 import io.github.legacygraph.service.qa.VectorRetrievalService;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -64,6 +65,20 @@ public class EnhancedQaAgent {
 
     /** QA 链路专用虚拟线程执行器 — 意图分类/改写/HyDE/规划/召回可部分并行 */
     private final ExecutorService qaExecutor = Executors.newVirtualThreadPerTaskExecutor();
+
+    /** Bean 销毁时优雅关闭执行器，避免资源泄漏。 */
+    @PreDestroy
+    public void shutdown() {
+        qaExecutor.shutdown();
+        try {
+            if (!qaExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
+                qaExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            qaExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /**
      * 流式问答

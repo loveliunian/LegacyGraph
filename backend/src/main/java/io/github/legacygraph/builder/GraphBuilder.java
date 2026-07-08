@@ -610,12 +610,15 @@ public class GraphBuilder {
      * 查找或创建表节点（便捷方法）
      */
     private GraphNode findOrCreateTableNode(String projectId, String versionId, String tableName) {
+        // 统一小写：SQL 提取的表名与 DB metadata 的 Table nodeKey（PostgreSQL 默认小写）对齐，
+        // 避免 CALL_JMZX_LOG vs call_jmzx_log 被当作两张不同的表。
+        String normalized = tableName != null ? tableName.toLowerCase() : tableName;
         return findOrCreateNode(
                 projectId, versionId,
                 NodeType.Table.name(),
-                tableName,
-                tableName,
-                tableName,
+                normalized,
+                normalized,
+                normalized,
                 null,
                 SourceType.SQL_PARSE.name(),
                 null,

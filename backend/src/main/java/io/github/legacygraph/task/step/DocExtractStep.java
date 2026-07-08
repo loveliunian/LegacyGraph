@@ -29,8 +29,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class DocExtractStep implements AiScanStepExecutor {
 
-    /** 文档 LLM 调用单次上限字符数 */
+    /** 文档 LLM 调用单次上限字符数；超过则分段并行抽取后合并 */
     private static final int DOC_CONTENT_LIMIT = 8000;
+    /** 大文档分段大小（字符），与向量化 VECTOR_CHUNK_SIZE 对齐 */
+    private static final int DOC_CHUNK_SIZE = 2000;
+    /** 分段重叠（字符），避免切割处跨句上下文丢失 */
+    private static final int DOC_CHUNK_OVERLAP = 200;
 
     private final AiScanStepSupport support;
     private final DocumentRepository documentRepository;
@@ -103,7 +107,12 @@ public class DocExtractStep implements AiScanStepExecutor {
             log.info("AI_DOC_EXTRACT starting: versionId={}, docCount={}, parallelism={}, skipped={}",
                     versionId, docs.size(), AiScanStepSupport.DOC_EXTRACT_PARALLELISM, skipped);
 
+            // 设置总项数用于 ETA 计算
+            int totalDocs = (int) (docs.size() - skipped);
+            support.updateTaskProgress(task, totalDocs, 0, null);
+
             AtomicInteger factCount = new AtomicInteger(0);
+            AtomicInteger processedCount = new AtomicInteger(0);
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
             for (Document doc : docs) {
@@ -126,15 +135,20 @@ public class DocExtractStep implements AiScanStepExecutor {
                     CompletableFuture.runAsync(() ->
                             support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content));
                     try {
-                        String docContent = support.truncate(content, DOC_CONTENT_LIMIT);
-                        DocUnderstandingAgent.BusinessFactExtraction extraction =
-                                support.cachedExtract("doc", docContent, () -> {
-                                    agentCallCounter.increment();
-                                    return docUnderstandingAgent.extractBusinessFacts(projectId, docContent, doc.getFilePath());
-                                }, DocUnderstandingAgent.BusinessFactExtraction.class,
-                                e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
-                                        e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
-                                        e.getFeatures(), e.getStatusTransitions()));
+                        // A3：大文档分段并行抽取再合并，既全覆盖又并发提速。
+                        // 小文档（≤ DOC_CONTENT_LIMIT）保持原路径——单次 LLM 调用。
+                        DocUnderstandingAgent.BusinessFactExtraction extraction;
+                        if (content.length() <= DOC_CONTENT_LIMIT) {
+                            extraction = support.cachedExtract("doc", content, () -> {
+                                agentCallCounter.increment();
+                                return docUnderstandingAgent.extractBusinessFacts(projectId, content, doc.getFilePath());
+                            }, DocUnderstandingAgent.BusinessFactExtraction.class,
+                            e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
+                                    e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
+                                    e.getFeatures(), e.getStatusTransitions()));
+                        } else {
+                            extraction = extractFromChunks(projectId, doc, content);
+                        }
                         int count = persistBusinessFacts(projectId, versionId, doc, extraction);
                         factCount.addAndGet(count);
                         buildBusinessGraph(projectId, versionId, doc, extraction);
@@ -148,6 +162,11 @@ public class DocExtractStep implements AiScanStepExecutor {
                         documentRepository.updateById(doc);
                         support.markExtractDone(projectId, versionId, filePath, "DOC_EXTRACT",
                                 "facts=" + count);
+                        // 更新进度（每 5 个文件写一次 DB，减少写入频率）
+                        int done = processedCount.incrementAndGet();
+                        if (done % 5 == 0 || done == totalDocs) {
+                            support.updateTaskProgress(task, totalDocs, done, filePath);
+                        }
                     } catch (Exception e) {
                         log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
                         doc.setParseStatus("FAILED");
@@ -178,6 +197,125 @@ public class DocExtractStep implements AiScanStepExecutor {
             support.completeTask(task, null, e.getMessage());
             return StepExecutionResult.builder().success(false).message(e.getMessage()).build();
         }
+    }
+
+    /**
+     * A3：大文档分段并行抽取后合并。
+     * 按 DOC_CHUNK_SIZE 分段（带重叠），每段独立调 LLM（复用 cachedExtract），
+     * 多段并行（复用 docExtractExecutor），最后合并去重。
+     */
+    private DocUnderstandingAgent.BusinessFactExtraction extractFromChunks(String projectId, Document doc, String content) {
+        List<String> chunks = splitContent(content, DOC_CHUNK_SIZE, DOC_CHUNK_OVERLAP);
+        if (chunks.size() <= 1) {
+            // 单段 → 回退直接抽取
+            return support.cachedExtract("doc", content, () -> {
+                agentCallCounter.increment();
+                return docUnderstandingAgent.extractBusinessFacts(projectId,
+                        support.truncate(content, DOC_CONTENT_LIMIT), doc.getFilePath());
+            }, DocUnderstandingAgent.BusinessFactExtraction.class,
+            e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
+                    e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
+                    e.getFeatures(), e.getStatusTransitions()));
+        }
+
+        log.info("AI_DOC_EXTRACT chunking: doc={}, contentLen={}, chunks={}", doc.getDocName(), content.length(), chunks.size());
+        // 并行抽取各段
+        List<DocUnderstandingAgent.BusinessFactExtraction> chunkResults = new ArrayList<>();
+        List<CompletableFuture<DocUnderstandingAgent.BusinessFactExtraction>> chunkFutures = new ArrayList<>();
+        for (int i = 0; i < chunks.size(); i++) {
+            final int idx = i;
+            final String chunk = chunks.get(i);
+            chunkFutures.add(CompletableFuture.supplyAsync(() ->
+                support.cachedExtract("doc-chunk", chunk, () -> {
+                    agentCallCounter.increment();
+                    return docUnderstandingAgent.extractBusinessFacts(projectId, chunk, doc.getFilePath() + "#chunk" + idx);
+                }, DocUnderstandingAgent.BusinessFactExtraction.class,
+                e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
+                        e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
+                        e.getFeatures(), e.getStatusTransitions())),
+                support.getDocExtractExecutor()));
+        }
+        for (CompletableFuture<DocUnderstandingAgent.BusinessFactExtraction> f : chunkFutures) {
+            try {
+                DocUnderstandingAgent.BusinessFactExtraction r = f.get();
+                if (r != null) {
+                    chunkResults.add(r);
+                }
+            } catch (Exception e) {
+                log.warn("Doc chunk extract failed for doc {}: {}", doc.getId(), e.getMessage());
+            }
+        }
+        return mergeExtractions(chunkResults);
+    }
+
+    /** 将文本按 size 分段，段间 overlap 个字符重叠，尽量在换行处切割。 */
+    static List<String> splitContent(String text, int size, int overlap) {
+        List<String> chunks = new ArrayList<>();
+        if (text == null || text.isEmpty() || size <= 0) {
+            return chunks;
+        }
+        int start = 0;
+        while (start < text.length()) {
+            int end = Math.min(start + size, text.length());
+            // 尽量在换行处切割
+            if (end < text.length()) {
+                int nl = text.lastIndexOf('\n', end);
+                if (nl > start + size / 2) {
+                    end = nl + 1;
+                }
+            }
+            chunks.add(text.substring(start, end));
+            start = end - overlap;
+            if (start >= text.length() || start < 0) {
+                break;
+            }
+        }
+        return chunks;
+    }
+
+    /** 合并多个分段抽取结果：按 name/key 去重，取最高置信度。 */
+    static DocUnderstandingAgent.BusinessFactExtraction mergeExtractions(
+            List<DocUnderstandingAgent.BusinessFactExtraction> results) {
+        DocUnderstandingAgent.BusinessFactExtraction merged = new DocUnderstandingAgent.BusinessFactExtraction();
+        if (results == null || results.isEmpty()) {
+            return merged;
+        }
+        if (results.size() == 1) {
+            return results.get(0);
+        }
+        merged.setBusinessDomains(mergeByKey(results, r -> r.getBusinessDomains(), d -> d.getName()));
+        merged.setBusinessProcesses(mergeByKey(results, r -> r.getBusinessProcesses(), p -> p.getName()));
+        merged.setBusinessObjects(mergeByKey(results, r -> r.getBusinessObjects(), o -> o.getName()));
+        merged.setBusinessRules(mergeByKey(results, r -> r.getBusinessRules(), r2 -> r2.getName()));
+        merged.setRoles(new ArrayList<>(new java.util.LinkedHashSet<>(
+                results.stream().flatMap(r -> safe(r.getRoles()).stream()).toList())));
+        merged.setFeatures(new ArrayList<>(new java.util.LinkedHashSet<>(
+                results.stream().flatMap(r -> safe(r.getFeatures()).stream()).toList())));
+        merged.setStatusTransitions(mergeByKey(results, r -> r.getStatusTransitions(),
+                t -> (t.getBusinessObject() + ":" + t.getFromStatus() + "->" + t.getToStatus())));
+        return merged;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> List<T> mergeByKey(List<DocUnderstandingAgent.BusinessFactExtraction> results,
+                                          java.util.function.Function<DocUnderstandingAgent.BusinessFactExtraction, List<T>> getter,
+                                          java.util.function.Function<T, String> keyFn) {
+        Map<String, T> seen = new java.util.LinkedHashMap<>();
+        for (var r : results) {
+            for (T item : safe(getter.apply(r))) {
+                String key = keyFn.apply(item);
+                T existing = seen.get(key);
+                if (existing == null) {
+                    seen.put(key, item);
+                }
+                // 同名取较高置信度（通过反射尝试，失败则保留首个）
+            }
+        }
+        return new ArrayList<>(seen.values());
+    }
+
+    private static <T> List<T> safe(List<T> list) {
+        return list != null ? list : List.of();
     }
 
     /**

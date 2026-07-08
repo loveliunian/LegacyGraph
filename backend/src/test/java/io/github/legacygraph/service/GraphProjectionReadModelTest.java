@@ -4,7 +4,6 @@ import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -29,7 +28,6 @@ import io.github.legacygraph.service.graph.GraphProjectionReadModel;
  * </p>
  */
 @ExtendWith(MockitoExtension.class)
-@Disabled("子代理自动生成，Mock 需要微调")
 class GraphProjectionReadModelTest {
 
     @Mock
@@ -74,19 +72,17 @@ class GraphProjectionReadModelTest {
     @Test
     void testGetFeatureView_WithNodes() {
         // queryNodes 参数：(projectId, versionId, nodeType, sourceType, minConfidence, status, limit)
-        // 模拟 Feature 类型返回
+        // 先用通用 stub 兜底（其余类型返回空）— lenient 避免 UnnecessaryStubbing
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), anyString(),
+                isNull(), isNull(), isNull(), eq(200)))
+                .thenReturn(Collections.emptyList());
+        // 具体类型 stub 覆盖
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq("Feature"),
                 isNull(), isNull(), isNull(), eq(200)))
                 .thenReturn(List.of(featureNode));
-        // 模拟 ApiEndpoint 类型返回
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq("ApiEndpoint"),
                 isNull(), isNull(), isNull(), eq(200)))
                 .thenReturn(List.of(apiNode));
-        // 其余类型返回空
-        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), anyString(),
-                isNull(), isNull(), isNull(), eq(200)))
-                .thenReturn(Collections.emptyList());
-        // queryEdges 参数：(projectId, versionId, minConfidence, status, limit)
         when(neo4jGraphDao.queryEdges(eq("proj-1"), eq("v1"),
                 isNull(), isNull(), eq(500)))
                 .thenReturn(List.of(sampleEdge));
@@ -116,12 +112,12 @@ class GraphProjectionReadModelTest {
         bizDomain.setNodeType("BusinessDomain");
         bizDomain.setNodeName("订单域");
 
+        lenient().when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), anyString(),
+                isNull(), isNull(), isNull(), eq(200)))
+                .thenReturn(Collections.emptyList());
         when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq("BusinessDomain"),
                 isNull(), isNull(), isNull(), eq(200)))
                 .thenReturn(List.of(bizDomain));
-        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), anyString(),
-                isNull(), isNull(), isNull(), eq(200)))
-                .thenReturn(Collections.emptyList());
         when(neo4jGraphDao.queryEdges(eq("proj-1"), eq("v1"),
                 isNull(), isNull(), eq(500)))
                 .thenReturn(Collections.emptyList());
@@ -161,10 +157,10 @@ class GraphProjectionReadModelTest {
      */
     @Test
     void testGetFeatureView_EmptyGraph() {
-        when(neo4jGraphDao.queryNodes(anyString(), anyString(), anyString(),
+        lenient().when(neo4jGraphDao.queryNodes(anyString(), anyString(), anyString(),
                 isNull(), isNull(), isNull(), anyInt()))
                 .thenReturn(Collections.emptyList());
-        when(neo4jGraphDao.queryEdges(anyString(), anyString(),
+        lenient().when(neo4jGraphDao.queryEdges(anyString(), anyString(),
                 isNull(), isNull(), anyInt()))
                 .thenReturn(Collections.emptyList());
 

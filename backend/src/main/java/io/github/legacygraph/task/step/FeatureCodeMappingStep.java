@@ -50,17 +50,20 @@ public class FeatureCodeMappingStep implements AiScanStepExecutor {
             int featureMappings = businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
             // P2：业务对象 ↔ 数据库表对齐，连通业务层与技术层
             int objectMappings = businessGraphBuilder.mapBusinessObjectsToTables(projectId, versionId);
-            int totalMappings = featureMappings + objectMappings;
+            // P2：业务域 ↔ Controller/Service 对齐，降低业务域 100% 孤立率
+            int domainMappings = businessGraphBuilder.mapBusinessDomainsToCode(projectId, versionId);
+            int totalMappings = featureMappings + objectMappings + domainMappings;
             if (totalMappings == 0) {
                 support.completeTask(task,
-                        "⚠ 未建立 Feature/业务对象技术映射 —— 可能无 Feature/Page/API，"
-                        + "或无 BusinessObject/技术实体候选",
+                        "⚠ 未建立 Feature/业务对象/业务域技术映射 —— 可能无 Feature/Page/API，"
+                        + "或无 BusinessObject/BusinessDomain/技术实体候选",
                         null);
                 return StepExecutionResult.builder().success(true)
-                        .message("⚠ 未建立 Feature/业务对象技术映射").processedCount(0).build();
+                        .message("⚠ 未建立 Feature/业务对象/业务域技术映射").processedCount(0).build();
             } else {
                 String summary = "已建立 Feature→Page/API 映射 " + featureMappings
-                        + " 条，业务对象技术映射 " + objectMappings + " 条";
+                        + " 条，业务对象技术映射 " + objectMappings
+                        + " 条，业务域技术映射 " + domainMappings + " 条";
                 support.completeTask(task, summary, null);
                 return StepExecutionResult.builder().success(true).message(summary)
                         .processedCount(totalMappings).build();

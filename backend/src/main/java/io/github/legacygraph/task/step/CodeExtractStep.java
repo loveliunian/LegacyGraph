@@ -109,6 +109,10 @@ public class CodeExtractStep implements AiScanStepExecutor {
                         skipped, uniqueNodes.size() - skipped);
             }
 
+            // 设置总项数用于 ETA 计算
+            int totalNodes = (int) (uniqueNodes.size() - skipped);
+            support.updateTaskProgress(task, totalNodes, 0, null);
+
             log.info("AI_CODE_EXTRACT starting: versionId={}, nodeCount={}, dedupedTo={}, parallelism={}, skipped={}",
                     versionId, codeNodes.size(), uniqueNodes.size(), AiScanStepSupport.DOC_EXTRACT_PARALLELISM, skipped);
 
@@ -143,6 +147,10 @@ public class CodeExtractStep implements AiScanStepExecutor {
                         factCount.addAndGet(count);
                         support.markExtractDone(projectId, versionId, filePath, "CODE_EXTRACT",
                                 "facts=" + count);
+                        int done = processed.incrementAndGet();
+                        if (done % 5 == 0 || done == totalNodes) {
+                            support.updateTaskProgress(task, totalNodes, done, filePath);
+                        }
                     } catch (Exception e) {
                         log.warn("Code fact extract failed for node {}: {}", node.getNodeKey(), e.getMessage());
                         support.markExtractFailed(projectId, versionId, filePath, "CODE_EXTRACT", e.getMessage());

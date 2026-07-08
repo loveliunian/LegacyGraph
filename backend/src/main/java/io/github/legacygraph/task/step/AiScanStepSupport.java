@@ -351,6 +351,21 @@ public class AiScanStepSupport {
         return preferred != null && !preferred.isBlank() ? preferred : fallback;
     }
 
+    /**
+     * 更新扫描任务的处理进度项数（用于 ETA 计算）。
+     */
+    public void updateTaskProgress(ScanTask task, int total, int processed, String currentItem) {
+        try {
+            task.setTotalItems(total);
+            task.setProcessedItems(processed);
+            if (currentItem != null) task.setCurrentItem(currentItem);
+            task.setUpdatedAt(LocalDateTime.now());
+            scanTaskRepository.updateById(task);
+        } catch (Exception e) {
+            log.debug("Failed to update task progress: {}", e.getMessage());
+        }
+    }
+
     // ==================== 断点续传 ====================
 
     /**

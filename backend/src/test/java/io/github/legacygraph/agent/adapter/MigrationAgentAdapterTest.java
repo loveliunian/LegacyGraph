@@ -3,7 +3,6 @@ package io.github.legacygraph.agent.adapter;
 import io.github.legacygraph.agent.MigrationAgent;
 import io.github.legacygraph.dto.MigrationConversion;
 import io.github.legacygraph.dto.graph.PatchPlan;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,7 +19,6 @@ import static org.mockito.Mockito.*;
  * 验证 MigrationAgent → PatchPlan 适配转换逻辑。
  */
 @ExtendWith(MockitoExtension.class)
-@Disabled("子代理自动生成，Mock 需要微调")
 class MigrationAgentAdapterTest {
 
     @Mock
@@ -65,7 +63,7 @@ class MigrationAgentAdapterTest {
     @Test
     void toPatchPlanWithNullConversion_marksManualReview() {
         when(migrationAgent.convert(anyString(), anyString(), anyString(),
-                anyString(), anyString()))
+                anyString(), any()))
                 .thenReturn(null);
 
         PatchPlan plan = adapter.toPatchPlan(
@@ -76,7 +74,7 @@ class MigrationAgentAdapterTest {
         assertTrue(plan.isManualReviewNeeded());
         assertEquals("UPGRADE", plan.getTaskType());
         verify(migrationAgent).convert(anyString(), anyString(), anyString(),
-                anyString(), anyString());
+                anyString(), any());
     }
 
     /**
@@ -87,7 +85,7 @@ class MigrationAgentAdapterTest {
         MigrationConversion conversion = new MigrationConversion();
         conversion.setManualReviewNeeded(java.util.List.of("部分规则需人工确认"));
         when(migrationAgent.convert(anyString(), anyString(), anyString(),
-                anyString(), anyString()))
+                anyString(), any()))
                 .thenReturn(conversion);
 
         PatchPlan plan = adapter.toPatchPlan("task-3", "project-1",
