@@ -209,4 +209,71 @@ class ServiceCallExtractorTest {
         assertNull(relation.getSourcePath());
         assertNull(relation.getLineNumber());
     }
+
+    @Test
+    void testExtractFromFile_LombokRequiredArgsConstructor() throws IOException {
+        // Lombok @RequiredArgsConstructor：final 字段 + 无显式构造器 + 无 @Autowired
+        // 源码里没有构造器（编译期由 Lombok 生成），原 collectInjectedVarTypes 漏掉 final 字段
+        // → orderMapper 不被识别为注入 → targetClass=null → Service→Mapper 调用链断裂。
+        String content = """
+                package com.example.service;
+
+                import com.example.mapper.OrderMapper;
+                import lombok.RequiredArgsConstructor;
+                import org.springframework.stereotype.Service;
+
+                @Service
+                @RequiredArgsConstructor
+                public class OrderService {
+                    private final OrderMapper orderMapper;
+
+                    public void createOrder(Object dto) {
+                        orderMapper.insert(dto);
+                    }
+                }
+                """;
+        Path javaFile = tempDir.resolve("OrderService.java");
+        Files.writeString(javaFile, content);
+
+        ServiceCallExtractor extractor = new ServiceCallExtractor();
+        List<ServiceCallExtractor.CallRelation> relations = extractor.extractFromFile(javaFile.toFile());
+
+        // final 字段 orderMapper 应被识别为构造器注入，insert 调用应解析出 targetClass=OrderMapper
+        boolean resolved = relations.stream()
+                .anyMatch(r -> "OrderMapper".equals(r.getTargetClass())
+                        && "insert".equals(r.getTargetMethod()));
+        assertTrue(resolved, "Lombok final 字段 orderMapper 应解析为 OrderMapper（修复前 targetClass=null）");
+    }
+
+    @Test
+    void testExtractFromFile_ThisPrefixedScope() throws IOException {
+        // this.userMapper.findById() —— scope.toString()="this.userMapper"，原逻辑匹配不上 "userMapper"
+        String content = """
+                package com.example.service;
+
+                import com.example.mapper.UserMapper;
+                import lombok.RequiredArgsConstructor;
+                import org.springframework.stereotype.Service;
+
+                @Service
+                @RequiredArgsConstructor
+                public class UserService {
+                    private final UserMapper userMapper;
+
+                    public Object findUser(Long id) {
+                        return this.userMapper.findById(id);
+                    }
+                }
+                """;
+        Path javaFile = tempDir.resolve("UserService.java");
+        Files.writeString(javaFile, content);
+
+        ServiceCallExtractor extractor = new ServiceCallExtractor();
+        List<ServiceCallExtractor.CallRelation> relations = extractor.extractFromFile(javaFile.toFile());
+
+        boolean resolved = relations.stream()
+                .anyMatch(r -> "UserMapper".equals(r.getTargetClass())
+                        && "findById".equals(r.getTargetMethod()));
+        assertTrue(resolved, "this.userMapper.findById() 应解析出 targetClass=UserMapper（修复前 this. 前缀导致 miss）");
+    }
 }

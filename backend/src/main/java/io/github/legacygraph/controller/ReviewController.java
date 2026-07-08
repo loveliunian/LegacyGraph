@@ -22,6 +22,7 @@ import io.github.legacygraph.util.JwtUtil;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 @RestController
 @RequestMapping("/lg/projects/{projectId}/reviews")
@@ -123,7 +124,7 @@ public class ReviewController {
         }
 
         ReviewRecord record = new ReviewRecord();
-        record.setId(UUID.randomUUID().toString());
+        record.setId(IdUtil.fastUUID());
         record.setProjectId(projectId);
         record.setVersionId(resolveVersionId(projectId, request.getVersionId()));
         record.setTargetType(targetType);
@@ -216,7 +217,7 @@ public class ReviewController {
         boolean isNew = false;
         if (record == null) {
             record = new ReviewRecord();
-            record.setId(UUID.randomUUID().toString());
+            record.setId(IdUtil.fastUUID());
             record.setProjectId(projectId);
             record.setVersionId(versionId);
             record.setTargetId(request.getTargetId());
@@ -271,7 +272,7 @@ public class ReviewController {
         boolean isNew = false;
         if (record == null) {
             record = new ReviewRecord();
-            record.setId(UUID.randomUUID().toString());
+            record.setId(IdUtil.fastUUID());
             record.setProjectId(projectId);
             record.setVersionId(versionId);
             record.setTargetId(request.getTargetId());

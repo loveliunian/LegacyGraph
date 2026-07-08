@@ -667,6 +667,19 @@ public class GraphQueryService {
                 () -> neo4jGraphDao.apiImplementationRelations(projectId, versionId));
     }
 
+    /**
+     * 每个 Mapper 访问的 Table 集合（Mapper→SqlStatement→Table），补全数据表访问关系。
+     * <p>API 锚定回溯在 Service↔Mapper 无边的项目里够不到表；此查询以 Mapper 为锚直接补全，
+     * 让「哪些数据库表」类问题在向量化后有结构化内容可召回。结果缓存（同版本稳定）。</p>
+     * <p>返回字段：mapperKey / mapperName / tables（List&lt;String&gt;）。</p>
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getTableAccessRelations(String projectId, String versionId) {
+        String key = graphKey(versionId, "table-access-relations", projectId);
+        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
+                () -> neo4jGraphDao.tableAccessRelations(projectId, versionId));
+    }
+
     // ==================== 漂移队列 ====================
 
     /**

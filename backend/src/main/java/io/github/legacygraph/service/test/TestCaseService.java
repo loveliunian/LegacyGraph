@@ -29,6 +29,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 测试用例生成服务
@@ -122,7 +123,7 @@ public class TestCaseService {
     private TestCase scenarioToTestCase(String projectId, String versionId,
                                          ScenarioDSL dsl, FeatureSlice slice) {
         TestCase tc = new TestCase();
-        tc.setId(UUID.randomUUID().toString());
+        tc.setId(IdUtil.fastUUID());
         tc.setProjectId(projectId);
         tc.setVersionId(versionId);
         tc.setCaseCode("SLICE_" + Math.abs(dsl.getScenarioId().hashCode()));
@@ -173,7 +174,7 @@ public class TestCaseService {
     }
     @Transactional
     public String generateTestCases(String projectId, GenerateTestCasesRequest request) {
-        String executionId = UUID.randomUUID().toString();
+        String executionId = IdUtil.fastUUID();
         String versionId = request.getVersionId();
 
         log.info("Starting generate test cases for projectId: {}, versionId: {}", projectId, versionId);
@@ -307,7 +308,7 @@ public class TestCaseService {
      */
     private TestCase createBaseApiTestCase(GraphNode apiNode, String method, String path, String scenario, String scenarioDesc, BigDecimal confidence) {
         TestCase testCase = new TestCase();
-        testCase.setId(UUID.randomUUID().toString());
+        testCase.setId(IdUtil.fastUUID());
         testCase.setProjectId(apiNode.getProjectId());
         testCase.setVersionId(apiNode.getVersionId());
         testCase.setCaseCode("API_" + Math.abs(apiNode.getNodeKey().hashCode()) + "_" + scenario.toLowerCase());
@@ -376,7 +377,7 @@ public class TestCaseService {
      */
     private TestCase createBaseDbTestCase(GraphNode tableNode, String assertionType, String description, BigDecimal confidence) {
         TestCase testCase = new TestCase();
-        testCase.setId(UUID.randomUUID().toString());
+        testCase.setId(IdUtil.fastUUID());
         testCase.setProjectId(tableNode.getProjectId());
         testCase.setVersionId(tableNode.getVersionId());
         testCase.setCaseCode("DB_" + Math.abs(tableNode.getNodeKey().hashCode()) + "_" + assertionType.toLowerCase());
@@ -397,7 +398,7 @@ public class TestCaseService {
      */
     private void generateE2ETestCase(GraphNode pageNode) {
         TestCase testCase = new TestCase();
-        testCase.setId(UUID.randomUUID().toString());
+        testCase.setId(IdUtil.fastUUID());
         testCase.setProjectId(pageNode.getProjectId());
         testCase.setVersionId(pageNode.getVersionId());
         testCase.setCaseCode("E2E_" + Math.abs(pageNode.getNodeKey().hashCode()));
@@ -442,7 +443,7 @@ public class TestCaseService {
      */
     @Transactional
     public String startTestRun(StartTestRunRequest request) {
-        String executionId = UUID.randomUUID().toString();
+        String executionId = IdUtil.fastUUID();
         String versionId = request.getVersionId();
         List<String> caseIds = request.getCaseIds();
         String baseUrl = request.getBaseUrl() != null ? request.getBaseUrl() : "http://localhost:5173";
@@ -466,7 +467,7 @@ public class TestCaseService {
             if (testCase == null) continue;
 
             TestResult result = new TestResult();
-            result.setId(UUID.randomUUID().toString());
+            result.setId(IdUtil.fastUUID());
             result.setProjectId(testCase.getProjectId());
             result.setVersionId(versionId);
             result.setTestCaseId(caseId);
@@ -512,7 +513,7 @@ public class TestCaseService {
                     return e2eTestExecutor.execute(testCase, executionId, baseUrl);
                 default:
                     TestResult result = new TestResult();
-                    result.setId(UUID.randomUUID().toString());
+                    result.setId(IdUtil.fastUUID());
                     result.setProjectId(testCase.getProjectId());
                     result.setVersionId(testCase.getVersionId());
                     result.setTestCaseId(testCase.getId());
@@ -526,7 +527,7 @@ public class TestCaseService {
         } catch (Exception e) {
             log.error("Test execution failed: {}", testCase.getCaseCode(), e);
             TestResult result = new TestResult();
-            result.setId(UUID.randomUUID().toString());
+            result.setId(IdUtil.fastUUID());
             result.setProjectId(testCase.getProjectId());
             result.setVersionId(testCase.getVersionId());
             result.setTestCaseId(testCase.getId());

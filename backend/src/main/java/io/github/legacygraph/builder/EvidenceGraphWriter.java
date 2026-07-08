@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 统一证据图谱写入器。
@@ -110,7 +111,7 @@ public class EvidenceGraphWriter {
     public GraphNode upsertNode(GraphNodeClaim claim) {
         // 构造节点声明（id 为新建候选；MERGE 命中已存在节点时以库内 id 为准）
         GraphNode node = new GraphNode();
-        node.setId(UUID.randomUUID().toString());
+        node.setId(IdUtil.fastUUID());
         node.setProjectId(claim.getProjectId());
         node.setVersionId(claim.getVersionId());
         node.setNodeType(claim.getNodeType());
@@ -180,7 +181,7 @@ public class EvidenceGraphWriter {
     public GraphEdge upsertEdge(GraphEdgeClaim claim) {
         // 构造边声明（id 为新建候选；MERGE 命中已存在边时以库内 id 为准）
         GraphEdge edge = new GraphEdge();
-        edge.setId(UUID.randomUUID().toString());
+        edge.setId(IdUtil.fastUUID());
         edge.setProjectId(claim.getProjectId());
         edge.setVersionId(claim.getVersionId());
         edge.setFromNodeId(claim.getFromNodeId());
@@ -231,7 +232,7 @@ public class EvidenceGraphWriter {
         Optional<GraphNode> node = neo4jGraphDao.findNodeById(graphElementId);
         // 1. 构造证据实体
         Evidence ev = new Evidence();
-        ev.setId(UUID.randomUUID().toString());
+        ev.setId(IdUtil.fastUUID());
         ev.setProjectId(hasText(evidence.getProjectId())
                 ? evidence.getProjectId()
                 : node.map(GraphNode::getProjectId).orElse(null));
@@ -276,7 +277,7 @@ public class EvidenceGraphWriter {
         // 3. 判断是节点证据还是边证据，建立关联
         if (node.isPresent()) {
             NodeEvidence ne = new NodeEvidence();
-            ne.setId(UUID.randomUUID().toString());
+            ne.setId(IdUtil.fastUUID());
             ne.setNodeId(graphElementId);
             ne.setEvidenceId(persisted.getId());
             ne.setRelationType(role.name());
@@ -284,7 +285,7 @@ public class EvidenceGraphWriter {
             nodeEvidenceRepository.insert(ne);
         } else {
             EdgeEvidence ee = new EdgeEvidence();
-            ee.setId(UUID.randomUUID().toString());
+            ee.setId(IdUtil.fastUUID());
             ee.setEdgeId(graphElementId);
             ee.setEvidenceId(persisted.getId());
             ee.setRelationType(role.name());
@@ -343,7 +344,7 @@ public class EvidenceGraphWriter {
     private void createEvidenceForNode(GraphNode node, String sourceType, String sourcePath,
                                        Integer startLine, Integer endLine) {
         Evidence evidence = new Evidence();
-        evidence.setId(UUID.randomUUID().toString());
+        evidence.setId(IdUtil.fastUUID());
         evidence.setProjectId(node.getProjectId());
         evidence.setVersionId(node.getVersionId());
         evidence.setEvidenceType(mapSourceTypeToEvidenceType(sourceType));
@@ -379,7 +380,7 @@ public class EvidenceGraphWriter {
         }
 
         NodeEvidence nodeEvidence = new NodeEvidence();
-        nodeEvidence.setId(UUID.randomUUID().toString());
+        nodeEvidence.setId(IdUtil.fastUUID());
         nodeEvidence.setNodeId(node.getId());
         nodeEvidence.setEvidenceId(persisted.getId());
         nodeEvidence.setRelationType(EvidenceRole.PRIMARY_SOURCE.name());
@@ -399,7 +400,7 @@ public class EvidenceGraphWriter {
         List<EdgeEvidence> batch = new ArrayList<>(nodeEvidences.size());
         for (NodeEvidence ne : nodeEvidences) {
             EdgeEvidence ee = new EdgeEvidence();
-            ee.setId(UUID.randomUUID().toString());
+            ee.setId(IdUtil.fastUUID());
             ee.setEdgeId(edge.getId());
             ee.setEvidenceId(ne.getEvidenceId());
             ee.setRelationType(EvidenceRole.INHERITED.name());
@@ -525,7 +526,7 @@ public class EvidenceGraphWriter {
                     // 使用独立事务，避免被外层 aborted 事务影响
                     pgEvidenceTxExecutor.execute(() -> {
                         Evidence ev = new Evidence();
-                        ev.setId(UUID.randomUUID().toString());
+                        ev.setId(IdUtil.fastUUID());
                         ev.setProjectId(intent.getProjectId());
                         ev.setVersionId(intent.getVersionId());
                         ev.setEvidenceType(er.getEvidenceType());

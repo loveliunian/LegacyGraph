@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * Fact 持久化助手（doc 3.2）— 从 {@code ProjectScanner} 抽取的 saveFact 逻辑，
@@ -74,7 +75,7 @@ public class FactPersister {
         for (FactDraft draft : deduped.values()) {
             try {
                 Fact fact = new Fact();
-                fact.setId(UUID.randomUUID().toString());
+                fact.setId(IdUtil.fastUUID());
                 fact.setProjectId(draft.getProjectId());
                 fact.setVersionId(draft.getVersionId());
                 fact.setFactType(draft.getFactType());
@@ -108,7 +109,7 @@ public class FactPersister {
                          BigDecimal confidence, String status) {
         try {
             Fact fact = new Fact();
-            fact.setId(UUID.randomUUID().toString());
+            fact.setId(IdUtil.fastUUID());
             fact.setProjectId(projectId);
             fact.setVersionId(versionId);
             fact.setFactType(factType);

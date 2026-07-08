@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,5 +56,32 @@ class SystemOverviewDocumentServiceTest {
         assertTrue(content.contains("后续 QA 文档"));
 
         verify(reportRepository).insert(any(Report.class));
+    }
+
+    @Test
+    void generateAfterScan_doesNotDuplicateQaFoundationSectionWhenNumberChanges() throws Exception {
+        SystemOverviewService systemOverviewService = mock(SystemOverviewService.class);
+        ReportRepository reportRepository = mock(ReportRepository.class);
+        SystemOverviewDocumentService service = new SystemOverviewDocumentService(
+                systemOverviewService, reportRepository, reportRoot.toString());
+
+        when(systemOverviewService.generateMarkdown("project-1", "version-1"))
+                .thenReturn("""
+                        # 系统关系总览报告
+
+                        ## 8. QA 文档基础
+
+                        - 已包含 QA 文档基础。
+                        """);
+
+        Report report = service.generateAfterScan("project-1", "version-1");
+
+        String content = Files.readString(Path.of(report.getFilePath()));
+        long qaHeadings = content.lines()
+                .filter(line -> line.startsWith("## ") && line.contains("QA 文档基础"))
+                .count();
+        assertEquals(1, qaHeadings);
+        verify(reportRepository).insert(any(Report.class));
+        verify(reportRepository, never()).updateById(any(Report.class));
     }
 }

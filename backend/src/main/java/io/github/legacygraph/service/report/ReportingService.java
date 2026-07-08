@@ -37,6 +37,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 报告生成服务
@@ -774,7 +775,7 @@ public class ReportingService {
     @Transactional
     protected Report saveReport(String projectId, String reportType, String reportName) {
         Report report = new Report();
-        report.setId(UUID.randomUUID().toString());
+        report.setId(IdUtil.fastUUID());
         report.setProjectId(projectId);
         report.setReportType(reportType);
         report.setReportName(reportName);

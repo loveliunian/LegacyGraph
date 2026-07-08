@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 业务图谱构建器
@@ -58,7 +59,7 @@ public class BusinessGraphBuilder {
             List<io.github.legacygraph.extractors.DocumentExtractor.DocumentChunk> chunks) {
         for (var chunk : chunks) {
             DocChunk dc = new DocChunk();
-            dc.setId(UUID.randomUUID().toString());
+            dc.setId(IdUtil.fastUUID());
             dc.setProjectId(projectId);
             dc.setVersionId(versionId);
             dc.setDocName(docName);
@@ -780,7 +781,7 @@ public class BusinessGraphBuilder {
             String sourceType, BigDecimal confidence,
             NodeStatus status) {
         GraphEdge edge = new GraphEdge();
-        edge.setId(UUID.randomUUID().toString());
+        edge.setId(IdUtil.fastUUID());
         edge.setProjectId(projectId);
         edge.setVersionId(versionId);
         edge.setFromNodeId(fromNodeId);

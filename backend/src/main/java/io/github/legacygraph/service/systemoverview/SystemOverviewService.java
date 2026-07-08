@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -102,6 +103,7 @@ public class SystemOverviewService {
      * 生成系统关系总览 Markdown 报告（对齐 02 结构）。
      */
     public String generateMarkdown(String projectId, String versionId) {
+        List<KnowledgeClaim> claims = loadUsableOverviewClaims(projectId, versionId);
         List<LayerMappingDTO> mappings = buildDynamicMappings(projectId, versionId);
         StringBuilder sb = new StringBuilder();
 
@@ -126,18 +128,23 @@ public class SystemOverviewService {
             sb.append("- ").append(path).append("\n");
         }
 
-        sb.append("\n## 3. 四层定义\n\n");
+        appendGraphStatistics(sb, claims);
+        appendGraphRelationDetails(sb, claims);
+        appendDomainBreakdown(sb, mappings);
+        appendTableImpact(sb, mappings);
+        appendMermaidGraph(sb, claims);
+
+        sb.append("\n## 8. QA 文档基础\n\n");
+        sb.append("- 本报告沉淀资料扫描后的业务/功能/代码/数据关系，可作为后续 QA 文档生成的事实基础。\n");
+        sb.append("- QA 文档应优先引用业务域、功能、Controller/API、代码模块、数据表与核心贯穿链路。\n");
+        sb.append("- 对未覆盖或低置信关系，应回到 Claim、证据或图谱查询确认，避免把推断写成已确认事实。\n\n");
+        sb.append("### 四层定义\n\n");
         sb.append("- **业务层**：BusinessDomain/Process/Object/Rule/Role（为什么存在）\n");
         sb.append("- **功能层**：Feature/Page/Button/Permission/ApiEndpoint（如何触发）\n");
         sb.append("- **代码层**：Controller/Service/Method/Mapper/SqlStatement（由什么实现）\n");
         sb.append("- **数据层**：Table/Column/Index（落到什么表）\n");
         sb.append("\n> 核心链路：BusinessDomain CONTAINS Feature EXPOSED_BY ApiEndpoint HANDLED_BY Controller ");
         sb.append("IMPLEMENTED_BY Service CALLS Mapper EXECUTES SqlStatement READS/WRITES Table HAS_COLUMN Column\n");
-
-        sb.append("\n## 4. QA 文档基础\n\n");
-        sb.append("- 本报告沉淀资料扫描后的业务/功能/代码/数据关系，可作为后续 QA 文档生成的事实基础。\n");
-        sb.append("- QA 文档应优先引用业务域、功能、Controller/API、代码模块、数据表与核心贯穿链路。\n");
-        sb.append("- 对未覆盖或低置信关系，应回到 Claim、证据或图谱查询确认，避免把推断写成已确认事实。\n");
 
         return sb.toString();
     }
@@ -337,6 +344,133 @@ public class SystemOverviewService {
         return status == null || "CONFIRMED".equals(status) || "PENDING_CONFIRM".equals(status);
     }
 
+    private List<KnowledgeClaim> loadUsableOverviewClaims(String projectId, String versionId) {
+        try {
+            List<KnowledgeClaim> claims = knowledgeClaimService.listClaims(
+                    projectId, versionId, null, null, null, null, 500);
+            if (claims == null || claims.isEmpty()) {
+                return Collections.emptyList();
+            }
+            return claims.stream()
+                    .filter(this::isUsableOverviewClaim)
+                    .sorted(claimComparator())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Failed to load overview claims for markdown: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private void appendGraphStatistics(StringBuilder sb, List<KnowledgeClaim> claims) {
+        sb.append("\n## 3. 图谱关系统计\n\n");
+        if (claims.isEmpty()) {
+            sb.append("暂无可用 Claim 关系；请先完成资料扫描或图谱导入。\n");
+            return;
+        }
+
+        sb.append("### 3.1 按关系类型\n\n");
+        sb.append("| 关系类型 | 数量 |\n");
+        sb.append("|---|---:|\n");
+        claims.stream()
+                .collect(Collectors.groupingBy(c -> n(c.getPredicate()), TreeMap::new, Collectors.counting()))
+                .forEach((predicate, count) -> sb.append(String.format("| %s | %d |\n", predicate, count)));
+
+        sb.append("\n### 3.2 按节点类型\n\n");
+        sb.append("| 节点类型 | 作为起点 | 作为终点 |\n");
+        sb.append("|---|---:|---:|\n");
+        Set<String> nodeTypes = new TreeSet<>();
+        claims.forEach(c -> {
+            nodeTypes.add(n(c.getSubjectType()));
+            nodeTypes.add(n(c.getObjectType()));
+        });
+        for (String nodeType : nodeTypes) {
+            long asSubject = claims.stream().filter(c -> Objects.equals(n(c.getSubjectType()), nodeType)).count();
+            long asObject = claims.stream().filter(c -> Objects.equals(n(c.getObjectType()), nodeType)).count();
+            sb.append(String.format("| %s | %d | %d |\n", nodeType, asSubject, asObject));
+        }
+    }
+
+    private void appendGraphRelationDetails(StringBuilder sb, List<KnowledgeClaim> claims) {
+        sb.append("\n## 4. 图谱关系明细\n\n");
+        if (claims.isEmpty()) {
+            sb.append("暂无可展开的 Claim 明细。\n");
+            return;
+        }
+
+        sb.append("| 起点类型 | 起点 | 关系 | 终点类型 | 终点 | 来源 | 状态 | 置信度 |\n");
+        sb.append("|---|---|---|---|---|---|---|---:|\n");
+        for (KnowledgeClaim claim : claims) {
+            sb.append(String.format("| %s | %s | %s | %s | %s | %s | %s | %s |\n",
+                    n(claim.getSubjectType()), n(claim.getSubjectKey()), n(claim.getPredicate()),
+                    n(claim.getObjectType()), n(claim.getObjectKey()), n(claim.getSourceType()),
+                    n(claim.getStatus()), formatConfidence(claim.getConfidence())));
+        }
+    }
+
+    private void appendDomainBreakdown(StringBuilder sb, List<LayerMappingDTO> mappings) {
+        sb.append("\n## 5. 按业务域拆解\n\n");
+        if (mappings.isEmpty()) {
+            sb.append("暂无业务域映射；请先完成系统关系总览生成。\n");
+            return;
+        }
+
+        Map<String, List<LayerMappingDTO>> byDomain = mappings.stream()
+                .collect(Collectors.groupingBy(m -> n(m.getBusinessDomain()), TreeMap::new, Collectors.toList()));
+        for (Map.Entry<String, List<LayerMappingDTO>> entry : byDomain.entrySet()) {
+            sb.append("### ").append(entry.getKey()).append("\n\n");
+            for (LayerMappingDTO mapping : entry.getValue()) {
+                sb.append("- 功能：`").append(n(mapping.getCapability())).append("`\n");
+                sb.append("- API：`").append(n(mapping.getApiPath())).append("`\n");
+                sb.append("- Controller：`").append(n(mapping.getController())).append("`\n");
+                sb.append("- 代码模块：`").append(n(mapping.getCodeModule())).append("`\n");
+                sb.append("- 数据表：`").append(mapping.getDataTables() == null || mapping.getDataTables().isEmpty()
+                        ? "-"
+                        : String.join(",", mapping.getDataTables())).append("`\n");
+                sb.append("- 链路：").append(toPath(mapping)).append("\n\n");
+            }
+        }
+    }
+
+    private void appendTableImpact(StringBuilder sb, List<LayerMappingDTO> mappings) {
+        sb.append("\n## 6. 数据表影响面\n\n");
+        List<LayerMappingDTO> tableMappings = mappings.stream()
+                .filter(m -> m.getDataTables() != null && !m.getDataTables().isEmpty())
+                .toList();
+        if (tableMappings.isEmpty()) {
+            sb.append("暂无数据表关联。\n");
+            return;
+        }
+
+        sb.append("| 数据表 | 业务域 | 功能/API | Controller | Service/代码模块 |\n");
+        sb.append("|---|---|---|---|---|\n");
+        for (LayerMappingDTO mapping : tableMappings) {
+            for (String table : mapping.getDataTables()) {
+                sb.append(String.format("| %s | %s | %s | %s | %s |\n",
+                        n(table), n(mapping.getBusinessDomain()), n(firstNonBlank(mapping.getApiPath(), mapping.getCapability())),
+                        n(mapping.getController()), n(mapping.getCodeModule())));
+            }
+        }
+    }
+
+    private void appendMermaidGraph(StringBuilder sb, List<KnowledgeClaim> claims) {
+        sb.append("\n## 7. Mermaid 关系图\n\n");
+        if (claims.isEmpty()) {
+            sb.append("暂无可绘制关系。\n");
+            return;
+        }
+
+        sb.append("```mermaid\n");
+        sb.append("graph LR\n");
+        claims.stream()
+                .limit(80)
+                .forEach(c -> sb.append(String.format("  \"%s\" -->|%s| \"%s\"\n",
+                        mermaidLabel(c.getSubjectKey()), mermaidLabel(c.getPredicate()), mermaidLabel(c.getObjectKey()))));
+        if (claims.size() > 80) {
+            sb.append("  \"更多关系\" -.-> \"请查看上方图谱关系明细\"\n");
+        }
+        sb.append("```\n");
+    }
+
     private String toPath(LayerMappingDTO mapping) {
         String tables = mapping.getDataTables() == null || mapping.getDataTables().isEmpty()
                 ? "-"
@@ -370,5 +504,26 @@ public class SystemOverviewService {
 
     private String n(String s) {
         return s == null ? "-" : s;
+    }
+
+    private Comparator<KnowledgeClaim> claimComparator() {
+        return Comparator
+                .comparing((KnowledgeClaim c) -> n(c.getSubjectType()))
+                .thenComparing(c -> n(c.getSubjectKey()))
+                .thenComparing(c -> n(c.getPredicate()))
+                .thenComparing(c -> n(c.getObjectType()))
+                .thenComparing(c -> n(c.getObjectKey()));
+    }
+
+    private String formatConfidence(BigDecimal confidence) {
+        return confidence == null ? "-" : confidence.toPlainString();
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return first == null || first.isBlank() ? second : first;
+    }
+
+    private String mermaidLabel(String value) {
+        return n(value).replace("\"", "\\\"");
     }
 }

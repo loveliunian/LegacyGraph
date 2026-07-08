@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 项目服务
@@ -191,7 +192,7 @@ public class ProjectService {
     @Transactional
     public Project createProject(CreateProjectRequest request) {
         Project project = new Project();
-        project.setId(UUID.randomUUID().toString());
+        project.setId(IdUtil.fastUUID());
         project.setProjectCode(request.getProjectCode());
         project.setProjectName(request.getProjectName());
         project.setDescription(request.getDescription());
@@ -211,7 +212,7 @@ public class ProjectService {
                 branch = "main";
             }
             CodeRepo codeRepo = new CodeRepo();
-            codeRepo.setId(UUID.randomUUID().toString());
+            codeRepo.setId(IdUtil.fastUUID());
             codeRepo.setProjectId(project.getId());
             codeRepo.setRepoName(extractRepoName(repoUrl));
             codeRepo.setRepoType("FULLSTACK");

@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 知识断言服务 — Claim 的幂等写入、状态计算、Fact 桥接。
@@ -337,7 +338,7 @@ public class KnowledgeClaimService {
     /** 从 draft 构建 KnowledgeClaim（不落库），供单条 insertNew 与批量 upsertDrafts 复用。 */
     private KnowledgeClaim buildClaimFromDraft(KnowledgeClaimDraft draft) {
         KnowledgeClaim claim = new KnowledgeClaim();
-        claim.setId(UUID.randomUUID().toString());
+        claim.setId(IdUtil.fastUUID());
         claim.setProjectId(draft.getProjectId());
         claim.setVersionId(draft.getVersionId());
         claim.setSubjectType(draft.getSubjectType());

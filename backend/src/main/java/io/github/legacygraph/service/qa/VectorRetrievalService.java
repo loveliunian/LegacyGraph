@@ -81,11 +81,14 @@ public class VectorRetrievalService {
     public void batchUpsertVectors(String projectId, String versionId, List<VectorDocument> documents) {
         String effectiveVersionId = resolveVersionId(projectId, versionId);
         log.info("Batch upserting {} vectors for projectId={}, versionId={}", documents.size(), projectId, effectiveVersionId);
+        // 存储一律用 effectiveVersionId（去连字符，与检索/lg_vector_document.version_id 对齐）。
+        // 此前用 doc.getVersionId() 会把带连字符的原始值写入，导致检索（resolveVersionId 去连字符后）查不到，
+        // SYSTEM_OVERVIEW 向量虽写入但永不被召回。
         for (VectorDocument doc : documents) {
             if (doc.getContent() != null && !doc.getContent().isBlank()) {
                 vectorizationService.embedAndStore(
                     doc.getProjectId() != null ? doc.getProjectId() : projectId,
-                    doc.getVersionId() != null ? doc.getVersionId() : effectiveVersionId,
+                    effectiveVersionId,
                     doc.getChunkType(),
                     doc.getSourceUri(),
                     doc.getChunkIndex() != null ? doc.getChunkIndex() : 0,

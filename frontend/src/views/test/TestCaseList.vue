@@ -275,28 +275,63 @@
           class="detail-section"
           style="margin-top: 24px;">
           <h4>测试步骤</h4>
-          <el-timeline>
+          <el-timeline v-if="detailSteps.length">
             <el-timeline-item
-              v-for="(step, index) in selectedCase.steps"
+              v-for="(step, index) in detailSteps"
               :key="index"
               :timestamp="`步骤 ${index + 1}`"
             >
-              {{ step }}
+              <span v-if="typeof step === 'string'">{{ step }}</span>
+              <div
+                v-else
+                class="step-object">
+                <span
+                  v-if="step.action"
+                  class="step-action">
+                  <el-tag
+                    size="small"
+                    type="primary">{{ step.action }}</el-tag>
+                </span>
+                <span
+                  v-if="step.method || step.path"
+                  class="step-path">{{ step.method }} {{ step.path }}</span>
+                <span v-if="step.url">{{ step.url }}</span>
+                <span v-if="step.selector">{{ step.selector }}</span>
+                <pre
+                  v-if="step.body"
+                  class="step-body">{{ step.body }}</pre>
+                <span
+                  v-else-if="!step.action && !step.method && !step.path && !step.url && !step.selector"
+                  class="text-gray">{{ JSON.stringify(step) }}</span>
+              </div>
             </el-timeline-item>
           </el-timeline>
+          <el-empty
+            v-else
+            description="暂无步骤"
+            :image-size="60" />
         </div>
 
         <div
           class="detail-section"
           style="margin-top: 24px;">
-          <h4>断言列表 ({{ selectedCase.assertionCount }})</h4>
-          <ul class="assertion-list">
+          <h4>断言列表 ({{ detailAssertions.length }})</h4>
+          <ul
+            v-if="detailAssertions.length"
+            class="assertion-list">
             <li
-              v-for="(assertion, index) in selectedCase.assertions"
+              v-for="(assertion, index) in detailAssertions"
               :key="index">
-              {{ assertion }}
+              <el-tag
+                size="small"
+                type="info">{{ assertion.type || 'ASSERT' }}</el-tag>
+              <span class="assert-expr">{{ formatAssertion(assertion) }}</span>
             </li>
           </ul>
+          <el-empty
+            v-else
+            description="暂无断言"
+            :image-size="60" />
         </div>
 
         <div
@@ -337,6 +372,8 @@ const loading = ref(false)
 const generateDialogVisible = ref(false)
 const detailVisible = ref(false)
 const selectedCase = ref<any>(null)
+const detailSteps = ref<any[]>([])
+const detailAssertions = ref<any[]>([])
 const generating = ref(false)
 const generateVersions = ref<any[]>([])
 
@@ -403,7 +440,41 @@ const getStatusText = (status: string) => dictLabel('test_case_status', status)
 
 const viewDetail = (row: any) => {
   selectedCase.value = row
+  detailSteps.value = parseJsonArray(row?.steps)
+  detailAssertions.value = parseAssertions(row?.expectedResult)
   detailVisible.value = true
+}
+
+/** steps / preconditions 在后端以 JSON 字符串存储，前端需解析为数组后再渲染 */
+const parseJsonArray = (raw: any): any[] => {
+  if (raw == null) return []
+  if (Array.isArray(raw)) return raw
+  try {
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+
+/** 断言存放在 expectedResult（JSON：{ "assertions": [...] }），解析为断言数组 */
+const parseAssertions = (raw: any): any[] => {
+  if (raw == null) return []
+  try {
+    const v = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (v && Array.isArray(v.assertions)) return v.assertions
+    if (Array.isArray(v)) return v
+    return []
+  } catch {
+    return []
+  }
+}
+
+const formatAssertion = (a: any): string => {
+  if (a == null) return ''
+  if (typeof a === 'string') return a
+  if (a.expression) return a.expression
+  return [a.field, a.operator, a.expected].filter(x => x != null && x !== '').join(' ')
 }
 
 const runCase = async (row: any) => {
@@ -534,5 +605,35 @@ const generateCases = async () => {
 .assertion-list li {
   margin-bottom: 8px;
   color: #606266;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.assert-expr {
+  word-break: break-all;
+}
+
+.step-object {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.step-path {
+  font-family: monospace;
+  color: #303133;
+}
+
+.step-body {
+  margin: 4px 0 0 0;
+  padding: 8px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

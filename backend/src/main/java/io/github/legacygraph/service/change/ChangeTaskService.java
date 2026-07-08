@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 变更任务编排服务（增强版2）— 见 doc §ChangeTask 落地模块、§任务状态机。
@@ -103,7 +104,7 @@ public class ChangeTaskService {
     public ChangeTask createTask(String projectId, String versionId, String taskType,
                                  String title, String inputIssue) {
         ChangeTask task = new ChangeTask();
-        task.setId(UUID.randomUUID().toString());
+        task.setId(IdUtil.fastUUID());
         task.setProjectId(projectId);
         task.setVersionId(versionId);
         task.setTaskType(taskType);
@@ -235,7 +236,7 @@ public class ChangeTaskService {
         String patchStatus = vr.isNeedsReview() ? "REVIEW_PENDING" : "DRAFT";
         for (PatchPlan.Patch p : plan.getPatches()) {
             PatchFile pf = new PatchFile();
-            pf.setId(UUID.randomUUID().toString());
+            pf.setId(IdUtil.fastUUID());
             pf.setChangeTaskId(taskId);
             pf.setFilePath(p.getFilePath());
             pf.setChangeType(p.getChangeType());
@@ -269,7 +270,7 @@ public class ChangeTaskService {
         List<ValidationGate> gates = new ArrayList<>(gateTypes.size());
         for (String type : gateTypes) {
             ValidationGate gate = new ValidationGate();
-            gate.setId(UUID.randomUUID().toString());
+            gate.setId(IdUtil.fastUUID());
             gate.setChangeTaskId(taskId);
             gate.setGateType(type);
             gate.setResult("PENDING");
@@ -342,7 +343,7 @@ public class ChangeTaskService {
 
         if (!allPassed) {
             ReviewRecord review = new ReviewRecord();
-            review.setId(UUID.randomUUID().toString());
+            review.setId(IdUtil.fastUUID());
             review.setProjectId(projectId);
             review.setVersionId(versionId);
             review.setTargetType("ChangeTask");
@@ -389,7 +390,7 @@ public class ChangeTaskService {
 
     private void createReviewRecord(ChangeTask task, PatchPlanValidator.ValidationResult vr) {
         ReviewRecord review = new ReviewRecord();
-        review.setId(UUID.randomUUID().toString());
+        review.setId(IdUtil.fastUUID());
         review.setProjectId(task.getProjectId());
         review.setVersionId(task.getVersionId());
         review.setTargetType("ChangeTask");

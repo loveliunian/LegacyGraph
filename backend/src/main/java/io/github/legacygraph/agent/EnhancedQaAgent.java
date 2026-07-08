@@ -30,6 +30,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * QA Agent 增强版 - 支持流式输出、多轮对话、意图分类、语义缓存、GraphRAG
@@ -94,7 +95,7 @@ public class EnhancedQaAgent {
                 }
                 Map<String, Object> completeData = new HashMap<>();
                 completeData.put("conversationId", conversation.getId());
-                completeData.put("messageId", assistantMessage != null ? assistantMessage.getId() : UUID.randomUUID().toString());
+                completeData.put("messageId", assistantMessage != null ? assistantMessage.getId() : IdUtil.fastUUID());
                 completeData.put("fromCache", true);
                 completeData.put("confidence", 1.0);
                 completeData.put("evidences", List.of());
@@ -253,6 +254,8 @@ public class EnhancedQaAgent {
             String retrievalContext = buildRetrievalContext(docs, graphNodes);
             retrievalContext = appendGraphRagContext(retrievalContext, graphRagCards, plan);
             retrievalContext = appendChangeImpactContext(retrievalContext, finalImpactAnalysis, finalParsedChange);
+            // 列举题：「哪些数据库表」「有哪些 Service」等直接从图谱一次性查全该类型节点，绕开向量 topK
+            retrievalContext = appendListingContext(retrievalContext, projectId, versionId, question);
             String fullContext = contextText + "\n" + retrievalContext;
 
             // 12. 流式生成答案
@@ -314,7 +317,7 @@ public class EnhancedQaAgent {
                         // 发送完成事件（包含提取后的 answer，前端直接用）
                         Map<String, Object> completeData = new HashMap<>();
                         completeData.put("conversationId", conversation.getId());
-                        completeData.put("messageId", assistantMessage != null ? assistantMessage.getId() : UUID.randomUUID().toString());
+                        completeData.put("messageId", assistantMessage != null ? assistantMessage.getId() : IdUtil.fastUUID());
                         completeData.put("confidence", 0.8);
                         completeData.put("evidences", evidences);
                         completeData.put("answer", displayText);
@@ -488,6 +491,102 @@ public class EnhancedQaAgent {
         }
 
         return context.toString();
+    }
+
+    /**
+     * 列举题专用上下文：检测「哪些/列出 所有 X」意图，直接从图谱一次性查出该类型全部节点，
+     * 拼成清单喂给 LLM。绕开向量检索 topK 上限 —— 否则「哪些数据库表」只能列到 topK 内的 7~10 张。
+     * <p>非列举题或图谱无该类型节点时原样返回。</p>
+     */
+    private String appendListingContext(String currentContext, String projectId, String versionId, String question) {
+        String nodeType = detectListingNodeType(question);
+        if (nodeType == null) {
+            return currentContext;
+        }
+        try {
+            String vid = versionId != null ? versionId.replace("-", "") : null;
+            List<GraphNode> nodes = neo4jGraphDao.queryNodes(
+                    projectId, vid, nodeType, null, null, null, 0);
+            if (nodes == null || nodes.isEmpty()) {
+                return currentContext;
+            }
+            List<String> names = nodes.stream()
+                    .map(n -> n.getDisplayName() != null && !n.getDisplayName().isBlank()
+                            ? n.getDisplayName() : n.getNodeName())
+                    .filter(n -> n != null && !n.isBlank())
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.toList());
+            if (names.isEmpty()) {
+                return currentContext;
+            }
+            int total = names.size();
+            int cap = 300; // 避免超大类型（如 Method 近千）撑爆 prompt
+            StringBuilder sb = new StringBuilder();
+            sb.append("\n## ").append(nodeType).append(" 清单（图谱共 ").append(total).append(" 个，完整列表）\n");
+            for (String n : names.subList(0, Math.min(cap, total))) {
+                sb.append("- ").append(n).append("\n");
+            }
+            if (total > cap) {
+                sb.append("（仅列前 ").append(cap).append(" 个，共 ").append(total)
+                        .append(" 个；如需全部请分批询问）\n");
+            }
+            log.info("Listing context: type={}, total={}, question='{}'", nodeType, total, question);
+            return currentContext + sb;
+        } catch (Exception e) {
+            log.warn("Listing context failed for type={}: {}", nodeType, e.getMessage());
+            return currentContext;
+        }
+    }
+
+    /**
+     * 检测列举意图并映射到 NodeType；非列举题或无法识别类型时返回 null。
+     * <p>关键词匹配：列举词（哪些/列出/所有/全部/清单/有几个/多少个...）+ 类型词（数据库表/Service/...）。
+     * 中文类型词用 substring；英文类型词用词边界（\b），避免 OrderController/OrderService
+     * 这类类名后缀被误当成类型词（「OrderController 处理哪些 API」应映射 ApiEndpoint 而非 Controller）。
+     * 单独「表」放最后兜底，避免匹配「表示」「列表」。
+     * </p>
+     */
+    String detectListingNodeType(String question) {
+        if (question == null || question.isBlank()) {
+            return null;
+        }
+        String q = question.toLowerCase();
+        boolean isListing = q.contains("哪些") || q.contains("列出") || q.contains("列举")
+                || q.contains("所有") || q.contains("全部") || q.contains("清单")
+                || q.contains("列表") || q.contains("有几个") || q.contains("多少个")
+                || q.contains("一共有");
+        if (!isListing) {
+            return null;
+        }
+        // 中文类型词（不会出现在类名里，substring 即可）
+        if (q.contains("数据库表") || q.contains("数据表") || q.contains("表名")) return "Table";
+        if (q.contains("业务域")) return "BusinessDomain";
+        if (q.contains("业务对象")) return "BusinessObject";
+        if (q.contains("业务流程")) return "BusinessProcess";
+        if (q.contains("业务规则")) return "BusinessRule";
+        if (q.contains("服务")) return "Service";
+        if (q.contains("控制器")) return "Controller";
+        if (q.contains("映射")) return "Mapper";
+        if (q.contains("接口")) return "ApiEndpoint";
+        if (q.contains("页面")) return "Page";
+        if (q.contains("方法")) return "Method";
+        // 英文类型词 —— 词边界匹配，规避类名后缀（OrderController/OrderService/...）
+        if (containsWord(q, "service")) return "Service";
+        if (containsWord(q, "controller")) return "Controller";
+        if (containsWord(q, "mapper")) return "Mapper";
+        if (containsWord(q, "api")) return "ApiEndpoint";
+        if (containsWord(q, "page")) return "Page";
+        if (containsWord(q, "method")) return "Method";
+        if (containsWord(q, "sql")) return "SqlStatement";
+        // 中文「表」最后兜底
+        if (q.contains("表")) return "Table";
+        return null;
+    }
+
+    /** 英文词边界匹配（规避类名后缀误匹配）。 */
+    private boolean containsWord(String text, String word) {
+        return text.matches("(?s).*\\b" + word + "\\b.*");
     }
 
     /**

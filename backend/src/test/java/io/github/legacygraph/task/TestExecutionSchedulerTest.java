@@ -4,6 +4,7 @@ import io.github.legacygraph.entity.TestCase;
 import io.github.legacygraph.entity.TestResult;
 import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.repository.TestResultRepository;
+import io.github.legacygraph.repository.TestRunRepository;
 import io.github.legacygraph.service.graph.GraphValidatorService;
 import io.github.legacygraph.test.ApiTestExecutor;
 import org.junit.jupiter.api.Disabled;
@@ -33,6 +34,9 @@ class TestExecutionSchedulerTest {
 
     @Mock
     private TestResultRepository testResultRepository;
+
+    @Mock
+    private TestRunRepository testRunRepository;
 
     @Mock
     private ApiTestExecutor apiTestExecutor;

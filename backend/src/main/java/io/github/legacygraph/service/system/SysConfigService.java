@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 系统配置服务
@@ -93,7 +94,7 @@ public class SysConfigService {
      */
     @CacheEvict(cacheNames = {"config-value", "config-all"}, allEntries = true)
     public SysConfig create(SysConfig config) {
-        config.setId(UUID.randomUUID().toString());
+        config.setId(IdUtil.fastUUID());
         config.setConfigType(config.getConfigType() == null ? "STRING" : config.getConfigType());
         config.setIsSystem(config.getIsSystem() == null ? false : config.getIsSystem());
         config.setStatus(config.getStatus() == null ? "ACTIVE" : config.getStatus());

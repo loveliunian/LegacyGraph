@@ -61,6 +61,13 @@ public class SystemOverviewIngestRequest {
         /** 代码模块（Service/Agent/Builder，如 "ProjectService"） */
         private String codeModule;
 
+        /**
+         * codeModule 的节点类型（如 "Service"、"Mapper"）；为空时按 "Service" 处理。
+         * 用于 Table 访问行：Mapper 经 SqlStatement 访问表，此时 codeModule 是 Mapper，
+         * 需以 Mapper 为 subject 生成 READS/WRITES Claim，而非 Service。
+         */
+        private String codeModuleType;
+
         /** 数据表（逗号分隔，如 "lg_project,lg_code_repo"） */
         private String dataTables;
 

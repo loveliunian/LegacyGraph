@@ -27,13 +27,18 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 @Slf4j
 @RestController
@@ -49,6 +54,7 @@ public class TestCaseController {
     private final TestCaseAgent testCaseAgent;
     private final Neo4jGraphDao neo4jGraphDao;
     private final ScanTaskRepository scanTaskRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TestCaseController(TestCaseRepository testCaseRepository,
                               TestResultRepository testResultRepository,
@@ -95,8 +101,15 @@ public class TestCaseController {
                 wrapper
         );
 
+        // 填充前端展示用的瞬态字段：用例编号 / 关联功能 / API路径 / 断言数 / 生成方式 / 最近运行
+        List<TestCase> records = page.getRecords();
+        Map<String, TestResult> latestByCase = loadLatestResults(records);
+        for (TestCase tc : records) {
+            enrich(tc, latestByCase.get(tc.getId()));
+        }
+
         PageResult<TestCase> result = PageResult.of(
-                page.getRecords(),
+                records,
                 page.getTotal(),
                 query.getPageNum(),
                 query.getPageSize()
@@ -111,6 +124,7 @@ public class TestCaseController {
         if (testCase == null || !testCase.getProjectId().equals(projectId)) {
             return Result.error("测试用例不存在");
         }
+        enrich(testCase, null);
         return Result.success(testCase);
     }
 
@@ -123,7 +137,7 @@ public class TestCaseController {
             request.setProjectId(projectId);
         }
         if (request.getId() == null) {
-            request.setId(UUID.randomUUID().toString());
+            request.setId(IdUtil.fastUUID());
         }
         if (request.getStatus() == null) {
             request.setStatus("ENABLED");
@@ -246,7 +260,18 @@ public class TestCaseController {
                     tc.setPreconditions("[]");
                 }
                 
-                tc.setExpectedResult("验证接口返回符合预期");
+                // expectedResult 存为 JSON：包含 assertions 数组，便于前端展示断言数与断言列表
+                if (genCase.getAssertions() != null && !genCase.getAssertions().isEmpty()) {
+                    try {
+                        Map<String, Object> expected = new LinkedHashMap<>();
+                        expected.put("assertions", genCase.getAssertions());
+                        tc.setExpectedResult(objectMapper.writeValueAsString(expected));
+                    } catch (Exception e) {
+                        tc.setExpectedResult("验证接口返回符合预期");
+                    }
+                } else {
+                    tc.setExpectedResult("验证接口返回符合预期");
+                }
                 tc.setStatus("ENABLED");
                 tc.setGeneratedBy("LLM");
                 tc.setCreatedAt(LocalDateTime.now());
@@ -264,6 +289,106 @@ public class TestCaseController {
                 "status", "completed",
                 "generated", totalGenerated
         ));
+    }
+
+    /**
+     * 批量加载一页测试用例各自的最近一次执行结果，避免列表 N+1 查询。
+     */
+    private Map<String, TestResult> loadLatestResults(List<TestCase> cases) {
+        if (cases == null || cases.isEmpty()) {
+            return Map.of();
+        }
+        List<String> caseIds = cases.stream()
+                .map(TestCase::getId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toList());
+        if (caseIds.isEmpty()) {
+            return Map.of();
+        }
+        // 按 executed_at 倒序取出，再按 testCaseId 取首条即最近结果
+        List<TestResult> results = testResultRepository.lambdaQuery()
+                .in(TestResult::getTestCaseId, caseIds)
+                .orderByDesc(TestResult::getExecutedAt)
+                .list();
+        Map<String, TestResult> latestByCase = new HashMap<>();
+        for (TestResult r : results) {
+            latestByCase.putIfAbsent(r.getTestCaseId(), r);
+        }
+        return latestByCase;
+    }
+
+    /**
+     * 填充 TestCase 实体上仅供前端展示的瞬态字段（@TableField(exist=false)）。
+     * 包括：用例编号、关联功能、API路径、HTTP方法、断言数、生成方式、最近运行状态/时间。
+     *
+     * @param tc          测试用例
+     * @param lastResult  最近一次执行结果，可为 null（列表页建议批量预取后传入，详情页传 null）
+     */
+    private void enrich(TestCase tc, TestResult lastResult) {
+        if (tc == null) {
+            return;
+        }
+        // 用例编号：以 caseCode 作为展示编号
+        tc.setCaseNo(tc.getCaseCode());
+
+        // 生成方式：LLM 生成标记为 AI_GENERATED，其余为手动
+        tc.setGenerateType("LLM".equals(tc.getGeneratedBy()) ? "AI_GENERATED" : "MANUAL");
+
+        // 关联功能 / API路径 / 方法：通过 targetNodeId 回查图谱节点
+        if (StringUtils.hasText(tc.getTargetNodeId())) {
+            try {
+                neo4jGraphDao.findNodeById(tc.getTargetNodeId()).ifPresent(node -> {
+                    tc.setFeatureName(StringUtils.hasText(node.getNodeName())
+                            ? node.getNodeName() : node.getDisplayName());
+                    if ("ApiEndpoint".equals(node.getNodeType())) {
+                        tc.setApiPath(extractApiEndpoint(node));
+                        tc.setMethod(extractHttpMethod(node));
+                    } else {
+                        tc.setApiPath(node.getNodeKey());
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("enrich: 解析目标节点失败 caseId={}, targetNodeId={}: {}",
+                        tc.getId(), tc.getTargetNodeId(), e.getMessage());
+            }
+        }
+
+        // 断言数：expectedResult 可能是 JSON（含 assertions 数组）或纯文本
+        tc.setAssertionCount(countAssertions(tc.getExpectedResult()));
+
+        // 最近运行状态 / 时间
+        TestResult last = lastResult;
+        if (last == null) {
+            last = testResultRepository.lambdaQuery()
+                    .eq(TestResult::getTestCaseId, tc.getId())
+                    .orderByDesc(TestResult::getExecutedAt)
+                    .last("LIMIT 1")
+                    .one();
+        }
+        if (last != null) {
+            tc.setLastRunStatus(last.getResultStatus());
+            tc.setLastRunTime(last.getExecutedAt());
+        }
+    }
+
+    /**
+     * 从 expectedResult 中解析断言数量。
+     * 兼容两种存储：JSON 对象（{"assertions":[...]}）或纯文本。
+     */
+    private int countAssertions(String expectedResult) {
+        if (!StringUtils.hasText(expectedResult)) {
+            return 0;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(expectedResult);
+            if (node.isObject() && node.has("assertions") && node.get("assertions").isArray()) {
+                return node.get("assertions").size();
+            }
+            return 0;
+        } catch (Exception e) {
+            // 非 JSON（纯文本期望结果），无结构化断言
+            return 0;
+        }
     }
 
     static String extractHttpMethod(GraphNode node) {

@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * E2E测试执行器
@@ -104,7 +105,7 @@ public class E2eTestExecutor {
         long startTime = System.currentTimeMillis();
 
         TestResult result = new TestResult();
-        result.setId(UUID.randomUUID().toString());
+        result.setId(IdUtil.fastUUID());
         result.setProjectId(testCase.getProjectId());
         result.setVersionId(testCase.getVersionId());
         result.setTestCaseId(testCase.getId());

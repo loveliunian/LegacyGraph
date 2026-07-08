@@ -132,6 +132,10 @@ public class ServiceCallExtractor {
                         // 尝试解析目标：检查方法调用的 scope（如 mapper.findById → mapper 是注入的 MapperUser）
                         methodCall.getScope().ifPresent(scope -> {
                             String varName = scope.toString();
+                            // 剥 "this." 前缀：this.mapper.findById() → "mapper"，否则 scope.toString()="this.mapper" 匹配不上
+                            if (varName.startsWith("this.")) {
+                                varName = varName.substring("this.".length());
+                            }
                             String resolvedType = injectedVarToType.get(varName);
                             if (resolvedType != null) {
                                 rel.setTargetClass(resolvedType);
@@ -189,7 +193,11 @@ public class ServiceCallExtractor {
                         String name = a.getNameAsString();
                         return "Autowired".equalsIgnoreCase(name) || "Inject".equalsIgnoreCase(name);
                     });
-            if (hasAutowired) {
+            // Lombok @RequiredArgsConstructor / Spring 单构造器注入：非 static final 字段即构造器注入，
+            // 源码无 @Autowired、也无显式构造器（Lombok 编译期生成），原逻辑漏掉导致 targetClass 全 null、
+            // Service→Mapper 调用链断裂。final 字段在 Spring 中必然经构造器注入，等同 @Autowired 语义。
+            boolean isConstructorInjectedFinal = field.isFinal() && !field.isStatic();
+            if (hasAutowired || isConstructorInjectedFinal) {
                 for (var variable : field.getVariables()) {
                     String varName = variable.getNameAsString();
                     String typeName = variable.getType().asString();

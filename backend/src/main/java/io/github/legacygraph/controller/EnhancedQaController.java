@@ -18,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * QA 问答控制器 - 支持流式输出和多轮对话
@@ -99,7 +100,7 @@ public class EnhancedQaController {
     @PostMapping("/feedback")
     public Result<Void> submitFeedback(@RequestBody FeedbackRequest request) {
         QaFeedback feedback = new QaFeedback();
-        feedback.setId(UUID.randomUUID().toString());
+        feedback.setId(IdUtil.fastUUID());
         feedback.setMessageId(request.getMessageId());
         feedback.setConversationId(request.getConversationId());
         feedback.setProjectId(request.getProjectId());

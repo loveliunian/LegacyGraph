@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -304,5 +305,32 @@ class EnhancedQaAgentTest {
             }
             return last;
         }
+    }
+
+    /**
+     * 列举题意图识别：中文关键词 → NodeType。
+     * <p>「哪些数据库表」「列出所有 Service」「有哪些 Controller」等应正确映射；
+     * 非列举题或无类型词返回 null。
+     * </p>
+     */
+    @Test
+    void detectListingNodeType_mapsChineseKeywords() {
+        EnhancedQaAgent a = newAgent();
+        assertEquals("Table", a.detectListingNodeType("这个项目用了哪些数据库表？"));
+        assertEquals("Table", a.detectListingNodeType("列出所有数据表"));
+        assertEquals("Table", a.detectListingNodeType("系统有哪些表名"));
+        assertEquals("Table", a.detectListingNodeType("系统里都有哪些表"));
+        assertEquals("Service", a.detectListingNodeType("有哪些 Service 类"));
+        assertEquals("Service", a.detectListingNodeType("列出所有服务"));
+        assertEquals("Controller", a.detectListingNodeType("一共有多少个控制器"));
+        assertEquals("Mapper", a.detectListingNodeType("项目有哪些 Mapper"));
+        assertEquals("ApiEndpoint", a.detectListingNodeType("列出所有接口"));
+        assertEquals("ApiEndpoint", a.detectListingNodeType("OrderController 处理哪些 API"));
+        assertEquals("BusinessDomain", a.detectListingNodeType("有哪些业务域"));
+        // 含列举词但无类型词 → null
+        assertNull(a.detectListingNodeType("订单域包含哪些功能"));
+        // 无列举词 → null
+        assertNull(a.detectListingNodeType("系统架构是什么样的"));
+        assertNull(a.detectListingNodeType("OrderController 是做什么的"));
     }
 }

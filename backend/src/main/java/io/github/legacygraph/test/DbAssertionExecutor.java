@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 数据库断言执行器
@@ -48,7 +49,7 @@ public class DbAssertionExecutor {
         log.info("Executing DB test case: {} {}", testCase.getCaseCode(), testCase.getCaseName());
 
         TestResult result = new TestResult();
-        result.setId(UUID.randomUUID().toString());
+        result.setId(IdUtil.fastUUID());
         result.setProjectId(testCase.getProjectId());
         result.setVersionId(testCase.getVersionId());
         result.setTestCaseId(testCase.getId());

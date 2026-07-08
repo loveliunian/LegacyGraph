@@ -53,6 +53,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -69,6 +70,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 扫描后 AI 编排器 — Phase 1。
@@ -988,6 +990,8 @@ public class AiScanOrchestrator {
             // 原串行 60 节点逐个阻塞 ~17s/节点，实测 1044s；4 路并发预期降到 ~260-350s。
             // 不回到 8 路：注释见 orchestrate()，DeepSeek 8 路曾触发限流导致 code 抽取 138s→576s。
             AtomicInteger generated = new AtomicInteger(0);
+            // 收集 TestCase 到列表，最后批量 insert（替代逐条 insert 的 312 次 DB 往返）
+            List<TestCase> batch = Collections.synchronizedList(new ArrayList<>());
             List<CompletableFuture<Void>> futures = new ArrayList<>();
             for (GraphNode node : allNodes) {
                 futures.add(CompletableFuture.runAsync(() -> {
@@ -1005,7 +1009,10 @@ public class AiScanOrchestrator {
                         List<GeneratedTestCase> cases = testCaseAgent.generateTestCases(req);
                         for (GeneratedTestCase gen : cases) {
                             int idx = generated.incrementAndGet();
-                            persistTestCase(projectId, versionId, node, gen, idx);
+                            TestCase tc = buildTestCase(projectId, versionId, node, gen, idx);
+                            if (tc != null) {
+                                batch.add(tc);
+                            }
                         }
                     } catch (Exception e) {
                         log.warn("Test generation failed for node {}: {}", node.getNodeKey(), e.getMessage());
@@ -1013,6 +1020,15 @@ public class AiScanOrchestrator {
                 }, docExtractExecutor));
             }
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            // 批量持久化（单次 insertBatch 替代 N 次 insert）
+            if (!batch.isEmpty()) {
+                try {
+                    testCaseRepository.insertBatch(batch);
+                } catch (Exception e) {
+                    log.warn("Failed to batch insert {} test cases: {}", batch.size(), e.getMessage());
+                }
+            }
 
             completeTask(task, "AI 生成测试用例 " + generated.get() + " 条", null);
         } catch (Exception e) {
@@ -1044,8 +1060,9 @@ public class AiScanOrchestrator {
         };
     }
 
-    private void persistTestCase(String projectId, String versionId, GraphNode node,
-                                 GeneratedTestCase gen, int index) {
+    /** 构造 TestCase（不落库，由调用方批量 insert）。构造失败返回 null。 */
+    private TestCase buildTestCase(String projectId, String versionId, GraphNode node,
+                                   GeneratedTestCase gen, int index) {
         try {
             TestCase tc = new TestCase();
             tc.setProjectId(projectId);
@@ -1064,9 +1081,10 @@ public class AiScanOrchestrator {
             tc.setGeneratedBy("LLM");
             tc.setCreatedAt(LocalDateTime.now());
             tc.setUpdatedAt(LocalDateTime.now());
-            testCaseRepository.insert(tc);
+            return tc;
         } catch (Exception e) {
-            log.warn("Failed to persist generated test case: {}", e.getMessage());
+            log.warn("Failed to build test case for node {}: {}", node.getNodeKey(), e.getMessage());
+            return null;
         }
     }
 
@@ -1156,7 +1174,7 @@ public class AiScanOrchestrator {
                 return false;
             }
             ReviewRecord record = new ReviewRecord();
-            record.setId(UUID.randomUUID().toString());
+            record.setId(IdUtil.fastUUID());
             record.setProjectId(projectId);
             record.setVersionId(versionId);
             record.setTargetType("NODE");
@@ -1187,7 +1205,7 @@ public class AiScanOrchestrator {
                 return false;
             }
             ReviewRecord record = new ReviewRecord();
-            record.setId(UUID.randomUUID().toString());
+            record.setId(IdUtil.fastUUID());
             record.setProjectId(projectId);
             record.setVersionId(versionId);
             record.setTargetType("EDGE");
@@ -1238,7 +1256,7 @@ public class AiScanOrchestrator {
                            String sourceType) {
         try {
             Fact fact = new Fact();
-            fact.setId(UUID.randomUUID().toString());
+            fact.setId(IdUtil.fastUUID());
             fact.setProjectId(projectId);
             fact.setVersionId(versionId);
             fact.setFactType(factType);
@@ -1452,7 +1470,7 @@ public class AiScanOrchestrator {
         }
         // fallback: 测试环境 scanTaskRecorder 可能为 null
         ScanTask task = new ScanTask();
-        task.setId(UUID.randomUUID().toString());
+        task.setId(IdUtil.fastUUID());
         task.setProjectId(projectId);
         task.setVersionId(versionId);
         task.setTaskType(taskType);
@@ -1625,7 +1643,8 @@ public class AiScanOrchestrator {
      */
     private int countGraphNodes(String projectId, String versionId) {
         try {
-            return neo4jGraphDao.queryNodes(projectId, versionId, null, null, null, null, Integer.MAX_VALUE).size();
+            // 用 Cypher COUNT，替代原 queryNodes(MAX_VALUE).size() 的全量加载（每文档前后各调一次，10 文档=20 次全量加载，是 DOC_EXTRACT 510s 的主因之一）
+            return (int) neo4jGraphDao.countNodes(projectId, versionId, null);
         } catch (Exception e) {
             log.debug("countGraphNodes failed: {}", e.getMessage());
             return 0;
@@ -1637,7 +1656,8 @@ public class AiScanOrchestrator {
      */
     private int countGraphEdges(String projectId, String versionId) {
         try {
-            return neo4jGraphDao.queryEdges(projectId, versionId, null, null, Integer.MAX_VALUE).size();
+            // 用 Cypher COUNT，替代原 queryEdges(MAX_VALUE).size() 的全量加载
+            return (int) neo4jGraphDao.countEdges(projectId, versionId, null);
         } catch (Exception e) {
             log.debug("countGraphEdges failed: {}", e.getMessage());
             return 0;

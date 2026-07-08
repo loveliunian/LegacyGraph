@@ -314,6 +314,14 @@ public class Neo4jGraphDao {
         return projectionRepo.apiImplementationRelations(projectId, versionId);
     }
 
+    /**
+     * 每个 Mapper 访问的 Table 集合（Mapper→SqlStatement→Table），用于补全数据表访问关系。
+     * 详见 {@link Neo4jProjectionRepository#tableAccessRelations}。
+     */
+    public List<Map<String, Object>> tableAccessRelations(String projectId, String versionId) {
+        return projectionRepo.tableAccessRelations(projectId, versionId);
+    }
+
     public List<Map<String, Object>> confidenceDistribution(String projectId, String versionId) {
         return projectionRepo.confidenceDistribution(projectId, versionId);
     }

@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 用户认证控制器
@@ -79,7 +80,7 @@ public class AuthController {
         if (user == null) {
             if ("admin".equals(request.getUsername())) {
                 user = new SysUser();
-                user.setId(UUID.randomUUID().toString());
+                user.setId(IdUtil.fastUUID());
                 user.setUsername("admin");
                 user.setPassword(passwordEncoder.encode("admin123"));
                 user.setNickname("管理员");

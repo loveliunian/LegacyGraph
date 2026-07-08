@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 系统用户服务
@@ -78,7 +79,7 @@ public class SysUserService {
      * 创建用户
      */
     public SysUser create(SysUser user) {
-        user.setId(UUID.randomUUID().toString());
+        user.setId(IdUtil.fastUUID());
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setStatus(user.getStatus() == null ? "ACTIVE" : user.getStatus());
         user.setCreatedAt(LocalDateTime.now());

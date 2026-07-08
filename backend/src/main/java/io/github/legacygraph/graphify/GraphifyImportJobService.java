@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * Graphify 导入作业服务。
@@ -38,7 +39,7 @@ public class GraphifyImportJobService {
                                      String projectRoot, String branchName,
                                      String sourceCommit) {
         GraphifyImportJob job = GraphifyImportJob.builder()
-                .jobId(UUID.randomUUID().toString())
+                .jobId(IdUtil.fastUUID())
                 .projectId(projectId)
                 .versionId(versionId)
                 .projectRoot(projectRoot)

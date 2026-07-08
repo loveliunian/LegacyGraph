@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 知识缺口发现服务 — 基于确定性规则在 Claim 层扫描 6 类缺口。
@@ -586,7 +587,7 @@ public class GapFinderService {
                               String title, String subjectType, String subjectKey, String severity,
                               List<String> relatedClaimIds) {
         GapTask gap = new GapTask();
-        gap.setId(UUID.randomUUID().toString());
+        gap.setId(IdUtil.fastUUID());
         gap.setProjectId(projectId);
         gap.setVersionId(versionId);
         gap.setGapType(gapType);
@@ -615,7 +616,7 @@ public class GapFinderService {
                                         String subjectKey, String severity, String reason,
                                         List<String> relatedClaimIds) {
         GapTask gap = new GapTask();
-        gap.setId(UUID.randomUUID().toString());
+        gap.setId(IdUtil.fastUUID());
         gap.setProjectId(projectId);
         gap.setVersionId(versionId);
         gap.setGapType(gapType);

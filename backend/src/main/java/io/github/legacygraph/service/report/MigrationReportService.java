@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 迁移就绪度报告服务 — 从 ReportingService 拆分。
@@ -44,7 +45,7 @@ public class MigrationReportService {
      */
     public Report generateMigrationReport(String projectId) {
         Report report = new Report();
-        report.setId(UUID.randomUUID().toString());
+        report.setId(IdUtil.fastUUID());
         report.setProjectId(projectId);
         report.setReportType("MIGRATION_READINESS");
         report.setGeneratedAt(LocalDateTime.now());

@@ -103,6 +103,32 @@ class VectorRetrievalServiceTest {
                 anyString(), anyString(), anyString(), anyString(), anyInt(), anyString(), anyString());
     }
 
+    /**
+     * 回归：batchUpsertVectors 必须用去连字符的规范化 versionId 落库，
+     * 不能用 doc.getVersionId()（带连字符的原始值）。
+     * <p>旧实现 doc.versionId 非空时优先用它，导致 SYSTEM_OVERVIEW 向量以带连字符 version_id 写入，
+     * 而检索（resolveVersionId 去连字符）查不到 → QA 召回为空。
+     * </p>
+     */
+    @Test
+    void testBatchUpsertVectors_StoresNormalizedVersionId() {
+        VectorDocument doc = new VectorDocument();
+        doc.setProjectId("1001");
+        doc.setVersionId("cda8cc37-5277-d6c0-da32-ba379795216a"); // 带连字符
+        doc.setChunkType("SYSTEM_OVERVIEW");
+        doc.setSourceUri("system-overview:row:1");
+        doc.setContent("业务域:Order 代码:OrderMapper 数据表:nx_order");
+        doc.setEmbeddingModel("bge-m3");
+
+        vectorRetrievalService.batchUpsertVectors("1001",
+                "cda8cc37-5277-d6c0-da32-ba379795216a", Collections.singletonList(doc));
+
+        // 落库 versionId 必须是去连字符的（与检索对齐），而非 doc 上带连字符的原始值
+        verify(vectorizationService).embedAndStore(
+                eq("1001"), eq("cda8cc375277d6c0da32ba379795216a"),
+                eq("SYSTEM_OVERVIEW"), anyString(), anyInt(), anyString(), anyString());
+    }
+
     @Test
     void testFindSimilarNodes_UsesBatchQuery() {
         String searchText = "订单";

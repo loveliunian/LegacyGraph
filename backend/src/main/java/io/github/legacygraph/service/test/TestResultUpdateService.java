@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 测试结果回写服务
@@ -118,7 +119,7 @@ public class TestResultUpdateService {
             GraphNode node = neo4jGraphDao.findNodeById(nodeId).orElse(null);
             if (node != null) {
                 ReviewRecord review = new ReviewRecord();
-                review.setId(UUID.randomUUID().toString());
+                review.setId(IdUtil.fastUUID());
                 review.setProjectId(node.getProjectId());
                 review.setVersionId(node.getVersionId());
                 review.setTargetType(node.getNodeType());

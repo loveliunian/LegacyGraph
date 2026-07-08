@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * PR 编排器（可用版）— 见 doc §安全与回滚策略、§PrOrchestrator。
@@ -93,7 +94,7 @@ public class PrOrchestrator {
         String rollbackPlan = toJson(buildRollbackPlan(task, branchName));
 
         PrTask prTask = new PrTask();
-        prTask.setId(UUID.randomUUID().toString());
+        prTask.setId(IdUtil.fastUUID());
         prTask.setChangeTaskId(task.getId());
         prTask.setBranchName(branchName);
         prTask.setPrUrl(null); // 真正推送后回填

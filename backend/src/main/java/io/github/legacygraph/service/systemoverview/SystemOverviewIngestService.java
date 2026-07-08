@@ -176,47 +176,79 @@ public class SystemOverviewIngestService {
      */
     private List<RelationRow> buildRelationsFromGraph(String projectId, String versionId) {
         List<RelationRow> rows = new ArrayList<>();
-        List<Map<String, Object>> apiRels;
+        List<Map<String, Object>> apiRels = null;
         try {
             apiRels = graphQueryService.getApiImplementationRelations(projectId, versionId);
         } catch (Exception e) {
             log.warn("Load api implementation relations failed for projectId={}: {}", projectId, e.getMessage());
-            return rows;
-        }
-        if (apiRels == null || apiRels.isEmpty()) {
-            return rows;
         }
 
         int processed = 0;
-        for (Map<String, Object> r : apiRels) {
-            if (processed++ >= MAX_GRAPH_APIS) {
-                log.warn("API implementation relations exceed {}, truncating graph-derived overview", MAX_GRAPH_APIS);
-                break;
-            }
-            String apiKey = str(r.get("nodeKey"));
-            String apiName = str(r.get("displayName"));
-            if (apiKey == null || apiKey.isBlank()) {
-                continue;
-            }
+        if (apiRels != null) {
+            for (Map<String, Object> r : apiRels) {
+                if (processed++ >= MAX_GRAPH_APIS) {
+                    log.warn("API implementation relations exceed {}, truncating graph-derived overview", MAX_GRAPH_APIS);
+                    break;
+                }
+                String apiKey = str(r.get("nodeKey"));
+                String apiName = str(r.get("displayName"));
+                if (apiKey == null || apiKey.isBlank()) {
+                    continue;
+                }
 
-            String controller = firstStr(r.get("controllers"));
-            String service = firstStr(r.get("services"));
-            List<String> tables = strList(r.get("tables"));
-            // 仅保留 PG 表（过滤 Neo4j/Redis/MinIO 等非关系存储），与 toClaims 口径一致
-            tables = tables.stream()
-                    .filter(t -> !t.startsWith("Neo4j") && !t.startsWith("Redis") && !t.startsWith("MinIO"))
-                    .collect(java.util.stream.Collectors.toList());
+                String controller = firstStr(r.get("controllers"));
+                String service = firstStr(r.get("services"));
+                List<String> tables = strList(r.get("tables"));
+                // 仅保留 PG 表（过滤 Neo4j/Redis/MinIO 等非关系存储），与 toClaims 口径一致
+                tables = tables.stream()
+                        .filter(t -> !t.startsWith("Neo4j") && !t.startsWith("Redis") && !t.startsWith("MinIO"))
+                        .collect(java.util.stream.Collectors.toList());
 
-            // 至少要抽到代码层或数据层，否则该 API 无投影价值
-            if (controller == null && service == null && tables.isEmpty()) {
-                continue;
+                // 至少要抽到代码层或数据层，否则该 API 无投影价值
+                if (controller == null && service == null && tables.isEmpty()) {
+                    continue;
+                }
+
+                String domain = deriveDomain(controller, apiName);
+                String capability = notBlank(apiName) ? apiName : apiKey;
+                rows.add(row(domain, capability, capability, controller, apiKey, service,
+                        String.join(",", tables), "HANDLED_BY", "CODE", 0.85));
             }
-
-            String domain = deriveDomain(controller, apiName);
-            String capability = notBlank(apiName) ? apiName : apiKey;
-            rows.add(row(domain, capability, capability, controller, apiKey, service,
-                    String.join(",", tables), "HANDLED_BY", "CODE", 0.85));
         }
+
+        // Table 捕获：以 Mapper 为锚补全数据表访问（API 回溯在 Service↔Mapper 无边时够不到表，
+        // 但 Mapper→SqlStatement→Table 通常通）。每行向量化后内容含 "数据表:t1,t2,..."，
+        // 让「哪些数据库表」类列举题有结构化内容可语义召回。
+        List<Map<String, Object>> tableRels = null;
+        try {
+            tableRels = graphQueryService.getTableAccessRelations(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("Load table access relations failed for projectId={}: {}", projectId, e.getMessage());
+        }
+        if (tableRels != null) {
+            for (Map<String, Object> r : tableRels) {
+                String mapperKey = str(r.get("mapperKey"));
+                String mapperName = notBlank(str(r.get("mapperName"))) ? str(r.get("mapperName")) : mapperKey;
+                if (mapperKey == null && mapperName == null) {
+                    continue;
+                }
+                List<String> tables = strList(r.get("tables"));
+                tables = tables.stream()
+                        .filter(t -> !t.startsWith("Neo4j") && !t.startsWith("Redis") && !t.startsWith("MinIO"))
+                        .collect(java.util.stream.Collectors.toList());
+                if (tables.isEmpty()) {
+                    continue;
+                }
+                String module = notBlank(mapperName) ? mapperName : mapperKey;
+                String domain = deriveDomainFromModule(module);
+                // codeModuleType=Mapper：toClaims 以 Mapper 为 subject 生成 READS/WRITES Table
+                RelationRow tr = row(domain, null, null, null, null, module,
+                        String.join(",", tables), "READS", "CODE", 0.85);
+                tr.setCodeModuleType("Mapper");
+                rows.add(tr);
+            }
+        }
+
         return rows;
     }
 
@@ -256,6 +288,15 @@ public class SystemOverviewIngestService {
             }
         }
         return notBlank(apiName) ? apiName : "未分类";
+    }
+
+    /** 用代码模块名（去 Mapper/Service/Controller 后缀）近似业务域，用于 Table 捕获行。 */
+    private String deriveDomainFromModule(String module) {
+        if (!notBlank(module)) {
+            return "未分类";
+        }
+        String d = module.replaceAll("(Mapper|Service|Controller|Repository)$", "").trim();
+        return d.isBlank() ? module : d;
     }
 
     // ──────────── 关系 → Claim 转换 ────────────
@@ -312,7 +353,9 @@ public class SystemOverviewIngestService {
             drafts.add(draft(projectId, versionId, "Feature", capability, "USES",
                     "Service", row.getCodeModule(), source, confidence));
         }
-        // 6. Service READS/WRTIES Table
+        // 6. codeModule READS/WRITES Table —— subjectType 取 codeModuleType（默认 Service）；
+        //    Table 捕获行的 codeModule 是 Mapper，需以 Mapper 为 subject。
+        String codeSubjectType = notBlank(row.getCodeModuleType()) ? row.getCodeModuleType() : "Service";
         if (notBlank(row.getCodeModule()) && notBlank(row.getDataTables())) {
             for (String t : row.getDataTables().split(",")) {
                 String table = t.trim();
@@ -321,11 +364,11 @@ public class SystemOverviewIngestService {
                     continue; // 跳过非 PG 存储
                 }
                 // READS：所有表
-                drafts.add(draft(projectId, versionId, "Service", row.getCodeModule(), "READS",
+                drafts.add(draft(projectId, versionId, codeSubjectType, row.getCodeModule(), "READS",
                         "Table", table, source, confidence));
                 // WRITES：非快照/日志类表（排除纯读表如 lg_sys_operation_log）
                 if (!table.endsWith("_log") && !table.endsWith("_snapshot")) {
-                    drafts.add(draft(projectId, versionId, "Service", row.getCodeModule(), "WRITES",
+                    drafts.add(draft(projectId, versionId, codeSubjectType, row.getCodeModule(), "WRITES",
                             "Table", table, source, confidence));
                 }
             }

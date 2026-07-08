@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 图谱写入意图后台执行器。
@@ -33,7 +34,7 @@ public class GraphWriteIntentWorker {
 
     private static final int BATCH_SIZE = 10;
     private static final int MAX_RETRY = 3;
-    private static final String WORKER_ID = "worker-" + UUID.randomUUID().toString().substring(0, 8);
+    private static final String WORKER_ID = "worker-" + IdUtil.fastUUID().substring(0, 8);
 
     /**
      * 每 30 秒执行一次。

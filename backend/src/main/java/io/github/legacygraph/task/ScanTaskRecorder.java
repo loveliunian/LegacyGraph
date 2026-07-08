@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 扫描任务记录器 — 统一 createTask/completeTask/logProgress。
@@ -35,7 +36,7 @@ public class ScanTaskRecorder {
      */
     public ScanTask createTask(String projectId, String versionId, String taskType, String taskName) {
         ScanTask task = new ScanTask();
-        task.setId(UUID.randomUUID().toString());
+        task.setId(IdUtil.fastUUID());
         task.setProjectId(projectId);
         task.setVersionId(versionId);
         task.setTaskType(taskType);

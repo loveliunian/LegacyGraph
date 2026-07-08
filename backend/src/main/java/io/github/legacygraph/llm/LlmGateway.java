@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * LLM 网关 — 支持多提供商动态切换。
@@ -133,7 +134,7 @@ public class LlmGateway {
             contract = AgentRunContract.builder().agentType(templateName).build();
         }
         if (contract.getContractId() == null) {
-            contract.setContractId(UUID.randomUUID().toString());
+            contract.setContractId(IdUtil.fastUUID());
         }
         if (contract.getAgentType() == null) {
             contract.setAgentType(templateName);

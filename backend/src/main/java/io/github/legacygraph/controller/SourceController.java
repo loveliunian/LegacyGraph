@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 资料接入控制器
@@ -1042,7 +1043,7 @@ public class SourceController {
         String uploadDir = Paths.get(System.getProperty("user.home"), ".legacygraph", "uploads", projectId).toString();
         Files.createDirectories(Paths.get(uploadDir));
 
-        String fileName = UUID.randomUUID() + "_" + originalFileName;
+        String fileName = IdUtil.fastUUID() + "_" + originalFileName;
         Path filePath = Paths.get(uploadDir, fileName);
 
         // 额外安全检查：确保文件路径在预期目录内

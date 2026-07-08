@@ -335,4 +335,33 @@ public class Neo4jProjectionRepository {
             return rows;
         }
     }
+
+    /**
+     * 每个 Mapper 访问的 Table 集合：{@code Mapper -EXECUTES-> SqlStatement -READS/WRITES/JOINS-> Table}。
+     * <p>
+     * API 锚定的回溯（{@link #apiImplementationRelations}）在 Service↔Mapper 无边的项目里够不到表，
+     * 但 Mapper→SqlStatement→Table 这条链通常是通的。本查询直接以 Mapper 为锚补全数据表访问关系，
+     * 让「哪些数据库表」这类列举题在向量化后有结构化内容可召回。
+     * </p>
+     * <p>返回字段：mapperKey / mapperName / tables（List&lt;String&gt;，去重）。</p>
+     */
+    public List<Map<String, Object>> tableAccessRelations(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (mp:Mapper {projectId: $projectId, versionId: $versionId}) " +
+                "MATCH (mp)-[:EXECUTES]->(:SqlStatement)-[:READS|WRITES|JOINS]->(t:Table) " +
+                "RETURN mp.nodeKey AS mapperKey, " +
+                "       coalesce(nullIf(mp.displayName, ''), nullIf(mp.nodeName, ''), mp.nodeKey) AS mapperName, " +
+                "       [x IN collect(DISTINCT coalesce(nullIf(t.nodeName, ''), t.nodeKey)) WHERE x IS NOT NULL] AS tables " +
+                "ORDER BY mapperName";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId)));
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
 }

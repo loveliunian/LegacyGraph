@@ -329,14 +329,18 @@ class AiScanOrchestratorTest {
 
         // 生成的测试用例被持久化
         verify(testCaseAgent, atLeastOnce()).generateTestCases(any());
-        ArgumentCaptor<TestCase> testCaseCaptor = ArgumentCaptor.forClass(TestCase.class);
-        verify(testCaseRepository, times(1)).insert(testCaseCaptor.capture());
-        TestCase persisted = testCaseCaptor.getValue();
+        // 批量持久化（insertBatch 替代逐条 insert）
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TestCase>> batchCaptor = ArgumentCaptor.forClass(List.class);
+        verify(testCaseRepository, times(1)).insertBatch(batchCaptor.capture());
+        List<TestCase> persisted = batchCaptor.getValue();
+        assertEquals(1, persisted.size());
+        TestCase tc = persisted.get(0);
         // preconditions 现在是 JSON 数组
-        assertEquals("[\"用户已登录\"]", persisted.getPreconditions());
-        assertTrue(persisted.getExpectedResult().contains("$.code == 0"));
+        assertEquals("[\"用户已登录\"]", tc.getPreconditions());
+        assertTrue(tc.getExpectedResult().contains("$.code == 0"));
         // steps 是 JSON 数组，包含 request 的 method 字段
-        assertTrue(persisted.getSteps().contains("\"method\":\"POST\""));
+        assertTrue(tc.getSteps().contains("\"method\":\"POST\""));
     }
 
     @Test

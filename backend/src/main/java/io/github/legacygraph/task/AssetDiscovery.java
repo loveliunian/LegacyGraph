@@ -11,6 +11,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 资产发现服务 — 统一代码仓库、数据库连接、文档的自动发现。
@@ -143,7 +144,7 @@ public class AssetDiscovery {
                 if (existing > 0) continue;
 
                 Document document = new Document();
-                document.setId(UUID.randomUUID().toString());
+                document.setId(IdUtil.fastUUID());
                 document.setProjectId(projectId);
                 document.setVersionId(versionId);
                 document.setDocName(doc.getFileName().toString());

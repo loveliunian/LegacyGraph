@@ -19,6 +19,7 @@ import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 操作日志切面
@@ -46,7 +47,7 @@ public class LogAspect {
     @Around("logPointcut()")
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
         long startTime = System.currentTimeMillis();
-        String traceId = UUID.randomUUID().toString().replace("-", "");
+        String traceId = IdUtil.fastUUID();
 
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();

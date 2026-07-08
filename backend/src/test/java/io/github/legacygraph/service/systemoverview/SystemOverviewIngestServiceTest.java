@@ -200,6 +200,42 @@ class SystemOverviewIngestServiceTest {
                 "非 lg_ 表不应生成 READS Claim");
     }
 
+    /**
+     * Table 捕获：Mapper→SqlStatement→Table 应转成 Mapper READS/WRITES Table Claim。
+     * <p>API 锚定回溯在 Service↔Mapper 无边的项目里够不到表，导致「哪些数据库表」类问题无数据。
+     * 现以 Mapper 为锚补全，subjectType 必须是 Mapper（不是 Service）。
+     * </p>
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void ingestFromProjectGraph_capturesTableAccessViaMapper() {
+        when(graphQueryService.getApiImplementationRelations("p1", "v1")).thenReturn(List.of());
+        when(graphQueryService.getTableAccessRelations("p1", "v1")).thenReturn(List.of(
+                java.util.Map.of(
+                        "mapperKey", "com.example.OrderMapper",
+                        "mapperName", "OrderMapper",
+                        "tables", List.of("nx_order", "nx_order_item", "Neo4j"))));
+        when(knowledgeClaimService.upsertDrafts(anyList())).thenReturn(List.of(new KnowledgeClaim()));
+
+        SystemOverviewIngestResult result = service.ingestFromProjectGraph("p1", "v1");
+
+        // 1 个 Mapper 行 → 1 条向量（内容含 "数据表:nx_order,nx_order_item"）
+        assertEquals(1, result.getVectorCount());
+        ArgumentCaptor<List<KnowledgeClaimDraft>> captor = ArgumentCaptor.forClass(List.class);
+        verify(knowledgeClaimService).upsertDrafts(captor.capture());
+        List<KnowledgeClaimDraft> drafts = captor.getValue();
+
+        // subjectType=Mapper（不是 Service），READS 每个 PG 表
+        assertTrue(drafts.stream().anyMatch(d -> "Mapper".equals(d.getSubjectType())
+                && "READS".equals(d.getPredicate()) && "Table".equals(d.getObjectType())
+                && "OrderMapper".equals(d.getSubjectKey()) && "nx_order".equals(d.getObjectKey())),
+                "应以 Mapper 为 subject 生成 READS Table Claim");
+        assertTrue(drafts.stream().anyMatch(d -> "READS".equals(d.getPredicate())
+                && "nx_order_item".equals(d.getObjectKey())));
+        assertFalse(drafts.stream().anyMatch(d -> "Neo4j".equals(d.getObjectKey())),
+                "非 PG 存储不应生成 READS Claim");
+    }
+
     @Test
     void ingestFromProjectGraph_emptyRelationsReturnsZero() {
         when(graphQueryService.getApiImplementationRelations("p1", "v1")).thenReturn(List.of());

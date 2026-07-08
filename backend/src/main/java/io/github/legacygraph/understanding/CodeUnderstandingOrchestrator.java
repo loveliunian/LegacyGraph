@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 代码理解编排器 —— 端到端编排问题拆解、工具执行、证据归档和报告生成。
@@ -39,7 +40,7 @@ public class CodeUnderstandingOrchestrator {
      * 执行代码理解任务，生成报告。
      */
     public CodeUnderstandingTaskResult execute(String projectId, CodeUnderstandingRequest request) {
-        String taskId = UUID.randomUUID().toString();
+        String taskId = IdUtil.fastUUID();
         log.info("开始代码理解任务: taskId={}, projectId={}, question={}", taskId, projectId, request.getQuestion());
 
         // 构建工具策略

@@ -18,6 +18,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static io.restassured.RestAssured.given;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * API测试执行器
@@ -50,7 +51,7 @@ public class ApiTestExecutor {
         log.info("Executing API test case: {} {}", testCase.getCaseCode(), testCase.getCaseName());
 
         TestResult result = new TestResult();
-        result.setId(UUID.randomUUID().toString());
+        result.setId(IdUtil.fastUUID());
         result.setProjectId(testCase.getProjectId());
         result.setVersionId(testCase.getVersionId());
         result.setTestCaseId(testCase.getId());
@@ -274,7 +275,7 @@ public class ApiTestExecutor {
 
         for (var assertionDef : assertions) {
             TestAssertion assertion = new TestAssertion();
-            assertion.setId(UUID.randomUUID().toString());
+            assertion.setId(IdUtil.fastUUID());
             assertion.setTestCaseId(testCaseId);
             assertion.setAssertionType((String) assertionDef.get("type"));
             assertion.setAssertionName((String) assertionDef.get("type") + " assertion");

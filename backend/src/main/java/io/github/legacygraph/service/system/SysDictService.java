@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 字典服务
@@ -119,7 +120,7 @@ public class SysDictService {
      * 创建字典类型
      */
     public SysDict create(SysDict dict) {
-        dict.setId(UUID.randomUUID().toString());
+        dict.setId(IdUtil.fastUUID());
         dict.setStatus(dict.getStatus() == null ? "ACTIVE" : dict.getStatus());
         dict.setSortOrder(dict.getSortOrder() == null ? 0 : dict.getSortOrder());
         dict.setCreatedAt(LocalDateTime.now());
@@ -188,7 +189,7 @@ public class SysDictService {
      */
     @CacheEvict(cacheNames = {"dict-items", "dict-map"}, allEntries = true)
     public SysDictItem createItem(SysDictItem item) {
-        item.setId(UUID.randomUUID().toString());
+        item.setId(IdUtil.fastUUID());
         item.setStatus(item.getStatus() == null ? "ACTIVE" : item.getStatus());
         item.setIsDefault(item.getIsDefault() == null ? false : item.getIsDefault());
         item.setSortOrder(item.getSortOrder() == null ? 0 : item.getSortOrder());

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 对话上下文管理器 - 管理多轮对话历史
@@ -45,7 +46,7 @@ public class ConversationContextManager {
 
         // 创建新会话
         QaConversation conversation = new QaConversation();
-        conversation.setId(UUID.randomUUID().toString());
+        conversation.setId(IdUtil.fastUUID());
         conversation.setProjectId(projectId);
         conversation.setSessionId(sessionId);
         conversation.setTitle("新对话");
@@ -75,7 +76,7 @@ public class ConversationContextManager {
     private QaMessage saveMessage(String conversationId, String role, String content,
                                   String evidencesJson, Double confidence) {
         QaMessage message = new QaMessage();
-        message.setId(UUID.randomUUID().toString());
+        message.setId(IdUtil.fastUUID());
         message.setConversationId(conversationId);
         message.setRole(role);
         message.setContent(content);

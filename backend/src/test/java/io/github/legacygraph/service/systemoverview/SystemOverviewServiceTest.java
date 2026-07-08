@@ -69,8 +69,42 @@ class SystemOverviewServiceTest {
         assertTrue(md.contains("系统关系总览报告"));
         assertTrue(md.contains("业务域映射总表"));
         assertTrue(md.contains("核心贯穿链路"));
+        assertTrue(md.contains("图谱关系统计"));
+        assertTrue(md.contains("图谱关系明细"));
         assertTrue(md.contains("ProjectController"));
         assertTrue(md.contains("BusinessDomain CONTAINS Feature"));
+    }
+
+    @Test
+    void generateMarkdown_includesDetailedGraphRelationsAndImpactViews() {
+        when(knowledgeClaimService.listClaims(eq("p2"), eq("v2"), any(), any(), isNull(), any(), anyInt()))
+                .thenReturn(List.of(
+                        claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "POST /orders", "DOC", "PENDING_CONFIRM"),
+                        claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "POST /orders/refund", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "POST /orders", "IMPLEMENTED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "POST /orders/refund", "IMPLEMENTED_BY", "Controller", "RefundController", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "POST /orders", "USES", "Service", "OrderService", "DOC", "PENDING_CONFIRM"),
+                        claim("Feature", "POST /orders/refund", "USES", "Service", "RefundService", "DOC", "PENDING_CONFIRM"),
+                        claim("ApiEndpoint", "POST /orders", "HANDLED_BY", "Controller", "OrderController", "DOC", "PENDING_CONFIRM"),
+                        claim("Service", "OrderService", "READS", "Table", "lg_order", "DOC", "PENDING_CONFIRM"),
+                        claim("Service", "RefundService", "WRITES", "Table", "lg_refund_order", "DOC", "PENDING_CONFIRM")
+                ));
+
+        String md = service.generateMarkdown("p2", "v2");
+
+        assertTrue(md.contains("## 3. 图谱关系统计"));
+        assertTrue(md.contains("| CONTAINS | 2 |"));
+        assertTrue(md.contains("## 4. 图谱关系明细"));
+        assertTrue(md.contains("| BusinessDomain | 订单域 | CONTAINS | Feature | POST /orders | DOC | PENDING_CONFIRM | 0.6000 |"));
+        assertTrue(md.contains("| Feature | POST /orders/refund | USES | Service | RefundService | DOC | PENDING_CONFIRM | 0.6000 |"));
+        assertTrue(md.contains("## 5. 按业务域拆解"));
+        assertTrue(md.contains("- API：`POST /orders`"));
+        assertTrue(md.contains("- Controller：`RefundController`"));
+        assertTrue(md.contains("## 6. 数据表影响面"));
+        assertTrue(md.contains("| lg_refund_order | 订单域 | POST /orders/refund | RefundController | RefundService |"));
+        assertTrue(md.contains("## 7. Mermaid 关系图"));
+        assertTrue(md.contains("\"订单域\" -->|CONTAINS| \"POST /orders\""));
+        assertTrue(md.contains("## 8. QA 文档基础"));
     }
 
     @Test

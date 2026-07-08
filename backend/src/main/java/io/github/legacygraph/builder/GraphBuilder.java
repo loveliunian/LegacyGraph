@@ -30,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 统一图谱构建器
@@ -305,7 +306,7 @@ public class GraphBuilder {
         Map<String, GraphNode> tableNodes = new HashMap<>();
         for (var tableMeta : tables) {
             String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
-            String tableId = UUID.randomUUID().toString();
+            String tableId = IdUtil.fastUUID();
 
             // 表节点
             GraphNode tableNode = buildNode(projectId, versionId, tableId,
@@ -319,7 +320,7 @@ public class GraphBuilder {
             // 字段节点 + HAS_COLUMN 边
             for (var colMeta : tableMeta.getColumns()) {
                 String colKey = tableKey + "." + colMeta.getColumnName();
-                String colId = UUID.randomUUID().toString();
+                String colId = IdUtil.fastUUID();
 
                 GraphNode colNode = buildNode(projectId, versionId, colId,
                         NodeType.Column.name(), colKey, colMeta.getColumnName(),
@@ -814,7 +815,7 @@ public class GraphBuilder {
             GraphNode callerNode = findOrCreateNodeByClass(
                     projectId, versionId, callerNodeType, callerClassKey, call.getSourcePath());
 
-            // 查找或创建被调用方节点（targetClass 可能为 null，此时跳过该调用关系）
+            // 查找被调用方节点（targetClass 可能为 null，此时跳过该调用关系）
             String targetClassKey = call.getTargetClass();
             if (targetClassKey == null || targetClassKey.isEmpty()) {
                 log.debug("Skipping call relation with null targetClass: caller={}, calledMethod={}",
@@ -822,8 +823,11 @@ public class GraphBuilder {
                 continue;
             }
             NodeType targetNodeType = inferNodeType(targetClassKey);
-            GraphNode targetNode = findOrCreateNodeByClass(
-                    projectId, versionId, targetNodeType, targetClassKey, call.getSourcePath());
+            // find-only：targetClass 是简单名，类节点 nodeKey 是 FQN，精确查找通常 miss。
+            // 不再用 findOrCreateNodeByClass（会创建重复的简单名节点污染图谱），miss 时 targetNode=null，
+            // 下面的 callerNode!=null && targetNode!=null 门会跳过本调用，交给 JavaMemberCallResolver 二次扫描解析。
+            GraphNode targetNode = neo4jGraphDao.findNode(
+                    projectId, versionId, targetNodeType.name(), targetClassKey).orElse(null);
 
             // 如果调用方和被调用方都存在，创建 CALLS 边
             if (callerNode != null && targetNode != null) {
@@ -1162,7 +1166,7 @@ public class GraphBuilder {
             String edgeType, String edgeKey,
             String sourceType, BigDecimal confidence, NodeStatus status) {
         GraphEdge edge = new GraphEdge();
-        edge.setId(UUID.randomUUID().toString());
+        edge.setId(IdUtil.fastUUID());
         edge.setProjectId(projectId);
         edge.setVersionId(versionId);
         edge.setFromNodeId(fromNodeId);
@@ -1215,7 +1219,7 @@ public class GraphBuilder {
 
         for (var item : configItems) {
             String configKey = "config:" + item.getKey();
-            String configId = UUID.randomUUID().toString();
+            String configId = IdUtil.fastUUID();
 
             // ConfigItem 节点
             GraphNode configNode = buildNode(projectId, versionId, configId,
@@ -1262,7 +1266,7 @@ public class GraphBuilder {
 
         for (var job : jobs) {
             String jobKey = "job:" + job.getClassName() + "." + job.getMethodName();
-            String jobId = UUID.randomUUID().toString();
+            String jobId = IdUtil.fastUUID();
 
             // ScheduledJob 节点
             String description = job.getCronExpression() != null
@@ -1280,7 +1284,7 @@ public class GraphBuilder {
 
             if (job.getClassName() != null && job.getMethodName() != null) {
                 String methodKey = buildMethodKey(job.getClassName(), job.getMethodName(), job.getMethodSignature());
-                GraphNode methodNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                GraphNode methodNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                         NodeType.Method.name(), methodKey, job.getMethodName(),
                         job.getMethodName(), "定时任务处理方法",
                         SourceType.CODE_AST.name(), job.getSourcePath(),
@@ -1323,7 +1327,7 @@ public class GraphBuilder {
             String consumerKey = "mq-consumer:" + consumer.getAnnotationType() + ":"
                     + nullToUnknown(consumer.getClassName()) + "."
                     + nullToUnknown(consumer.getMethodName()) + ":" + topicName;
-            String consumerId = UUID.randomUUID().toString();
+            String consumerId = IdUtil.fastUUID();
 
             GraphNode consumerNode = buildNode(projectId, versionId, consumerId,
                     NodeType.MQConsumer.name(), consumerKey, topicName,
@@ -1337,7 +1341,7 @@ public class GraphBuilder {
             allNodes.add(consumerNode);
 
             String topicKey = "mq-topic:" + topicName;
-            GraphNode topicNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+            GraphNode topicNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                     NodeType.MQTopic.name(), topicKey, topicName,
                     topicName,
                     consumer.getAnnotationType() + " 消息主题",
@@ -1355,7 +1359,7 @@ public class GraphBuilder {
 
             if (consumer.getClassName() != null && consumer.getMethodName() != null) {
                 String methodKey = buildMethodKey(consumer.getClassName(), consumer.getMethodName(), consumer.getMethodSignature());
-                GraphNode methodNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                GraphNode methodNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                         NodeType.Method.name(), methodKey, consumer.getMethodName(),
                         consumer.getMethodName(), "消息消费处理方法",
                         SourceType.CODE_AST.name(), consumer.getSourcePath(),
@@ -1403,7 +1407,7 @@ public class GraphBuilder {
         for (var call : calls) {
             String edgeKeySuffix = call.getServiceName() != null ? call.getServiceName() : call.getBaseUrl();
             String systemKey = "ext:" + call.getClientType() + ":" + (edgeKeySuffix != null ? edgeKeySuffix : "unknown");
-            String systemId = UUID.randomUUID().toString();
+            String systemId = IdUtil.fastUUID();
 
             // ExternalSystem 节点
             GraphNode systemNode = buildNode(projectId, versionId, systemId,
@@ -1419,7 +1423,7 @@ public class GraphBuilder {
 
             if (call.getBaseUrl() != null && !call.getBaseUrl().isBlank()) {
                 String apiKey = "external:" + call.getBaseUrl();
-                GraphNode externalApiNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                GraphNode externalApiNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                         NodeType.ApiEndpoint.name(), apiKey, call.getBaseUrl(),
                         call.getBaseUrl(), "外部 API: " + call.getBaseUrl(),
                         SourceType.CODE_AST.name(), call.getSourcePath(),
@@ -1439,7 +1443,7 @@ public class GraphBuilder {
 
             if (call.getClassName() != null && call.getMethodName() != null) {
                 String methodKey = buildMethodKey(call.getClassName(), call.getMethodName(), call.getMethodSignature());
-                GraphNode methodNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                GraphNode methodNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                         NodeType.Method.name(), methodKey, call.getMethodName(),
                         call.getMethodName(), "外部系统调用方法",
                         SourceType.CODE_AST.name(), call.getSourcePath(),
@@ -1458,7 +1462,7 @@ public class GraphBuilder {
                         BigDecimal.ONE, NodeStatus.CONFIRMED));
             } else if (call.getClassName() != null) {
                 NodeType classNodeType = inferNodeType(call.getClassName());
-                GraphNode classNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                GraphNode classNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                         classNodeType.name(), call.getClassName(),
                         call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1),
                         call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1),
@@ -1496,7 +1500,7 @@ public class GraphBuilder {
 
         for (var tc : testCases) {
             String testKey = "test:" + tc.getClassName() + "." + tc.getMethodName();
-            String testId = UUID.randomUUID().toString();
+            String testId = IdUtil.fastUUID();
 
             // TestCase 节点
             GraphNode testNode = buildNode(projectId, versionId, testId,
@@ -1518,7 +1522,7 @@ public class GraphBuilder {
                             : String.valueOf(index);
                     String assertionKey = "assertion:" + testKey + "#"
                             + assertion.getAssertionType() + "#" + assertionLine;
-                    GraphNode assertionNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                    GraphNode assertionNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                             NodeType.Assertion.name(), assertionKey, assertion.getAssertionType(),
                             assertion.getAssertionType(),
                             assertion.getExpectedValue(),
@@ -1544,7 +1548,7 @@ public class GraphBuilder {
                 GraphNode classNode = findExistingNode(projectId, versionId,
                         NodeType.Service.name(), testedClassKey);
                 if (classNode == null) {
-                    classNode = buildNode(projectId, versionId, UUID.randomUUID().toString(),
+                    classNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
                             NodeType.Service.name(), testedClassKey,
                             testedClassKey.substring(testedClassKey.lastIndexOf('.') + 1),
                             testedClassKey.substring(testedClassKey.lastIndexOf('.') + 1),
@@ -1589,7 +1593,7 @@ public class GraphBuilder {
         // 1. 创建 Button 节点
         for (var button : buttons) {
             String buttonKey = "button:" + button.getText();
-            String buttonId = UUID.randomUUID().toString();
+            String buttonId = IdUtil.fastUUID();
 
             GraphNode buttonNode = buildNode(projectId, versionId, buttonId,
                     NodeType.Button.name(), buttonKey, button.getText(),
@@ -1602,7 +1606,7 @@ public class GraphBuilder {
             // Button -> Permission REQUIRES 边
             if (button.getPermission() != null && !button.getPermission().isBlank()) {
                 String permKey = "permission:" + button.getPermission();
-                String permId = UUID.randomUUID().toString();
+                String permId = IdUtil.fastUUID();
 
                 GraphNode permNode = buildNode(projectId, versionId, permId,
                         NodeType.Permission.name(), permKey, button.getPermission(),
@@ -1645,7 +1649,7 @@ public class GraphBuilder {
 
                 if (pageNode != null) {
                     String permKey = "permission:" + page.getPermission();
-                    String permId = UUID.randomUUID().toString();
+                    String permId = IdUtil.fastUUID();
 
                     GraphNode permNode = buildNode(projectId, versionId, permId,
                             NodeType.Permission.name(), permKey, page.getPermission(),
@@ -1692,7 +1696,7 @@ public class GraphBuilder {
         // 1. 创建 FeatureModule 节点
         for (var module : modules) {
             String moduleKey = "module:" + module.getModuleName();
-            String moduleId = UUID.randomUUID().toString();
+            String moduleId = IdUtil.fastUUID();
 
             String description = module.getDescription() != null 
                     ? module.getDescription() 
@@ -1711,7 +1715,7 @@ public class GraphBuilder {
         // 2. 创建 Feature 节点和 FeatureModule -> Feature CONTAINS 边
         for (var feature : features) {
             String featureKey = "feature:" + feature.getModuleName() + "/" + feature.getFeatureName();
-            String featureId = UUID.randomUUID().toString();
+            String featureId = IdUtil.fastUUID();
 
             String description = feature.getDescription() != null 
                     ? feature.getDescription() 
@@ -1777,7 +1781,7 @@ public class GraphBuilder {
 
         for (var role : roles) {
             String roleKey = role.getNodeKey();
-            String roleId = UUID.randomUUID().toString();
+            String roleId = IdUtil.fastUUID();
 
             GraphNode roleNode = buildNode(projectId, versionId, roleId,
                     NodeType.Role.name(), roleKey, role.getDisplayName(),
@@ -1827,7 +1831,7 @@ public class GraphBuilder {
 
         for (var domain : domains) {
             String domainKey = domain.getNodeKey();
-            String domainId = UUID.randomUUID().toString();
+            String domainId = IdUtil.fastUUID();
 
             GraphNode domainNode = buildNode(projectId, versionId, domainId,
                     NodeType.BusinessDomain.name(), domainKey, domain.getDisplayName(),
@@ -1857,7 +1861,7 @@ public class GraphBuilder {
 
         for (var obj : objects) {
             String objKey = obj.getNodeKey();
-            String objId = UUID.randomUUID().toString();
+            String objId = IdUtil.fastUUID();
 
             GraphNode objNode = buildNode(projectId, versionId, objId,
                     NodeType.BusinessObject.name(), objKey, obj.getDisplayName(),
@@ -1903,7 +1907,7 @@ public class GraphBuilder {
 
         for (var rule : rules) {
             String ruleKey = rule.getNodeKey();
-            String ruleId = UUID.randomUUID().toString();
+            String ruleId = IdUtil.fastUUID();
 
             GraphNode ruleNode = buildNode(projectId, versionId, ruleId,
                     NodeType.BusinessRule.name(), ruleKey, rule.getDisplayName(),
@@ -1950,7 +1954,7 @@ public class GraphBuilder {
 
         for (var process : processes) {
             String processKey = process.getNodeKey();
-            String processId = UUID.randomUUID().toString();
+            String processId = IdUtil.fastUUID();
 
             GraphNode processNode = buildNode(projectId, versionId, processId,
                     NodeType.BusinessProcess.name(), processKey, process.getDisplayName(),

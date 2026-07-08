@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 扫描完成后的系统关系总结文档生成服务。
@@ -53,7 +54,7 @@ public class SystemOverviewDocumentService {
         boolean inserting = report == null;
         if (inserting) {
             report = new Report();
-            report.setId(UUID.randomUUID().toString());
+            report.setId(IdUtil.fastUUID());
             report.setGeneratedAt(now);
         }
 
@@ -95,7 +96,7 @@ public class SystemOverviewDocumentService {
 
     private String ensureQaFoundationSection(String markdown) {
         String content = markdown == null ? "" : markdown;
-        if (content.contains("## 4. QA 文档基础")) {
+        if (content.contains("QA 文档基础")) {
             return content;
         }
         return content + """

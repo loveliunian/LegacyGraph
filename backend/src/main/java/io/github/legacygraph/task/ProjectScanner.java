@@ -62,6 +62,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import io.github.legacygraph.util.IdUtil;
 
 /**
  * 项目扫描器
@@ -94,6 +95,8 @@ public class ProjectScanner {
     private AssetDiscoveryService assetDiscoveryService;
     private SystemOverviewDocumentService systemOverviewDocumentService;
     private SystemOverviewIngestService systemOverviewIngestService;
+    /** 成员调用二次扫描解析器（可选）：ADAPTER_SCAN 后对全局图谱解析 Service→Mapper 等 CALLS 边 */
+    private io.github.legacygraph.builder.JavaMemberCallResolver javaMemberCallResolver;
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -231,6 +234,11 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSystemOverviewDocumentService(SystemOverviewDocumentService systemOverviewDocumentService) {
         this.systemOverviewDocumentService = systemOverviewDocumentService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setJavaMemberCallResolver(io.github.legacygraph.builder.JavaMemberCallResolver javaMemberCallResolver) {
+        this.javaMemberCallResolver = javaMemberCallResolver;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -511,6 +519,22 @@ public class ProjectScanner {
                         projectId, versionId);
                 ScanTask skippedAdapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
                 completeTask(skippedAdapterTask, "未选择代码/文档扫描类型，已跳过", null, "SKIPPED");
+            }
+
+            // 3b. 成员调用二次扫描：所有 Java 文件抽取完成后，对全局图谱解析 Service→Mapper 等 CALLS 边。
+            // 逐文件 buildServiceCallGraph 受简单名/FQN 不匹配 + 跨文件顺序限制漏边，此处用 god-node guard 补齐。
+            if (isCancelled(versionId)) return;
+            if (shouldScanCode && javaMemberCallResolver != null) {
+                ScanTask resolveTask = createTask(projectId, versionId, "MEMBER_CALL_RESOLVE", "成员调用二次解析");
+                try {
+                    int resolved = javaMemberCallResolver.resolveMemberCalls(projectId, versionId);
+                    completeTask(resolveTask, "resolved " + resolved + " member-call edges", null);
+                    log.info("Scan still running: projectId={}, versionId={}, phase=MEMBER_CALL_RESOLVE, detail=resolved {} call edges",
+                            projectId, versionId, resolved);
+                } catch (Exception e) {
+                    log.warn("Member-call resolution failed (non-blocking): versionId={}, err={}", versionId, e.getMessage());
+                    completeTask(resolveTask, "failed: " + e.getMessage(), e.getMessage());
+                }
             }
 
             // 4. 扫描所有已配置数据库的元数据（按 scope 过滤）
@@ -1859,7 +1883,7 @@ public class ProjectScanner {
         }
         // fallback: 测试环境
         ScanTask task = new ScanTask();
-        task.setId(UUID.randomUUID().toString());
+        task.setId(IdUtil.fastUUID());
         task.setProjectId(projectId);
         task.setVersionId(versionId);
         task.setTaskType(taskType);
@@ -1932,7 +1956,7 @@ public class ProjectScanner {
             BigDecimal confidence, String status) {
         try {
             Fact fact = new Fact();
-            fact.setId(UUID.randomUUID().toString());
+            fact.setId(IdUtil.fastUUID());
             fact.setProjectId(projectId);
             fact.setVersionId(versionId);
             fact.setFactType(factType);
