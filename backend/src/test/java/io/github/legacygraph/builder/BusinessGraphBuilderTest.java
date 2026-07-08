@@ -44,9 +44,18 @@ class BusinessGraphBuilderTest {
 
     @BeforeEach
     void setUp() {
-        // 使用真实 FeatureIdentityNormalizer 测试归一化行为
+        // 使用真实 FeatureIdentityNormalizer + ConfigurableTerminologyService 测试归一化/相似度行为。
+        // 术语映射改为从表加载，此处 mock repository 返回空列表（本用例不依赖具体术语映射）。
+        io.github.legacygraph.terminology.TerminologyProperties props =
+                new io.github.legacygraph.terminology.TerminologyProperties();
+        io.github.legacygraph.repository.TerminologyMappingRepository terminologyMappingRepository =
+                mock(io.github.legacygraph.repository.TerminologyMappingRepository.class);
+        when(terminologyMappingRepository.selectList(any())).thenReturn(new ArrayList<>());
+        io.github.legacygraph.terminology.ConfigurableTerminologyService terminologyService =
+                new io.github.legacygraph.terminology.ConfigurableTerminologyService(props, terminologyMappingRepository);
+        terminologyService.reload();
         businessGraphBuilder = new BusinessGraphBuilder(neo4jGraphDao, docChunkRepository, writer,
-                new FeatureIdentityNormalizer());
+                new FeatureIdentityNormalizer(), terminologyService);
     }
 
     @Test

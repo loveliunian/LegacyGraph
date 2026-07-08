@@ -33,31 +33,30 @@ import java.util.Set;
 @Slf4j
 public class ServiceCallExtractor {
 
-    private final JavaParser javaParser;
-
-    public ServiceCallExtractor() {
+    /** ThreadLocal JavaParser — parallelStream 安全（JavaParser 非线程安全） */
+    private final ThreadLocal<JavaParser> javaParser = ThreadLocal.withInitial(() -> {
         ParserConfiguration config = new ParserConfiguration();
-        // 使用当前javaparser支持的最高语言级别（3.28.2 → JAVA_26），兼容 Java 8~26 所有语法
         config.setLanguageLevel(LanguageLevel.JAVA_26);
-        this.javaParser = new JavaParser(config);
-    }
+        return new JavaParser(config);
+    });
 
     /**
      * 从Java文件抽取调用关系
      * 增强：建立注入变量名→类型映射，用于精确绑定 Controller→Service、Service→Mapper 调用。
      */
     public List<CallRelation> extractFromFile(File file) throws IOException {
+        JavaParser parser = javaParser.get();
         List<CallRelation> relations = new ArrayList<>();
         String content = Files.readString(file.toPath());
         ParseResult<CompilationUnit> result;
         try {
-            result = javaParser.parse(content);
+            result = parser.parse(content);
         } catch (RuntimeException e) {
             // JavaParser 词法分析器偶发内部崩溃（如 IndexOutOfBounds），重试一次
             log.warn("JavaParser crashed on first parse attempt (will retry): {} — {}", file.getAbsolutePath(), e.getMessage());
             content = Files.readString(file.toPath());
             try {
-                result = javaParser.parse(content);
+                result = parser.parse(content);
             } catch (RuntimeException e2) {
                 log.warn("Failed to parse Java file for service call (JavaParser crash after retry): {}", file.getAbsolutePath());
                 log.warn("Parse error: {}", e2.getMessage());
@@ -68,7 +67,7 @@ public class ServiceCallExtractor {
             // 偶发 I/O 竞争导致读入不完整 → 重试一次
             content = Files.readString(file.toPath());
             try {
-                result = javaParser.parse(content);
+                result = parser.parse(content);
             } catch (RuntimeException e) {
                 log.warn("Failed to parse Java file for service call (JavaParser crash on retry): {}", file.getAbsolutePath());
                 log.warn("Parse error: {}", e.getMessage());
@@ -136,7 +135,11 @@ public class ServiceCallExtractor {
                             if (varName.startsWith("this.")) {
                                 varName = varName.substring("this.".length());
                             }
-                            String resolvedType = injectedVarToType.get(varName);
+                            // P0 修复：原代码只用 injectedVarToType（注入字段+构造参数），漏掉了方法参数和本地变量，
+                            // 导致 Service→Mapper 等跨 Bean 调用 targetClass 几乎全为 null（462 条中仅 6 条非 null 且全是 injects 注入边）。
+                            // methodVarToType 已包含 injectedVarToType 的全部内容（其构造参数为 new HashMap<>(injectedVarToType)），
+                            // 改用后可解析通过参数传入的依赖调用（如 saveLog(BackLogMapper mapper) { mapper.insert(...) }）。
+                            String resolvedType = methodVarToType.get(varName);
                             if (resolvedType != null) {
                                 rel.setTargetClass(resolvedType);
                                 rel.setTargetMethod(calledMethod);

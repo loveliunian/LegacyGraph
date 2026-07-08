@@ -364,4 +364,82 @@ public class Neo4jProjectionRepository {
             return rows;
         }
     }
+
+    /**
+     * 窗口查询节点 — 支持游标分页、多类型/来源/状态过滤。
+     * 按 nodeKey 排序确保分页稳定性，返回前端投影字段。
+     */
+    public List<Map<String, Object>> queryNodesWindow(String projectId, String versionId,
+                                                       List<String> nodeTypes, List<String> sourceTypes,
+                                                       String status, Double minConfidence,
+                                                       String cursor, int limit) {
+        try (Session session = neo4jDriver.session()) {
+            StringBuilder cypher = new StringBuilder("MATCH (n) WHERE n.projectId = $projectId");
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            if (versionId != null) {
+                cypher.append(" AND n.versionId = $versionId");
+                params.put("versionId", normalizeId(versionId));
+            }
+            if (nodeTypes != null && !nodeTypes.isEmpty()) {
+                cypher.append(" AND labels(n)[0] IN $nodeTypes");
+                params.put("nodeTypes", nodeTypes);
+            }
+            if (sourceTypes != null && !sourceTypes.isEmpty()) {
+                cypher.append(" AND n.sourceType IN $sourceTypes");
+                params.put("sourceTypes", sourceTypes);
+            }
+            if (status != null) {
+                cypher.append(" AND n.status = $status");
+                params.put("status", status);
+            }
+            if (minConfidence != null) {
+                cypher.append(" AND n.confidence >= $minConfidence");
+                params.put("minConfidence", minConfidence);
+            }
+            if (cursor != null && !cursor.isBlank()) {
+                cypher.append(" AND n.nodeKey > $cursor");
+                params.put("cursor", cursor);
+            }
+            cypher.append(" RETURN n.id AS id, n.nodeKey AS nodeKey, n.nodeName AS nodeName, ")
+                  .append("n.displayName AS displayName, labels(n)[0] AS nodeType, ")
+                  .append("n.confidence AS confidence, n.status AS status, n.sourceType AS sourceType ")
+                  .append("ORDER BY n.nodeKey ASC LIMIT $limit");
+            params.put("limit", (long) limit);
+
+            Result result = session.run(cypher.toString(), params);
+            List<Map<String, Object>> nodes = new ArrayList<>();
+            while (result.hasNext()) {
+                nodes.add(result.next().asMap());
+            }
+            return nodes;
+        }
+    }
+
+    /**
+     * 查询指定节点集合之间的所有边（投影字段）。
+     */
+    public List<Map<String, Object>> queryEdgesForNodes(String projectId, String versionId,
+                                                         List<String> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) return List.of();
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (from)-[r]->(to) " +
+                "WHERE r.projectId = $projectId " +
+                "AND from.id IN $nodeIds AND to.id IN $nodeIds " +
+                "AND r.versionId = $versionId " +
+                "RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target";
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", normalizeId(versionId));
+            params.put("nodeIds", nodeIds);
+
+            Result result = session.run(cypher, params);
+            List<Map<String, Object>> edges = new ArrayList<>();
+            while (result.hasNext()) {
+                edges.add(result.next().asMap());
+            }
+            return edges;
+        }
+    }
 }

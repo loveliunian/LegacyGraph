@@ -12,6 +12,7 @@ import io.github.legacygraph.entity.DocChunk;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.repository.DocChunkRepository;
+import io.github.legacygraph.terminology.TerminologyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +21,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,15 +40,18 @@ public class BusinessGraphBuilder {
     private final DocChunkRepository docChunkRepository;
     private final EvidenceGraphWriter writer;
     private final FeatureIdentityNormalizer featureIdentityNormalizer;
+    private final TerminologyService terminologyService;
 
     public BusinessGraphBuilder(Neo4jGraphDao neo4jGraphDao,
                               DocChunkRepository docChunkRepository,
                               EvidenceGraphWriter writer,
-                              FeatureIdentityNormalizer featureIdentityNormalizer) {
+                              FeatureIdentityNormalizer featureIdentityNormalizer,
+                              TerminologyService terminologyService) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.docChunkRepository = docChunkRepository;
         this.writer = writer;
         this.featureIdentityNormalizer = featureIdentityNormalizer;
+        this.terminologyService = terminologyService;
     }
 
     /**
@@ -312,14 +315,13 @@ public class BusinessGraphBuilder {
         List<GraphEdge> candidateEdges = new ArrayList<>();
         // 预计算每个名称的 token 集合（按名去重缓存），避免在 feature×page×api 笛卡尔积里重复分词
         Map<String, Set<String>> tokensByName = new HashMap<>();
-        // 跨语言名称匹配：中文 Feature 名经 CN_ALIAS 翻成英文子词后，与英文 API/Page 名做 token 重叠
-        // （见 tokenSimilarity / matchTokens）。后续可进一步替换为向量语义检索提升精度。
+        // 跨语言名称匹配委托给 TerminologyService：中文 Feature 名翻成英文子词后与英文 API/Page 名做 token 重叠。
         for (GraphNode feature : safeList(docFeatures)) {
             String featureName = normalizeSearchName(feature);
             if (featureName.isBlank()) {
                 continue;
             }
-            Set<String> featTokens = tokensByName.computeIfAbsent(featureName, this::matchTokens);
+            Set<String> featTokens = tokensByName.computeIfAbsent(featureName, terminologyService::tokenize);
 
             // 匹配Page
             for (GraphNode page : safeList(pages)) {
@@ -327,8 +329,8 @@ public class BusinessGraphBuilder {
                 if (pageName.isBlank()) {
                     continue;
                 }
-                Set<String> pageTokens = tokensByName.computeIfAbsent(pageName, this::matchTokens);
-                double score = tokenSimilarity(featTokens, pageTokens, featureName, pageName);
+                Set<String> pageTokens = tokensByName.computeIfAbsent(pageName, terminologyService::tokenize);
+                double score = terminologyService.similarityOfTokens(featTokens, pageTokens, featureName, pageName);
                 if (score > 0.6) {
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), page.getId(),
@@ -346,8 +348,8 @@ public class BusinessGraphBuilder {
                 if (apiName.isBlank()) {
                     continue;
                 }
-                Set<String> apiTokens = tokensByName.computeIfAbsent(apiName, this::matchTokens);
-                double score = tokenSimilarity(featTokens, apiTokens, featureName, apiName);
+                Set<String> apiTokens = tokensByName.computeIfAbsent(apiName, terminologyService::tokenize);
+                double score = terminologyService.similarityOfTokens(featTokens, apiTokens, featureName, apiName);
                 if (score > 0.5) {
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), api.getId(),
@@ -417,7 +419,7 @@ public class BusinessGraphBuilder {
             for (GraphNode tech : techEntities) {
                 String techName = normalizeSearchName(tech);
                 if (techName.isBlank()) continue;
-                double score = nameSimilarity(objName, techName);
+                double score = terminologyService.calculateSimilarity(objName, techName);
                 boolean isCodeEntity = NodeType.Service.name().equals(tech.getNodeType())
                         || NodeType.Mapper.name().equals(tech.getNodeType())
                         || NodeType.Controller.name().equals(tech.getNodeType());
@@ -484,97 +486,9 @@ public class BusinessGraphBuilder {
     }
 
     private String normalizeSearchName(GraphNode node) {
-        // 保留原始大小写，供 nameSimilarity 拆分 camelCase；不再在此处小写/去前缀，
-        // 分词与归一化统一交给 matchTokens 处理。
+        // 保留原始大小写，供 TerminologyService 拆分 camelCase；不在此处小写/去前缀，
+        // 分词与归一化统一交给 TerminologyService.tokenize 处理。
         return nodeDisplayName(node).trim();
-    }
-
-    /**
-     * 中文业务术语 → 英文关键词（camelCase 拆分后的子词形式）映射表。
-     * <p>用于跨语言名称匹配：文档抽取的 Feature 名为中文（如"出金审核列表"），
-     * 代码抽取的 ApiEndpoint 名为英文路径（如"getCashOutAuditList"），
-     * 直接做字符级 Jaccard 必然为 0。这里把中文术语翻成英文子词，使两侧 token 可重叠。</p>
-     * <p>这是一个领域词典起点，可按需扩充；后续可替换为向量语义检索。</p>
-     */
-    private static final Map<String, List<String>> CN_ALIAS = Map.ofEntries(
-            Map.entry("出金", List.of("cash", "out")),
-            Map.entry("入金", List.of("gold", "in")),
-            Map.entry("保证金", List.of("margin", "earnest")),
-            Map.entry("诚意金", List.of("earnest")),
-            Map.entry("违约", List.of("penalty", "breach")),
-            Map.entry("审核", List.of("audit")),
-            Map.entry("初审", List.of("first", "trial")),
-            Map.entry("复审", List.of("recheck")),
-            Map.entry("审批", List.of("approve", "audit")),
-            Map.entry("通过", List.of("approved", "pass")),
-            Map.entry("提交", List.of("submit")),
-            Map.entry("导出", List.of("export", "excel")),
-            Map.entry("冻结", List.of("frozen", "freeze", "lock")),
-            Map.entry("释放", List.of("free", "release", "unlock")),
-            Map.entry("解锁", List.of("unlock", "free")),
-            Map.entry("锁定", List.of("lock")),
-            Map.entry("白名单", List.of("white")),
-            Map.entry("异常", List.of("exception")),
-            Map.entry("账户", List.of("account", "acct")),
-            Map.entry("主账户", List.of("master", "account")),
-            Map.entry("子账户", List.of("sub", "account")),
-            Map.entry("销户", List.of("closing", "close")),
-            Map.entry("开户", List.of("open", "account")),
-            Map.entry("会员", List.of("corp", "member")),
-            Map.entry("企业", List.of("corp")),
-            Map.entry("余额", List.of("balance")),
-            Map.entry("记账", List.of("billing")),
-            Map.entry("明细", List.of("detail", "details")),
-            Map.entry("对账", List.of("reconciliation", "recheck")),
-            Map.entry("流水", List.of("flow", "stream", "trans")),
-            Map.entry("银行", List.of("bank")),
-            Map.entry("利息", List.of("fee", "interest")),
-            Map.entry("历史", List.of("his", "history")),
-            Map.entry("每日", List.of("daily")),
-            Map.entry("统计", List.of("statistics", "count", "amount")),
-            Map.entry("汇总", List.of("summary", "count")),
-            Map.entry("列表", List.of("list")),
-            Map.entry("查询", List.of("find", "query", "get")),
-            Map.entry("详情", List.of("detail", "byid")),
-            Map.entry("信息", List.of("info")),
-            Map.entry("角色", List.of("role")),
-            Map.entry("菜单", List.of("menu")),
-            Map.entry("系统参数", List.of("sys", "param")),
-            Map.entry("参数", List.of("param")),
-            Map.entry("短信验证码", List.of("sms", "ver", "code")),
-            Map.entry("短信", List.of("sms")),
-            Map.entry("验证码", List.of("ver", "code")),
-            Map.entry("登录", List.of("login")),
-            Map.entry("登出", List.of("logout")),
-            Map.entry("同步", List.of("sync")),
-            Map.entry("风控", List.of("risk")),
-            Map.entry("风险", List.of("risk")),
-            Map.entry("焦煤", List.of("jmzx", "coking")),
-            Map.entry("农信", List.of("nx")),
-            Map.entry("划转", List.of("transfer", "pay")),
-            Map.entry("备注", List.of("remark")),
-            Map.entry("手动", List.of("hand", "manual")),
-            Map.entry("线下", List.of("hand", "offline")),
-            Map.entry("原路退回", List.of("sendback", "send", "back")),
-            Map.entry("业务", List.of("business", "biz")),
-            Map.entry("申请", List.of("apply", "audit")),
-            Map.entry("添加", List.of("add", "save")),
-            Map.entry("删除", List.of("del", "delete")),
-            Map.entry("更新", List.of("upd", "update", "save")),
-            Map.entry("修改", List.of("upd", "update")),
-            Map.entry("日志", List.of("log")),
-            Map.entry("调用", List.of("call")),
-            Map.entry("接口", List.of("interface", "api")),
-            Map.entry("用户", List.of("user")),
-            Map.entry("获取", List.of("get")),
-            Map.entry("规则", List.of("rule"))
-    );
-    /** CN_ALIAS 的 key 按长度降序，匹配时最长优先，避免"主账户"被"账户"抢先消费。 */
-    private static final List<String> CN_ALIAS_KEYS_DESC;
-    static {
-        List<String> keys = new ArrayList<>(CN_ALIAS.keySet());
-        keys.sort((x, y) -> Integer.compare(y.length(), x.length()));
-        CN_ALIAS_KEYS_DESC = keys;
     }
 
     private String nodeDisplayName(GraphNode node) {
@@ -592,135 +506,6 @@ public class BusinessGraphBuilder {
 
     private List<GraphNode> safeList(List<GraphNode> nodes) {
         return nodes != null ? nodes : List.of();
-    }
-
-    /**
-     * 跨语言名称相似度：中文术语翻成英文子词后做 token 重叠度匹配。
-     * <p>用重叠系数（intersection / min(|A|,|B|)）而非 Jaccard——中文术语展开后 token 数
-     * 与英文路径不对等，Jaccard 会被稀释。</p>
-     * <p>守卫：较小集合（&lt;3 token）必须被完全包含，避免单 token 共享导致的误匹配
-     * （如"出金"与"入金"都含 gold 相关 token）。</p>
-     */
-    private double nameSimilarity(String a, String b) {
-        if (a == null || b == null || a.isBlank() || b.isBlank()) {
-            return 0;
-        }
-        return tokenSimilarity(matchTokens(a), matchTokens(b), a, b);
-    }
-
-    /**
-     * 基于 token 集合的相似度（核心逻辑），供 nameSimilarity 与 mapFeaturesToCode 预计算后复用。
-     * <p>两侧 token 非空时用重叠系数（intersection / min(|A|,|B|)）+ 小集合守卫；
-     * 否则退回 contains/equals 兜底。</p>
-     */
-    private double tokenSimilarity(Set<String> ta, Set<String> tb, String a, String b) {
-        if (!ta.isEmpty() && !tb.isEmpty()) {
-            int inter = 0;
-            for (String t : ta) {
-                if (tb.contains(t)) {
-                    inter++;
-                }
-            }
-            if (inter == 0) {
-                return 0;
-            }
-            int min = Math.min(ta.size(), tb.size());
-            // 单 token 集合：仅当共享 token 足够长(≥4)且被完全包含时才认，
-            // 避免 nx/ab 类短 token 误匹配（"农信接口调用日志"仅翻出 {nx} 会误匹配所有含 nx 的接口），
-            // 同时让单字业务对象名（order/account/user）能与 orders/OrderService 等匹配上。
-            if (min < 2) {
-                if (inter == min) {
-                    Set<String> smaller = ta.size() <= tb.size() ? ta : tb;
-                    String sole = smaller.iterator().next();
-                    if (sole != null && sole.length() >= 4) {
-                        return 1.0;
-                    }
-                }
-                return 0;
-            }
-            // 小集合（<3 token）必须完全包含，杜绝单 token 误匹配
-            if (inter != min && min < 3) {
-                return 0;
-            }
-            return (double) inter / min;
-        }
-        // 兜底：两侧无法分词或 token 无交集时用包含关系；要求长度≥3，避免 "/" 等单字符假匹配
-        if (a.length() >= 3 && b.length() >= 3 && (a.contains(b) || b.contains(a))) {
-            return 0.7;
-        }
-        return a.equalsIgnoreCase(b) ? 0.9 : 0;
-    }
-
-    /**
-     * 将名称拆分为英文关键词 token 集合，用于跨语言相似度匹配。
-     * <ol>
-     *   <li>拆分 camelCase 边界（getCashOutAuditList → get/cash/out/audit/list）</li>
-     *   <li>中文术语按 {@link #CN_ALIAS} 翻成英文子词（出金审核列表 → cash/out/audit/list）</li>
-     *   <li>剩余英文片段按非字母数字分割，长度≥2 的纳入</li>
-     * </ol>
-     */
-    private Set<String> matchTokens(String name) {
-        Set<String> tokens = new HashSet<>();
-        if (name == null || name.isBlank()) {
-            return tokens;
-        }
-        // 1) 拆 camelCase（保留大小写先拆，再统一小写）
-        String expanded = name.replaceAll("([a-z0-9])([A-Z])", "$1 $2")
-                .replaceAll("([A-Z]+)([A-Z][a-z])", "$1 $2");
-        String lower = expanded.toLowerCase();
-        // 2) 中文术语 → 英文子词（最长优先）。无中文字符时跳过词典扫描（英文 API 名走 camelCase 拆分即可）
-        if (hasCjk(lower)) {
-            for (String cn : CN_ALIAS_KEYS_DESC) {
-                int idx = lower.indexOf(cn);
-                while (idx >= 0) {
-                    List<String> en = CN_ALIAS.get(cn);
-                    if (en != null) {
-                        tokens.addAll(en);
-                    }
-                    lower = lower.substring(0, idx) + " " + lower.substring(idx + cn.length());
-                    idx = lower.indexOf(cn);
-                }
-            }
-        }
-        // 3) 剩余英文片段
-        for (String t : lower.split("[^a-z0-9]+")) {
-            if (t.length() >= 2) {
-                tokens.add(stem(t));
-            }
-        }
-        return tokens;
-    }
-
-    /**
-     * 粗粒度英文复数词干归一，让 order/orders、service/services、mapper/mappers 折叠为同一 token。
-     * <p>仅对长度≥4 的 token 生效，避免误伤 is/as/us 等短词。规则简单（ies→y、ses/xes→去 es、
-     * s→去 s），不追求语言学正确，只为补 token 重叠匹配在单复数命名上的盲区。</p>
-     */
-    private static String stem(String t) {
-        if (t == null || t.length() < 4) {
-            return t;
-        }
-        if (t.endsWith("ies")) {
-            return t.substring(0, t.length() - 3) + "y";      // categories→category, policies→policy
-        }
-        if (t.endsWith("ses") || t.endsWith("xes")) {
-            return t.substring(0, t.length() - 2);            // classes→class, boxes→box
-        }
-        if (t.endsWith("s") && !t.endsWith("ss")) {
-            return t.substring(0, t.length() - 1);            // orders→order, services→service
-        }
-        return t;
-    }
-
-    /** 是否含 CJK 汉字（用于 matchTokens 跳过英文名称的词典扫描）。 */
-    private static boolean hasCjk(String s) {
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c >= '一' && c <= '鿿') {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

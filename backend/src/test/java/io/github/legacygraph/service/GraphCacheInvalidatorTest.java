@@ -19,28 +19,31 @@ class GraphCacheInvalidatorTest {
     private CacheService cacheService;
 
     @Test
-    void testInvalidateVersion_EvictsGraphReportValidationAndVector() {
+    void testInvalidateVersion_EvictsByPatterns() {
         GraphCacheInvalidator invalidator = new GraphCacheInvalidator(cacheService);
         invalidator.invalidateVersion("v1-abc");
 
-        // 图谱视图按版本（去横线）前缀失效
-        verify(cacheService).evictByPrefix("graph:v1abc:");
-        // 验证报告按版本失效（带/不带横线两种形式）
-        verify(cacheService).evictByPrefix("validation-report::v1-abc");
-        verify(cacheService).evictByPrefix("validation-report::v1abc");
-        // 报告整体失效
-        verify(cacheService).evictByPrefix("report-");
-        // 语义检索缓存兜底失效
-        verify(cacheService).evictByPrefix("vec:search:");
+        // 现在使用 evictByPatterns 批量失效：5 个模式
+        verify(cacheService).evictByPatterns(argThat(patterns ->
+            patterns.size() == 5
+            && patterns.contains("graph:v1abc:*")
+            && patterns.contains("report-*")
+            && patterns.contains("vec:search:*")
+            && patterns.stream().anyMatch(p -> p.startsWith("validation-report::"))
+        ));
+        verify(cacheService, never()).evictByPrefix(anyString());
     }
 
     @Test
     void testInvalidateAll_WhenVersionNull() {
         new GraphCacheInvalidator(cacheService).invalidateAll();
-        verify(cacheService).evictByPrefix("graph:");
-        verify(cacheService).evictByPrefix("validation-report");
-        verify(cacheService).evictByPrefix("report-");
-        verify(cacheService).evictByPrefix("vec:search:");
+        verify(cacheService).evictByPatterns(argThat(patterns ->
+            patterns.size() == 4
+            && patterns.contains("graph:*")
+            && patterns.contains("validation-report*")
+            && patterns.contains("report-*")
+            && patterns.contains("vec:search:*")
+        ));
     }
 
     @Test

@@ -140,6 +140,15 @@ public class Neo4jGraphDao {
     }
 
     /**
+     * 批量查询多个源节点的邻居（一次 Cypher 替代 N 次单节点查询）。
+     * @return sourceNodeId → neighborIds 映射
+     */
+    public Map<String, Set<String>> findNeighborNodeIdsBySources(
+            String projectId, Collection<String> sourceNodeIds, int perNodeLimit) {
+        return queryRepo.findNeighborNodeIdsBySources(projectId, sourceNodeIds, perNodeLimit);
+    }
+
+    /**
      * 有界无向路径查询 — 在 from/to 节点之间查找最多 maxDepth 跳的路径。
      *
      * @param relationshipTypes 关系类型白名单（空列表 → 全类型）
@@ -287,6 +296,21 @@ public class Neo4jGraphDao {
     public List<Map<String, Object>> queryEdgesProjection(String projectId, String versionId,
                                                            Double minConfidence, String status) {
         return projectionRepo.queryEdgesProjection(projectId, versionId, minConfidence, status);
+    }
+
+    /** 窗口查询节点（游标分页 + 多条件过滤） */
+    public List<Map<String, Object>> queryNodesWindow(String projectId, String versionId,
+                                                       List<String> nodeTypes, List<String> sourceTypes,
+                                                       String status, Double minConfidence,
+                                                       String cursor, int limit) {
+        return projectionRepo.queryNodesWindow(projectId, versionId, nodeTypes, sourceTypes,
+                status, minConfidence, cursor, limit);
+    }
+
+    /** 查询指定节点集合之间的边 */
+    public List<Map<String, Object>> queryEdgesForNodes(String projectId, String versionId,
+                                                         List<String> nodeIds) {
+        return projectionRepo.queryEdgesForNodes(projectId, versionId, nodeIds);
     }
 
     public Map<String, Object> graphStats(String projectId) {

@@ -414,6 +414,39 @@ public class Neo4jQueryRepository {
         }
     }
 
+    /**
+     * 批量查询多个源节点的邻居（一次 Cypher 替代 N 次单节点查询），
+     * 返回 sourceNodeId → neighborIds 映射。
+     */
+    public Map<String, Set<String>> findNeighborNodeIdsBySources(
+            String projectId, Collection<String> sourceNodeIds, int perNodeLimit) {
+        if (sourceNodeIds == null || sourceNodeIds.isEmpty()) return Map.of();
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n)-[r]-(m) " +
+                "WHERE n.id IN $sourceIds AND n.projectId = $projectId " +
+                "AND r.projectId = $projectId AND m.id IS NOT NULL " +
+                "RETURN n.id AS sourceId, m.id AS neighborId";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "sourceIds", new ArrayList<>(sourceNodeIds)));
+            Map<String, Set<String>> map = new HashMap<>();
+            while (result.hasNext()) {
+                org.neo4j.driver.Record rec = result.next();
+                String src = rec.get("sourceId").asString();
+                String nbr = rec.get("neighborId").asString();
+                map.computeIfAbsent(src, k -> new LinkedHashSet<>()).add(nbr);
+            }
+            // 应用 perNodeLimit
+            if (perNodeLimit > 0) {
+                map.replaceAll((k, v) -> v.size() > perNodeLimit
+                        ? v.stream().limit(perNodeLimit).collect(Collectors.toCollection(LinkedHashSet::new))
+                        : v);
+            }
+            return map;
+        }
+    }
+
     /** 按 ID 查找边（返回两端节点 id 属性，而非 Neo4j 内部 elementId） */
     public Optional<GraphEdge> findEdgeById(String edgeId) {
         try (Session session = neo4jDriver.session()) {

@@ -49,8 +49,32 @@ public class VectorRetrievalService {
         this.semanticCacheRepository = semanticCacheRepository;
     }
 
+    /** 当前向量语料版本（向量重建时递增，用于主动失效旧缓存） */
+    private volatile String corpusVersion = "v1";
+
+    /**
+     * 更新语料版本并触发缓存失效。
+     * 在 batchUpsertVectors 完成后调用，确保新向量不被旧缓存遮蔽。
+     */
+    public void bumpCorpusVersion(String projectId, String versionId) {
+        this.corpusVersion = "v" + System.currentTimeMillis();
+        if (cacheService != null) {
+            cacheService.evictByPrefix("vec:search:" + projectId + ":" + versionId + ":");
+            log.info("Vector corpus version bumped to {}, cache evicted for project={} version={}",
+                    corpusVersion, projectId, versionId);
+        }
+    }
+
     private String searchCacheKey(String projectId, String versionId, String query, int topK, String chunkType) {
-        String raw = projectId + "|" + versionId + "|" + topK + "|" + chunkType + "|" + query;
+        String raw = String.join("|",
+            projectId,
+            versionId,
+            embeddingModel != null ? embeddingModel.getClass().getSimpleName() : "default",
+            corpusVersion,
+            String.valueOf(topK),
+            chunkType != null ? chunkType : "",
+            query
+        );
         return "vec:search:" + sha256(raw);
     }
 

@@ -243,15 +243,14 @@ public class AssetDiscoveryService {
             log.warn("Failed to walk directory {}: {}", root, e.getMessage());
             return new ArrayList<>();
         }
-        List<SourceAsset> assets = new ArrayList<>(paths.size());
-        for (Path p : paths) {
-            String relativePath = root.relativize(p).toString();
-            SourceAsset asset = buildAsset(p, relativePath);
-            if (shouldIncludeAsset(asset, scanCode, scanDocs)) {
-                assets.add(asset);
-            }
-        }
-        return assets;
+        // parallelStream: SHA-256 计算是 CPU 密集操作，并行化可显著加速大项目资产构建
+        return paths.parallelStream()
+                .map(p -> {
+                    String relativePath = root.relativize(p).toString();
+                    return buildAsset(p, relativePath);
+                })
+                .filter(asset -> shouldIncludeAsset(asset, scanCode, scanDocs))
+                .collect(Collectors.toList());
     }
 
     private SourceAsset buildAsset(Path file, String relativePath) {

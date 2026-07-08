@@ -497,33 +497,66 @@ public class EvidenceGraphWriter {
     public GraphWriteResult writeIntent(GraphWriteIntent intent) {
         int nodeCount = 0, edgeCount = 0;
         java.util.concurrent.atomic.AtomicInteger evidenceCount = new java.util.concurrent.atomic.AtomicInteger(0);
-        if (intent.getNodeClaims() != null) {
-            for (GraphNodeClaim nc : intent.getNodeClaims()) {
-                try {
-                    upsertNode(nc);
-                    nodeCount++;
-                } catch (Exception e) {
-                    log.error("writeIntent: node claim failed (idempotencyKey={}, nodeKey={}): {}",
-                            intent.getIdempotencyKey(), nc.getNodeKey(), e.getMessage());
+
+        // 批量 MERGE 节点（1 次 Neo4j 往返替代 N 次）
+        if (intent.getNodeClaims() != null && !intent.getNodeClaims().isEmpty()) {
+            try {
+                List<Neo4jWriteRepository.BatchNodeUpsert> batch = new ArrayList<>();
+                for (GraphNodeClaim nc : intent.getNodeClaims()) {
+                    Map<String, Object> props = new HashMap<>();
+                    props.put("nodeName", nc.getNodeName() != null ? nc.getNodeName() : "");
+                    props.put("displayName", nc.getDisplayName() != null ? nc.getDisplayName() : "");
+                    props.put("confidence", nc.getConfidence() != null ? nc.getConfidence() : 0.5);
+                    props.put("status", deriveNodeStatus(nc));
+                    props.put("sourceType", nc.getSourceType() != null ? nc.getSourceType() : "");
+                    props.put("sourcePath", nc.getSourcePath() != null ? nc.getSourcePath() : "");
+                    if (nc.getDescription() != null) props.put("description", nc.getDescription());
+                    batch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                            nc.getNodeType(), nc.getNodeKey(),
+                            nc.getNodeName() != null ? nc.getNodeName() : nc.getNodeKey(), props));
+                }
+                neo4jGraphDao.mergeNodesBatch(intent.getProjectId(), intent.getVersionId(), batch);
+                nodeCount = batch.size();
+            } catch (Exception e) {
+                log.error("writeIntent: batch node merge failed (idempotencyKey={}): {}",
+                        intent.getIdempotencyKey(), e.getMessage());
+                // 降级：逐条重试
+                for (GraphNodeClaim nc : intent.getNodeClaims()) {
+                    try { upsertNode(nc); nodeCount++; }
+                    catch (Exception e2) { log.error("writeIntent fallback: node failed: {}", e2.getMessage()); }
                 }
             }
         }
-        if (intent.getEdgeClaims() != null) {
-            for (GraphEdgeClaim ec : intent.getEdgeClaims()) {
-                try {
-                    upsertEdge(ec);
-                    edgeCount++;
-                } catch (Exception e) {
-                    log.error("writeIntent: edge claim failed (idempotencyKey={}, edgeKey={}): {}",
-                            intent.getIdempotencyKey(), ec.getEdgeKey(), e.getMessage());
+
+        // 批量 MERGE 边（1 次 Neo4j 往返替代 N 次）
+        if (intent.getEdgeClaims() != null && !intent.getEdgeClaims().isEmpty()) {
+            try {
+                List<Neo4jWriteRepository.BatchEdgeUpsert> batch = new ArrayList<>();
+                for (GraphEdgeClaim ec : intent.getEdgeClaims()) {
+                    Map<String, Object> props = new HashMap<>();
+                    props.put("confidence", ec.getConfidence() != null ? ec.getConfidence() : 0.5);
+                    props.put("status", deriveEdgeStatus(ec));
+                    props.put("sourceType", ec.getSourceType() != null ? ec.getSourceType() : "");
+                    if (ec.getLabel() != null) props.put("label", ec.getLabel());
+                    batch.add(new Neo4jWriteRepository.BatchEdgeUpsert(
+                            ec.getFromNodeId(), ec.getToNodeId(), ec.getEdgeType(), ec.getEdgeKey(), props));
+                }
+                neo4jGraphDao.mergeEdgesBatch(intent.getProjectId(), intent.getVersionId(), batch);
+                edgeCount = batch.size();
+            } catch (Exception e) {
+                log.error("writeIntent: batch edge merge failed (idempotencyKey={}): {}",
+                        intent.getIdempotencyKey(), e.getMessage());
+                for (GraphEdgeClaim ec : intent.getEdgeClaims()) {
+                    try { upsertEdge(ec); edgeCount++; }
+                    catch (Exception e2) { log.error("writeIntent fallback: edge failed: {}", e2.getMessage()); }
                 }
             }
         }
+
+        // 证据记录（逐条：PG insertOrIgnore 去重）
         if (intent.getEvidenceRecords() != null) {
             for (EvidenceRecord er : intent.getEvidenceRecords()) {
                 try {
-                    // evidence records 通常随已有节点/边关联；此处作为独立证据落库
-                    // 使用独立事务，避免被外层 aborted 事务影响
                     pgEvidenceTxExecutor.execute(() -> {
                         Evidence ev = new Evidence();
                         ev.setId(IdUtil.fastUUID());

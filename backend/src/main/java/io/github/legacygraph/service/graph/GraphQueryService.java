@@ -417,6 +417,164 @@ public class GraphQueryService {
         return result;
     }
 
+    // ==================== 窗口查询（新增，替代全量 getUnifiedGraph） ====================
+
+    /** 窗口默认 limit */
+    private static final int DEFAULT_WINDOW_LIMIT = 500;
+
+    /**
+     * 图谱汇总统计 — 返回节点/边总数 + 按类型分组统计，供前端首屏展示筛选面板。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getGraphSummary(String projectId, String versionId) {
+        String key = graphKey(versionId, "summary", projectId);
+        return cacheService.getOrLoad(key, Map.class, GRAPH_CACHE_TTL,
+                () -> getGraphSummaryUncached(projectId, versionId));
+    }
+
+    private Map<String, Object> getGraphSummaryUncached(String projectId, String versionId) {
+        String nv = normalizeVersionId(versionId);
+        long totalNodes = neo4jGraphDao.countNodes(projectId, nv, null);
+        long totalEdges = neo4jGraphDao.countEdges(projectId, nv, null);
+        long confirmedNodes = neo4jGraphDao.countNodes(projectId, nv, "CONFIRMED");
+        long pendingNodes = neo4jGraphDao.countNodes(projectId, nv, "PENDING_CONFIRM");
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("projectId", projectId);
+        summary.put("versionId", versionId);
+        summary.put("totalNodeCount", totalNodes);
+        summary.put("totalEdgeCount", totalEdges);
+        summary.put("confirmedNodeCount", confirmedNodes);
+        summary.put("pendingNodeCount", pendingNodes);
+        return summary;
+    }
+
+    /**
+     * 图谱窗口查询 — 按条件分页返回节点和边，替代全量 getUnifiedGraph。
+     *
+     * @param cursor 基于 nodeKey 的游标分页（首次传 null）
+     * @param limit  每页最大节点数（默认 {@value #DEFAULT_WINDOW_LIMIT}）
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getGraphWindow(String projectId, String versionId,
+                                               List<String> nodeTypes, List<String> sourceTypes,
+                                               String status, Double minConfidence,
+                                               String cursor, int limit) {
+        int effectiveLimit = limit > 0 ? Math.min(limit, 1000) : DEFAULT_WINDOW_LIMIT;
+        String key = graphKey(versionId, "window",
+                String.valueOf(nodeTypes), String.valueOf(sourceTypes),
+                String.valueOf(status), String.valueOf(minConfidence),
+                String.valueOf(cursor), String.valueOf(effectiveLimit));
+        return cacheService.getOrLoad(key, Map.class, Duration.ofMinutes(5),
+                () -> getGraphWindowUncached(projectId, versionId, nodeTypes, sourceTypes,
+                        status, minConfidence, cursor, effectiveLimit));
+    }
+
+    private Map<String, Object> getGraphWindowUncached(String projectId, String versionId,
+                                                        List<String> nodeTypes, List<String> sourceTypes,
+                                                        String status, Double minConfidence,
+                                                        String cursor, int limit) {
+        String nv = normalizeVersionId(versionId);
+        // 查询节点（游标分页，多取一条判断 hasMore）
+        List<Map<String, Object>> nodes = neo4jGraphDao.queryNodesWindow(
+                projectId, nv, nodeTypes, sourceTypes, status, minConfidence, cursor, limit + 1);
+
+        boolean hasMore = nodes.size() > limit;
+        if (hasMore) nodes = nodes.subList(0, limit);
+
+        String nextCursor = null;
+        if (hasMore && !nodes.isEmpty()) {
+            nextCursor = (String) nodes.get(nodes.size() - 1).get("nodeKey");
+        }
+
+        // 查询这批节点关联的边
+        List<String> nodeIds = nodes.stream()
+                .map(n -> (String) n.get("id"))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        List<Map<String, Object>> edges = nodeIds.isEmpty()
+                ? List.of()
+                : neo4jGraphDao.queryEdgesForNodes(projectId, nv, nodeIds);
+
+        long totalNodes = neo4jGraphDao.countNodes(projectId, nv, status);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("nodes", nodes);
+        result.put("edges", edges);
+        result.put("nextCursor", nextCursor);
+        result.put("hasMore", hasMore);
+        result.put("totalNodeCount", totalNodes);
+        return result;
+    }
+
+    /**
+     * 节点邻域查询 — 从指定节点出发，BFS 展开 depth 跳邻居。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getNodeNeighborhood(String projectId, String versionId,
+                                                    String nodeId, int depth,
+                                                    List<String> edgeTypes, int limit) {
+        int effectiveDepth = Math.max(1, Math.min(depth, 3));
+        int effectiveLimit = limit > 0 ? Math.min(limit, 300) : 50;
+        String key = graphKey(versionId, "neighborhood",
+                nodeId, String.valueOf(effectiveDepth),
+                String.valueOf(edgeTypes), String.valueOf(effectiveLimit));
+        return cacheService.getOrLoad(key, Map.class, Duration.ofMinutes(5),
+                () -> getNodeNeighborhoodUncached(projectId, versionId, nodeId,
+                        effectiveDepth, edgeTypes, effectiveLimit));
+    }
+
+    private Map<String, Object> getNodeNeighborhoodUncached(String projectId, String versionId,
+                                                             String nodeId, int depth,
+                                                             List<String> edgeTypes, int limit) {
+        String nv = normalizeVersionId(versionId);
+        // BFS 批量展开
+        Set<String> visited = new LinkedHashSet<>();
+        Set<String> frontier = new LinkedHashSet<>();
+        frontier.add(nodeId);
+        visited.add(nodeId);
+
+        for (int level = 0; level < depth && !frontier.isEmpty()
+                && visited.size() < limit; level++) {
+            Map<String, Set<String>> neighbors = neo4jGraphDao.findNeighborNodeIdsBySources(
+                    projectId, frontier, 20);
+            Set<String> next = new LinkedHashSet<>();
+            for (Set<String> nbrs : neighbors.values()) {
+                for (String nbr : nbrs) {
+                    if (visited.add(nbr) && visited.size() < limit) {
+                        next.add(nbr);
+                    }
+                }
+            }
+            frontier = next;
+        }
+
+        List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(new ArrayList<>(visited));
+        // 查询边
+        List<String> nodeIds = nodes.stream().map(GraphNode::getId).collect(Collectors.toList());
+        List<Map<String, Object>> edges = nodeIds.size() <= 1
+                ? List.of()
+                : neo4jGraphDao.queryEdgesForNodes(projectId, nv, nodeIds);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("centerNodeId", nodeId);
+        result.put("depth", depth);
+        result.put("nodes", nodes.stream().map(n -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", n.getId());
+            m.put("nodeType", n.getNodeType());
+            m.put("nodeKey", n.getNodeKey());
+            m.put("nodeName", n.getNodeName());
+            m.put("displayName", n.getDisplayName());
+            m.put("confidence", n.getConfidence());
+            m.put("status", n.getStatus());
+            return m;
+        }).collect(Collectors.toList()));
+        result.put("edges", edges);
+        result.put("totalNodes", nodes.size());
+        return result;
+    }
+
     /**
      * 获取项目扫描版本列表（分页），包含进度、任务统计和节点/边统计。
      *

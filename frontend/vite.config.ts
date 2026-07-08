@@ -85,6 +85,27 @@ export default defineConfig(({ command }) => {
           changeOrigin: true
         }
       }
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // 可视化库（G6/ECharts 体积大，独立 chunk 利用浏览器缓存）
+            'vendor-g6': ['@antv/g6'],
+            'vendor-echarts': ['echarts'],
+            // UI 组件库
+            'vendor-element-plus': ['element-plus'],
+            // 编辑器（Monaco 体积大，按需加载）
+            'vendor-monaco': ['monaco-editor'],
+            // Vue 生态
+            'vendor-vue': ['vue', 'vue-router', 'pinia'],
+            // 通用工具
+            'vendor-utils': ['axios', 'lodash-es', 'dayjs']
+          }
+        }
+      },
+      // 提高 chunk 大小警告阈值（默认 500KB）
+      chunkSizeWarningLimit: 1000
     }
   }
 })

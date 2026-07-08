@@ -85,12 +85,32 @@ class AiScanOrchestratorTest {
 
     @BeforeEach
     void setUp() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        // 重构后：手动构造共享支撑组件 + 各真实步骤执行器，把 mock 依赖注入进去，
+        // 再组成 List 传给 AiScanOrchestrator（步骤执行器模式）。
+        io.github.legacygraph.task.step.AiScanStepSupport support =
+                new io.github.legacygraph.task.step.AiScanStepSupport(
+                        scanTaskRecorder, scanTaskRepository, factRepository,
+                        knowledgeClaimService, vectorizationService, objectMapper);
+        List<io.github.legacygraph.task.step.AiScanStepExecutor> stepExecutors = List.of(
+                new io.github.legacygraph.task.step.DocExtractStep(support, documentRepository,
+                        docUnderstandingAgent, businessGraphBuilder, neo4jGraphDao,
+                        agentCallCounter, graphNodeCounter, graphEdgeCounter),
+                new io.github.legacygraph.task.step.CodeExtractStep(support, neo4jGraphDao,
+                        codeFactAgent, businessGraphBuilder),
+                new io.github.legacygraph.task.step.FeatureCodeMappingStep(support, businessGraphBuilder),
+                new io.github.legacygraph.task.step.FeatureMappingStep(support, neo4jGraphDao,
+                        featureMappingAgent, evidenceGraphWriter, reviewRecordRepository,
+                        objectMapper, agentCallCounter),
+                new io.github.legacygraph.task.step.TestGenerateStep(support, neo4jGraphDao,
+                        testCaseAgent, testCaseRepository, objectMapper),
+                new io.github.legacygraph.task.step.ReviewPrepareStep(support, neo4jGraphDao,
+                        reviewRecordRepository),
+                new io.github.legacygraph.task.step.KnowledgeGapStep(support, gapFinderService),
+                new io.github.legacygraph.task.step.UnderstandingEnhancementStep(support, neo4jGraphDao,
+                        scanUnderstandingEnhancer));
         orchestrator = new AiScanOrchestrator(scanTaskRepository, scanTaskRecorder, aiScanJobRepository,
-                documentRepository, factRepository,
-                reviewRecordRepository, testCaseRepository, neo4jGraphDao, docUnderstandingAgent,
-                featureMappingAgent, testCaseAgent, codeFactAgent, businessGraphBuilder, new ObjectMapper(),
-                knowledgeClaimService, gapFinderService, scanUnderstandingEnhancer, evidenceGraphWriter, vectorizationService,
-                scanDurationTimer, agentCallCounter, graphNodeCounter, graphEdgeCounter);
+                objectMapper, stepExecutors, gapFinderService);
         lenient().when(gapFinderService.scanGaps(anyString(), anyString()))
                 .thenReturn(GapFinderService.GapScanResult.builder()
                         .created(0)

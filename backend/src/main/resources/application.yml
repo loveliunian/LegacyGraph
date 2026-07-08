@@ -1,8 +1,41 @@
+# =============================================================================
+# JVM 启动参数建议（生产环境）
+# =============================================================================
+# 基础堆内存（根据实际负载调整）:
+#   -Xms2g -Xmx4g
+#
+# GC 选择（Java 21+ 推荐 ZGC，低延迟 < 1ms 暂停）:
+#   -XX:+UseZGC -XX:MaxGCPauseMillis=50
+#
+# 备选（Java 17 兼容）:
+#   -XX:+UseG1GC -XX:MaxGCPauseMillis=100
+#
+# GC 日志（排查 GC 问题用）:
+#   -Xlog:gc*:file=logs/gc.log:time,level,tags:filecount=10,filesize=50M
+#
+# 大图构建场景（对象分配密集，建议）:
+#   -XX:+AlwaysPreTouch          # 启动时预触碰堆页，避免运行时缺页
+#   -XX:+UseStringDeduplication  # G1/ZGC 下启用字符串去重，减少内存
+#
+# Docker / K8s 环境:
+#   -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+#
+# 完整示例（Java 21 + ZGC）:
+#   java -Xms2g -Xmx4g -XX:+UseZGC -XX:MaxGCPauseMillis=50 \
+#        -XX:+AlwaysPreTouch -XX:+UseContainerSupport \
+#        -XX:MaxRAMPercentage=75.0 \
+#        -jar legacygraph-api.jar
+# =============================================================================
+
 server:
   port: 8080
   servlet:
     context-path: /api
     engine: jetty
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain
+    min-response-size: 1024
 
 spring:
   profiles:
@@ -22,14 +55,16 @@ spring:
     password: ${POSTGRES_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
-      minimum-idle: 5
-      maximum-pool-size: 20
+      minimum-idle: 10
+      maximum-pool-size: 30
       idle-timeout: 30000
       pool-name: LegacyGraphHikariCP
       max-lifetime: 1800000
-      connection-timeout: 30000
+      connection-timeout: 10000
+      leak-detection-threshold: 10000
       data-source-properties:
         stringtype: unspecified
+        reWriteBatchedInserts: true
 
   # Flyway 数据库迁移配置（Spring Boot 4.x 移除自动配置，手动 FlywayConfig 管理）
   flyway:
@@ -51,10 +86,10 @@ spring:
       database: ${REDIS_DATABASE:11}
       lettuce:
         pool:
-          max-active: 8
-          max-wait: -1ms
+          max-active: 16
+          max-wait: 2000ms
           max-idle: 8
-          min-idle: 0
+          min-idle: 4
 
   # Jackson 配置
   jackson:
@@ -74,6 +109,10 @@ spring:
     authentication:
       username: ${NEO4J_USERNAME:}
       password: ${NEO4J_PASSWORD:}
+    pool:
+      max-connection-pool-size: 50
+      connection-acquisition-timeout: 10000
+      max-connection-lifetime: 3600s
 
   # Spring AI OpenAI 配置（兼容 DeepSeek）
   # api-key 从数据库 lg_llm_provider 表读取，此处仅做占位
@@ -256,3 +295,15 @@ legacy-graph:
       max-output-bytes: 200000
       # 工作目录白名单（空列表 = 允许所有目录，生产环境必须配置）
       work-dir-whitelist:
+
+# 术语相似度阈值配置。
+# 中文业务术语 → 英文子词的映射表已迁入数据库表 lg_terminology_mapping（见 ConfigurableTerminologyService），
+# 以后新增术语直接入库即可，无需改配置重新部署。此处仅保留相似度阈值，便于按环境调优。
+terminology:
+  similarity:
+    min-token-length: 4
+    small-set-threshold: 3
+    contains-similarity: 0.7
+    exact-match-similarity: 0.9
+    min-match-length: 3
+

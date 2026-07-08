@@ -4,6 +4,9 @@ import io.github.legacygraph.service.system.CacheService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 图谱/报告缓存失效器（场景 4）。
  *
@@ -29,19 +32,21 @@ public class GraphCacheInvalidator {
      * @param versionId 受影响版本；为 null 时失效所有图谱视图缓存（graph:*）
      */
     public void invalidateVersion(String versionId) {
+        List<String> patterns = new ArrayList<>();
         if (versionId != null) {
-            cacheService.evictByPrefix("graph:" + versionId.replace("-", "") + ":");
+            patterns.add("graph:" + versionId.replace("-", "") + ":*");
             // 验证报告以传入 versionId 原样为键；写点可能传入带/不带横线两种格式，均失效
-            cacheService.evictByPrefix("validation-report::" + versionId);
-            cacheService.evictByPrefix("validation-report::" + versionId.replace("-", ""));
+            patterns.add("validation-report::*" + versionId + "*");
+            patterns.add("validation-report::*" + versionId.replace("-", "") + "*");
         } else {
-            cacheService.evictByPrefix("graph:");
-            cacheService.evictByPrefix("validation-report");
+            patterns.add("graph:*");
+            patterns.add("validation-report*");
         }
         // 报告缓存键形如 lg:report-xxx::projectId:versionId，按 report- 前缀整体失效
-        cacheService.evictByPrefix("report-");
+        patterns.add("report-*");
         // 语义检索结果缓存（向量库随扫描更新；短 TTL + 此处兜底失效）
-        cacheService.evictByPrefix("vec:search:");
+        patterns.add("vec:search:*");
+        cacheService.evictByPatterns(patterns);
         log.debug("Graph/report cache invalidated for version={}", versionId);
     }
 

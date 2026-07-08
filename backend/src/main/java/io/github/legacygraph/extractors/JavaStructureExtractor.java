@@ -26,26 +26,26 @@ import java.util.List;
 @Component
 public class JavaStructureExtractor {
 
-    private final JavaParser javaParser;
-
-    public JavaStructureExtractor() {
+    /** ThreadLocal JavaParser — parallelStream 安全（JavaParser 非线程安全） */
+    private final ThreadLocal<JavaParser> javaParser = ThreadLocal.withInitial(() -> {
         ParserConfiguration config = new ParserConfiguration();
         config.setLanguageLevel(LanguageLevel.JAVA_26);
-        this.javaParser = new JavaParser(config);
-    }
+        return new JavaParser(config);
+    });
 
     public List<JavaClassInfo> extractFromFile(Path javaFile) throws IOException {
         List<JavaClassInfo> classes = new ArrayList<>();
 
         // 先读入内存再解析，避免 I/O 竞争读到半截文件
+        JavaParser parser = javaParser.get();
         ParseResult<CompilationUnit> result;
         try {
-            result = javaParser.parse(Files.readString(javaFile));
+            result = parser.parse(Files.readString(javaFile));
         } catch (RuntimeException e) {
             // JavaParser 词法分析器偶发内部崩溃（如 IndexOutOfBounds），重试一次
             log.warn("JavaParser crashed on first parse attempt (will retry): {} — {}", javaFile, e.getMessage());
             try {
-                result = javaParser.parse(Files.readString(javaFile));
+                result = parser.parse(Files.readString(javaFile));
             } catch (RuntimeException e2) {
                 log.warn("Failed to parse Java structure (JavaParser crash after retry): {}", javaFile);
                 log.warn("Parse error: {}", e2.getMessage());
@@ -55,7 +55,7 @@ public class JavaStructureExtractor {
         if (!result.isSuccessful() || result.getResult().isEmpty()) {
             // 偶发 I/O 竞争导致读入不完整 → 重读源文件并重试一次
             try {
-                result = javaParser.parse(Files.readString(javaFile));
+                result = parser.parse(Files.readString(javaFile));
             } catch (RuntimeException e) {
                 log.warn("Failed to parse Java structure (JavaParser crash on retry): {}", javaFile);
                 log.warn("Parse error: {}", e.getMessage());

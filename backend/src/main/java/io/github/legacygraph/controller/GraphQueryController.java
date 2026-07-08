@@ -231,6 +231,51 @@ public class GraphQueryController {
     }
 
     /**
+     * 图谱汇总统计 — 返回节点/边总数和按类型/状态分组统计，供前端筛选面板使用。
+     */
+    @GetMapping("/graph/summary")
+    @Operation(summary = "图谱汇总统计", description = "返回节点/边总数、按状态分组统计，用于首屏筛选面板")
+    public Result<Map<String, Object>> getGraphSummary(
+            @PathVariable String projectId,
+            @RequestParam(required = false) String versionId) {
+        return Result.success(graphQueryService.getGraphSummary(projectId, versionId));
+    }
+
+    /**
+     * 图谱窗口查询 — 按条件分页返回节点+边，替代全量 getUnifiedGraph。
+     */
+    @GetMapping("/graph/window")
+    @Operation(summary = "图谱窗口查询", description = "按类型/来源/状态过滤，游标分页返回节点和关联边")
+    public Result<Map<String, Object>> getGraphWindow(
+            @PathVariable String projectId,
+            @RequestParam(required = false) String versionId,
+            @RequestParam(required = false) List<String> nodeTypes,
+            @RequestParam(required = false) List<String> sourceTypes,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0.0") Double minConfidence,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "500") int limit) {
+        return Result.success(graphQueryService.getGraphWindow(
+                projectId, versionId, nodeTypes, sourceTypes, status, minConfidence, cursor, limit));
+    }
+
+    /**
+     * 节点邻域查询 — 从指定节点 BFS 展开 depth 跳邻居。
+     */
+    @GetMapping("/graph/nodes/{nodeId}/neighborhood")
+    @Operation(summary = "节点邻域查询", description = "从指定节点出发，BFS 展开 depth 跳邻居（默认 1 跳，最多 3 跳）")
+    public Result<Map<String, Object>> getNodeNeighborhood(
+            @PathVariable String projectId,
+            @PathVariable String nodeId,
+            @RequestParam(required = false) String versionId,
+            @RequestParam(defaultValue = "1") int depth,
+            @RequestParam(required = false) List<String> edgeTypes,
+            @RequestParam(defaultValue = "50") int limit) {
+        return Result.success(graphQueryService.getNodeNeighborhood(
+                projectId, versionId, nodeId, depth, edgeTypes, limit));
+    }
+
+    /**
      * 获取功能切片列表：总图上的 Feature → Page → API → Method → SQL → Table 投影视图。
      */
     @GetMapping("/graph/feature-slices")

@@ -10,8 +10,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import io.github.legacygraph.util.IdUtil;
 
 /**
@@ -32,23 +38,47 @@ public class GraphWriteIntentWorker {
     private final EvidenceGraphWriter evidenceGraphWriter;
     private final ObjectMapper objectMapper;
 
-    private static final int BATCH_SIZE = 10;
+    private static final int BATCH_SIZE = 50;
     private static final int MAX_RETRY = 3;
+    private static final int WORKER_CONCURRENCY = 4;
     private static final String WORKER_ID = "worker-" + IdUtil.fastUUID().substring(0, 8);
 
+    /** 有界并发执行器 — 限制同时写入 Neo4j 的 intent 数量 */
+    private final ExecutorService writeExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private final Semaphore concurrencyLimit = new Semaphore(WORKER_CONCURRENCY);
+
     /**
-     * 每 30 秒执行一次。
+     * 每 30 秒执行一次，有界并发处理 pending intents。
      */
     @Scheduled(fixedDelay = 30_000)
     public void processPendingIntents() {
         List<GraphWriteIntentEntity> pending = intentService.fetchPending(BATCH_SIZE);
         if (pending.isEmpty()) return;
 
-        log.debug("GraphWriteIntentWorker[{}]: processing {} pending intents", WORKER_ID, pending.size());
+        log.debug("GraphWriteIntentWorker[{}]: processing {} pending intents (concurrency={})",
+                WORKER_ID, pending.size(), WORKER_CONCURRENCY);
 
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
         for (GraphWriteIntentEntity entity : pending) {
-            processIntent(entity);
+            futures.add(CompletableFuture.runAsync(() -> {
+                try {
+                    concurrencyLimit.acquire();
+                    try {
+                        processIntent(entity);
+                    } finally {
+                        concurrencyLimit.release();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, writeExecutor));
         }
+
+        // 等待所有 intent 处理完成（最多 2 分钟）
+        CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+            .orTimeout(2, TimeUnit.MINUTES)
+            .exceptionally(ex -> { log.warn("Intent processing timed out: {}", ex.getMessage()); return null; })
+            .join();
     }
 
     private void processIntent(GraphWriteIntentEntity entity) {

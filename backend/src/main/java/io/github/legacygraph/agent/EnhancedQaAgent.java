@@ -29,6 +29,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import io.github.legacygraph.util.IdUtil;
 
@@ -57,6 +61,9 @@ public class EnhancedQaAgent {
     private final ImpactSubgraphService impactSubgraphService;
     private final ChangeImpactAgent changeImpactAgent;
     private final ChangeImpactQuestionParser changeImpactParser;
+
+    /** QA 链路专用虚拟线程执行器 — 意图分类/改写/HyDE/规划/召回可部分并行 */
+    private final ExecutorService qaExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
      * 流式问答
@@ -114,10 +121,15 @@ public class EnhancedQaAgent {
                 .map(m -> m.getRole() + ": " + m.getContent())
                 .collect(Collectors.toList());
 
-            // 5. 意图分类
+            // 5. 意图分类 + HyDE 并发执行（两者无依赖）
             stageStart = System.currentTimeMillis();
             sendEvent(emitter, "thinking", Map.of("stage", "classifying"));
-            QueryIntent intent = intentClassifier.classify(projectId, question, history);
+            CompletableFuture<QueryIntent> intentFuture = CompletableFuture.supplyAsync(
+                () -> intentClassifier.classify(projectId, question, history), qaExecutor);
+            CompletableFuture<String> hydeFuture = CompletableFuture.supplyAsync(
+                () -> hydeGenerator.generateHypotheticalDocument(projectId, question), qaExecutor);
+            // 等待 classify 完成（后续依赖）
+            QueryIntent intent = intentFuture.join();
             stageTimings.put("intent_classify", System.currentTimeMillis() - stageStart);
 
             // 5.5 变更影响专用链路（与 GraphRAG 分支并列互斥，CHANGE_IMPACT 不触发 GraphRAG Planner）
@@ -175,57 +187,71 @@ public class EnhancedQaAgent {
             final ChangeImpactAnalysis finalImpactAnalysis = impactAnalysis;
             final ChangeImpactQuestionParser.ParsedChangeRequest finalParsedChange = parsedChange;
 
-            // 6. 查询改写
+            // 6. 查询改写（依赖 intent）+ 等待 HyDE 结果
             stageStart = System.currentTimeMillis();
             sendEvent(emitter, "thinking", Map.of("stage", "rewriting"));
             List<String> queryVariants = new ArrayList<>(queryRewriter.rewrite(projectId, question, intent));
-            String hypotheticalDoc = hydeGenerator.generateHypotheticalDocument(projectId, question);
+            // 取回已在 intent classify 阶段并发启动的 HyDE 结果
+            String hypotheticalDoc = hydeFuture.join();
             if (hypotheticalDoc != null && !hypotheticalDoc.isBlank()) {
                 queryVariants.add(hypotheticalDoc);
             }
             stageTimings.put("query_rewrite", System.currentTimeMillis() - stageStart);
 
-            // 6.5 GraphRAG 规划 + 执行（如果意图为复杂类型）
+            // 6.5 GraphRAG 规划 + 7. 多路召回 — 并发执行（两者无依赖）
             List<GraphRagEvidenceCard> graphRagCards = Collections.emptyList();
             GraphRagPlan plan = null;
+            // 启动多路召回（异步）
+            CompletableFuture<List<VectorDocument>> retrievalFuture = CompletableFuture.supplyAsync(
+                () -> hybridRetrievalService.retrieve(projectId, versionId, question, queryVariants, 20),
+                qaExecutor);
+            CompletableFuture<GraphRagResult> graphRagFuture = null;
             if (intent.requiresPlanner()) {
-                try {
-                    sendEvent(emitter, "thinking", Map.of("stage", "planning_graph_rag"));
-                    String plannerVersionId = intent == QueryIntent.COMPARATIVE ? null : versionId;
-                    List<KnowledgeClaim> relevantClaims = loadRelevantClaims(projectId, plannerVersionId, question, intent);
-                    plan = plannerAgent.plan(projectId, question, relevantClaims, intent);
-                    log.debug("GraphRAG plan generated: {} sub-questions", 
-                        plan.getSubQuestions() != null ? plan.getSubQuestions().size() : 0);
+                graphRagFuture = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        sendEvent(emitter, "thinking", Map.of("stage", "planning_graph_rag"));
+                        String plannerVersionId = intent == QueryIntent.COMPARATIVE ? null : versionId;
+                        List<KnowledgeClaim> relevantClaims = loadRelevantClaims(projectId, plannerVersionId, question, intent);
+                        GraphRagPlan p = plannerAgent.plan(projectId, question, relevantClaims, intent);
+                        log.debug("GraphRAG plan generated: {} sub-questions",
+                            p.getSubQuestions() != null ? p.getSubQuestions().size() : 0);
 
-                    // 执行 GraphRAG 计划
-                    if (plan != null && !plan.isNeedsHumanReview()) {
-                        sendEvent(emitter, "thinking", Map.of("stage", "executing_graph_rag"));
-                        try {
-                            GraphRagExecutionResult result = planExecutor.execute(
-                                projectId, versionId,
-                                plan.getClaimQueries(),
-                                plan.getPathQueries()
-                            );
-                            graphRagCards = result.getAllCards() != null
-                                ? result.getAllCards()
-                                : Collections.emptyList();
-                            log.info("GraphRAG execution completed: {} evidence cards", graphRagCards.size());
-                        } catch (Exception e) {
-                            log.warn("GraphRAG execution failed, continuing without: {}", e.getMessage());
+                        List<GraphRagEvidenceCard> cards = Collections.emptyList();
+                        if (!p.isNeedsHumanReview()) {
+                            sendEvent(emitter, "thinking", Map.of("stage", "executing_graph_rag"));
+                            try {
+                                GraphRagExecutionResult result = planExecutor.execute(
+                                    projectId, versionId,
+                                    p.getClaimQueries(),
+                                    p.getPathQueries()
+                                );
+                                cards = result.getAllCards() != null
+                                    ? result.getAllCards()
+                                    : Collections.emptyList();
+                                log.info("GraphRAG execution completed: {} evidence cards", cards.size());
+                            } catch (Exception e) {
+                                log.warn("GraphRAG execution failed, continuing without: {}", e.getMessage());
+                            }
                         }
+                        return new GraphRagResult(p, cards);
+                    } catch (Exception e) {
+                        log.warn("GraphRAG planning failed, continuing without plan: {}", e.getMessage());
+                        return new GraphRagResult(null, Collections.emptyList());
                     }
-                } catch (Exception e) {
-                    log.warn("GraphRAG planning failed, continuing without plan: {}", e.getMessage());
-                }
+                }, qaExecutor);
             }
 
-            // 7. 多路召回
+            // 等待检索完成
+            List<VectorDocument> docs = retrievalFuture.join();
             stageStart = System.currentTimeMillis();
-            sendEvent(emitter, "thinking", Map.of("stage", "retrieving"));
-            List<VectorDocument> docs = hybridRetrievalService.retrieve(
-                projectId, versionId, question, queryVariants, 20
-            );
             stageTimings.put("retrieval", System.currentTimeMillis() - stageStart);
+
+            // 等待 GraphRAG 完成（如果启动了）
+            if (graphRagFuture != null) {
+                GraphRagResult graphRagResult = graphRagFuture.join();
+                plan = graphRagResult.plan;
+                graphRagCards = graphRagResult.cards;
+            }
 
             // 8. Re-ranking
             stageStart = System.currentTimeMillis();
@@ -364,21 +390,32 @@ public class EnhancedQaAgent {
         }
     }
 
+    /** 图扩展每层最大节点数 */
+    private static final int MAX_EXPANDED_NODES = 100;
+    private static final int PER_NODE_NEIGHBOR_LIMIT = 20;
+
     /**
-     * 图谱扩展
+     * 图谱扩展 — 多源 BFS 批量展开。
+     *
+     * <p>原实现存在两个问题：
+     * <ol>
+     *   <li>每层循环都用原始 seedNodes，depth>1 时重复查询同一批邻居（bug）</li>
+     *   <li>每个种子节点单独调用 findNeighborNodeIds，seed 数量 × depth 次 Neo4j 往返</li>
+     * </ol>
+     *
+     * <p>优化后：BFS 逐层推进 frontier（已访问节点不再入队），
+     * 每层一次批量查询所有 frontier 节点的邻居，Neo4j 往返从 O(N×depth) 降到 O(depth)。</p>
      */
-    private List<GraphNode> expandGraph(String projectId, String versionId, 
+    private List<GraphNode> expandGraph(String projectId, String versionId,
                                         String question, QueryIntent intent) {
         try {
-            // 从向量检索结果中提取节点ID
+            // 1. 向量检索找种子节点 ID
             List<VectorDocument> seedDocs = vectorRetrievalService.semanticSearch(
                 projectId, versionId, question, 5, null
             );
-            
             List<String> seedNodeIds = seedDocs.stream()
                 .filter(d -> d.getMeta() != null && d.getMeta().contains("nodeId"))
                 .map(d -> {
-                    // 从 meta JSON 提取 nodeId
                     try {
                         var meta = objectMapper.readTree(d.getMeta());
                         return meta.has("nodeId") ? meta.get("nodeId").asText() : null;
@@ -390,42 +427,57 @@ public class EnhancedQaAgent {
                 .limit(5)
                 .collect(Collectors.toList());
 
-            if (seedNodeIds.isEmpty()) {
-                return Collections.emptyList();
-            }
+            if (seedNodeIds.isEmpty()) return Collections.emptyList();
 
-            // 查找种子节点
+            // 2. 解析种子节点
             List<GraphNode> seedNodes = neo4jGraphDao.findNodesByIds(seedNodeIds);
-            if (seedNodes.isEmpty()) {
-                return Collections.emptyList();
-            }
+            if (seedNodes.isEmpty()) return Collections.emptyList();
 
-            // 根据意图类型决定扩展深度
+            // 3. BFS 逐层批量展开
             int depth = intent.getRecommendedGraphDepth();
-            Set<String> visited = new HashSet<>();
+            Set<String> visited = new LinkedHashSet<>();
             List<GraphNode> result = new ArrayList<>(seedNodes);
-            visited.addAll(seedNodes.stream().map(GraphNode::getId).toList());
+            visited.addAll(seedNodes.stream().map(GraphNode::getId).collect(Collectors.toList()));
 
-            for (int d = 1; d <= depth; d++) {
-                for (GraphNode seed : new ArrayList<>(seedNodes)) {
-                    try {
-                        Set<String> neighborIds = neo4jGraphDao.findNeighborNodeIds(
-                            projectId, seed.getId()
-                        );
-                        List<GraphNode> neighbors = neo4jGraphDao.findNodesByIds(
-                            new ArrayList<>(neighborIds)
-                        );
-                        for (GraphNode neighbor : neighbors) {
-                            if (visited.add(neighbor.getId())) {
-                                result.add(neighbor);
-                            }
+            // frontier: 当前层需要展开的节点 ID
+            Set<String> frontier = new LinkedHashSet<>(visited);
+            for (int level = 1; level <= depth && !frontier.isEmpty()
+                    && result.size() < MAX_EXPANDED_NODES; level++) {
+                // 批量查询所有 frontier 节点的邻居
+                Map<String, Set<String>> allNeighbors;
+                try {
+                    allNeighbors = neo4jGraphDao.findNeighborNodeIdsBySources(
+                        projectId, frontier, PER_NODE_NEIGHBOR_LIMIT);
+                } catch (Exception e) {
+                    log.warn("Batch neighbor query failed at level {}: {}", level, e.getMessage());
+                    break;
+                }
+
+                // 收集下一层 frontier
+                Set<String> nextFrontier = new LinkedHashSet<>();
+                for (Set<String> nbrs : allNeighbors.values()) {
+                    for (String nbrId : nbrs) {
+                        if (visited.add(nbrId) && result.size() < MAX_EXPANDED_NODES) {
+                            nextFrontier.add(nbrId);
                         }
-                    } catch (Exception e) {
-                        log.warn("Failed to expand node {}: {}", seed.getId(), e.getMessage());
                     }
                 }
+
+                // 批量查询下一层节点实体
+                if (!nextFrontier.isEmpty()) {
+                    try {
+                        List<GraphNode> nextNodes = neo4jGraphDao.findNodesByIds(
+                            new ArrayList<>(nextFrontier));
+                        result.addAll(nextNodes);
+                    } catch (Exception e) {
+                        log.warn("Failed to load nodes at level {}: {}", level, e.getMessage());
+                    }
+                }
+                frontier = nextFrontier;
             }
 
+            log.debug("Graph expanded: {} seeds, {} total nodes after {} hops",
+                seedNodes.size(), result.size(), depth);
             return result;
         } catch (Exception e) {
             log.warn("Graph expansion failed: {}", e.getMessage());
@@ -776,4 +828,9 @@ public class EnhancedQaAgent {
             .name(eventName)
             .data(objectMapper.writeValueAsString(data)));
     }
+
+    /**
+     * GraphRAG 并发结果容器（planning + execution 在同一线程内完成）。
+     */
+    private record GraphRagResult(GraphRagPlan plan, List<GraphRagEvidenceCard> cards) {}
 }

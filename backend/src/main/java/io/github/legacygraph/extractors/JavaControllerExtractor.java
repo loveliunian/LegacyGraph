@@ -28,30 +28,29 @@ import java.util.Optional;
 @Slf4j
 public class JavaControllerExtractor {
 
-    private final com.github.javaparser.JavaParser javaParser;
-
-    public JavaControllerExtractor() {
+    /** ThreadLocal JavaParser — parallelStream 安全（JavaParser 非线程安全） */
+    private final ThreadLocal<com.github.javaparser.JavaParser> javaParser = ThreadLocal.withInitial(() -> {
         ParserConfiguration config = new ParserConfiguration();
-        // 使用当前javaparser支持的最高语言级别（3.28.2 → JAVA_26），兼容 Java 8~26 所有语法
         config.setLanguageLevel(LanguageLevel.JAVA_26);
-        this.javaParser = new com.github.javaparser.JavaParser(config);
-    }
+        return new com.github.javaparser.JavaParser(config);
+    });
 
     /**
      * 从Java文件中抽取Controller的API信息
      */
     public List<ApiFact> extractFromFile(Path javaFile) throws IOException {
+        com.github.javaparser.JavaParser parser = javaParser.get();
         List<ApiFact> result = new ArrayList<>();
 
         // 先读入内存再解析，避免 I/O 竞争读到半截文件
         ParseResult<CompilationUnit> resultCU;
         try {
-            resultCU = javaParser.parse(Files.readString(javaFile));
+            resultCU = parser.parse(Files.readString(javaFile));
         } catch (RuntimeException e) {
             // JavaParser 词法分析器偶发内部崩溃（如 IndexOutOfBounds），重试一次
             log.warn("JavaParser crashed on first parse attempt (will retry): {} — {}", javaFile, e.getMessage());
             try {
-                resultCU = javaParser.parse(Files.readString(javaFile));
+                resultCU = parser.parse(Files.readString(javaFile));
             } catch (RuntimeException e2) {
                 log.warn("Failed to parse Java file (JavaParser crash after retry): {}", javaFile);
                 log.warn("Parse error: {}", e2.getMessage());
@@ -61,7 +60,7 @@ public class JavaControllerExtractor {
         if (!resultCU.isSuccessful() || resultCU.getResult().isEmpty()) {
             // 偶发 I/O 竞争导致读入不完整 → 重读源文件并重试一次
             try {
-                resultCU = javaParser.parse(Files.readString(javaFile));
+                resultCU = parser.parse(Files.readString(javaFile));
             } catch (RuntimeException e) {
                 log.warn("Failed to parse Java file (JavaParser crash on retry): {}", javaFile);
                 log.warn("Parse error: {}", e.getMessage());
