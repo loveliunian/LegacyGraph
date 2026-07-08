@@ -97,18 +97,20 @@ public class AiScanStepSupport {
         return new AbstractExecutorService() {
             @Override
             public void execute(Runnable command) {
-                try {
-                    semaphore.acquire();
-                    delegate.execute(() -> {
+                // 先提交虚拟线程，在虚拟线程内 acquire，避免调用线程（主扫描线程）被阻塞。
+                // 旧实现在调用线程 acquire：主线程提交第 5 个任务时因前 4 个任务全阻塞而永久卡死。
+                delegate.execute(() -> {
+                    try {
+                        semaphore.acquire();
                         try {
                             command.run();
                         } finally {
                             semaphore.release();
                         }
-                    });
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
             }
             @Override public void shutdown() { delegate.shutdown(); }
             @Override public List<Runnable> shutdownNow() { return delegate.shutdownNow(); }
@@ -205,25 +207,39 @@ public class AiScanStepSupport {
 
     // ==================== LLM 缓存 ====================
 
+    /** Redis 不可用时快速降级：首次失败后设为 false，后续调用跳过 Redis */
+    private volatile boolean cacheAvailable = true;
+
     /**
      * LLM 抽取结果按内容哈希缓存：同一内容（文档/代码未改动）重扫时复用，跳过 LLM 调用。
-     * cacheService 不可用（测试环境）或内容为空时直调 loader。
+     * cacheService 不可用（测试环境）或 Redis 连不上时直调 loader，首次失败后快速降级。
      */
     public <T> T cachedExtract(String type, String content, Supplier<T> loader,
                                Class<T> resultType, Predicate<T> isEmpty) {
         if (cacheService == null || content == null || content.isBlank()) {
             return loader.get();
         }
+        if (!cacheAvailable) {
+            return loader.get(); // Redis 已判不可用，跳过缓存直调 LLM
+        }
         String key = "llm:" + type + ":" + sha256(content);
-        // 命中且非空才复用；空结果（LLM 返回空/解析失败）视为未命中，重新调 LLM
-        T cached = cacheService.get(key, resultType);
-        if (cached != null && !isEmpty.test(cached)) {
-            return cached;
+        try {
+            T cached = cacheService.get(key, resultType);
+            if (cached != null && !isEmpty.test(cached)) {
+                return cached;
+            }
+        } catch (Exception e) {
+            cacheAvailable = false;
+            log.warn("Redis unavailable, disabling LLM cache for this scan: {}", e.getMessage());
+            return loader.get();
         }
         T loaded = loader.get();
-        // 仅缓存非空结果——空结果不缓存，下次重试，避免把失败锁进缓存
         if (loaded != null && !isEmpty.test(loaded)) {
-            cacheService.put(key, loaded, LLM_CACHE_TTL);
+            try {
+                cacheService.put(key, loaded, LLM_CACHE_TTL);
+            } catch (Exception e) {
+                // put 失败不影响扫描主流程
+            }
         }
         return loaded;
     }

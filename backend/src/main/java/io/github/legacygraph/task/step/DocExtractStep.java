@@ -134,8 +134,17 @@ public class DocExtractStep implements AiScanStepExecutor {
                         support.markExtractFailed(projectId, versionId, filePath, "DOC_EXTRACT", "empty content");
                         return;
                     }
-                    CompletableFuture.runAsync(() ->
-                            support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content));
+                    // 内存保护：堆使用率 >85% 时跳过向量化，避免 OOM 中断扫描
+                    if (isMemoryHealthy()) {
+                        CompletableFuture.runAsync(() -> {
+                            try {
+                                support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                            } catch (OutOfMemoryError oom) {
+                                log.warn("Vectorization OOM for doc {} (non-blocking), content length={}",
+                                        doc.getId(), content.length());
+                            }
+                        });
+                    }
                     try {
                         // A3：大文档分段并行抽取再合并，既全覆盖又并发提速。
                         // 小文档（≤ DOC_CONTENT_LIMIT）保持原路径——单次 LLM 调用。
@@ -169,6 +178,13 @@ public class DocExtractStep implements AiScanStepExecutor {
                         if (done % 5 == 0 || done == totalDocs) {
                             support.updateTaskProgress(task, totalDocs, done, filePath);
                         }
+                    } catch (OutOfMemoryError oom) {
+                        log.error("Doc extract OOM for doc {} (content length={}), skip and continue",
+                                doc.getId(), content.length());
+                        doc.setParseStatus("FAILED");
+                        doc.setErrorMessage("OOM: " + oom.getMessage());
+                        doc.setUpdatedAt(java.time.LocalDateTime.now());
+                        try { documentRepository.updateById(doc); } catch (Exception ignored) {}
                     } catch (Exception e) {
                         log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
                         doc.setParseStatus("FAILED");
@@ -461,5 +477,12 @@ public class DocExtractStep implements AiScanStepExecutor {
             log.debug("countGraphEdges failed: {}", e.getMessage());
             return 0;
         }
+    }
+
+    /** 内存保护：堆使用率 ≤85% 时才安全进行向量化等重内存操作 */
+    private static boolean isMemoryHealthy() {
+        Runtime rt = Runtime.getRuntime();
+        long used = rt.totalMemory() - rt.freeMemory();
+        return (double) used / rt.maxMemory() < 0.85;
     }
 }

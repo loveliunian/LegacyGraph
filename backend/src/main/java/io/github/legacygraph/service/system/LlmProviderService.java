@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
+@org.springframework.context.annotation.Lazy(false)
 @RequiredArgsConstructor
 public class LlmProviderService {
 

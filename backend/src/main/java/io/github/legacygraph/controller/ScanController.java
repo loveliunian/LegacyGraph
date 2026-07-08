@@ -54,7 +54,7 @@ public class ScanController {
      * @param request 创建扫描版本请求
      * @return 新创建的扫描版本ID
      */
-@Log(value = "启动扫描", type = Log.OperationType.SCAN)
+    @Log(value = "启动扫描", type = Log.OperationType.SCAN)
     @PostMapping
     @Operation(summary = "创建扫描版本", description = "在指定项目下创建一个新的扫描版本，用于后续知识图谱扫描")
     @ApiResponses(value = {

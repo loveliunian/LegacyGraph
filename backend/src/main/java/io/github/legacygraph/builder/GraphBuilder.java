@@ -799,7 +799,7 @@ public class GraphBuilder {
         List<GraphNode> tables = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Table.name(), null, null, null, 0);
         Map<String, GraphNode> tableByName = new HashMap<>();
-        for (GraphNode t : tables != null ? tables : List.of()) {
+        for (GraphNode t : tables != null ? tables : java.util.Collections.<GraphNode>emptyList()) {
             String name = t.getNodeName();
             if (name != null) tableByName.put(name.toLowerCase(), t);
             String key = t.getNodeKey();
@@ -820,16 +820,20 @@ public class GraphBuilder {
                                     || path.contains("/domain/") || path.contains("/pojo/")
                                     || path.contains("/dto/");
                         })
-                        .forEach(javaFiles::add);
+                        .limit(MAX_FILES_PER_EXTRACT)
+                        .limit(MAX_FILES_PER_EXTRACT).forEach(javaFiles::add);
             }
 
+            // 复用单实例避免 Metaspace 膨胀；先读内容再解析避免文件 I/O 卡在 parse 内
             com.github.javaparser.JavaParser parser = new com.github.javaparser.JavaParser(
                     new com.github.javaparser.ParserConfiguration()
                             .setLanguageLevel(com.github.javaparser.ParserConfiguration.LanguageLevel.JAVA_17));
 
             for (Path javaFile : javaFiles) {
                 try {
-                    var cu = parser.parse(javaFile).getResult().orElse(null);
+                    String code = readFileSafely(javaFile);
+                    if (code == null) continue;
+                    var cu = parser.parse(code).getResult().orElse(null);
                     if (cu == null) continue;
                     for (var type : cu.getTypes()) {
                         if (!type.isClassOrInterfaceDeclaration() || type.asClassOrInterfaceDeclaration().isInterface())
@@ -894,7 +898,7 @@ public class GraphBuilder {
         List<GraphNode> tables = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Table.name(), null, null, null, 0);
         Map<String, GraphNode> tableByName = new HashMap<>();
-        for (GraphNode t : tables != null ? tables : List.of()) {
+        for (GraphNode t : tables != null ? tables : java.util.Collections.<GraphNode>emptyList()) {
             String n = t.getNodeName();
             if (n != null) tableByName.put(n.toLowerCase(), t);
             String k = t.getNodeKey();
@@ -917,7 +921,7 @@ public class GraphBuilder {
             try (var stream = Files.walk(repoRoot)) {
                 stream.filter(f -> f.toString().endsWith(".xml"))
                         .filter(f -> f.toString().toLowerCase().contains("mapper"))
-                        .forEach(xmlFiles::add);
+                        .limit(MAX_FILES_PER_EXTRACT).forEach(xmlFiles::add);
             }
 
             for (Path xmlFile : xmlFiles) {
@@ -977,7 +981,7 @@ public class GraphBuilder {
         List<GraphNode> tables = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Table.name(), null, null, null, 0);
         Map<String, GraphNode> tableByName = new HashMap<>();
-        for (GraphNode t : tables != null ? tables : List.of()) {
+        for (GraphNode t : tables != null ? tables : java.util.Collections.<GraphNode>emptyList()) {
             String n = t.getNodeName();
             if (n != null) tableByName.put(n.toLowerCase(), t);
             String k = t.getNodeKey();
@@ -1002,7 +1006,7 @@ public class GraphBuilder {
                             return path.contains("mapper") || path.contains("dao")
                                     || path.contains("repository") || path.contains("service");
                         })
-                        .forEach(javaFiles::add);
+                        .limit(MAX_FILES_PER_EXTRACT).forEach(javaFiles::add);
             }
 
             for (Path f : javaFiles) {
@@ -1075,7 +1079,7 @@ public class GraphBuilder {
                 stream.filter(f -> {
                     String n = f.getFileName().toString().toLowerCase();
                     return n.endsWith(".html") || n.endsWith(".htm");
-                }).forEach(htmlFiles::add);
+                }).limit(MAX_FILES_PER_EXTRACT).forEach(htmlFiles::add);
             }
 
             for (Path htmlFile : htmlFiles) {
@@ -1177,7 +1181,7 @@ public class GraphBuilder {
         try {
             List<Path> javaFiles = new ArrayList<>();
             try (var stream = Files.walk(repoRoot)) {
-                stream.filter(f -> f.toString().endsWith(".java")).forEach(javaFiles::add);
+                stream.filter(f -> f.toString().endsWith(".java")).limit(MAX_FILES_PER_EXTRACT).forEach(javaFiles::add);
             }
             for (Path f : javaFiles) {
                 try {
@@ -1217,7 +1221,7 @@ public class GraphBuilder {
         try {
             List<Path> javaFiles = new ArrayList<>();
             try (var stream = Files.walk(repoRoot)) {
-                stream.filter(f -> f.toString().endsWith(".java")).forEach(javaFiles::add);
+                stream.filter(f -> f.toString().endsWith(".java")).limit(MAX_FILES_PER_EXTRACT).forEach(javaFiles::add);
             }
             for (Path f : javaFiles) {
                 try {
@@ -1280,7 +1284,7 @@ public class GraphBuilder {
                 stream.filter(f -> {
                     String n = f.getFileName().toString().toLowerCase();
                     return n.endsWith(".html") || n.endsWith(".htm");
-                }).forEach(htmlFiles::add);
+                }).limit(MAX_FILES_PER_EXTRACT).forEach(htmlFiles::add);
             }
 
             for (Path htmlFile : htmlFiles) {
@@ -1332,8 +1336,8 @@ public class GraphBuilder {
 
     /** 单文件最大读取字符数（超过则跳过，防止大文件拖慢提取） */
     private static final int MAX_FILE_CHARS = 200_000;
-    /** 单次提取最大文件数（超过则截断，防止大仓库提取耗时过长） */
-    private static final int MAX_FILES_PER_EXTRACT = 500;
+    /** 单次提取最大文件数（超过则截断，防止大仓库提取 OOM） */
+    private static final int MAX_FILES_PER_EXTRACT = 200;
 
     private static String readFileSafely(Path file) {
         try {

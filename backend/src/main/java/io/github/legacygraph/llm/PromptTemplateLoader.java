@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
+@org.springframework.context.annotation.Lazy(false)
 public class PromptTemplateLoader {
 
     private final PromptTemplateService promptTemplateService;

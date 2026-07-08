@@ -41,6 +41,7 @@ import io.github.legacygraph.util.IdUtil;
  */
 @Slf4j
 @Component
+@org.springframework.context.annotation.Lazy(false)
 public class LlmGateway {
 
     private final ObjectMapper objectMapper;

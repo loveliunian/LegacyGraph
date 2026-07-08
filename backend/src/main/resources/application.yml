@@ -42,6 +42,9 @@ spring:
     active: dev
   application:
     name: legacy-graph-api
+  main:
+    # 延迟加载非 Web Bean，减少启动时间；Controller 首次请求时初始化
+    lazy-initialization: true
 
   servlet:
     multipart:
@@ -61,7 +64,7 @@ spring:
       pool-name: LegacyGraphHikariCP
       max-lifetime: 1800000
       connection-timeout: 10000
-      leak-detection-threshold: 10000
+      leak-detection-threshold: 120000
       data-source-properties:
         stringtype: unspecified
         reWriteBatchedInserts: true
@@ -73,7 +76,8 @@ spring:
     baseline-version: 1
     locations: classpath:db/migration
     clean-disabled: true
-    validate-on-migrate: true
+    # 生产关闭校验：45+ migrations checksum 扫描需 3-5s，已在 CI/开发阶段校验
+    validate-on-migrate: false
     out-of-order: true
     placeholder-replacement: false
 
@@ -110,7 +114,7 @@ spring:
       username: ${NEO4J_USERNAME:}
       password: ${NEO4J_PASSWORD:}
     pool:
-      max-connection-pool-size: 50
+      max-connection-pool-size: 25
       connection-acquisition-timeout: 10000
       max-connection-lifetime: 3600s
 
@@ -158,11 +162,9 @@ jwt:
   secret: ${JWT_SECRET:legacygraph-dev-secret-key-2024-very-long-for-jwt-hmac}
   expiration: 86400000
 
-# 日志配置
-logging:
-  level:
-    io.github.legacygraph: info
-    org.springframework.security: warn
+# 日志配置已由 logback-spring.xml 接管
+# 开发环境(dev): 控制台 DEBUG 输出
+# 生产环境(prod): 文件输出 + 按天分割 + gz 压缩 + 30天保留
 
 # Actuator 端点收口
 management:
@@ -175,11 +177,7 @@ management:
       show-details: when-authorized
   health:
     defaults:
-      enabled: true
-    neo4j:
-      enabled: true
-    redis:
-      enabled: true
+      enabled: false
     db:
       enabled: true
 

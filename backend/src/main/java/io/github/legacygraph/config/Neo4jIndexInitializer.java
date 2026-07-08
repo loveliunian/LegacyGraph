@@ -5,18 +5,13 @@ import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 
 /**
- * Neo4j 索引初始化器 — 在应用启动完成后自动创建性能必需的复合索引。
- *
- * <p>所有 {@code CREATE INDEX ... IF NOT EXISTS} 为幂等操作，
- * 重复执行不会报错，适合放在启动阶段执行。</p>
- *
- * <p>参考：doc/系统优化方案/01-数据库查询优化.md §3.2</p>
+ * Neo4j 索引初始化器 — 异步创建性能必需的复合索引，不阻塞启动。
  */
 @Slf4j
 @Component
@@ -28,6 +23,7 @@ public class Neo4jIndexInitializer {
         this.neo4jDriver = neo4jDriver;
     }
 
+    @Async
     @EventListener(ApplicationReadyEvent.class)
     public void createIndexes() {
         log.info("Starting Neo4j index initialization...");

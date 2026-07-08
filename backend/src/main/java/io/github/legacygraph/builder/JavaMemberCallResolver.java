@@ -61,7 +61,8 @@ public class JavaMemberCallResolver {
     /**
      * 二次解析成员调用，批量 MERGE CALLS 边。返回新合并的边数。
      */
-    @Transactional
+    // 不使用 @Transactional：MyBatis-Plus 自带连接管理，Neo4j 写入不需要 PG 事务。
+    // 全程内存索引+批量写，耗时 ~10-15s，长事务会导致 HikariCP 连接泄漏告警。
     public int resolveMemberCalls(String projectId, String versionId) {
         // 1. 加载 SERVICE_CALL 事实
         List<Fact> facts = factRepository.selectList(new LambdaQueryWrapper<Fact>()

@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
@@ -18,8 +17,6 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.UUID;
 import io.github.legacygraph.util.IdUtil;
 
 /**
@@ -34,7 +31,7 @@ public class LogAspect {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AuditLogRepository auditLogRepository;
 
-    public LogAspect(@Autowired(required = false) AuditLogRepository auditLogRepository) {
+    public LogAspect(AuditLogRepository auditLogRepository) {
         this.auditLogRepository = auditLogRepository;
     }
 
@@ -225,7 +222,7 @@ public class LogAspect {
         AuditLog auditLog = new AuditLog();
         auditLog.setTraceId(traceId);
         auditLog.setOperation(operation != null && !operation.isEmpty() ? operation : methodObj.getName());
-        auditLog.setOperationType(operationType.name());
+        auditLog.setOperationType(logAnnotation.type().name());
         auditLog.setMethod(method);
         auditLog.setRequestUri(requestUri);
         auditLog.setRequestMethod(requestMethod);

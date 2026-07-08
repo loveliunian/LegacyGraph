@@ -30,6 +30,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@org.springframework.context.annotation.Lazy(false)
 @RequiredArgsConstructor
 public class ReasoningModelClient {
 

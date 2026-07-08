@@ -23,6 +23,7 @@ import java.util.List;
  */
 @Slf4j
 @Service
+@org.springframework.context.annotation.Lazy(false)
 public class VectorizationService {
 
     private final VectorDocumentRepository vectorDocumentRepository;

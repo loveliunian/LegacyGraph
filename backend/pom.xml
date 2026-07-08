@@ -375,7 +375,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <forkCount>0</forkCount>
-                    <argLine>-Xmx1g</argLine>
+                    <argLine>-Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200</argLine>
                 </configuration>
             </plugin>
         </plugins>

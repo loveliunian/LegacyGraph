@@ -5,35 +5,92 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PreDestroy;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+
 /**
- * PG 证据写入事务执行器。
- * <p>
- * 将 PG 写操作封装在独立的 REQUIRES_NEW 事务中，确保：
- * <ul>
- *   <li>MyBatis-Plus 的 SqlSessionTemplate 能正确参与 Spring 事务同步</li>
- *   <li>内部事务失败不会导致外层事务（含 Neo4j 写入）被标记为 aborted</li>
- *   <li>避免手动 TransactionManager 操作绕过 Spring 事务同步导致的
- *       "current transaction is aborted" 级联失败</li>
- * </ul>
- * </p>
- * <p>
- * 注意：此 Bean 必须独立于 EvidenceGraphWriter，因为 Spring AOP 代理无法拦截
- * 类内部的自调用（self-invocation），@Transactional 注解在同类方法调用中不生效。
- * </p>
+ * PG 证据写入事务执行器（批量模式）。
+ *
+ * <p>将逐条 {@link #execute(Runnable)} 改为入队 → 后台单线程批量 drain → 单事务提交，
+ * 解决建图时数百个虚拟线程并发 {@code REQUIRES_NEW} 导致 HikariCP 连接池耗尽的问题。</p>
+ *
+ * <p>批量参数：最多等待 200ms 或攒够 100 条后 flush；超过 100 条立即 flush。</p>
  */
 @Slf4j
 @Component
 public class PgEvidenceTxExecutor {
 
-    /**
-     * 在独立事务中执行 PG 写操作。
-     * <p>REQUIRES_NEW 确保：挂起当前事务（如有），创建新连接+新事务，
-     * 失败时只回滚内部事务，不影响外层。</p>
-     *
-     * @param pgWrite PG 写操作（Lambda/Runnable）
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    private static final int BATCH_SIZE = 100;
+    private static final long FLUSH_INTERVAL_MS = 200;
+
+    private final LinkedBlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+    private final Thread worker;
+
+    public PgEvidenceTxExecutor() {
+        worker = Thread.ofVirtual().name("pg-evidence-batcher").start(() -> {
+            List<Runnable> batch = new ArrayList<>(BATCH_SIZE);
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    Runnable r = queue.poll(FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+                    if (r != null) {
+                        batch.add(r);
+                    }
+                    // flush when batch full, or after idle timeout with non-empty batch
+                    if (batch.size() >= BATCH_SIZE || (r == null && !batch.isEmpty())) {
+                        List<Runnable> toWrite = new ArrayList<>(batch);
+                        batch.clear();
+                        try {
+                            executeBatch(toWrite);
+                        } catch (Exception e) {
+                            log.error("Batch evidence write failed ({} items): {}", toWrite.size(), e.getMessage());
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            // drain remaining on shutdown
+            List<Runnable> remaining = new ArrayList<>();
+            queue.drainTo(remaining);
+            if (!remaining.isEmpty()) {
+                try { executeBatch(remaining); } catch (Exception e) { log.error("Final drain failed: {}", e.getMessage()); }
+            }
+        });
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        worker.interrupt();
+        try { worker.join(5000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+    }
+
+    /** 入队（非阻塞），批量子线程异步消费 */
     public void execute(Runnable pgWrite) {
-        pgWrite.run();
+        if (!queue.offer(pgWrite)) {
+            // 队列满（极少发生）→ 降级为同步单条写
+            log.warn("Evidence queue full, fallback to sync write");
+            try { executeBatch(List.of(pgWrite)); } catch (Exception e) { /* best-effort */ }
+        }
+    }
+
+    /** 批量事务：整批写在一个 REQUIRES_NEW 事务中，减少连接数 */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void executeBatch(List<Runnable> batch) {
+        for (Runnable r : batch) {
+            r.run();
+        }
+    }
+
+    /** 强制 flush（扫描结束时调用，确保最后一批写入） */
+    public void flush() {
+        List<Runnable> remaining = new ArrayList<>();
+        queue.drainTo(remaining);
+        if (!remaining.isEmpty()) {
+            try { executeBatch(remaining); } catch (Exception e) { log.error("Flush failed: {}", e.getMessage()); }
+        }
     }
 }
