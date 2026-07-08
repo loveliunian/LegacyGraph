@@ -356,6 +356,9 @@ public class EvidenceGraphWriter {
         evidence.setContentHash(locationHash(node.getProjectId(), node.getVersionId(),
                 evidence.getEvidenceType(), sourcePath, node.getDisplayName(),
                 startLine, endLine));
+        // 构造可读摘要
+        evidence.setSummary(sourceType + " 证据: " + (node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName())
+                + (sourcePath != null ? " (" + sourcePath + ")" : ""));
         // 无内容证据默认 INTERNAL（节点指针型证据不含源码正文）
         if (evidence.getPrivacyLevel() == null) {
             evidence.setPrivacyLevel(PrivacyLevel.INTERNAL.name());

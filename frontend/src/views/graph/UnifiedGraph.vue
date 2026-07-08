@@ -633,7 +633,7 @@ async function loadGraph(versionId: string) {
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      label: edge.label || edge.type,
+      label: edge.label || dictLabel('graph_edge_type', edge.type || ''),
       data: {
         ...edge
       }
@@ -724,47 +724,59 @@ async function rejectNode() {
 
 async function viewEvidence() {
   evidenceDrawerVisible.value = true
-  // 加载选中节点的证据数据
-  if (!projectId.value || !selectedNode.value?.data?.id) return
-  const node = selectedNode.value!
+  const nodeData = selectedNode.value?.data
+  if (!projectId.value || !nodeData?.id) return
+  const nodeId = nodeData.id as string
+
   try {
-    // 调用后端证据检索接口获取真实证据
-    const searchResult: any = await factApi.searchEvidence(projectId.value, {
-      pageNum: 1,
-      pageSize: 20,
-      evidenceType: undefined,
-      keyword: node.data.label || undefined
-    })
-    if (searchResult && searchResult.list && searchResult.list.length > 0) {
-      nodeEvidence.value = searchResult.list.map((e: any) => ({
+    // 优先按节点 ID 查关联证据（通过 NodeEvidence 关联表）
+    const byNodeResult: any = await factApi.getEvidenceByNodeId(projectId.value, nodeId, { pageNum: 1, pageSize: 20 })
+    if (byNodeResult && byNodeResult.list && byNodeResult.list.length > 0) {
+      nodeEvidence.value = byNodeResult.list.map((e: any) => ({
         id: e.id,
         evidenceType: e.evidenceType || 'CODE',
-        sourceName: e.sourceName || node.data.label,
+        sourceName: e.sourceName || nodeData.label,
         sourcePath: e.sourcePath || e.location,
         summary: e.summary || e.content,
         content: e.content,
         location: e.location,
         createdAt: e.createdAt,
       }))
+      return
+    }
+
+    // 回退：关键词搜索
+    const searchResult: any = await factApi.searchEvidence(projectId.value, {
+      pageNum: 1,
+      pageSize: 20,
+      keyword: nodeData.label || undefined
+    })
+    if (searchResult && searchResult.list && searchResult.list.length > 0) {
+      nodeEvidence.value = searchResult.list.map((e: any) => ({
+        id: e.id,
+        evidenceType: e.evidenceType || 'CODE',
+        sourceName: e.sourceName || nodeData.label,
+        sourcePath: e.sourcePath || e.location,
+        summary: e.summary || e.content,
+        content: e.content,
+        location: e.location,
+        createdAt: e.createdAt,
+      }))
+    } else if (nodeData.sourcePath || nodeData.description) {
+      // 最后回退：从节点属性构造简单证据
+      nodeEvidence.value = [{
+        id: nodeId + '-evidence',
+        evidenceType: 'FILE_LINE',
+        sourceName: nodeData.label || '节点证据',
+        sourcePath: nodeData.sourcePath,
+        summary: nodeData.description || `该节点的证据源，来自 ${nodeData.sourcePath || '代码分析'}`,
+        createdAt: new Date().toISOString(),
+      }]
     } else {
-      // 回退：从节点属性中构造简单证据
-      const nodeData = node.data
-      if (nodeData.sourcePath || nodeData.description) {
-        nodeEvidence.value = [{
-          id: nodeData.id + '-evidence',
-          evidenceType: 'FILE_LINE',
-          sourceName: nodeData.label || '节点证据',
-          sourcePath: nodeData.sourcePath,
-          summary: nodeData.description || `该节点的证据源，来自 ${nodeData.sourcePath || '代码分析'}`,
-          createdAt: new Date().toISOString(),
-        }]
-      } else {
-        nodeEvidence.value = []
-      }
+      nodeEvidence.value = []
     }
   } catch (error) {
     console.error('加载证据失败', error)
-    // 出错时也不使用硬编码示例
     nodeEvidence.value = []
   }
 }

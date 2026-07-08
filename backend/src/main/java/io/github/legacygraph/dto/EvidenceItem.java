@@ -54,27 +54,28 @@ public class EvidenceItem {
     /**
      * 从图谱节点构建证据项
      */
-    public static EvidenceItem fromGraphNode(String nodeId, String nodeName, String nodeType,
-                                              String sourcePath, String description) {
+    private static String graphJumpUrl(String projectId, String nodeId) {
+        return "#/projects/" + projectId + "/graph/unified?highlight=" + nodeId;
+    }
+
+    public static EvidenceItem fromGraphNode(String projectId, String nodeId, String nodeName,
+                                              String nodeType, String sourcePath, String description) {
         EvidenceItem item = new EvidenceItem();
         item.setSourceKind("GRAPH_NODE");
         item.setRef(nodeId);
         item.setTitle(nodeName);
-        item.setExcerpt(description != null ? 
-            (description.length() > 200 ? description.substring(0, 200) + "..." : description) : 
+        item.setExcerpt(description != null ?
+            (description.length() > 200 ? description.substring(0, 200) + "..." : description) :
             "");
-        item.setJumpUrl("/graph?node=" + nodeId);
+        item.setJumpUrl(graphJumpUrl(projectId, nodeId));
         item.setNodeType(nodeType);
         item.setSourceFile(sourcePath);
         item.setRetrievalMethod("GRAPH_TRAVERSAL");
         return item;
     }
 
-    /**
-     * 从文档分块构建证据项
-     */
-    public static EvidenceItem fromDocChunk(String chunkId, String sourceUri, String content,
-                                            String chunkType) {
+    public static EvidenceItem fromDocChunk(String projectId, String chunkId, String sourceUri,
+                                             String content, String chunkType) {
         EvidenceItem item = new EvidenceItem();
         item.setSourceKind("DOC_CHUNK");
         item.setRef(chunkId);
@@ -82,37 +83,27 @@ public class EvidenceItem {
         item.setExcerpt(content != null ?
             (content.length() > 200 ? content.substring(0, 200) + "..." : content) :
             "");
-        item.setJumpUrl("/documents/" + chunkId);
+        item.setJumpUrl("#/projects/" + projectId + "/documents?highlight=" + chunkId);
         item.setNodeType(chunkType);
         item.setSourceFile(sourceUri);
         item.setRetrievalMethod("VECTOR");
         return item;
     }
 
-    /**
-     * 从 GraphRAG 证据卡构建证据项。
-     * <p>
-     * 把 GraphRagPlanExecutor 产出的结构化证据卡映射为前端可渲染的 EvidenceItem：
-     * claim 查询命中时跳转知识断言详情页，路径查询命中时跳转图谱节点视图。
-     * 携带 confidence / 行号 / relationTypes 等可选字段供前端按需展示。
-     * </p>
-     */
-    public static EvidenceItem fromGraphRagCard(GraphRagEvidenceCard card) {
+    public static EvidenceItem fromGraphRagCard(String projectId, GraphRagEvidenceCard card) {
         EvidenceItem item = new EvidenceItem();
         item.setSourceKind("GRAPH_RAG");
         String claimId = card.getClaimId();
         String nodeKey = card.getNodeKey();
-        // ref 优先用 claimId，否则用 nodeKey
         item.setRef(claimId != null && !claimId.isBlank() ? claimId : nodeKey);
         item.setTitle(nodeKey);
         String excerpt = card.getExcerpt();
         item.setExcerpt(excerpt != null
                 ? (excerpt.length() > 200 ? excerpt.substring(0, 200) + "..." : excerpt)
                 : "");
-        // 有 claimId 跳知识断言详情，否则跳图谱节点视图
         item.setJumpUrl(claimId != null && !claimId.isBlank()
-                ? "/knowledge/claims/" + claimId
-                : "/graph?node=" + (nodeKey != null ? nodeKey : ""));
+                ? "#/projects/" + projectId + "/graph/unified?claim=" + claimId
+                : graphJumpUrl(projectId, nodeKey != null ? nodeKey : ""));
         item.setNodeType(card.getSourceType());
         item.setSourceFile(card.getSourcePath());
         if (card.getConfidence() != null) {

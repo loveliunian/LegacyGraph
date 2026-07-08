@@ -102,6 +102,13 @@ export const factApi = {
   },
 
   /**
+   * 按节点 ID 查找关联证据 — 通过 NodeEvidence 关联表反查
+   */
+  getEvidenceByNodeId: (projectId: string, nodeId: string, params: PageQuery) => {
+    return get<PageResult<Evidence>>(`/lg/projects/${encodeURIComponent(projectId)}/evidence/by-node/${encodeURIComponent(nodeId)}`, params)
+  },
+
+  /**
    * 获取证据详情
    * @param projectId 项目ID
    * @param id 证据ID

@@ -1,17 +1,26 @@
 <template>
   <div class="graph-qa-page">
     <el-container class="qa-container">
-      <!-- 左侧对话列表 -->
+      <!-- 左侧对话列表（可折叠） -->
       <el-aside
-        width="260px"
-        class="conversation-sidebar">
+        :width="sidebarCollapsed ? '0px' : '260px'"
+        class="conversation-sidebar"
+        :class="{ collapsed: sidebarCollapsed }">
         <div class="sidebar-header">
           <el-button
             type="primary"
             :icon="Plus"
+            size="small"
             @click="createNewConversation">
             新对话
           </el-button>
+          <el-button
+            :icon="sidebarCollapsed ? ArrowRight : ArrowLeft"
+            size="small"
+            text
+            class="collapse-btn"
+            @click="sidebarCollapsed = !sidebarCollapsed"
+          />
         </div>
         <div class="conversation-list">
           <div
@@ -38,6 +47,14 @@
         <el-card class="qa-card">
           <template #header>
             <div class="card-header">
+              <el-button
+                v-if="sidebarCollapsed"
+                :icon="Fold"
+                size="small"
+                text
+                title="展开对话列表"
+                @click="sidebarCollapsed = false"
+              />
               <el-icon><ChatDotRound /></el-icon>
               <span style="margin-left: 8px; font-weight: 600;">图谱问答</span>
               <el-tag
@@ -230,7 +247,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, Link } from '@element-plus/icons-vue'
+import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, Link, ArrowLeft, ArrowRight, Fold } from '@element-plus/icons-vue'
 import { qaApi, type QaConversation, type EvidenceItem } from '@/api/qa.api'
 import { changeTaskApi } from '@/api/change-task.api'
 import { mapQaHistoryMessages } from './qaMessageMapper'
@@ -251,6 +268,7 @@ interface Message {
 
 const conversations = ref<QaConversation[]>([])
 const currentConversationId = ref<string | null>(null)
+const sidebarCollapsed = ref(false)
 const messages = ref<Message[]>([])
 const inputText = ref('')
 const thinking = ref(false)
@@ -290,9 +308,28 @@ const askQuestion = (q: string) => {
   handleSend()
 }
 
+const ensureConversation = async () => {
+  // 已有活跃对话，直接返回
+  if (currentConversationId.value) return
+  // 自动选最近的对话，无对话时才创建新的
+  if (conversations.value.length > 0) {
+    await switchConversation(conversations.value[0].id)
+    return
+  }
+  // 没有任何对话，创建一个
+  const conv = await qaApi.createConversation(projectId)
+  if (conv?.id) {
+    currentConversationId.value = conv.id
+    await refreshConversations()
+  }
+}
+
 const handleSend = async () => {
   const question = inputText.value.trim()
   if (!question || thinking.value) return
+
+  // 确保在一个对话中（自动复用最近对话，无对话时创建新的）
+  await ensureConversation()
 
   messages.value.push({ role: 'user', content: question })
   inputText.value = ''
@@ -378,8 +415,17 @@ const clearChat = () => {
 }
 
 const createNewConversation = async () => {
-  currentConversationId.value = null
-  messages.value = []
+  try {
+    const conv = await qaApi.createConversation(projectId)
+    if (conv?.id) {
+      currentConversationId.value = conv.id
+      messages.value = []
+      await refreshConversations()
+    }
+  } catch (err) {
+    console.error('Failed to create conversation:', err)
+    ElMessage.error('创建对话失败')
+  }
 }
 
 const switchConversation = async (convId: string) => {
@@ -482,8 +528,13 @@ const handleCreateChangeTask = async (impact: any) => {
   }
 }
 
-onMounted(() => {
-  refreshConversations()
+onMounted(async () => {
+  await refreshConversations()
+  // 自动选中最近对话，确保刷新后在同一对话中继续
+  if (conversations.value.length > 0 && !currentConversationId.value) {
+    const latest = conversations.value[0] // 已按 updatedAt DESC 排序
+    await switchConversation(latest.id)
+  }
 })
 </script>
 
@@ -501,11 +552,24 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   background: #fafafa;
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+
+.conversation-sidebar.collapsed {
+  border-right: none;
 }
 
 .sidebar-header {
-  padding: 16px;
+  padding: 12px;
   border-bottom: 1px solid #ebeef5;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sidebar-header .el-button:first-child {
+  flex: 1;
 }
 
 .sidebar-header .el-button {

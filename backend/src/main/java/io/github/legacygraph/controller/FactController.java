@@ -204,6 +204,41 @@ public class FactController {
         return Result.success(result);
     }
 
+    /**
+     * 按图谱节点 ID 查找关联证据 — 通过 NodeEvidence/EdgeEvidence 关联表反查。
+     */
+    @GetMapping("/evidence/by-node/{nodeId}")
+    @Operation(summary = "按节点ID查找关联证据")
+    public Result<PageResult<Evidence>> getEvidenceByNodeId(
+            @PathVariable String projectId,
+            @PathVariable String nodeId,
+            PageQuery query) {
+
+        // 查 NodeEvidence 找到 evidenceId 列表
+        List<String> evidenceIds = nodeEvidenceRepository.selectList(
+                new LambdaQueryWrapper<NodeEvidence>()
+                        .eq(NodeEvidence::getNodeId, nodeId)
+                        .select(NodeEvidence::getEvidenceId)
+        ).stream().map(NodeEvidence::getEvidenceId).distinct().collect(Collectors.toList());
+
+        if (evidenceIds.isEmpty()) {
+            return Result.success(PageResult.of(List.of(), 0L, query.getPageNum(), query.getPageSize()));
+        }
+
+        Page<Evidence> page = evidenceRepository.selectPage(
+                new Page<>(query.getPageNum(), query.getPageSize()),
+                new LambdaQueryWrapper<Evidence>()
+                        .eq(Evidence::getProjectId, projectId)
+                        .in(Evidence::getId, evidenceIds)
+                        .orderByDesc(Evidence::getCreatedAt)
+        );
+
+        PageResult<Evidence> result = PageResult.of(page.getRecords(), page.getTotal(),
+                query.getPageNum(), query.getPageSize());
+        enrichEvidenceList(projectId, result.getList());
+        return Result.success(result);
+    }
+
     @GetMapping("/evidence/{id}")
     @Operation(summary = "获取证据详情")
     public Result<Evidence> getEvidence(@PathVariable String projectId, @PathVariable String id) {

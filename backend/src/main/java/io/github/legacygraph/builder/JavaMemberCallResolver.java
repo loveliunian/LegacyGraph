@@ -98,6 +98,8 @@ public class JavaMemberCallResolver {
         // 精确签名索引：Method nodeKey（FQN.methodName(paramTypes)）→ 方法节点。
         // 避免精确签名快路径逐 fact 调 findNode（~958 次 Neo4j 往返），全走内存。
         Map<String, GraphNode> methodByExactKey = new HashMap<>();
+        // 反向索引：方法简单名 → Method 节点列表，用于 targetClass 未解析时的 god-node 消歧。
+        Map<String, List<GraphNode>> methodNameIndex = new HashMap<>();
         List<GraphNode> methods = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Method.name(), null, null, null, 0);
         for (GraphNode m : methods) {
@@ -112,6 +114,8 @@ public class JavaMemberCallResolver {
                 continue;
             }
             methodIndex.computeIfAbsent(owningFqn + "|" + normalizeName(methodName), k -> new ArrayList<>()).add(m);
+            // 反向索引：methodName → 所有同名方法节点
+            methodNameIndex.computeIfAbsent(normalizeName(methodName), k -> new ArrayList<>()).add(m);
         }
 
         // 3. 去重集：已存在的 CALLS 边 (fromId|toId)
@@ -126,18 +130,31 @@ public class JavaMemberCallResolver {
 
         // 4. 逐事实解析
         List<GraphEdge> candidateEdges = new ArrayList<>();
+        int forwardResolved = 0;
+        int reverseResolved = 0;
         for (Fact fact : facts) {
             try {
                 CallRelationDto call = parseCallRelation(fact);
                 if (call == null) {
                     continue;
                 }
-                // 跳过合成的 "injects:" 依赖行（callerMethod 为 null）和未解析 targetClass 的调用
-                if (isBlank(call.callerClass) || isBlank(call.callerMethod) || isBlank(call.targetClass)) {
+                // 跳过合成的 "injects:" 依赖行（callerMethod 为 null）
+                if (isBlank(call.callerClass) || isBlank(call.callerMethod)) {
                     continue;
                 }
-                GraphEdge edge = resolveOne(projectId, versionId, call,
-                        fqnToClassNode, simpleNameToClassNodes, methodIndex, methodByExactKey, existingPairs);
+                GraphEdge edge;
+                if (!isBlank(call.targetClass)) {
+                    // 正向路径：targetClass 已由 ServiceCallExtractor 解析 → god-node 精确匹配
+                    edge = resolveOne(projectId, versionId, call,
+                            fqnToClassNode, simpleNameToClassNodes, methodIndex, methodByExactKey, existingPairs);
+                    if (edge != null) forwardResolved++;
+                } else {
+                    // P0 反向路径：targetClass 未解析（XML 配置注入等场景）→ 按 calledMethod 名全局搜索
+                    edge = resolveByMethodName(projectId, versionId, call,
+                            fqnToClassNode, simpleNameToClassNodes, methodNameIndex,
+                            methodIndex, methodByExactKey, existingPairs);
+                    if (edge != null) reverseResolved++;
+                }
                 if (edge != null) {
                     candidateEdges.add(edge);
                 }
@@ -147,14 +164,15 @@ public class JavaMemberCallResolver {
         }
 
         if (candidateEdges.isEmpty()) {
-            log.info("Member-call resolve: 0 new edges for versionId={} ({} facts processed)", versionId, facts.size());
+            log.info("Member-call resolve: 0 new edges for versionId={} ({} facts processed, forward={} reverse={})",
+                    versionId, facts.size(), forwardResolved, reverseResolved);
             return 0;
         }
 
         // 5. 批量 MERGE
         int merged = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
-        log.info("Member-call resolve: {} edges merged for versionId={} ({} facts processed)",
-                merged, versionId, facts.size());
+        log.info("Member-call resolve: {} edges merged for versionId={} ({} facts processed, forward={} reverse={})",
+                merged, versionId, facts.size(), forwardResolved, reverseResolved);
         return merged;
     }
 
@@ -202,6 +220,93 @@ public class JavaMemberCallResolver {
         }
 
         return buildEdgePOJO(projectId, versionId, fromNode, toNode);
+    }
+
+    /**
+     * P0 反向匹配：targetClass 未解析时（XML 配置注入等场景），按 calledMethod 名全局搜索。
+     *
+     * <p>不依赖 {@link CallRelationDto#targetClass} 是否已解析——该方法名在全局 Method 索引中
+     * 恰好 1 个定义时直接解析（god-node）；多候选时尝试 caller 同包消歧；否则跳过。</p>
+     */
+    private GraphEdge resolveByMethodName(String projectId, String versionId, CallRelationDto call,
+                                          Map<String, GraphNode> fqnToClassNode,
+                                          Map<String, List<GraphNode>> simpleNameToClassNodes,
+                                          Map<String, List<GraphNode>> methodNameIndex,
+                                          Map<String, List<GraphNode>> methodIndex,
+                                          Map<String, GraphNode> methodByExactKey,
+                                          Set<String> existingPairs) {
+        String calledMethod = call.calledMethod;
+        if (isBlank(calledMethod)) {
+            return null;
+        }
+        String normCalled = normalizeName(calledMethod);
+        List<GraphNode> candidates = methodNameIndex.get(normCalled);
+        if (candidates == null || candidates.isEmpty()) {
+            return null; // 全局无此方法 → 可能是 JDK/外部库方法
+        }
+
+        // Caller
+        String callerFqn = call.callerClass;
+        GraphNode callerClassNode = fqnToClassNode.get(callerFqn);
+        GraphNode fromNode = findMethodNode(callerFqn,
+                call.callerMethodSignature, call.callerMethod, methodIndex, methodByExactKey);
+        if (fromNode == null) {
+            fromNode = callerClassNode;
+        }
+        if (fromNode == null) {
+            return null;
+        }
+
+        // God-node：全局恰好 1 个同名方法
+        GraphNode targetMethodNode;
+        if (candidates.size() == 1) {
+            targetMethodNode = candidates.get(0);
+        } else {
+            // 多候选 → 尝试 caller 同包消歧
+            String callerPkg = callerFqn.contains(".") ? callerFqn.substring(0, callerFqn.lastIndexOf('.')) : "";
+            List<GraphNode> samePkg = new ArrayList<>();
+            for (GraphNode c : candidates) {
+                String targetFqn = owningFqn(c.getNodeKey());
+                if (targetFqn != null && targetFqn.startsWith(callerPkg)) {
+                    samePkg.add(c);
+                }
+            }
+            if (samePkg.size() == 1) {
+                targetMethodNode = samePkg.get(0);
+            } else {
+                return null; // 歧义，跳过
+            }
+        }
+
+        // 端点：方法级优先，回退类级
+        String targetFqn = owningFqn(targetMethodNode.getNodeKey());
+        GraphNode targetClassNode = fqnToClassNode.get(targetFqn);
+        if (targetClassNode == null) {
+            // 尝试简单名查找
+            String simple = simpleName(targetFqn);
+            if (simple != null) {
+                List<GraphNode> simpleCands = simpleNameToClassNodes.get(simple);
+                if (simpleCands != null && simpleCands.size() == 1) {
+                    targetClassNode = simpleCands.get(0);
+                }
+            }
+        }
+        GraphNode toNode = targetClassNode != null ? targetClassNode : targetMethodNode;
+        if (fromNode.getId().equals(toNode.getId())) {
+            return null; // 自调用
+        }
+
+        // 去重
+        String pair = fromNode.getId() + "|" + toNode.getId();
+        if (!existingPairs.add(pair)) {
+            return null;
+        }
+
+        GraphEdge edge = buildEdgePOJO(projectId, versionId, fromNode, toNode);
+        // 反向匹配置信度略低于精确 targetClass 解析
+        edge.setConfidence(BigDecimal.valueOf(0.85));
+        edge.setStatus(NodeStatus.PENDING_CONFIRM.name());
+        return edge;
     }
 
     /**

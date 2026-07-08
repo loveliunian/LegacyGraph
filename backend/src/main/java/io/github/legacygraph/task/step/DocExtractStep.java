@@ -18,7 +18,9 @@ import org.springframework.stereotype.Component;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -300,7 +302,7 @@ public class DocExtractStep implements AiScanStepExecutor {
     private static <T> List<T> mergeByKey(List<DocUnderstandingAgent.BusinessFactExtraction> results,
                                           java.util.function.Function<DocUnderstandingAgent.BusinessFactExtraction, List<T>> getter,
                                           java.util.function.Function<T, String> keyFn) {
-        Map<String, T> seen = new java.util.LinkedHashMap<>();
+        Map<String, T> seen = new LinkedHashMap<>();
         for (var r : results) {
             for (T item : safe(getter.apply(r))) {
                 String key = keyFn.apply(item);

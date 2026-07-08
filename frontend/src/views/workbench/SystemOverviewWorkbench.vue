@@ -123,7 +123,9 @@
             <el-tag v-for="t in row.dataTables" :key="t" size="small" class="mr">{{ t }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="edgeType" label="关系" width="150" />
+        <el-table-column prop="edgeType" label="关系" width="150">
+          <template #default="{ row }">{{ dictLabel('graph_edge_type', row.edgeType) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleDrillDown(row)">
@@ -194,6 +196,7 @@ import {
 } from '@/api/system-overview.api'
 import type { Report } from '@/api/report.api'
 import { reportApi } from '@/api/report.api'
+import { dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const router = useRouter()

@@ -583,6 +583,88 @@ public class BusinessGraphBuilder {
     }
 
     /**
+     * P2：跨语言 Feature 去重合并。
+     *
+     * <p>DOC_AI 产中文 Feature（"释放会员保证金"），FRONTEND_AST 产英文 Feature（"unLock"），
+     * 两者语义相同但 nodeKey 不同 → 图谱中存在冗余节点。用 bge-m3 向量语义去重：余弦 > 0.75
+     * 的 DOC_AI↔FRONTEND_AST Feature 对，将英文 Feature 的关系迁移到中文 Feature 后删除。</p>
+     *
+     * @return 合并的 Feature 对数
+     */
+    @Transactional
+    public int mergeCrossLanguageFeatures(String projectId, String versionId) {
+        if (embeddingModel == null) {
+            log.info("Skip cross-language feature merge: EmbeddingModel not available");
+            return 0;
+        }
+
+        List<GraphNode> docFeatures = new ArrayList<>();
+        List<GraphNode> frontendFeatures = new ArrayList<>();
+        for (GraphNode f : safeList(neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Feature.name(), null, null, null, 0))) {
+            String st = f.getSourceType();
+            if ("DOC_AI".equals(st) || "CODE_AI".equals(st)) {
+                docFeatures.add(f);
+            } else if ("FRONTEND_AST".equals(st)) {
+                frontendFeatures.add(f);
+            }
+        }
+        if (docFeatures.isEmpty() || frontendFeatures.isEmpty()) {
+            log.info("Skip cross-language feature merge: need both DOC/CODE and FRONTEND features");
+            return 0;
+        }
+
+        // 预计算所有 Feature 的 embedding
+        Map<String, float[]> embCache = new HashMap<>();
+        for (GraphNode f : docFeatures) {
+            embedOne(normalizeSearchName(f), embCache);
+        }
+        for (GraphNode f : frontendFeatures) {
+            embedOne(normalizeSearchName(f), embCache);
+        }
+
+        int merged = 0;
+        for (GraphNode docFeat : docFeatures) {
+            float[] docEmb = embCache.get(normalizeSearchName(docFeat));
+            if (docEmb == null) continue;
+
+            GraphNode bestMatch = null;
+            double bestScore = 0.75; // 阈值
+            for (GraphNode feFeat : frontendFeatures) {
+                float[] feEmb = embCache.get(normalizeSearchName(feFeat));
+                if (feEmb == null) continue;
+                double score = cosineSimilarity(docEmb, feEmb);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = feFeat;
+                }
+            }
+
+            if (bestMatch != null) {
+                try {
+                    // 将英文源节点 bestMatch(FRONTEND_AST) 的边迁移到中文规范节点 docFeat 后，删除 bestMatch
+                    int moved = neo4jGraphDao.moveEdgesAndDeleteNode(
+                            projectId, versionId, bestMatch.getId(), docFeat.getId());
+                    if (moved > 0) {
+                        log.info("Feature merge: '{}' ({}) ← '{}' ({}), score={}",
+                                docFeat.getNodeName(), docFeat.getSourceType(),
+                                bestMatch.getNodeName(), bestMatch.getSourceType(),
+                                String.format("%.2f", bestScore));
+                        frontendFeatures.remove(bestMatch); // 已合并，不再参与匹配
+                        merged++;
+                    }
+                } catch (Exception e) {
+                    log.warn("Feature merge failed: '{}' ← '{}': {}",
+                            docFeat.getNodeName(), bestMatch.getNodeName(), e.getMessage());
+                }
+            }
+        }
+
+        log.info("Cross-language feature merge: {} groups merged (projectId={})", merged, projectId);
+        return merged;
+    }
+
+    /**
      * 归一化 Feature 节点 key，委托给 {@link FeatureIdentityNormalizer}。
      *
      * <p>统一 trim、小写、中文标点、来源前缀，确保跨来源（文档/代码/流程派生）

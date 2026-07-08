@@ -139,6 +139,7 @@ import { graphApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { loadScanVersions } from '@/utils/versionsCache'
+import { dictLabel } from '@/utils/dict'
 
 interface GraphNode {
   id: string
@@ -297,7 +298,7 @@ const processGraphData = (data: any[]) => {
         id: edgeId,
         source,
         target,
-        label: edge.label || edge.type || edge.properties?.type || 'RELATED'
+        label: edge.label || dictLabel('graph_edge_type', edge.type || edge.properties?.type || '') || 'RELATED'
       })
     })
 

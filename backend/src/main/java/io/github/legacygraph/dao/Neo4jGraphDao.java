@@ -248,6 +248,16 @@ public class Neo4jGraphDao {
         writeRepo.setEdgeProperty(edgeId, property, value);
     }
 
+    /**
+     * 将 sourceNodeId 的所有关系迁移到 targetNodeId 后删除 sourceNodeId。
+     * 用于跨语言 Feature 去重合并。
+     * @return 迁移的边数
+     */
+    public int moveEdgesAndDeleteNode(String projectId, String versionId,
+                                       String sourceNodeId, String targetNodeId) {
+        return writeRepo.moveEdgesAndDeleteNode(projectId, versionId, sourceNodeId, targetNodeId);
+    }
+
     public void mergeNodesBatch(String projectId, String versionId,
                                  List<Neo4jWriteRepository.BatchNodeUpsert> nodes) {
         writeRepo.mergeNodesBatch(projectId, versionId, nodes);

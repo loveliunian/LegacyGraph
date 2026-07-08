@@ -181,13 +181,18 @@ public class GraphBuilder {
     public void buildMapperSqlGraph(String projectId, String versionId, MapperSqlFact mapperFact) {
         // 创建Mapper节点
         String mapperKey = mapperFact.getNamespace();
+        String mapperName = (mapperFact.getMapperInterface() != null && !mapperFact.getMapperInterface().isBlank())
+                ? mapperFact.getMapperInterface()
+                : (mapperKey != null && !mapperKey.isBlank() ? mapperKey : "未命名Mapper");
+        String mapperDesc = mapperFact.getNamespace() != null
+                ? "MyBatis Mapper: " + mapperFact.getNamespace() : null;
         GraphNode mapperNode = findOrCreateNode(
                 projectId, versionId,
                 NodeType.Mapper.name(),
                 mapperKey,
-                mapperFact.getMapperInterface() != null ? mapperFact.getMapperInterface() : mapperKey,
-                null,
-                null,
+                mapperName,
+                mapperName,
+                mapperDesc,
                 SourceType.MYBATIS_XML.name(),
                 mapperFact.getSourcePath(),
                 null,

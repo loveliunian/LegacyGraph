@@ -52,8 +52,10 @@ public class FeatureCodeMappingStep implements AiScanStepExecutor {
             int objectMappings = businessGraphBuilder.mapBusinessObjectsToTables(projectId, versionId);
             // P2：业务域 ↔ Controller/Service 对齐，降低业务域 100% 孤立率
             int domainMappings = businessGraphBuilder.mapBusinessDomainsToCode(projectId, versionId);
+            // P2：跨语言 Feature 去重合并（中文 DOC_AI ↔ 英文 FRONTEND_AST）
+            int featureMerges = businessGraphBuilder.mergeCrossLanguageFeatures(projectId, versionId);
             int totalMappings = featureMappings + objectMappings + domainMappings;
-            if (totalMappings == 0) {
+            if (totalMappings == 0 && featureMerges == 0) {
                 support.completeTask(task,
                         "⚠ 未建立 Feature/业务对象/业务域技术映射 —— 可能无 Feature/Page/API，"
                         + "或无 BusinessObject/BusinessDomain/技术实体候选",
@@ -63,7 +65,8 @@ public class FeatureCodeMappingStep implements AiScanStepExecutor {
             } else {
                 String summary = "已建立 Feature→Page/API 映射 " + featureMappings
                         + " 条，业务对象技术映射 " + objectMappings
-                        + " 条，业务域技术映射 " + domainMappings + " 条";
+                        + " 条，业务域技术映射 " + domainMappings
+                        + " 条，跨语言 Feature 合并 " + featureMerges + " 组";
                 support.completeTask(task, summary, null);
                 return StepExecutionResult.builder().success(true).message(summary)
                         .processedCount(totalMappings).build();

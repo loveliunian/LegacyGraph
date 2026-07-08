@@ -168,6 +168,7 @@ import type { Node as FlowNode, Edge as FlowEdge } from '@vue-flow/core'
 import GraphViewer from '@/components/graph/GraphViewerOptimized.vue'
 import { graphApi, testApi, factApi } from '@/api'
 import { loadScanVersions } from '@/utils/versionsCache'
+import { dictLabel } from '@/utils/dict'
 
 interface FlowNodeData {
   label: string
@@ -318,7 +319,7 @@ function toFlowEdge(edge: any, index: number): FlowEdge {
     id: normalizeId(edge.id || `${source}-${target}-${index}`),
     source,
     target,
-    label: edge.label || edge.type || props.type || '',
+    label: edge.label || dictLabel('graph_edge_type', edge.type || '') || props.type || '',
     data: {
       confidence: toNumber(edge.confidence ?? props.confidence, 0.8),
       ...props

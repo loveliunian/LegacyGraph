@@ -181,7 +181,7 @@ public class EnhancedQaAgent {
                             } catch (Exception e) {
                                 log.warn("ChangeImpactAgent failed: {}", e.getMessage());
                             }
-                            impactEvidences = toImpactEvidenceItems(subgraph);
+                            impactEvidences = toImpactEvidenceItems(projectId, subgraph);
 
                             Map<String, Object> impactData = new HashMap<>();
                             impactData.put("changeKind", parsedChange.getChangeKind());
@@ -278,11 +278,11 @@ public class EnhancedQaAgent {
             List<GraphNode> graphNodes = expandGraph(projectId, versionId, question, intent);
 
             // 10. 构建证据列表（含 GraphRAG 证据卡 + 变更影响证据）
-            List<EvidenceItem> evidences = buildEvidenceList(docs, graphNodes);
+            List<EvidenceItem> evidences = buildEvidenceList(projectId, docs, graphNodes);
             // 追加 GraphRAG 证据卡（结构化映射：claimId/nodeKey/行号/relationTypes/confidence）
             for (GraphRagEvidenceCard card : graphRagCards) {
                 if (evidences.size() >= 20) break;
-                evidences.add(EvidenceItem.fromGraphRagCard(card));
+                evidences.add(EvidenceItem.fromGraphRagCard(projectId, card));
             }
             // 追加变更影响证据
             for (EvidenceItem ie : finalImpactEvidences) {
@@ -503,13 +503,15 @@ public class EnhancedQaAgent {
     /**
      * 构建证据列表
      */
-    private List<EvidenceItem> buildEvidenceList(List<VectorDocument> docs, List<GraphNode> nodes) {
+    private List<EvidenceItem> buildEvidenceList(String projectId, List<VectorDocument> docs,
+                                                   List<GraphNode> nodes) {
         List<EvidenceItem> evidences = new ArrayList<>();
 
         // 文档证据
         for (VectorDocument doc : docs) {
             if (evidences.size() >= 10) break;
             evidences.add(EvidenceItem.fromDocChunk(
+                projectId,
                 doc.getId().toString(),
                 doc.getSourceUri(),
                 doc.getContent(),
@@ -521,6 +523,7 @@ public class EnhancedQaAgent {
         for (GraphNode node : nodes) {
             if (evidences.size() >= 15) break;
             evidences.add(EvidenceItem.fromGraphNode(
+                projectId,
                 node.getId(),
                 node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName(),
                 node.getNodeType(),
@@ -598,6 +601,7 @@ public class EnhancedQaAgent {
                 sb.append("（仅列前 ").append(cap).append(" 个，共 ").append(total)
                         .append(" 个；如需全部请分批询问）\n");
             }
+            sb.append("\n请将以上 ").append(nodeType).append(" 清单用自然语言整理回答，不要直接输出 JSON 或原文照抄。\n");
             log.info("Listing context: type={}, total={}, question='{}'", nodeType, total, question);
             return currentContext + sb;
         } catch (Exception e) {
@@ -794,15 +798,15 @@ public class EnhancedQaAgent {
     /**
      * 把影响子图节点转为 EvidenceItem（复用 EvidenceItem.fromGraphNode）。
      */
-    private List<EvidenceItem> toImpactEvidenceItems(ImpactSubgraph subgraph) {
+    private List<EvidenceItem> toImpactEvidenceItems(String projectId, ImpactSubgraph subgraph) {
         if (subgraph == null || subgraph.getNodeIds() == null || subgraph.getNodeIds().isEmpty()) {
             return Collections.emptyList();
         }
         List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(subgraph.getNodeIds());
         List<EvidenceItem> items = new ArrayList<>();
         for (GraphNode n : nodes) {
-            items.add(EvidenceItem.fromGraphNode(n.getId(), n.getNodeName(), n.getNodeType(),
-                n.getSourcePath(), n.getDescription()));
+            items.add(EvidenceItem.fromGraphNode(projectId, n.getId(), n.getNodeName(),
+                n.getNodeType(), n.getSourcePath(), n.getDescription()));
         }
         return items;
     }

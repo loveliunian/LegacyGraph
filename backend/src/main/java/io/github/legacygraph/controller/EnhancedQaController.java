@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import io.github.legacygraph.util.IdUtil;
 
@@ -65,6 +66,16 @@ public class EnhancedQaController {
         ));
         
         return emitter;
+    }
+
+    /**
+     * 创建新对话
+     */
+    @PostMapping("/conversations")
+    public Result<QaConversation> createConversation(@RequestBody Map<String, String> body) {
+        String projectId = body.get("projectId");
+        QaConversation conv = conversationManager.getOrCreateConversation(projectId, null, null);
+        return Result.success(conv);
     }
 
     /**

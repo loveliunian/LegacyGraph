@@ -245,6 +245,7 @@ import { useRoute } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import { loadScanVersions } from '@/utils/versionsCache'
+import { dictLabel } from '@/utils/dict'
 
 interface TableColumn {
   columnName: string
@@ -548,7 +549,7 @@ function convertToVueFlow() {
       id: edge.id || edgeKey,
       source,
       target,
-      label: edge.type || edge.label || '',
+      label: dictLabel('graph_edge_type', edge.type || edge.label || ''),
     })
   })
 

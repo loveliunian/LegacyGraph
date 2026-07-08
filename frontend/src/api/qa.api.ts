@@ -157,6 +157,11 @@ export const qaApi = {
     return controller
   },
 
+  /** 创建新对话 */
+  createConversation: (projectId: string): Promise<QaConversation> => {
+    return post('/qa/conversations', { projectId })
+  },
+
   /** 列出对话 */
   listConversations: (projectId: string): Promise<QaConversation[]> => {
     return get(`/qa/conversations?projectId=${encodeURIComponent(projectId)}`)

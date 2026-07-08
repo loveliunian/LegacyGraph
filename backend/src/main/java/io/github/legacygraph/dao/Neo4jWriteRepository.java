@@ -587,4 +587,77 @@ public class Neo4jWriteRepository {
         }
         return 0;
     }
+
+    /**
+     * 将 sourceNodeId 的所有出边迁移到 targetNodeId，然后删除 sourceNodeId。
+     * 用于跨语言 Feature 去重合并（英文 FRONTEND_AST Feature → 中文 DOC_AI Feature）。
+     * 入边（如 BusinessProcess -CONTAINS-> Feature）也一并迁移。
+     *
+     * @return 迁移的边数
+     */
+    public int moveEdgesAndDeleteNode(String projectId, String versionId,
+                                       String sourceNodeId, String targetNodeId) {
+        try (Session session = neo4jDriver.session()) {
+            return session.writeTransaction(tx -> {
+                int moved = 0;
+                // 1. 迁移出边：source-[r]->target → canon-[r]->target
+                var outRels = tx.run("""
+                    MATCH (src {id: $srcId})-[r]->(t)
+                    WHERE t.projectId = $pid AND t.versionId = $vid
+                    RETURN type(r) as relType, properties(r) as props, t.id as targetId
+                """, Map.of("srcId", sourceNodeId, "pid", projectId, "vid", versionId));
+                while (outRels.hasNext()) {
+                    var row = outRels.next();
+                    String relType = row.get("relType").asString();
+                    String targetId = row.get("targetId").asString();
+                    // 检查 canon 到同一 target 的同类型边是否已存在
+                    var check = tx.run("""
+                        MATCH (canon {id: $canonId})-[r]->(t {id: $tId})
+                        WHERE type(r) = $relType
+                        RETURN count(r) as cnt
+                    """, Map.of("canonId", targetNodeId, "tId", targetId, "relType", relType));
+                    if (check.hasNext() && check.next().get("cnt").asInt() == 0) {
+                        tx.run("MATCH (canon {id: $canonId}) MATCH (t {id: $tId}) "
+                                + "CREATE (canon)-[r:" + relType + "]->(t) "
+                                + "SET r = $props",
+                                Map.of("canonId", targetNodeId, "tId", targetId,
+                                        "props", row.get("props").asMap()));
+                        moved++;
+                    }
+                }
+                // 2. 迁移入边：source-[r]->src → source-[r]->canon
+                var inRels = tx.run("""
+                    MATCH (s)-[r]->(dst {id: $srcId})
+                    WHERE s.projectId = $pid AND s.versionId = $vid
+                    RETURN type(r) as relType, properties(r) as props, s.id as sourceId
+                """, Map.of("srcId", sourceNodeId, "pid", projectId, "vid", versionId));
+                while (inRels.hasNext()) {
+                    var row = inRels.next();
+                    String relType = row.get("relType").asString();
+                    String sId = row.get("sourceId").asString();
+                    var check = tx.run("""
+                        MATCH (s {id: $sId})-[r]->(canon {id: $canonId})
+                        WHERE type(r) = $relType
+                        RETURN count(r) as cnt
+                    """, Map.of("sId", sId, "canonId", targetNodeId, "relType", relType));
+                    if (check.hasNext() && check.next().get("cnt").asInt() == 0) {
+                        tx.run("MATCH (s {id: $sId}) MATCH (canon {id: $canonId}) "
+                                + "CREATE (s)-[r:" + relType + "]->(canon) "
+                                + "SET r = $props",
+                                Map.of("sId", sId, "canonId", targetNodeId,
+                                        "props", row.get("props").asMap()));
+                        moved++;
+                    }
+                }
+                // 3. 删除源节点
+                tx.run("MATCH (src {id: $srcId}) DETACH DELETE src",
+                        Map.of("srcId", sourceNodeId));
+                return moved;
+            });
+        } catch (Exception e) {
+            log.warn("moveEdgesAndDeleteNode failed: src={}, canon={}, err={}",
+                    sourceNodeId, targetNodeId, e.getMessage());
+            return -1;
+        }
+    }
 }

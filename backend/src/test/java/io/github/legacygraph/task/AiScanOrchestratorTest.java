@@ -255,7 +255,7 @@ class AiScanOrchestratorTest {
                 .findFirst()
                 .orElseThrow();
         assertEquals("WARNING", mappingTask.getTaskStatus());
-        assertTrue(mappingTask.getOutputSummary().contains("未建立 Feature/业务对象技术映射"));
+        assertTrue(mappingTask.getOutputSummary().contains("未建立 Feature/业务对象"));
     }
 
     @Test
