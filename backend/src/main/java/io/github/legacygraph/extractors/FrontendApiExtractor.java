@@ -53,10 +53,12 @@ public class FrontendApiExtractor {
 
     /**
      * 抽取 axios.get/post/put/delete
+     * 也匹配 this.$http.get/post 模式（Vue 插件）
      */
     private void extractAxiosCalls(String[] lines, List<FrontendPageFact.FrontendApiCall> result, Path file) {
-        Pattern pattern = Pattern.compile("axios\\.(get|post|put|delete|patch)\\(\\s*['\"]([^'\"]+)['\"]");
-        extractByPattern(pattern, 1, 2, lines, result, file);
+        // axios.get('/url') 或 this.$http.get('/url')
+        Pattern pattern = Pattern.compile("(?:axios|\\$http|this\\.\\$http)\\.(get|post|put|delete|patch)\\(\\s*([`'\"])([^`'\"]+)\\2");
+        extractByPattern(pattern, 1, 3, lines, result, file);
     }
 
     /**
@@ -76,7 +78,7 @@ public class FrontendApiExtractor {
                 }
                 FrontendPageFact.FrontendApiCall call = new FrontendPageFact.FrontendApiCall();
                 call.setMethod(matcher.group(1).toLowerCase());
-                call.setUrl(matcher.group(3));
+                call.setUrl(normalizeTemplateUrl(matcher.group(3)));
                 call.setSourceFile(file.toString());
                 call.setLineNumber(i + 1);
                 result.add(call);
@@ -111,7 +113,7 @@ public class FrontendApiExtractor {
                 Matcher methodMatcher = METHOD_PATTERN.matcher(block);
                 String method = methodMatcher.find() ? methodMatcher.group(1).toLowerCase() : "get";
                 FrontendPageFact.FrontendApiCall call = new FrontendPageFact.FrontendApiCall();
-                call.setUrl(urlMatcher.group(2));
+                call.setUrl(normalizeTemplateUrl(urlMatcher.group(2)));
                 call.setMethod(method);
                 call.setSourceFile(file.toString());
                 call.setLineNumber(urlLineNumber);
@@ -153,7 +155,7 @@ public class FrontendApiExtractor {
                     }
 
                     FrontendPageFact.FrontendApiCall call = new FrontendPageFact.FrontendApiCall();
-                    call.setUrl(url);
+                    call.setUrl(normalizeTemplateUrl(url));
                     call.setMethod(method);
                     call.setFunctionName(currentFunction);
                     call.setSourceFile(file.toString());
@@ -189,7 +191,7 @@ public class FrontendApiExtractor {
             Matcher matcher = pattern.matcher(line);
             while (matcher.find()) {
                 String method = methodGroup == urlGroup ? "get" : matcher.group(methodGroup).toLowerCase();
-                String url = matcher.group(urlGroup);
+                String url = normalizeTemplateUrl(matcher.group(urlGroup));
 
                 FrontendPageFact.FrontendApiCall call = new FrontendPageFact.FrontendApiCall();
                 call.setUrl(url);
@@ -199,6 +201,19 @@ public class FrontendApiExtractor {
                 result.add(call);
             }
         }
+    }
+
+    /**
+     * 归一化模板字面量 URL：/api/users/${id} → /api/users/{id}
+     * 使前端动态 URL 能匹配后端 @PathVariable 路径。
+     */
+    static String normalizeTemplateUrl(String url) {
+        if (url == null) return null;
+        // ${variable} → {variable}
+        url = url.replaceAll("\\$\\{([^}]+)}", "{$1}");
+        // 移除前后的反引号（如果被捕获到）
+        url = url.replaceAll("^`|`$", "");
+        return url;
     }
 
     /**

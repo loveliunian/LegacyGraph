@@ -13,6 +13,12 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.types.ResolvedType;
+import com.github.javaparser.symbolsolver.JavaSymbolSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -33,12 +39,31 @@ import java.util.Set;
 @Slf4j
 public class ServiceCallExtractor {
 
+    /** 源码根目录（用于 SymbolSolver 跨文件类型解析），为 null 时退回纯 AST 推断 */
+    private File sourceRoot;
+
     /** ThreadLocal JavaParser — parallelStream 安全（JavaParser 非线程安全） */
     private final ThreadLocal<JavaParser> javaParser = ThreadLocal.withInitial(() -> {
         ParserConfiguration config = new ParserConfiguration();
         config.setLanguageLevel(LanguageLevel.JAVA_26);
+        // P0.1c：配置 SymbolSolver（当 sourceRoot 可用时）
+        if (sourceRoot != null && sourceRoot.isDirectory()) {
+            CombinedTypeSolver typeSolver = new CombinedTypeSolver(
+                    new ReflectionTypeSolver(),
+                    new JavaParserTypeSolver(sourceRoot)
+            );
+            config.setSymbolResolver(new JavaSymbolSolver(typeSolver));
+        }
         return new JavaParser(config);
     });
+
+    /**
+     * 设置源码根目录，启用 SymbolSolver 跨文件类型解析。
+     * 必须在首次调用 {@link #extractFromFile} 前设置。
+     */
+    public void setSourceRoot(File sourceRoot) {
+        this.sourceRoot = sourceRoot;
+    }
 
     /**
      * 从Java文件抽取调用关系
@@ -93,23 +118,8 @@ public class ServiceCallExtractor {
                 // 遍历所有方法，抽取方法调用
                 for (MethodDeclaration method : clazz.getMethods()) {
                     String methodName = method.getNameAsString();
-                    // 生成参数签名，与 JavaStructureExtractor 保持一致
-                    String paramSignature = method.getParameters().stream()
-                            .map(p -> {
-                                String type = p.getType().asString();
-                                int genericIdx = type.indexOf('<');
-                                if (genericIdx > 0) {
-                                    type = type.substring(0, genericIdx);
-                                }
-                                int dotIdx = type.lastIndexOf('.');
-                                if (dotIdx > 0) {
-                                    type = type.substring(dotIdx + 1);
-                                }
-                                return type;
-                            })
-                            .reduce((a, b) -> a + ", " + b)
-                            .orElse("");
-                    String callerMethod = methodName + "(" + paramSignature + ")";
+                    // 生成参数签名，统一使用 MethodSignatureSupport
+                    String callerMethod = MethodSignatureSupport.build(method);
 
                     // 构建方法内可见的变量→类型映射（注入字段 + 本地变量），用于推断被调用方法实参类型
                     final Map<String, String> methodVarToType =
@@ -131,20 +141,68 @@ public class ServiceCallExtractor {
                         // 尝试解析目标：检查方法调用的 scope（如 mapper.findById → mapper 是注入的 MapperUser）
                         methodCall.getScope().ifPresent(scope -> {
                             String varName = scope.toString();
+                            // 保存接收者表达式原文（P2-2），用于审计区分"未解析"vs"歧义跳过"
+                            rel.setReceiverExpression(varName);
                             // 剥 "this." 前缀：this.mapper.findById() → "mapper"，否则 scope.toString()="this.mapper" 匹配不上
                             if (varName.startsWith("this.")) {
                                 varName = varName.substring("this.".length());
                             }
-                            // P0 修复：原代码只用 injectedVarToType（注入字段+构造参数），漏掉了方法参数和本地变量，
-                            // 导致 Service→Mapper 等跨 Bean 调用 targetClass 几乎全为 null（462 条中仅 6 条非 null 且全是 injects 注入边）。
-                            // methodVarToType 已包含 injectedVarToType 的全部内容（其构造参数为 new HashMap<>(injectedVarToType)），
-                            // 改用后可解析通过参数传入的依赖调用（如 saveLog(BackLogMapper mapper) { mapper.insert(...) }）。
-                            String resolvedType = methodVarToType.get(varName);
+
+                            // P0.1c：优先使用 SymbolSolver 解析接收者类型
+                            String resolvedType = null;
+                            if (sourceRoot != null) {
+                                try {
+                                    ResolvedType rt = scope.calculateResolvedType();
+                                    if (rt != null && !rt.isNull()) {
+                                        String typeName = rt.describe();
+                                        // 去泛型参数
+                                        int genericIdx = typeName.indexOf('<');
+                                        if (genericIdx > 0) {
+                                            typeName = typeName.substring(0, genericIdx);
+                                        }
+                                        // 取简单类名
+                                        int dotIdx = typeName.lastIndexOf('.');
+                                        if (dotIdx > 0) {
+                                            typeName = typeName.substring(dotIdx + 1);
+                                        }
+                                        resolvedType = typeName;
+                                    }
+                                } catch (Exception e) {
+                                    // SymbolSolver 解析失败（如类型不在源码树中），降级到文本推断
+                                    log.debug("SymbolSolver failed for scope '{}' in {}: {}", varName, filePath, e.getMessage());
+                                }
+                            }
+
+                            // 降级：使用方法内变量→类型映射（文本推断）
+                            if (resolvedType == null) {
+                                resolvedType = methodVarToType.get(varName);
+                            }
+
                             if (resolvedType != null) {
                                 rel.setTargetClass(resolvedType);
                                 rel.setTargetMethod(calledMethod);
                             }
                         });
+
+                        // P0.1c：当 SymbolSolver 可用时，尝试解析被调用方法的声明类（处理链式调用、继承方法等）
+                        if (sourceRoot != null && rel.getTargetClass() == null) {
+                            try {
+                                ResolvedMethodDeclaration rmd = methodCall.resolve();
+                                String declaringType = rmd.declaringType().getQualifiedName();
+                                int genericIdx = declaringType.indexOf('<');
+                                if (genericIdx > 0) {
+                                    declaringType = declaringType.substring(0, genericIdx);
+                                }
+                                int dotIdx = declaringType.lastIndexOf('.');
+                                if (dotIdx > 0) {
+                                    declaringType = declaringType.substring(dotIdx + 1);
+                                }
+                                rel.setTargetClass(declaringType);
+                                rel.setTargetMethod(calledMethod);
+                            } catch (Exception e) {
+                                // 无法解析方法声明（如第三方库方法），跳过
+                            }
+                        }
                         relations.add(rel);
                     });
                 }
@@ -260,9 +318,32 @@ public class ServiceCallExtractor {
 
     /**
      * 推断实参表达式的类型名（简单名，与 JavaStructureExtractor 归一化规则一致）。
-     * 不依赖符号求解，仅处理可在 AST 层面可靠推断的表达式；其余返回 null。
+     * P0.1c：当 SymbolSolver 可用时，优先使用符号求解；否则回退到 AST 文本推断。
      */
     private String inferArgumentTypeName(Expression expr, Map<String, String> varToType) {
+        // P0.1c：优先使用 SymbolSolver
+        if (sourceRoot != null) {
+            try {
+                ResolvedType rt = expr.calculateResolvedType();
+                if (rt != null && !rt.isNull() && !rt.isVoid()) {
+                    String typeName = rt.describe();
+                    int genericIdx = typeName.indexOf('<');
+                    if (genericIdx > 0) {
+                        typeName = typeName.substring(0, genericIdx);
+                    }
+                    int dotIdx = typeName.lastIndexOf('.');
+                    if (dotIdx > 0) {
+                        typeName = typeName.substring(dotIdx + 1);
+                    }
+                    // 过滤原始类型描述（如 java.lang.String → String 已处理）
+                    return typeName;
+                }
+            } catch (Exception e) {
+                // 降级到 AST 推断
+            }
+        }
+
+        // 降级：AST 文本推断
         if (expr.isIntegerLiteralExpr()) return "int";
         if (expr.isLongLiteralExpr()) return "long";
         if (expr.isDoubleLiteralExpr()) return "double";
@@ -292,22 +373,10 @@ public class ServiceCallExtractor {
     }
 
     /**
-     * 类型名归一化：去泛型参数 + 取简单类名。
-     * 与 JavaStructureExtractor 的参数签名归一化保持一致。
+     * 类型名归一化：委托给 {@link MethodSignatureSupport#normalizeTypeName}。
      */
     private String normalizeTypeName(String type) {
-        if (type == null || type.isEmpty()) {
-            return null;
-        }
-        int genericIdx = type.indexOf('<');
-        if (genericIdx > 0) {
-            type = type.substring(0, genericIdx);
-        }
-        int dotIdx = type.lastIndexOf('.');
-        if (dotIdx > 0) {
-            type = type.substring(dotIdx + 1);
-        }
-        return type;
+        return MethodSignatureSupport.normalizeTypeName(type);
     }
 
     /**
@@ -341,6 +410,7 @@ public class ServiceCallExtractor {
         private Integer lineNumber;
         private String callerMethodSignature;  // 调用方完整签名 methodName(paramType1, paramType2)
         private String calledMethodSignature;  // 被调用方完整签名（如果能解析到）
+        private String receiverExpression;  // P2-2：调用点接收者表达式原文（如 "mapper"、"this.service"），用于审计
 
         public CallRelation(String callerClass, String callerMethod, String calledMethod) {
             this.callerClass = callerClass;
@@ -352,6 +422,7 @@ public class ServiceCallExtractor {
             this.lineNumber = null;
             this.callerMethodSignature = null;
             this.calledMethodSignature = null;
+            this.receiverExpression = null;
         }
     }
 }

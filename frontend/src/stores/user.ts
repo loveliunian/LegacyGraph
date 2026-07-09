@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
 import type { User } from '@/types'
 import { authApi } from '@/api'
 import { loadAllDicts, clearDictCache } from '@/utils/dict'
@@ -63,18 +62,13 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const login = async (username: string, password: string) => {
-  try {
-      const result = await authApi.login({ username, password })
-      setTokens(result.accessToken, result.refreshToken)
-      setUserInfo(result.user)
-      // 登录后一次性加载全量字典到内存
-      loadAllDicts()
-      return result
-  } catch (error) {
-    console.error('login error:', error)
-    ElMessage.error('操作失败')
+    const result = await authApi.login({ username, password })
+    setTokens(result.accessToken, result.refreshToken)
+    setUserInfo(result.user)
+    // 登录后一次性加载全量字典到内存
+    loadAllDicts()
+    return result
   }
-    }
 
   const logout = async () => {
     try {

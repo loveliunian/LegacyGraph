@@ -34,11 +34,20 @@ public class JavaCodeAdapter implements ExtractionAdapter {
     private final GraphBuilder graphBuilder;
     private final JavaControllerExtractor controllerExtractor = new JavaControllerExtractor();
     private final JavaStructureExtractor structureExtractor;
-    private final ServiceCallExtractor callExtractor = new ServiceCallExtractor();
+    private final ServiceCallExtractor callExtractor;
 
     public JavaCodeAdapter(GraphBuilder graphBuilder, JavaStructureExtractor structureExtractor) {
         this.graphBuilder = graphBuilder;
         this.structureExtractor = structureExtractor;
+        this.callExtractor = new ServiceCallExtractor();
+    }
+
+    /**
+     * 设置源码根目录，启用 SymbolSolver。
+     * 由 ExtractionAdapterRegistry 在扫描开始前调用。
+     */
+    public void setSourceRoot(java.io.File sourceRoot) {
+        this.callExtractor.setSourceRoot(sourceRoot);
     }
 
     @Override

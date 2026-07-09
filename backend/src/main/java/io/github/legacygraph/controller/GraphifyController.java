@@ -4,6 +4,7 @@ import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.eval.GraphifyQualityResult;
 import io.github.legacygraph.eval.GraphifyQualityService;
+import io.github.legacygraph.eval.GraphCompletenessAuditService;
 import io.github.legacygraph.integration.graphify.GraphifyImportService;
 import io.github.legacygraph.integration.graphify.GraphifyRunner;
 import io.github.legacygraph.integration.graphify.GraphifyRunResult;
@@ -27,6 +28,7 @@ public class GraphifyController {
     private final GraphifyRunner graphifyRunner;
     private final GraphifyImportService graphifyImportService;
     private final GraphifyQualityService graphifyQualityService;
+    private final GraphCompletenessAuditService completenessAuditService;
 
     /**
      * POST /api/lg/projects/{projectId}/graphify/analyze
@@ -201,6 +203,21 @@ public class GraphifyController {
             @PathVariable String projectId,
             @RequestParam(required = false) String versionId) {
         return Result.success(graphifyQualityService.getQuality(projectId, versionId));
+    }
+
+    /**
+     * GET /api/lg/projects/{projectId}/graphify/audit
+     * 图谱完整性审计 — 7 项端到端质量指标。
+     *
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID，可选；为空时取项目最新扫描版本
+     * @return 审计结果（含 7 项指标）
+     */
+    @GetMapping("/graphify/audit")
+    public Result<GraphCompletenessAuditService.AuditResult> getAudit(
+            @PathVariable String projectId,
+            @RequestParam(required = false) String versionId) {
+        return Result.success(completenessAuditService.audit(projectId, versionId));
     }
 
     @lombok.Builder

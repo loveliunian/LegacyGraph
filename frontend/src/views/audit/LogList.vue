@@ -197,7 +197,9 @@
         <el-table-column
           prop="createdAt"
           label="操作时间"
-          width="180" />
+          width="180">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="100"
@@ -309,7 +311,7 @@
           {{ currentLog.duration }} ms
         </el-descriptions-item>
         <el-descriptions-item label="操作时间">
-          {{ currentLog.createdAt }}
+          {{ formatTime(currentLog.createdAt) }}
         </el-descriptions-item>
       </el-descriptions>
 
@@ -328,6 +330,9 @@ import { Download, Delete } from '@element-plus/icons-vue'
 import { exportData } from '@/utils/export'
 import { auditApi } from '@/api'
 import type { PageResult } from '@/types'
+import dayjs from 'dayjs'
+
+const formatTime = (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 
 interface AuditLog {
   id: string

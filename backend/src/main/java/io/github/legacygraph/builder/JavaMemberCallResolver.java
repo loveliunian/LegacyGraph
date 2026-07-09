@@ -427,5 +427,6 @@ public class JavaMemberCallResolver {
         private Integer lineNumber;
         private String callerMethodSignature;
         private String calledMethodSignature;
+        private String receiverExpression;  // P2-2：调用点接收者表达式原文
     }
 }

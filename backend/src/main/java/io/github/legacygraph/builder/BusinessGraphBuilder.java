@@ -320,42 +320,28 @@ public class BusinessGraphBuilder {
         List<GraphNode> apis = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.ApiEndpoint.name(), null, null, null, 0);
 
-        // B1：预计算所有唯一名称的 embedding（Feature/Page/API），扫描级缓存避免笛卡尔积重算。
-        // 单次 embed 失败（Ollama 抖动）→ catch 后 nameToEmbedding 不含该名称，
-        // 下游仅用 token 分，永不因 embedding 不可用而抛异常。
-        Map<String, float[]> nameToEmbedding = precomputeEmbeddings(docFeatures, pages, apis);
-        boolean vectorAvailable = !nameToEmbedding.isEmpty();
-        if (vectorAvailable) {
-            log.info("Vector semantic matching enabled: {} names embedded", nameToEmbedding.size());
-        } else {
-            log.info("Vector semantic matching unavailable (EmbeddingModel not ready), using token-only matching");
-        }
+        // B1：向量嵌入按需计算，不预加载全部 532 个避免 OOM。
+        // token 分 < 门控值 → 不触发 embed，节省 Ollama 调用和内存。
+        Map<String, float[]> nameToEmbedding = new HashMap<>();
+        log.info("Vector semantic matching: lazy embed mode (on-demand, token gate={})", 0.15);
 
         List<GraphEdge> candidateEdges = new ArrayList<>();
-        // 预计算每个名称的 token 集合（按名去重缓存），避免在 feature×page×api 笛卡尔积里重复分词
         Map<String, Set<String>> tokensByName = new HashMap<>();
-        // 跨语言名称匹配委托给 TerminologyService：中文 Feature 名翻成英文子词后与英文 API/Page 名做 token 重叠。
         for (GraphNode feature : safeList(docFeatures)) {
             String featureName = normalizeSearchName(feature);
-            if (featureName.isBlank()) {
-                continue;
-            }
+            if (featureName.isBlank()) continue;
             Set<String> featTokens = tokensByName.computeIfAbsent(featureName, terminologyService::tokenize);
-            float[] featEmb = nameToEmbedding.get(featureName);
 
-            // 匹配Page
             for (GraphNode page : safeList(pages)) {
                 String pageName = normalizeSearchName(page);
-                if (pageName.isBlank()) {
-                    continue;
-                }
+                if (pageName.isBlank()) continue;
                 Set<String> pageTokens = tokensByName.computeIfAbsent(pageName, terminologyService::tokenize);
                 double tokenScore = terminologyService.similarityOfTokens(featTokens, pageTokens, featureName, pageName);
-                double score = maxTokenAndVector(tokenScore, featEmb, nameToEmbedding.get(pageName));
+                if (tokenScore < 0.15) continue; // 门控：无 token 重叠 → 跳过向量
+                double score = lazyMaxTokenVector(tokenScore, featureName, pageName, nameToEmbedding);
                 if (score > 0.6) {
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
-                            feature.getId(), page.getId(),
-                            EdgeType.EXPOSED_BY.name(),
+                            feature.getId(), page.getId(), EdgeType.EXPOSED_BY.name(),
                             feature.getNodeKey() + "->exposed_by->" + page.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score * 0.8),
@@ -363,19 +349,16 @@ public class BusinessGraphBuilder {
                 }
             }
 
-            // 匹配API
             for (GraphNode api : safeList(apis)) {
                 String apiName = normalizeSearchName(api);
-                if (apiName.isBlank()) {
-                    continue;
-                }
+                if (apiName.isBlank()) continue;
                 Set<String> apiTokens = tokensByName.computeIfAbsent(apiName, terminologyService::tokenize);
                 double tokenScore = terminologyService.similarityOfTokens(featTokens, apiTokens, featureName, apiName);
-                double score = maxTokenAndVector(tokenScore, featEmb, nameToEmbedding.get(apiName));
+                if (tokenScore < 0.15) continue;
+                double score = lazyMaxTokenVector(tokenScore, featureName, apiName, nameToEmbedding);
                 if (score > 0.5) {
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
-                            feature.getId(), api.getId(),
-                            EdgeType.IMPLEMENTED_BY.name(),
+                            feature.getId(), api.getId(), EdgeType.IMPLEMENTED_BY.name(),
                             feature.getNodeKey() + "->implemented_by->" + api.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score * 0.7),
@@ -394,25 +377,22 @@ public class BusinessGraphBuilder {
         return mappedCount;
     }
 
-    /**
-     * B1：预计算所有唯一名称的 embedding，扫描级缓存。
-     * 单名称 embed 失败（Ollama 抖动）→ 跳过该名称，不影响其他。
-     */
-    private Map<String, float[]> precomputeEmbeddings(List<GraphNode> features, List<GraphNode> pages, List<GraphNode> apis) {
-        if (embeddingModel == null) {
-            return Map.of();
-        }
-        Map<String, float[]> result = new HashMap<>();
-        for (GraphNode node : safeList(features)) {
-            embedOne(normalizeSearchName(node), result);
-        }
-        for (GraphNode node : safeList(pages)) {
-            embedOne(normalizeSearchName(node), result);
-        }
-        for (GraphNode node : safeList(apis)) {
-            embedOne(normalizeSearchName(node), result);
-        }
-        return result;
+    /** 按需获取 embedding（缓存命中直接用，未命中调 Ollama） */
+    private float[] getOrEmbed(String name, Map<String, float[]> cache) {
+        return cache.computeIfAbsent(name, k -> {
+            if (embeddingModel == null) return null;
+            try { return embeddingModel.embed(k); }
+            catch (Exception e) { log.debug("Embed fail: {}", k); return null; }
+        });
+    }
+
+    /** 按需向量+token混合分：仅在 token 门控通过后才计算向量，大幅减少 embed 调用 */
+    private double lazyMaxTokenVector(double tokenScore, String name1, String name2,
+                                       Map<String, float[]> cache) {
+        float[] e1 = getOrEmbed(name1, cache);
+        float[] e2 = getOrEmbed(name2, cache);
+        if (e1 == null || e2 == null) return tokenScore;
+        return Math.max(tokenScore, cosineSimilarity(e1, e2));
     }
 
     private void embedOne(String name, Map<String, float[]> cache) {
@@ -424,21 +404,6 @@ public class BusinessGraphBuilder {
         } catch (Exception e) {
             log.debug("Embedding failed for '{}' (Ollama jitter), fallback to token score: {}", name, e.getMessage());
         }
-    }
-
-    /** 取 token 分与向量余弦相似度的最大值；任一路不可用时回退另一路。 */
-    private static double maxTokenAndVector(double tokenScore, float[] featEmb, float[] targetEmb) {
-        if (featEmb == null || targetEmb == null) {
-            return tokenScore;
-        }
-        // 门控：token 重叠 < 0.15 时跳过向量分。避免中文 Feature 与英文 API 仅靠 bge-m3
-        // 跨语言余弦（0.5-0.7 的语义背景噪声）大量误匹配，导致 IMPLEMENTED_BY 膨胀 10×。
-        // 334 Feature × 197 API = 65,798 对，18% 误匹配 = 11,750 条噪声边。
-        if (tokenScore < 0.15) {
-            return tokenScore;
-        }
-        double cosine = cosineSimilarity(featEmb, targetEmb);
-        return Math.max(tokenScore, cosine);
     }
 
     /** 余弦相似度（两个已归一化的 bge-m3 向量，可直接点积）。 */

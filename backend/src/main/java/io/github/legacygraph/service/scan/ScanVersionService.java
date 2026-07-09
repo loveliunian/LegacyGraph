@@ -42,8 +42,6 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
     private final CacheService cacheService;
     private final GraphCacheInvalidator graphCacheInvalidator;
     private final Neo4jGraphDao neo4jGraphDao;
-    private final GraphNodeRepository graphNodeRepository;
-    private final GraphEdgeRepository graphEdgeRepository;
     private final FactRepository factRepository;
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
@@ -77,8 +75,6 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                               CacheService cacheService,
                               GraphCacheInvalidator graphCacheInvalidator,
                               Neo4jGraphDao neo4jGraphDao,
-                              GraphNodeRepository graphNodeRepository,
-                              GraphEdgeRepository graphEdgeRepository,
                               FactRepository factRepository,
                               EvidenceRepository evidenceRepository,
                               NodeEvidenceRepository nodeEvidenceRepository,
@@ -99,8 +95,6 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         this.cacheService = cacheService;
         this.graphCacheInvalidator = graphCacheInvalidator;
         this.neo4jGraphDao = neo4jGraphDao;
-        this.graphNodeRepository = graphNodeRepository;
-        this.graphEdgeRepository = graphEdgeRepository;
         this.factRepository = factRepository;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
@@ -137,6 +131,7 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         int completed;
         LocalDateTime startedAt;
         LocalDateTime finishedAt;
+        List<ScanTask> aiTasks;
     }
 
     /**
@@ -168,6 +163,8 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         boolean allSkipped = true;
         boolean allTerminal = true;
         int completed = 0;
+        int totalItemsSum = 0;
+        int processedItemsSum = 0;
         LocalDateTime minStarted = null;
         LocalDateTime maxFinished = null;
 
@@ -188,11 +185,18 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
             if (t.getFinishedAt() != null && (maxFinished == null || t.getFinishedAt().isAfter(maxFinished))) {
                 maxFinished = t.getFinishedAt();
             }
+            if (t.getTotalItems() != null) {
+                totalItemsSum += t.getTotalItems();
+            }
+            if (t.getProcessedItems() != null) {
+                processedItemsSum += t.getProcessedItems();
+            }
         }
 
         AiPhaseAggregate agg = new AiPhaseAggregate();
-        agg.total = aiTasks.size();
-        agg.completed = completed;
+        agg.aiTasks = aiTasks;
+        agg.total = totalItemsSum > 0 ? totalItemsSum : aiTasks.size();
+        agg.completed = processedItemsSum > 0 ? processedItemsSum : completed;
         agg.startedAt = minStarted;
         if (anyRunning) {
             agg.status = "RUNNING";
@@ -202,7 +206,6 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
             agg.status = allSkipped ? "SKIPPED" : (anyWarning ? "WARNING" : "SUCCESS");
             agg.finishedAt = maxFinished;
         } else {
-            // 存在 PENDING 等未开始子任务，视为进行中
             agg.status = "RUNNING";
         }
         return agg;
@@ -225,11 +228,17 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         long eta = 0;
         boolean hasEstimate = false;
         LocalDateTime now = LocalDateTime.now();
-        for (ScanTask t : tasks) {
-            String type = t.getTaskType();
-            if (type == null || !type.startsWith("AI_") || "AI_ORCHESTRATION".equals(type)) {
-                continue;
+        List<ScanTask> aiTasks = agg != null && agg.aiTasks != null ? agg.aiTasks : new ArrayList<>();
+        if (aiTasks.isEmpty()) {
+            for (ScanTask t : tasks) {
+                String type = t.getTaskType();
+                if (type != null && type.startsWith("AI_") && !"AI_ORCHESTRATION".equals(type)) {
+                    aiTasks.add(t);
+                }
             }
+        }
+        for (ScanTask t : aiTasks) {
+            String type = t.getTaskType();
             String s = t.getTaskStatus();
             if (isCompletedTaskStatus(s) || "FAILED".equals(s)) {
                 continue;
@@ -246,14 +255,22 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 }
                 long elapsed = Duration.between(t.getStartedAt(), now).getSeconds();
                 Double hist = getHistoricalPhaseDuration(projectId, type);
-                eta += hist != null
-                        ? Math.max(0, Math.round(hist) - elapsed)
-                        : DEFAULT_PHASE_FALLBACK_SECONDS;
-                hasEstimate = true;
+                if (hist != null) {
+                    eta += Math.max(0, Math.round(hist) - elapsed);
+                    hasEstimate = true;
+                } else {
+                    eta += DEFAULT_PHASE_FALLBACK_SECONDS * 2;
+                    hasEstimate = true;
+                }
             } else {
                 Double hist = getHistoricalPhaseDuration(projectId, type);
-                eta += hist != null ? Math.round(hist) : DEFAULT_PHASE_FALLBACK_SECONDS;
-                hasEstimate = true;
+                if (hist != null) {
+                    eta += Math.round(hist);
+                    hasEstimate = true;
+                } else {
+                    eta += DEFAULT_PHASE_FALLBACK_SECONDS * 2;
+                    hasEstimate = true;
+                }
             }
         }
         return hasEstimate ? eta : -1L;
@@ -329,7 +346,13 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         String cacheKey = PROGRESS_KEY + versionId;
         ScanProgressResponse cached = cacheService.get(cacheKey, ScanProgressResponse.class);
         if (cached != null) {
-            return cached;
+            boolean aiOrchRunning = cached.getTasks().stream()
+                    .anyMatch(t -> "AI_ORCHESTRATION".equals(t.getTaskType()) 
+                            && "RUNNING".equals(t.getStatus())
+                            && (t.getEstimatedSecondsRemaining() == null || t.getEstimatedSecondsRemaining() <= 0));
+            if (!aiOrchRunning) {
+                return cached;
+            }
         }
 
         ScanVersion version = scanVersionRepository.selectById(versionId);
@@ -376,10 +399,20 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                     tp.setStartedAt(agg.startedAt);
                     tp.setFinishedAt(agg.finishedAt);
                     // AI 聚合阶段 RUNNING 时按子任务历史均时汇总 ETA；终态不显示
-                    tp.setEstimatedSecondsRemaining(
-                            "RUNNING".equals(agg.status)
-                                    ? computeAiOrchestrationEta(projectId, tasks, agg)
-                                    : -1L);
+                    if ("RUNNING".equals(agg.status)) {
+                        long eta = computeAiOrchestrationEta(projectId, tasks, agg);
+                        if (eta < 0) {
+                            Double histAiDuration = getHistoricalPhaseDuration(projectId, "AI_ORCHESTRATION");
+                            if (histAiDuration != null) {
+                                eta = Math.round(histAiDuration);
+                            } else {
+                                eta = DEFAULT_PHASE_FALLBACK_SECONDS * 5;
+                            }
+                        }
+                        tp.setEstimatedSecondsRemaining(eta);
+                    } else {
+                        tp.setEstimatedSecondsRemaining(-1L);
+                    }
                     if (isCompletedTaskStatus(agg.status)) {
                         completedTasks++;
                     }
@@ -389,7 +422,7 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                     taskProgressList.add(tp);
                     continue;
                 } else {
-                    // 无 AI 子任务：若版本已终态则标记为 SKIPPED，否则保持 PENDING
+                    // 无 AI 子任务：若版本已终态则标记为 SKIPPED，否则标记为 RUNNING（AI 编排可能正在初始化）
                     String versionStatus = version.getScanStatus();
                     if ("SUCCESS".equals(versionStatus) || "FAILED".equals(versionStatus) || "CANCELLED".equals(versionStatus)) {
                         tp.setStatus("SKIPPED");
@@ -398,6 +431,26 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                         tp.setProcessedItems(0);
                         tp.setEstimatedSecondsRemaining(-1L);
                         completedTasks++;
+                        taskProgressList.add(tp);
+                        continue;
+                    } else if ("RUNNING".equals(versionStatus) || "QUEUED".equals(versionStatus)) {
+                        tp.setStatus("RUNNING");
+                        tp.setFactCount(0);
+                        tp.setTotalItems(0);
+                        tp.setProcessedItems(0);
+                        long eta = computeAiOrchestrationEta(projectId, tasks, null);
+                        if (eta < 0) {
+                            Double histAiDuration = getHistoricalPhaseDuration(projectId, "AI_ORCHESTRATION");
+                            if (histAiDuration != null) {
+                                eta = Math.round(histAiDuration);
+                            } else {
+                                eta = DEFAULT_PHASE_FALLBACK_SECONDS * 5;
+                            }
+                        }
+                        tp.setEstimatedSecondsRemaining(eta);
+                        if (currentPhaseIndex < 0) {
+                            currentPhaseIndex = phase.getOrder();
+                        }
                         taskProgressList.add(tp);
                         continue;
                     }
@@ -420,6 +473,15 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                         && task.getStartedAt() != null) {
                     tp.setEstimatedSecondsRemaining(
                             computeBlendedEta(projectId, task));
+                } else if ("RUNNING".equals(task.getTaskStatus()) && task.getStartedAt() != null) {
+                    long eta = -1;
+                    Double histDuration = getHistoricalPhaseDuration(projectId, task.getTaskType());
+                    if (histDuration != null) {
+                        eta = Math.round(histDuration);
+                    } else {
+                        eta = DEFAULT_PHASE_FALLBACK_SECONDS * 5;
+                    }
+                    tp.setEstimatedSecondsRemaining(eta);
                 } else {
                     tp.setEstimatedSecondsRemaining(-1L);
                 }
@@ -441,6 +503,15 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 }
             }
             taskProgressList.add(tp);
+        }
+
+        for (ScanProgressResponse.TaskProgress tp : taskProgressList) {
+            if ("AI_ORCHESTRATION".equals(tp.getTaskType()) && "RUNNING".equals(tp.getStatus())
+                    && (tp.getEstimatedSecondsRemaining() == null || tp.getEstimatedSecondsRemaining() <= 0)) {
+                Double histAiDuration = getHistoricalPhaseDuration(projectId, "AI_ORCHESTRATION");
+                long eta = histAiDuration != null ? Math.round(histAiDuration) : DEFAULT_PHASE_FALLBACK_SECONDS * 5;
+                tp.setEstimatedSecondsRemaining(eta);
+            }
         }
 
         // 如果全部完成，currentPhaseIndex = 最后一个阶段
@@ -643,21 +714,9 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         taskWrapper.eq(ScanTask::getVersionId, versionId);
         scanTaskRepository.delete(taskWrapper);
 
-        // 2. Neo4j 子图异步删除 — M14 修复：移到 PG 删除全部完成后再执行，
-        //    避免 PG 删除失败时 Neo4j 图谱已被删除导致数据不一致。
-        //    （原代码在此处直接 self.deleteNeo4jGraphAsync，与 PG 删除并行执行）
+        // 2. Neo4j 子图异步删除
 
-        // 3. PG 图谱数据并行删除（虚拟线程，I/O 密集）
-        CompletableFuture<Void> graphFuture = CompletableFuture.runAsync(() -> {
-            try {
-                graphNodeRepository.delete(new QueryWrapper<GraphNode>().eq("version_id", versionId));
-                graphEdgeRepository.delete(new QueryWrapper<GraphEdge>().eq("version_id", versionId));
-            } catch (Exception e) {
-                log.warn("S10: 删除版本级PG图谱失败: versionId={}, error={}", versionId, e.getMessage());
-            }
-        });
-
-        // 4. 事实删除
+        // 3. 事实删除
         CompletableFuture<Void> factFuture = CompletableFuture.runAsync(() -> {
             try {
                 factRepository.delete(new QueryWrapper<Fact>().eq("version_id", versionId));
@@ -715,7 +774,7 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
         });
 
         // 等待所有并行删除完成
-        CompletableFuture.allOf(graphFuture, factFuture, evidenceFuture,
+        CompletableFuture.allOf(factFuture, evidenceFuture,
                 testFuture, auditFuture).join();
 
         // M14 修复：PG 删除全部完成后，再执行 Neo4j 异步删除，避免 PG 回滚时 Neo4j 已被删除

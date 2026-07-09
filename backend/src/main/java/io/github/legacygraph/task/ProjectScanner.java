@@ -20,6 +20,8 @@ import io.github.legacygraph.entity.SourceAssetSnapshot;
 import io.github.legacygraph.extractors.adapter.BusinessDomainAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
+import io.github.legacygraph.extractors.adapter.JavaCodeAdapter;
+import io.github.legacygraph.extractors.adapter.JavaServiceCallAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionResult;
 import io.github.legacygraph.extractors.adapter.ScanContext;
 import io.github.legacygraph.extractors.adapter.SourceAsset;
@@ -330,6 +332,9 @@ public class ProjectScanner {
                 }
             }
 
+            // 后台代码 AST 提取任务（字段血缘等），AI 阶段开始前需等待其完成，避免 AST+LLM 并发 OOM
+            java.util.concurrent.Future<?> backgroundExtractionFuture = null;
+
             // ⚡ DB 连接状态快照：扫描开始前固定 READY 连接列表，扫描期间不受状态变化影响
             boolean shouldScanDb = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("DB_SCAN");
@@ -596,11 +601,12 @@ public class ProjectScanner {
                             log.warn("Column cross-validation failed (non-blocking): {}", e.getMessage());
                         }
                         // 从代码提取字段级数据血缘 + 节点增强（后台异步，不阻塞主扫描管线）
+                        // 保存 Future，在 AI 阶段开始前等待完成，避免 AST 解析与 LLM 抽取并发导致堆峰值 OOM
                         if (baseDir != null && !baseDir.isBlank()) {
                             final String asyncPid = projectId;
                             final String asyncVid = versionId;
                             final java.nio.file.Path repoPath = java.nio.file.Path.of(baseDir);
-                            CompletableFuture.runAsync(() -> {
+                            backgroundExtractionFuture = CompletableFuture.runAsync(() -> {
                                 log.info("Background extraction started: projectId={}", asyncPid);
                                 int total = 0;
                                 try { total += graphBuilder.extractEntityColumns(asyncPid, asyncVid, repoPath); } catch (Exception e) { log.warn("Entity columns: {}", e.getMessage()); }
@@ -702,6 +708,16 @@ public class ProjectScanner {
                     projectId, versionId);
             ScanTask buildTask = createTask(projectId, versionId, "GRAPH_BUILD", "图谱构建");
             completeTask(buildTask, "Graph built in Neo4j", null);
+
+            // 等待后台代码 AST 提取完成（最多 5 分钟），避免与 AI LLM 抽取并发导致堆峰值 OOM
+            if (backgroundExtractionFuture != null) {
+                try {
+                    backgroundExtractionFuture.get(5, java.util.concurrent.TimeUnit.MINUTES);
+                } catch (Exception e) {
+                    log.warn("Background extraction not completed before AI phase (non-blocking): {}",
+                            e.getMessage());
+                }
+            }
 
             // 6. 扫描后 AI 编排
             // DOC_PARSE 未显式指定 AI 开关时默认开启 AI；显式 enableAi=false 必须被尊重。
@@ -1627,6 +1643,20 @@ public class ProjectScanner {
                 .frontendDir(frontendDir)
                 .config(new java.util.concurrent.ConcurrentHashMap<>())
                 .build();
+
+        // P0.1c：为 Java 适配器设置源码根目录，启用 SymbolSolver 跨文件类型解析
+        if (backendDir != null && !backendDir.isBlank()) {
+            java.io.File sourceRoot = new java.io.File(backendDir);
+            if (sourceRoot.isDirectory()) {
+                for (ExtractionAdapter adapter : extractionAdapterRegistry.getAllAdapters()) {
+                    if (adapter instanceof JavaCodeAdapter javaCodeAdapter) {
+                        javaCodeAdapter.setSourceRoot(sourceRoot);
+                    } else if (adapter instanceof JavaServiceCallAdapter javaServiceCallAdapter) {
+                        javaServiceCallAdapter.setSourceRoot(sourceRoot);
+                    }
+                }
+            }
+        }
 
         if (assetDiscoveryService != null) {
             ResolvedScanPlan effectivePlan = resolvedPlan != null

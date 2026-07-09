@@ -234,6 +234,27 @@ public class GraphBuilder {
                     NodeStatus.CONFIRMED
             );
 
+            // P1-1：绑定 Java Mapper 接口方法 ↔ SqlStatement（按 namespace.methodId 匹配 Method 节点）
+            // 打通 Service→Method→SqlStatement→Table 全链路
+            String methodNodeKey = mapperKey + "." + stmt.getId() + "()";
+            GraphNode methodNode = neo4jGraphDao.findNode(
+                    projectId, versionId, NodeType.Method.name(), methodNodeKey).orElse(null);
+            // 回退：尝试不带 () 的 key
+            if (methodNode == null) {
+                methodNode = neo4jGraphDao.findNode(
+                        projectId, versionId, NodeType.Method.name(), mapperKey + "." + stmt.getId()).orElse(null);
+            }
+            if (methodNode != null) {
+                createEdge(projectId, versionId,
+                        methodNode.getId(), sqlNode.getId(),
+                        EdgeType.EXECUTES.name(),
+                        methodNodeKey + "->executes->" + sqlKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.valueOf(0.95),
+                        NodeStatus.CONFIRMED
+                );
+            }
+
             // 解析SQL表关系 - 优先使用展开include后的SQL
             String sqlToParse = (stmt.getExpandedSql() != null && !stmt.getExpandedSql().isBlank()) 
                     ? stmt.getExpandedSql() : stmt.getSql();
@@ -821,7 +842,7 @@ public class GraphBuilder {
                                     || path.contains("/dto/");
                         })
                         .limit(MAX_FILES_PER_EXTRACT)
-                        .limit(MAX_FILES_PER_EXTRACT).forEach(javaFiles::add);
+                        .forEach(javaFiles::add);
             }
 
             // 复用单实例避免 Metaspace 膨胀；先读内容再解析避免文件 I/O 卡在 parse 内
@@ -830,10 +851,11 @@ public class GraphBuilder {
                             .setLanguageLevel(com.github.javaparser.ParserConfiguration.LanguageLevel.JAVA_17));
 
             for (Path javaFile : javaFiles) {
+                com.github.javaparser.ast.CompilationUnit cu = null;
                 try {
                     String code = readFileSafely(javaFile);
                     if (code == null) continue;
-                    var cu = parser.parse(code).getResult().orElse(null);
+                    cu = parser.parse(code).getResult().orElse(null);
                     if (cu == null) continue;
                     for (var type : cu.getTypes()) {
                         if (!type.isClassOrInterfaceDeclaration() || type.asClassOrInterfaceDeclaration().isInterface())
@@ -879,6 +901,9 @@ public class GraphBuilder {
                     }
                 } catch (Exception e) {
                     log.debug("Entity extract skipped {}: {}", javaFile.getFileName(), e.getMessage());
+                } finally {
+                    // 显式释放 AST 树（Position/Range/JavaToken 等），降低与 AI 抽取并发时的堆峰值
+                    cu = null;
                 }
             }
         } catch (IOException e) {
@@ -1574,6 +1599,40 @@ public class GraphBuilder {
             );
             nodes.add(classNode);
 
+            // 尝试创建 EXTENDS/IMPLEMENTS 边（find-only，跨文件未解析的留给 resolver 二次扫描）
+            if (classInfo.getExtendedTypes() != null) {
+                for (String parentSimple : classInfo.getExtendedTypes()) {
+                    GraphNode parentNode = findClassNodeBySimpleName(
+                            projectId, versionId, parentSimple);
+                    if (parentNode != null && !parentNode.getId().equals(classNode.getId())) {
+                        createEdge(projectId, versionId,
+                                classNode.getId(), parentNode.getId(),
+                                EdgeType.EXTENDS.name(),
+                                classInfo.getQualifiedName() + "->extends->" + parentNode.getNodeKey(),
+                                SourceType.CODE_AST.name(),
+                                BigDecimal.ONE,
+                                NodeStatus.CONFIRMED
+                        );
+                    }
+                }
+            }
+            if (classInfo.getImplementedTypes() != null) {
+                for (String ifaceSimple : classInfo.getImplementedTypes()) {
+                    GraphNode ifaceNode = findClassNodeBySimpleName(
+                            projectId, versionId, ifaceSimple);
+                    if (ifaceNode != null && !ifaceNode.getId().equals(classNode.getId())) {
+                        createEdge(projectId, versionId,
+                                classNode.getId(), ifaceNode.getId(),
+                                EdgeType.IMPLEMENTS.name(),
+                                classInfo.getQualifiedName() + "->implements->" + ifaceNode.getNodeKey(),
+                                SourceType.CODE_AST.name(),
+                                BigDecimal.ONE,
+                                NodeStatus.CONFIRMED
+                        );
+                    }
+                }
+            }
+
             if (classInfo.getMethods() == null || classInfo.getMethods().isEmpty()) {
                 continue;
             }
@@ -1686,6 +1745,31 @@ public class GraphBuilder {
                 }
             }
         }
+    }
+
+    /**
+     * 按简单名在 Controller/Service/Mapper 节点中查找（用于继承/实现边解析）。
+     * 只在当前已入库的节点中 find-only，不创建新节点。
+     */
+    private GraphNode findClassNodeBySimpleName(String projectId, String versionId, String simpleName) {
+        if (simpleName == null || simpleName.isBlank()) {
+            return null;
+        }
+        for (NodeType t : new NodeType[]{NodeType.Controller, NodeType.Service, NodeType.Mapper}) {
+            List<GraphNode> nodes = neo4jGraphDao.queryNodes(
+                    projectId, versionId, t.name(), null, null, null, 0);
+            if (nodes == null) continue;
+            for (GraphNode n : nodes) {
+                String key = n.getNodeKey();
+                if (key != null && key.endsWith("." + simpleName)) {
+                    return n;
+                }
+                if (simpleName.equals(n.getNodeName())) {
+                    return n;
+                }
+            }
+        }
+        return null;
     }
 
     /**

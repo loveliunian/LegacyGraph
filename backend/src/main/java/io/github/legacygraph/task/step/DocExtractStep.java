@@ -33,10 +33,12 @@ public class DocExtractStep implements AiScanStepExecutor {
 
     /** 文档 LLM 调用单次上限字符数；超过则分段并行抽取后合并 */
     private static final int DOC_CONTENT_LIMIT = 8000;
-    /** 大文档分段大小（字符），与向量化 VECTOR_CHUNK_SIZE 对齐 */
-    private static final int DOC_CHUNK_SIZE = 2000;
+    /** 大文档分段大小（字符）。太小导致 LLM 调用过多，44KB 切 22 段耗 11 分钟 */
+    private static final int DOC_CHUNK_SIZE = 4000;
     /** 分段重叠（字符），避免切割处跨句上下文丢失 */
-    private static final int DOC_CHUNK_OVERLAP = 200;
+    private static final int DOC_CHUNK_OVERLAP = 400;
+    /** 超过此大小的文档才分段，中间大小直接截断（性价比：分段 LLM 耗时 vs 覆盖内容） */
+    private static final int DOC_CHUNK_THRESHOLD = 16000;
 
     private final AiScanStepSupport support;
     private final DocumentRepository documentRepository;
@@ -134,20 +136,11 @@ public class DocExtractStep implements AiScanStepExecutor {
                         support.markExtractFailed(projectId, versionId, filePath, "DOC_EXTRACT", "empty content");
                         return;
                     }
-                    // 内存保护：堆使用率 >85% 时跳过向量化，避免 OOM 中断扫描
-                    if (isMemoryHealthy()) {
-                        CompletableFuture.runAsync(() -> {
-                            try {
-                                support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
-                            } catch (OutOfMemoryError oom) {
-                                log.warn("Vectorization OOM for doc {} (non-blocking), content length={}",
-                                        doc.getId(), content.length());
-                            }
-                        });
-                    }
+                    // 向量化：support 内部已用专用有界线程池 + 内存水位背压，这里直接委托
+                    support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
                     try {
                         // 内存保护：堆快满时跳过 LLM 调用，避免 OOM 中断扫描
-                        if (!isMemoryHealthy()) {
+                        if (!AiScanStepSupport.isMemoryHealthy()) {
                             log.warn("Skipping doc extract for {} (low memory: {}MB free)",
                                     doc.getDocName(), Runtime.getRuntime().freeMemory() / 1024 / 1024);
                             doc.setParseStatus("FAILED");
@@ -159,8 +152,9 @@ public class DocExtractStep implements AiScanStepExecutor {
                         // A3：大文档分段并行抽取再合并，既全覆盖又并发提速。
                         // 小文档（≤ DOC_CONTENT_LIMIT）保持原路径——单次 LLM 调用。
                         DocUnderstandingAgent.BusinessFactExtraction extraction;
-                        if (content.length() <= DOC_CONTENT_LIMIT) {
-                            extraction = support.cachedExtract("doc", content, () -> {
+                        if (content.length() <= DOC_CHUNK_THRESHOLD) {
+                            extraction = support.cachedExtract("doc",
+                                    support.truncate(content, DOC_CONTENT_LIMIT), () -> {
                                 agentCallCounter.increment();
                                 return docUnderstandingAgent.extractBusinessFacts(projectId, content, doc.getFilePath());
                             }, DocUnderstandingAgent.BusinessFactExtraction.class,
@@ -228,9 +222,11 @@ public class DocExtractStep implements AiScanStepExecutor {
     }
 
     /**
-     * A3：大文档分段并行抽取后合并。
-     * 按 DOC_CHUNK_SIZE 分段（带重叠），每段独立调 LLM（复用 cachedExtract），
-     * 多段并行（复用 docExtractExecutor），最后合并去重。
+     * A3：大文档分段抽取后合并。
+     * 按 DOC_CHUNK_SIZE 分段（带重叠），每段独立调 LLM（复用 cachedExtract）。
+     * <p><b>串行抽取</b>：避免多段 LLM 响应(BusinessFactExtraction，含大量长字符串)同时驻留
+     * 导致内存峰值失控（OOM 根因之一）。段间内存占用 = 1 段输入 + 1 份响应，而非 N 份并发。</p>
+     * <p>串行也避免与主文档任务争用 docExtractExecutor 的 Semaphore(2)，防止死锁。</p>
      */
     private DocUnderstandingAgent.BusinessFactExtraction extractFromChunks(String projectId, Document doc, String content) {
         List<String> chunks = splitContent(content, DOC_CHUNK_SIZE, DOC_CHUNK_OVERLAP);
@@ -247,30 +243,33 @@ public class DocExtractStep implements AiScanStepExecutor {
         }
 
         log.info("AI_DOC_EXTRACT chunking: doc={}, contentLen={}, chunks={}", doc.getDocName(), content.length(), chunks.size());
-        // 并行抽取各段
-        List<DocUnderstandingAgent.BusinessFactExtraction> chunkResults = new ArrayList<>();
-        List<CompletableFuture<DocUnderstandingAgent.BusinessFactExtraction>> chunkFutures = new ArrayList<>();
+        // 串行抽取各段：逐段调 LLM，逐段释放，内存峰值 = 单段而非 N 段
+        List<DocUnderstandingAgent.BusinessFactExtraction> chunkResults = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
             final int idx = i;
             final String chunk = chunks.get(i);
-            chunkFutures.add(CompletableFuture.supplyAsync(() ->
-                support.cachedExtract("doc-chunk", chunk, () -> {
+            // 内存保护：分段过程中堆变紧张则提前终止，已抽到的段照样合并
+            if (!AiScanStepSupport.isMemoryHealthy()) {
+                log.warn("Doc chunk extract aborted early (low memory) for doc {} at chunk {}/{}",
+                        doc.getId(), idx, chunks.size());
+                break;
+            }
+            try {
+                DocUnderstandingAgent.BusinessFactExtraction r = support.cachedExtract("doc-chunk", chunk, () -> {
                     agentCallCounter.increment();
                     return docUnderstandingAgent.extractBusinessFacts(projectId, chunk, doc.getFilePath() + "#chunk" + idx);
                 }, DocUnderstandingAgent.BusinessFactExtraction.class,
                 e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
                         e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
-                        e.getFeatures(), e.getStatusTransitions())),
-                support.getDocExtractExecutor()));
-        }
-        for (CompletableFuture<DocUnderstandingAgent.BusinessFactExtraction> f : chunkFutures) {
-            try {
-                DocUnderstandingAgent.BusinessFactExtraction r = f.get();
+                        e.getFeatures(), e.getStatusTransitions()));
                 if (r != null) {
                     chunkResults.add(r);
                 }
+            } catch (OutOfMemoryError oom) {
+                log.warn("Doc chunk extract OOM at chunk {}/{} for doc {}, aborting chunking", idx, chunks.size(), doc.getId());
+                break;
             } catch (Exception e) {
-                log.warn("Doc chunk extract failed for doc {}: {}", doc.getId(), e.getMessage());
+                log.warn("Doc chunk extract failed at chunk {} for doc {}: {}", idx, doc.getId(), e.getMessage());
             }
         }
         return mergeExtractions(chunkResults);
@@ -487,12 +486,5 @@ public class DocExtractStep implements AiScanStepExecutor {
             log.debug("countGraphEdges failed: {}", e.getMessage());
             return 0;
         }
-    }
-
-    /** 内存保护：堆使用率 ≤85% 时才安全进行向量化等重内存操作 */
-    private static boolean isMemoryHealthy() {
-        Runtime rt = Runtime.getRuntime();
-        long used = rt.totalMemory() - rt.freeMemory();
-        return (double) used / rt.maxMemory() < 0.85;
     }
 }

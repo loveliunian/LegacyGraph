@@ -135,8 +135,8 @@ public class CodeExtractStep implements AiScanStepExecutor {
                         return;
                     }
                     processed.incrementAndGet();
-                    CompletableFuture.runAsync(() ->
-                            support.vectorizeContent(projectId, versionId, "CODE", node.getSourcePath(), content));
+                    // 向量化：support 内部已用专用有界线程池 + 内存水位背压，直接委托
+                    support.vectorizeContent(projectId, versionId, "CODE", node.getSourcePath(), content);
                     try {
                         String codeContent = support.truncate(content, CODE_CONTENT_LIMIT);
                         FactExtractionResult result = support.cachedExtract("code", codeContent,

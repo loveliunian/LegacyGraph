@@ -23,7 +23,11 @@ COPY --from=builder /build/target/*.jar app.jar
 EXPOSE 8080
 
 # JVM 参数优化
-ENV JAVA_OPTS="-Xms1g -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+# 说明：扫描/建图阶段对象分配密集，AiScanStepSupport 的并发度按 4GB 堆调优（见其注释）。
+# 容器内用 MaxRAMPercentage 按 Pod/容器内存上限自适应堆大小（配 -m 4g 时约 3g 堆），
+# 避免硬编码 -Xmx2g 与代码并发度假设不符导致扫描 OOM。
+# 如需固定堆，可用 JAVA_OPTS 覆盖为 -Xms2g -Xmx4g。
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:InitialRAMPercentage=50.0 -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ExitOnOutOfMemoryError"
 
 # 启动
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

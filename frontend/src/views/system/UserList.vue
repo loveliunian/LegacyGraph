@@ -79,7 +79,9 @@
         <el-table-column
           prop="createdAt"
           label="创建时间"
-          width="180" />
+          width="180">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="150"
@@ -169,6 +171,9 @@ import BaseTable from '@/components/common/BaseTable.vue'
 import SearchForm from '@/components/common/SearchForm.vue'
 import type { User } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import dayjs from 'dayjs'
+
+const formatTime = (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm:ss')
 
 
 const loading = ref(false)

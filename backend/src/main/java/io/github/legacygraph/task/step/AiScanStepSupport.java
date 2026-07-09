@@ -23,9 +23,12 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -44,6 +47,12 @@ public class AiScanStepSupport {
 
     /** LLM 并发上限（4GB 堆实测 DOC+CODE 各 2 路不 OOM；DeepSeek 8 路限流，2+2=4 安全） */
     public static final int DOC_EXTRACT_PARALLELISM = 2;
+    /** 向量化并发上限：embedding 调用 CPU/内存较重，独立于 LLM 并发控制，避免无界堆积打爆堆 */
+    public static final int VECTOR_PARALLELISM = 2;
+    /** 向量化任务队列上限：超出即拒绝（背压），防止内容文本在队列里无限堆积导致 OOM */
+    private static final int VECTOR_QUEUE_CAPACITY = 8;
+    /** 内存水位线：堆使用率超过此值时拒绝新的向量化任务（背压，而非事后跳过） */
+    private static final double MEMORY_HIGH_WATERMARK = 0.80;
 
     /** 向量化分片参数 */
     private static final int VECTOR_CHUNK_SIZE = 2000;
@@ -68,6 +77,21 @@ public class AiScanStepSupport {
     private final ExecutorService docExtractExecutor = boundedVirtualExecutor(DOC_EXTRACT_PARALLELISM);
     /** 代码抽取线程池：同上，DOC/CODE 各独立控制并发，峰值 8 路 LLM */
     private final ExecutorService codeExtractExecutor = boundedVirtualExecutor(DOC_EXTRACT_PARALLELISM);
+    /**
+     * 向量化专用线程池：有界线程 + 有界队列 + CallerRuns 失败回退。
+     * 不再用 ForkJoinPool.commonPool（无界队列会无控堆积内容文本导致 OOM）。
+     * 提交时还会做内存水位检查，超水位直接拒绝。
+     */
+    private final ExecutorService vectorizeExecutor = new ThreadPoolExecutor(
+            VECTOR_PARALLELISM, VECTOR_PARALLELISM,
+            0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(VECTOR_QUEUE_CAPACITY),
+            r -> {
+                Thread t = new Thread(r, "vectorize-worker");
+                t.setDaemon(true);
+                return t;
+            },
+            new ThreadPoolExecutor.DiscardPolicy());  // 队列满直接丢弃向量化任务（非核心路径，可重扫补）
 
     /** LLM 抽取缓存（Redis，可选；测试环境为 null 时降级为直调 LLM） */
     @Autowired(required = false)
@@ -126,6 +150,7 @@ public class AiScanStepSupport {
     public void shutdown() {
         docExtractExecutor.shutdown();
         codeExtractExecutor.shutdown();
+        vectorizeExecutor.shutdown();
         try {
             if (!docExtractExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
                 docExtractExecutor.shutdownNow();
@@ -133,9 +158,13 @@ public class AiScanStepSupport {
             if (!codeExtractExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
                 codeExtractExecutor.shutdownNow();
             }
+            if (!vectorizeExecutor.awaitTermination(15, TimeUnit.SECONDS)) {
+                vectorizeExecutor.shutdownNow();
+            }
         } catch (InterruptedException e) {
             docExtractExecutor.shutdownNow();
             codeExtractExecutor.shutdownNow();
+            vectorizeExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
@@ -248,22 +277,55 @@ public class AiScanStepSupport {
 
     /**
      * 向量化内容分片并存储到 pgvector（非阻塞：失败不影响扫描主流程）。
+     *
+     * <p>提交到专用有界线程池 {@link #vectorizeExecutor}，而非 ForkJoinPool.commonPool。
+     * 提交时刻做内存水位检查（背压）：堆使用率超 {@link #MEMORY_HIGH_WATERMARK} 时直接拒绝，
+     * 避免内容文本在无界队列里堆积导致 OOM。队列满时由 DiscardPolicy 丢弃（向量化非核心路径）。</p>
      */
     public void vectorizeContent(String projectId, String versionId, String chunkType,
                                  String sourceUri, String content) {
         if (vectorizationService == null || !vectorizationService.isAvailable()) {
             return;
         }
-        try {
-            int stored = vectorizationService.embedDocument(
-                    projectId, versionId, chunkType, sourceUri, content,
-                    VECTOR_CHUNK_SIZE, VECTOR_OVERLAP, EMBEDDING_MODEL_NAME);
-            if (stored > 0) {
-                log.debug("Vectorized {}: {} chunks stored", sourceUri, stored);
-            }
-        } catch (Exception e) {
-            log.debug("Vectorization skipped for {}: {}", sourceUri, e.getMessage());
+        // 背压：提交时刻检查内存水位，超水位直接放弃向量化（比事后跳过更早拦截）
+        if (!isMemoryHealthy()) {
+            log.debug("Vectorization skipped (memory high) for {}: {}MB used / {}%",
+                    sourceUri,
+                    (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024,
+                    (int) (memoryUsageRatio() * 100));
+            return;
         }
+        try {
+            vectorizeExecutor.execute(() -> {
+                try {
+                    int stored = vectorizationService.embedDocument(
+                            projectId, versionId, chunkType, sourceUri, content,
+                            VECTOR_CHUNK_SIZE, VECTOR_OVERLAP, EMBEDDING_MODEL_NAME);
+                    if (stored > 0) {
+                        log.debug("Vectorized {}: {} chunks stored", sourceUri, stored);
+                    }
+                } catch (OutOfMemoryError oom) {
+                    log.warn("Vectorization OOM (non-blocking) for {}: {}", sourceUri, oom.getMessage());
+                } catch (Exception e) {
+                    log.debug("Vectorization skipped for {}: {}", sourceUri, e.getMessage());
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // 有界队列满（DiscardPolicy 不会抛 Rejected，这里兜底其他拒绝场景）
+            log.debug("Vectorization rejected (queue full) for {}", sourceUri);
+        }
+    }
+
+    /** 堆使用率（used / max）。 */
+    private static double memoryUsageRatio() {
+        Runtime rt = Runtime.getRuntime();
+        long used = rt.totalMemory() - rt.freeMemory();
+        return (double) used / rt.maxMemory();
+    }
+
+    /** 内存保护：堆使用率低于水位线时才安全进行向量化等重内存操作。 */
+    public static boolean isMemoryHealthy() {
+        return memoryUsageRatio() < MEMORY_HIGH_WATERMARK;
     }
 
     // ==================== Knowledge Claim 桥接 ====================
@@ -311,15 +373,31 @@ public class AiScanStepSupport {
         }
     }
 
-    /** 批量 upsert：单次 DB 往返替代逐条 upsert。返回受影响行数。 */
+    /** 批量 upsert：单次 DB 往返替代逐条 upsert。返回受影响行数。
+     *  批内按冲突键 (projectId, versionId, factType, factKey) 去重，
+     *  避免 PostgreSQL "ON CONFLICT DO UPDATE command cannot affect row a second time" 整批失败。 */
     public int saveAiFactsBatch(List<Fact> facts) {
         if (facts == null || facts.isEmpty()) {
             return 0;
         }
+        // 批内去重：同 (project_id, version_id, fact_type, fact_key) 只保留最后一条
+        java.util.Map<String, Fact> deduped = new java.util.LinkedHashMap<>();
+        for (Fact f : facts) {
+            if (f == null || f.getProjectId() == null || f.getVersionId() == null
+                    || f.getFactType() == null || f.getFactKey() == null) {
+                continue;
+            }
+            String k = f.getProjectId() + "|" + f.getVersionId() + "|" + f.getFactType() + "|" + f.getFactKey();
+            deduped.put(k, f);
+        }
+        if (deduped.isEmpty()) {
+            return 0;
+        }
+        List<Fact> toSave = new java.util.ArrayList<>(deduped.values());
         try {
-            return factRepository.batchUpsert(facts);
+            return factRepository.batchUpsert(toSave);
         } catch (Exception e) {
-            log.warn("Failed to batch save {} AI facts: {}", facts.size(), e.getMessage());
+            log.warn("Failed to batch save {} AI facts: {}", toSave.size(), e.getMessage());
             return 0;
         }
     }

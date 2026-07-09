@@ -147,8 +147,9 @@ public class FrontendGraphBuilder {
         // 处理API调用
         if (page.getApiCalls() != null) {
             for (FrontendPageFact.FrontendApiCall apiCall : page.getApiCalls()) {
+                String httpMethod = apiCall.getMethod() != null ? apiCall.getMethod().toUpperCase() : "GET";
                 String normalizedPath = GraphBuilder.normalizePath(apiCall.getUrl());
-                String apiKey = apiCall.getMethod().toUpperCase() + " " + normalizedPath;
+                String apiKey = GraphBuilder.normalizeApiKey(httpMethod, normalizedPath);
 
                 // 查找后端匹配的ApiEndpoint
                 Optional<GraphNode> backendApiOpt = findBackendApi(projectId, versionId, apiKey);

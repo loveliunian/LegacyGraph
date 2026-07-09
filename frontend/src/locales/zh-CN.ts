@@ -25,6 +25,7 @@ export default {
     view: '查看',
     detail: '详情',
     back: '返回',
+    backToHome: '返回首页',
     submit: '提交',
     close: '关闭',
     enable: '启用',

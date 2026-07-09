@@ -98,8 +98,8 @@ const handleLogin = async () => {
       await userStore.login(loginForm.username, loginForm.password)
       ElMessage.success('登录成功')
       router.push('/projects')
-    } catch (error: any) {
-      ElMessage.error(error.message || '登录失败，请检查用户名和密码')
+    } catch {
+      // 错误提示由 request 响应拦截器统一处理
     } finally {
       loading.value = false
     }

@@ -40,8 +40,6 @@ public class ProjectService {
     private final Neo4jGraphDao neo4jGraphDao;
     private final ScanVersionRepository scanVersionRepository;
     private final ScanTaskRepository scanTaskRepository;
-    private final GraphNodeRepository graphNodeRepository;
-    private final GraphEdgeRepository graphEdgeRepository;
     private final FactRepository factRepository;
     private final EvidenceRepository evidenceRepository;
     private final NodeEvidenceRepository nodeEvidenceRepository;
@@ -88,8 +86,6 @@ public class ProjectService {
                           Neo4jGraphDao neo4jGraphDao,
                           ScanVersionRepository scanVersionRepository,
                           ScanTaskRepository scanTaskRepository,
-                          GraphNodeRepository graphNodeRepository,
-                          GraphEdgeRepository graphEdgeRepository,
                           FactRepository factRepository,
                           EvidenceRepository evidenceRepository,
                           NodeEvidenceRepository nodeEvidenceRepository,
@@ -135,8 +131,6 @@ public class ProjectService {
         this.neo4jGraphDao = neo4jGraphDao;
         this.scanVersionRepository = scanVersionRepository;
         this.scanTaskRepository = scanTaskRepository;
-        this.graphNodeRepository = graphNodeRepository;
-        this.graphEdgeRepository = graphEdgeRepository;
         this.factRepository = factRepository;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
@@ -273,18 +267,7 @@ public class ProjectService {
         // 2. Neo4j 全项目图谱异步删除（不阻塞响应）
         deleteNeo4jProjectGraphAsync(id);
 
-        // 3. 项目级 PG 图谱
-        CompletableFuture<Void> graphFuture = CompletableFuture.runAsync(() -> {
-            try {
-                graphNodeRepository.delete(new QueryWrapper<GraphNode>().eq("project_id", id));
-                graphEdgeRepository.delete(new QueryWrapper<GraphEdge>().eq("project_id", id));
-            } catch (Exception e) {
-                log.warn("S9: 删除项目级PG图谱失败: projectId={}, error={}", id, e.getMessage());
-                failedSteps.add("graph:" + id);
-            }
-        });
-
-        // 4. 事实/证据（先查 ID 再批量删，避免 SQL 注入）
+        // 3. 事实/证据（先查 ID 再批量删，避免 SQL 注入）
         CompletableFuture<Void> evidenceFuture = CompletableFuture.runAsync(() -> {
             try {
                 List<Evidence> evidenceList = evidenceRepository.selectList(
@@ -420,7 +403,6 @@ public class ProjectService {
         });
 
         // 等待所有并行删除完成
-        futures.add(graphFuture);
         futures.add(evidenceFuture);
         futures.add(docFuture);
         futures.add(testFuture);

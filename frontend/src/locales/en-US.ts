@@ -25,6 +25,7 @@ export default {
     view: 'View',
     detail: 'Detail',
     back: 'Back',
+    backToHome: 'Back to Home',
     submit: 'Submit',
     close: 'Close',
     enable: 'Enable',

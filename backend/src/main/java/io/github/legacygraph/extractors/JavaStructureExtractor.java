@@ -77,6 +77,16 @@ public class JavaStructureExtractor {
             String className = clazz.getNameAsString();
             String qualifiedName = clazz.getFullyQualifiedName()
                     .orElse(packageName.isBlank() ? className : packageName + "." + className);
+            // 提取继承和实现列表（简单名，后续由 resolver 解析为 FQN）
+            List<String> extendedTypes = new ArrayList<>();
+            for (var ext : clazz.getExtendedTypes()) {
+                extendedTypes.add(ext.getNameAsString());
+            }
+            List<String> implementedTypes = new ArrayList<>();
+            for (var impl : clazz.getImplementedTypes()) {
+                implementedTypes.add(impl.getNameAsString());
+            }
+
             JavaClassInfo classInfo = new JavaClassInfo(
                     className,
                     packageName,
@@ -85,30 +95,14 @@ public class JavaStructureExtractor {
                     javaFile.toString(),
                     clazz.getBegin().map(p -> p.line).orElse(null),
                     clazz.getEnd().map(p -> p.line).orElse(null),
-                    new ArrayList<>()
+                    new ArrayList<>(),
+                    extendedTypes,
+                    implementedTypes
             );
 
             for (MethodDeclaration method : clazz.getMethods()) {
                 String methodName = method.getNameAsString();
-                // 生成参数签名: (String, int, User)
-                String paramSignature = method.getParameters().stream()
-                        .map(p -> {
-                            String type = p.getType().asString();
-                            // 简化泛型: List<String> -> List
-                            int genericIdx = type.indexOf('<');
-                            if (genericIdx > 0) {
-                                type = type.substring(0, genericIdx);
-                            }
-                            // 取简单类名: java.util.List -> List
-                            int dotIdx = type.lastIndexOf('.');
-                            if (dotIdx > 0) {
-                                type = type.substring(dotIdx + 1);
-                            }
-                            return type;
-                        })
-                        .reduce((a, b) -> a + ", " + b)
-                        .orElse("");
-                String methodSignature = methodName + "(" + paramSignature + ")";
+                String methodSignature = MethodSignatureSupport.build(method);
                 classInfo.getMethods().add(new JavaMethodInfo(
                         methodName,
                         qualifiedName + "." + methodSignature,
@@ -150,6 +144,10 @@ public class JavaStructureExtractor {
         private Integer startLine;
         private Integer endLine;
         private List<JavaMethodInfo> methods = new ArrayList<>();
+        /** extends 的父类简单名列表 */
+        private List<String> extendedTypes = new ArrayList<>();
+        /** implements 的接口简单名列表 */
+        private List<String> implementedTypes = new ArrayList<>();
     }
 
     @Data

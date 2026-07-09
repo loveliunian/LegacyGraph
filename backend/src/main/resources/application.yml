@@ -64,7 +64,7 @@ spring:
       pool-name: LegacyGraphHikariCP
       max-lifetime: 600000
       connection-timeout: 10000
-      leak-detection-threshold: 120000
+      leak-detection-threshold: 600000
       data-source-properties:
         stringtype: unspecified
         reWriteBatchedInserts: true
