@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { ElConfigProvider } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import en from 'element-plus/es/locale/lang/en'
@@ -23,6 +23,10 @@ const handleLocaleChange = ((e: CustomEvent<LocaleType>) => {
 }) as EventListener
 
 window.addEventListener('locale-changed', handleLocaleChange)
+
+onUnmounted(() => {
+  window.removeEventListener('locale-changed', handleLocaleChange)
+})
 </script>
 
 <style>

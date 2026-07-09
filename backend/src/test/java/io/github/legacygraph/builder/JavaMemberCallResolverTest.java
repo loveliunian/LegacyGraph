@@ -68,7 +68,7 @@ class JavaMemberCallResolverTest {
         // 字段顺序：callerClass, callerMethod, calledMethod, targetClass, targetMethod, sourcePath, lineNumber, callerMethodSignature, calledMethodSignature
         JavaMemberCallResolver.CallRelationDto dto = new JavaMemberCallResolver.CallRelationDto(
                 callerClass, callerMethod, calledMethod, targetClass, calledMethod,
-                null, null, callerMethodSig, calledMethodSig);
+                null, null, callerMethodSig, calledMethodSig, null);
         Fact f = new Fact();
         f.setId("fact-" + callerClass + "-" + calledMethod);
         f.setFactType("SERVICE_CALL");

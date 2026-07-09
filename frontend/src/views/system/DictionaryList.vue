@@ -407,9 +407,8 @@ async function saveType() {
     typeDialogVisible.value = false
     clearDictCache()
     loadDictTypes()
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('保存失败')
+  } catch {
+    // request 拦截器已统一处理错误提示
   } finally {
     saving.value = false
   }
@@ -503,9 +502,8 @@ async function saveItem() {
     if (currentDictType.value) {
       itemList.value = await systemApi.getDictItems(currentDictType.value.id)
     }
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('保存失败')
+  } catch {
+    // request 拦截器已统一处理错误提示
   } finally {
     saving.value = false
   }

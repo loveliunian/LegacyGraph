@@ -187,9 +187,8 @@ async function handleSave(row: SystemConfig) {
     ElMessage.success('保存成功')
     editingId.value = null
     loadData()
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('保存失败')
+  } catch {
+    // request 拦截器已统一处理错误提示
   }
 }
 

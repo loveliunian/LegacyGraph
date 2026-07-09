@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 图谱完整性审计服务 — 落地 §8.3 的 7 项端到端质量指标。
+ * 图谱完整性审计服务 — 落地 §8.3 的 8 项端到端质量指标。
  * <p>
  * 与 {@link GraphifyQualityService} 的区别：前者评估 Graphify 导入的 benchmark 召回率，
  * 本服务评估 LegacyGraph 自建图谱的结构性完整性（边连通率、端到端链路覆盖度等）。
@@ -35,7 +35,7 @@ public class GraphCompletenessAuditService {
     private final ScanVersionRepository scanVersionRepository;
 
     /**
-     * 执行完整性审计，返回 7 项指标结果。
+     * 执行完整性审计，返回 8 项指标结果。
      *
      * @param projectId 项目 ID
      * @param versionId 扫描版本 ID，为空时取最新
@@ -46,7 +46,7 @@ public class GraphCompletenessAuditService {
             return new AuditResult(projectId, null, "无扫描版本", List.of());
         }
 
-        List<Metric> metrics = new ArrayList<>(7);
+        List<Metric> metrics = new ArrayList<>(8);
 
         // 1. Controller 入度覆盖率：被 Feature/Page 通过 EXPOSED_BY/CALLS 指向的 Controller 占比
         metrics.add(controllerInboundCoverage(projectId, vid));
@@ -68,6 +68,9 @@ public class GraphCompletenessAuditService {
 
         // 7. SqlStatement→Table 覆盖率：已连表的 SqlStatement 占比
         metrics.add(sqlStatementTableCoverage(projectId, vid));
+
+        // 8. 外部验证覆盖率：EXTERNAL_VERIFY 来源且 CONFIRMED 的边占比
+        metrics.add(externalVerificationCoverage(projectId, vid));
 
         return new AuditResult(projectId, vid, null, metrics);
     }
@@ -241,6 +244,32 @@ public class GraphCompletenessAuditService {
         double rate = (double) connected / total;
         return new Metric("SqlStatement→Table 覆盖率", rate, connected,
                 "≥90%", connected + "/" + total + " SqlStatement 已连表");
+    }
+
+    /**
+     * 8. 外部验证覆盖率 = sourceType=EXTERNAL_VERIFY 且 status=CONFIRMED 的边 / 总边
+     * <p>
+     * Neo4jGraphDao.countEdges 仅支持按 status 过滤，故先按 status=CONFIRMED 拉取边，
+     * 再在 Java 端过滤 sourceType=EXTERNAL_VERIFY。
+     * </p>
+     */
+    private Metric externalVerificationCoverage(String projectId, String versionId) {
+        long totalEdges = graphDao.countEdges(projectId, versionId, null);
+
+        List<GraphEdge> confirmedEdges = graphDao.queryEdges(
+                projectId, versionId, null, null, null, null,
+                NodeStatus.CONFIRMED.name(), 0);
+        int verifiedEdges = (int) confirmedEdges.stream()
+                .filter(e -> "EXTERNAL_VERIFY".equals(e.getSourceType()))
+                .count();
+
+        if (verifiedEdges == 0) {
+            return new Metric("外部验证覆盖率", 0.0, 0, "≥30%", "未启用外部验证");
+        }
+
+        double rate = totalEdges > 0 ? (double) verifiedEdges / totalEdges : 0.0;
+        return new Metric("外部验证覆盖率", rate, verifiedEdges, "≥30%",
+                String.format("已验证 %d / 总计 %d 条边", verifiedEdges, totalEdges));
     }
 
     // ==================== 辅助 ====================

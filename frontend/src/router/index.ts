@@ -192,97 +192,97 @@ const routes: RouteRecordRaw[] = [
             path: 'workbench',
             name: 'EvidenceWorkbench',
             component: () => import('@/views/workbench/EvidenceWorkbench.vue'),
-            meta: { title: '证据工作台' }
+            meta: { title: 'menu.evidenceWorkbench' }
           },
           {
             path: 'change-tasks',
             name: 'ChangeTaskList',
             component: () => import('@/views/change/ChangeTaskList.vue'),
-            meta: { title: '变更任务' }
+            meta: { title: 'menu.changeTasks' }
           },
           {
             path: 'qa',
             name: 'GraphQa',
             component: () => import('@/views/graph/GraphQa.vue'),
-            meta: { title: '图谱问答' }
+            meta: { title: 'menu.graphQa' }
           },
           {
             path: 'agents',
             name: 'AgentHub',
             component: () => import('@/views/agent/AgentHub.vue'),
-            meta: { title: 'AI 助手' }
+            meta: { title: 'menu.agentHub' }
           },
           {
             path: 'understanding',
             name: 'UnderstandingReport',
             component: () => import('@/views/understanding/UnderstandingReportView.vue'),
-            meta: { title: '代码理解' }
+            meta: { title: 'menu.understanding' }
           },
           {
             path: 'vector-search',
             name: 'VectorSearch',
             component: () => import('@/views/vector/VectorSearch.vue'),
-            meta: { title: '向量检索' }
+            meta: { title: 'menu.vectorSearch' }
           },
           {
             path: 'pr-workbench',
             name: 'PrWorkbench',
             component: () => import('@/views/change/PrWorkbench.vue'),
-            meta: { title: 'PR 工作台' }
+            meta: { title: 'menu.prWorkbench' }
           },
           {
             path: 'graph-diff',
             name: 'GraphDiff',
             component: () => import('@/views/graph/GraphDiff.vue'),
-            meta: { title: '图谱对比' }
+            meta: { title: 'menu.graphDiff' }
           },
           {
             path: 'graphify/jobs',
             name: 'GraphifyJobs',
             component: () => import('@/views/graphify/GraphifyJobCenterView.vue'),
-            meta: { title: 'Graphify 作业中心' }
+            meta: { title: 'menu.graphifyJobs' }
           },
           {
             path: 'graphify/diff',
             name: 'GraphifyDiff',
             component: () => import('@/views/graphify/GraphifyDiffView.vue'),
-            meta: { title: 'Graphify 版本差异' }
+            meta: { title: 'menu.graphifyDiff' }
           },
           {
             path: 'graphify/quality',
             name: 'GraphifyQuality',
             component: () => import('@/views/graphify/GraphifyQualityDashboard.vue'),
-            meta: { title: 'Graphify 质量仪表盘' }
+            meta: { title: 'menu.graphifyQuality' }
           },
           {
             path: 'graphify/cross-repo-impact',
             name: 'GraphifyCrossRepoImpact',
             component: () => import('@/views/graphify/CrossRepositoryImpactView.vue'),
-            meta: { title: '跨仓影响分析' }
+            meta: { title: 'menu.crossRepoImpact' }
           },
           {
             path: 'knowledge',
             name: 'KnowledgeWorkbench',
             component: () => import('@/views/workbench/KnowledgeWorkbench.vue'),
-            meta: { title: '知识工作台' }
+            meta: { title: 'menu.knowledgeWorkbench' }
           },
           {
             path: 'agents/history',
             name: 'AgentHistory',
             component: () => import('@/views/agent/AgentHistory.vue'),
-            meta: { title: 'Agent 运行历史' }
+            meta: { title: 'menu.agentHistory' }
           },
           {
             path: 'evidence/conflicts',
             name: 'EvidenceConflict',
             component: () => import('@/views/workbench/EvidenceConflict.vue'),
-            meta: { title: '证据冲突处理' }
+            meta: { title: 'menu.evidenceConflict' }
           },
           {
             path: 'system-overview',
             name: 'SystemOverviewWorkbench',
             component: () => import('@/views/workbench/SystemOverviewWorkbench.vue'),
-            meta: { title: '系统关系总览' }
+            meta: { title: 'menu.systemOverview' }
           }
         ]
       },
@@ -296,37 +296,37 @@ const routes: RouteRecordRaw[] = [
             path: 'users',
             name: 'SystemUserList',
             component: () => import('@/views/system/UserList.vue'),
-            meta: { title: '用户管理' }
+            meta: { title: 'menu.users' }
           },
           {
             path: 'dictionaries',
             name: 'SystemDictionaryList',
             component: () => import('@/views/system/DictionaryList.vue'),
-            meta: { title: '字典管理' }
+            meta: { title: 'menu.dictionaries' }
           },
           {
             path: 'settings',
             name: 'SystemSettings',
             component: () => import('@/views/system/Settings.vue'),
-            meta: { title: '系统配置' }
+            meta: { title: 'menu.settings' }
           },
           {
             path: 'llm',
             name: 'LlmProviderSettings',
             component: () => import('@/views/system/LlmProviderSettings.vue'),
-            meta: { title: 'LLM 提供商' }
+            meta: { title: 'menu.llmProvider' }
           },
           {
             path: 'prompts',
             name: 'PromptTemplateList',
             component: () => import('@/views/system/PromptList.vue'),
-            meta: { title: '提示词管理' }
+            meta: { title: 'menu.promptTemplates' }
           },
           {
             path: 'plugins',
             name: 'PluginManagement',
             component: () => import('@/views/system/PluginManagement.vue'),
-            meta: { title: '插件管理' }
+            meta: { title: 'menu.plugins' }
           },
           {
             path: 'audit-logs',
@@ -392,7 +392,7 @@ router.beforeEach(async (to, _from, next) => {
       }
     }
     // 确保字典已加载到内存（页面刷新后缓存丢失，需重新加载）
-    loadAllDicts()
+    await loadAllDicts()
     // F-H6：路由级角色守卫——meta.roles 命中其一才放行，否则跳 403。
     const requiredRoles = to.meta.roles
     if (requiredRoles && requiredRoles.length > 0 && !userStore.hasAnyRole(requiredRoles)) {

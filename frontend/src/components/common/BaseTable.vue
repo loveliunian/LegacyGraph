@@ -42,6 +42,7 @@ interface Props {
   total?: number
   page?: number
   pageSize?: number
+  remotePagination?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -50,7 +51,8 @@ const props = withDefaults(defineProps<Props>(), {
   pagination: true,
   total: 0,
   page: 1,
-  pageSize: 20
+  pageSize: 20,
+  remotePagination: true
 })
 
 const emit = defineEmits<{
@@ -65,7 +67,7 @@ const currentPage = ref(props.page)
 const pageSize = ref(props.pageSize)
 
 const tableData = computed(() => {
-  if (!props.pagination) {
+  if (!props.pagination || props.remotePagination) {
     return props.data
   }
   const start = (currentPage.value - 1) * pageSize.value

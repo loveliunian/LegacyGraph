@@ -95,8 +95,6 @@ export default defineConfig(({ command }) => {
             'vendor-echarts': ['echarts'],
             // UI 组件库
             'vendor-element-plus': ['element-plus'],
-            // 编辑器（Monaco 体积大，按需加载）
-            'vendor-monaco': ['monaco-editor'],
             // Vue 生态
             'vendor-vue': ['vue', 'vue-router', 'pinia'],
             // 通用工具

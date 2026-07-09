@@ -20,8 +20,7 @@
             <el-col :span="6">
               <div class="stat-item">
                 <div
-                  class="stat-number"
-                  style="color: #409eff;">
+                  class="stat-number stat-number--primary">
                   {{ stats.totalNodes }}
                 </div>
                 <div class="stat-label">图谱节点</div>
@@ -30,8 +29,7 @@
             <el-col :span="6">
               <div class="stat-item">
                 <div
-                  class="stat-number"
-                  style="color: #67c23a;">
+                  class="stat-number stat-number--success">
                   {{ stats.confirmedNodes }}
                 </div>
                 <div class="stat-label">已确认</div>
@@ -40,8 +38,7 @@
             <el-col :span="6">
               <div class="stat-item">
                 <div
-                  class="stat-number"
-                  style="color: #e6a23c;">
+                  class="stat-number stat-number--warning">
                   {{ stats.totalEdges }}
                 </div>
                 <div class="stat-label">关系连接</div>
@@ -50,8 +47,7 @@
             <el-col :span="6">
               <div class="stat-item">
                 <div
-                  class="stat-number"
-                  style="color: #67c23a;">
+                  class="stat-number stat-number--success">
                   {{ stats.confirmedEdges }}
                 </div>
                 <div class="stat-label">已确认</div>
@@ -518,9 +514,9 @@ const getMigrationScore = computed(() => {
 })
 
 const getConfidenceColor = (confidence: number) => {
-  if (confidence < 0.5) return '#f56c6c'
-  if (confidence < 0.8) return '#e6a23c'
-  return '#67c23a'
+  if (confidence < 0.5) return 'var(--el-color-danger)'
+  if (confidence < 0.8) return 'var(--el-color-warning)'
+  return 'var(--el-color-success)'
 }
 
 const getBarHeight = (count: number) => {
@@ -529,9 +525,9 @@ const getBarHeight = (count: number) => {
 }
 
 const getBarColor = (lower: number) => {
-  if (lower < 0.5) return '#f56c6c'
-  if (lower < 0.8) return '#e6a23c'
-  return '#67c23a'
+  if (lower < 0.5) return 'var(--el-color-danger)'
+  if (lower < 0.8) return 'var(--el-color-warning)'
+  return 'var(--el-color-success)'
 }
 
 const getConfidenceClass = (confidence: number) => {
@@ -715,6 +711,10 @@ onMounted(loadDashboard)
   font-weight: bold;
   margin-bottom: 4px;
 }
+
+.stat-number--primary { color: var(--el-color-primary); }
+.stat-number--success { color: var(--el-color-success); }
+.stat-number--warning { color: var(--el-color-warning); }
 
 .stat-label {
   font-size: 12px;
@@ -916,9 +916,9 @@ onMounted(loadDashboard)
   flex-shrink: 0;
 }
 
-.confidence.low { background: #fef0f0; color: #f56c6c; }
-.confidence.medium { background: #fdf6ec; color: #e6a23c; }
-.confidence.high { background: #f0f9eb; color: #67c23a; }
+.confidence.low { background: var(--el-color-danger-light-9); color: var(--el-color-danger); }
+.confidence.medium { background: var(--el-color-warning-light-9); color: var(--el-color-warning); }
+.confidence.high { background: var(--el-color-success-light-9); color: var(--el-color-success); }
 
 .more {
   text-align: center;
@@ -969,10 +969,10 @@ onMounted(loadDashboard)
   margin-bottom: 16px;
 }
 
-.score-circle.excellent { border-color: #67c23a; background: #f0f9eb; }
-.score-circle.good { border-color: #e6a23c; background: #fdf6ec; }
-.score-circle.fair { border-color: #409eff; background: #ecf5ff; }
-.score-circle.poor { border-color: #f56c6c; background: #fef0f0; }
+.score-circle.excellent { border-color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.score-circle.good { border-color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+.score-circle.fair { border-color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.score-circle.poor { border-color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
 
 .score-value { font-size: 36px; font-weight: bold; line-height: 1; }
 .score-label { font-size: 16px; color: #909399; }
@@ -1009,7 +1009,7 @@ onMounted(loadDashboard)
   gap: 6px;
   font-size: 14px;
   font-weight: 600;
-  color: #f56c6c;
+  color: var(--el-color-danger);
   margin-bottom: 8px;
 }
 

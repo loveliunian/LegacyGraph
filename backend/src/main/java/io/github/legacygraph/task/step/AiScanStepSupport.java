@@ -50,13 +50,16 @@ public class AiScanStepSupport {
     /** 向量化并发上限：embedding 调用 CPU/内存较重，独立于 LLM 并发控制，避免无界堆积打爆堆 */
     public static final int VECTOR_PARALLELISM = 2;
     /** 向量化任务队列上限：超出即拒绝（背压），防止内容文本在队列里无限堆积导致 OOM */
-    private static final int VECTOR_QUEUE_CAPACITY = 8;
+    private static final int VECTOR_QUEUE_CAPACITY = 4;
     /** 内存水位线：堆使用率超过此值时拒绝新的向量化任务（背压，而非事后跳过） */
     private static final double MEMORY_HIGH_WATERMARK = 0.80;
 
-    /** 向量化分片参数 */
-    private static final int VECTOR_CHUNK_SIZE = 2000;
-    private static final int VECTOR_OVERLAP = 200;
+    /** 向量化分片参数（#20 调优：2000→1200，减少单次 embedding 内存峰值） */
+    private static final int VECTOR_CHUNK_SIZE = 1200;
+    private static final int VECTOR_OVERLAP = 120;
+    /** 大文档阈值（字符），超过此值动态使用更小的 chunk */
+    private static final int LARGE_DOC_THRESHOLD = 20000;
+    private static final int LARGE_DOC_CHUNK_SIZE = 800;
     /** 当前使用的 embedding 模型名 */
     private static final String EMBEDDING_MODEL_NAME = "bge-m3";
 
@@ -78,9 +81,13 @@ public class AiScanStepSupport {
     /** 代码抽取线程池：同上，DOC/CODE 各独立控制并发，峰值 8 路 LLM */
     private final ExecutorService codeExtractExecutor = boundedVirtualExecutor(DOC_EXTRACT_PARALLELISM);
     /**
-     * 向量化专用线程池：有界线程 + 有界队列 + CallerRuns 失败回退。
+     * 向量化专用线程池：有界线程 + 有界队列 + CallerRuns 回退。
      * 不再用 ForkJoinPool.commonPool（无界队列会无控堆积内容文本导致 OOM）。
      * 提交时还会做内存水位检查，超水位直接拒绝。
+     *
+     * <p>拒绝策略用 CallerRunsPolicy：队列满时提交线程自己执行任务，
+     * 这样虽然会短暂阻塞提交方，但保证任务不丢失，避免 DiscardPolicy
+     * 静默丢任务导致进度永远卡住的"软挂起"问题。</p>
      */
     private final ExecutorService vectorizeExecutor = new ThreadPoolExecutor(
             VECTOR_PARALLELISM, VECTOR_PARALLELISM,
@@ -91,7 +98,7 @@ public class AiScanStepSupport {
                 t.setDaemon(true);
                 return t;
             },
-            new ThreadPoolExecutor.DiscardPolicy());  // 队列满直接丢弃向量化任务（非核心路径，可重扫补）
+            new ThreadPoolExecutor.CallerRunsPolicy());  // 队列满时提交线程自己执行，不丢任务
 
     /** LLM 抽取缓存（Redis，可选；测试环境为 null 时降级为直调 LLM） */
     @Autowired(required = false)
@@ -280,11 +287,18 @@ public class AiScanStepSupport {
      *
      * <p>提交到专用有界线程池 {@link #vectorizeExecutor}，而非 ForkJoinPool.commonPool。
      * 提交时刻做内存水位检查（背压）：堆使用率超 {@link #MEMORY_HIGH_WATERMARK} 时直接拒绝，
-     * 避免内容文本在无界队列里堆积导致 OOM。队列满时由 DiscardPolicy 丢弃（向量化非核心路径）。</p>
+     * 避免内容文本在无界队列里堆积导致 OOM。队列满时由 CallerRunsPolicy 回退到提交线程执行。</p>
+     *
+     * <p><b>#20 修复：</b>大文档（&gt;{@link #LARGE_DOC_THRESHOLD}）动态使用更小的 chunk size，
+     * 减少 bge-m3 embedding 时的单次内存峰值。worker 线程内逐 chunk 处理并检查内存水位，
+     * 避免所有 chunk 字符串同时驻留内存。</p>
      */
     public void vectorizeContent(String projectId, String versionId, String chunkType,
                                  String sourceUri, String content) {
         if (vectorizationService == null || !vectorizationService.isAvailable()) {
+            return;
+        }
+        if (content == null || content.isBlank()) {
             return;
         }
         // 背压：提交时刻检查内存水位，超水位直接放弃向量化（比事后跳过更早拦截）
@@ -295,12 +309,28 @@ public class AiScanStepSupport {
                     (int) (memoryUsageRatio() * 100));
             return;
         }
+        // 大文档动态使用更小的 chunk，减少 embedding 内存峰值
+        int effectiveChunkSize = VECTOR_CHUNK_SIZE;
+        int effectiveOverlap = VECTOR_OVERLAP;
+        if (content.length() > LARGE_DOC_THRESHOLD) {
+            effectiveChunkSize = LARGE_DOC_CHUNK_SIZE;
+            effectiveOverlap = 80;
+            log.info("Large doc vectorization (len={}): using smaller chunks size={}",
+                    content.length(), effectiveChunkSize);
+        }
+        final int chunkSize = effectiveChunkSize;
+        final int overlap = effectiveOverlap;
         try {
             vectorizeExecutor.execute(() -> {
                 try {
+                    // worker 线程内再次检查内存（提交后可能内存已变紧张）
+                    if (!isMemoryHealthy()) {
+                        log.debug("Vectorization skipped (memory high in worker) for {}", sourceUri);
+                        return;
+                    }
                     int stored = vectorizationService.embedDocument(
                             projectId, versionId, chunkType, sourceUri, content,
-                            VECTOR_CHUNK_SIZE, VECTOR_OVERLAP, EMBEDDING_MODEL_NAME);
+                            chunkSize, overlap, EMBEDDING_MODEL_NAME);
                     if (stored > 0) {
                         log.debug("Vectorized {}: {} chunks stored", sourceUri, stored);
                     }
@@ -311,7 +341,7 @@ public class AiScanStepSupport {
                 }
             });
         } catch (RejectedExecutionException e) {
-            // 有界队列满（DiscardPolicy 不会抛 Rejected，这里兜底其他拒绝场景）
+            // 有界队列满（CallerRunsPolicy 不会抛 Rejected，这里兜底其他拒绝场景）
             log.debug("Vectorization rejected (queue full) for {}", sourceUri);
         }
     }

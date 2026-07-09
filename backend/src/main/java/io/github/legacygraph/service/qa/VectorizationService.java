@@ -105,6 +105,10 @@ public class VectorizationService {
     /**
      * 对文本进行分片并批量向量化存储
      *
+     * <p><b>#20 修复：</b>改为逐 chunk 流式生成+处理，不再一次性 materialize 全部 chunk List，
+     * 避免大文档（&gt;40KB）所有分片字符串同时驻留内存导致 OOM。
+     * 每个 chunk embedding 前检查 JVM 堆水位，超限则提前终止（已存储的 chunk 保留）。</p>
+     *
      * @param projectId          项目ID
      * @param versionId          扫描版本ID
      * @param chunkType          分片类型
@@ -133,25 +137,63 @@ public class VectorizationService {
             return 0;
         }
 
-        List<String> chunks = chunkDocument(content, maxChars, overlapChars);
+        // #20 修复：流式分片——逐 chunk 生成+处理，不 materialize 全部 List
         int stored = 0;
-        for (int i = 0; i < chunks.size(); i++) {
+        int chunkIndex = 0;
+        int start = 0;
+        int length = content.length();
+        // 预估 chunk 数仅用于日志
+        int estimatedChunks = (int) Math.ceil((double) length / (maxChars - overlapChars));
+
+        while (start < length) {
+            int end = Math.min(start + maxChars, length);
+            // 尝试在换行处截断
+            int newlinePos = content.lastIndexOf('\n', end);
+            if (newlinePos > start + maxChars * 0.5) {
+                end = newlinePos + 1;
+            }
+            String chunk = content.substring(start, end);
+            chunkIndex++;
+
+            // 内存保护：每个 chunk embedding 前检查堆水位
+            Runtime rt = Runtime.getRuntime();
+            double memRatio = (double) (rt.totalMemory() - rt.freeMemory()) / rt.maxMemory();
+            if (memRatio > 0.85) {
+                log.warn("Vectorization aborted (memory high at chunk {}/{}) for {}: {}% heap used",
+                        chunkIndex, estimatedChunks, sourceUri, (int) (memRatio * 100));
+                break;
+            }
+
             try {
-                // 每个 chunk 的 embedAndStore 内部已有 @Transactional，保证原子性
-                Long id = embedAndStore(projectId, versionId, chunkType, sourceUri, i, chunks.get(i), embeddingModelName);
+                Long id = embedAndStore(projectId, versionId, chunkType, sourceUri, chunkIndex - 1, chunk, embeddingModelName);
                 if (id != null) {
                     stored++;
                 }
+            } catch (OutOfMemoryError oom) {
+                log.warn("Embedding OOM at chunk {}/{} for {} (chunkLen={}), aborting: {}",
+                        chunkIndex, estimatedChunks, sourceUri, chunk.length(), oom.getMessage());
+                break;
             } catch (Exception e) {
-                // 捕获唯一约束冲突（并发场景下的最终防线）
                 if (e.getMessage() != null && e.getMessage().contains("duplicate key")) {
-                    log.debug("Chunk {}/{} already exists (concurrent write), skip: {}", i, chunks.size(), sourceUri);
+                    log.debug("Chunk {}/{} already exists (concurrent write), skip: {}", chunkIndex, estimatedChunks, sourceUri);
                 } else {
-                    log.warn("Failed to embed chunk {}/{} for {}: {}", i, chunks.size(), sourceUri, e.getMessage());
+                    log.warn("Failed to embed chunk {}/{} for {}: {}", chunkIndex, estimatedChunks, sourceUri, e.getMessage());
                 }
             }
+
+            // 已到末尾，结束
+            if (end >= length) {
+                break;
+            }
+            // 计算下一段起点，保证严格前进
+            int nextStart = end - overlapChars;
+            if (nextStart <= start) {
+                nextStart = end;
+            }
+            start = nextStart;
         }
-        log.info("Vectorized document {}: {} chunks, {} stored", sourceUri, chunks.size(), stored);
+
+        log.info("Vectorized document {}: {} chunks (est), {} stored", sourceUri, chunkIndex, stored);
         return stored;
     }
 

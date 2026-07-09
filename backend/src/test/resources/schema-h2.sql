@@ -1133,6 +1133,7 @@ CREATE TABLE lg_sys_operation_log (
     id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     trace_id        VARCHAR(64),
     operation       VARCHAR(128),
+    operation_type  VARCHAR(64),
     method          VARCHAR(256),
     request_uri     VARCHAR(512),
     request_method  VARCHAR(16),
@@ -1228,3 +1229,23 @@ CREATE TABLE IF NOT EXISTS lg_notifications (
     read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ============================================
+-- lg_terminology_mapping (术语映射表 - V42)
+-- 中文业务术语 → 英文子词映射，跨语言名称匹配用
+-- H2 适配：JSONB → TEXT，UUID → VARCHAR(36)
+-- ============================================
+CREATE TABLE IF NOT EXISTS lg_terminology_mapping (
+    id            VARCHAR(36) PRIMARY KEY,
+    source_term   VARCHAR(128) NOT NULL UNIQUE,
+    target_terms  TEXT NOT NULL DEFAULT '[]',
+    description   VARCHAR(512),
+    status        VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    sort_order    INTEGER NOT NULL DEFAULT 0,
+    deleted       SMALLINT NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_lg_terminology_mapping_status
+    ON lg_terminology_mapping(status);

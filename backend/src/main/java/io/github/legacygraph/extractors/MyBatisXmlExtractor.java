@@ -129,11 +129,146 @@ public class MyBatisXmlExtractor {
             stmt.setExpandedSql(expandIncludes(element, sqlFragments));
             // 近似行号：在原始文本中定位 <tag ... id="theId"> 及其闭合标签
             resolveLineNumbers(stmt, tagName, id, rawText);
+            // 解析 SQL 语句涉及的表名
+            resolveTables(stmt, stmt.getExpandedSql());
             result.add(stmt);
         }
 
         return result;
     }
+
+    /**
+     * 解析 SQL 语句涉及的表名，按语句类型填充 readTables / writeTables / joinTables。
+     * <p>
+     * 近似解析（不依赖完整 SQL 词法器），覆盖常见 MyBatis 场景：
+     * <ul>
+     *   <li>SELECT ... FROM t1 JOIN t2 → readTables=[t1], joinTables=[t2]</li>
+     *   <li>INSERT INTO t1 → writeTables=[t1]</li>
+     *   <li>UPDATE t1 → writeTables=[t1]</li>
+     *   <li>DELETE FROM t1 → writeTables=[t1]（删除语义上属写操作）</li>
+     * </ul>
+     * </p>
+     * 表名去 schema 前缀、去别名、去子查询括号；忽略子查询内的表名（近似）。
+     */
+    private void resolveTables(SqlStatement stmt, String sql) {
+        if (sql == null || sql.isBlank()) {
+            return;
+        }
+        // 移除 MyBatis #{} / ${} 占位符，避免干扰关键字识别
+        String normalized = sql.replaceAll("#\\{[^}]*}", "?")
+                .replaceAll("\\$\\{[^}]*}", "?");
+        String type = stmt.getType() == null ? "" : stmt.getType().toLowerCase();
+
+        switch (type) {
+            case "select":
+                resolveSelectTables(stmt, normalized);
+                break;
+            case "insert":
+                resolveInsertTables(stmt, normalized);
+                break;
+            case "update":
+                resolveUpdateTables(stmt, normalized);
+                break;
+            case "delete":
+                resolveDeleteTables(stmt, normalized);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** SELECT ... FROM t1 [JOIN|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL JOIN t2 ...] */
+    private void resolveSelectTables(SqlStatement stmt, String sql) {
+        java.util.regex.Matcher fromMatcher = FROM_PATTERN.matcher(sql);
+        if (fromMatcher.find()) {
+            String firstTable = extractTableName(fromMatcher.group(1));
+            if (firstTable != null) {
+                stmt.getReadTables().add(firstTable);
+            }
+        }
+        java.util.regex.Matcher joinMatcher = JOIN_PATTERN.matcher(sql);
+        while (joinMatcher.find()) {
+            String joinTable = extractTableName(joinMatcher.group(2));
+            if (joinTable != null) {
+                stmt.getJoinTables().add(joinTable);
+            }
+        }
+    }
+
+    /** INSERT INTO t1 ... / INSERT OR REPLACE INTO t1 ... */
+    private void resolveInsertTables(SqlStatement stmt, String sql) {
+        java.util.regex.Matcher m = INSERT_INTO_PATTERN.matcher(sql);
+        if (m.find()) {
+            String table = extractTableName(m.group(1));
+            if (table != null) {
+                stmt.getWriteTables().add(table);
+            }
+        }
+    }
+
+    /** UPDATE t1 SET ... */
+    private void resolveUpdateTables(SqlStatement stmt, String sql) {
+        java.util.regex.Matcher m = UPDATE_PATTERN.matcher(sql);
+        if (m.find()) {
+            String table = extractTableName(m.group(1));
+            if (table != null) {
+                stmt.getWriteTables().add(table);
+            }
+        }
+    }
+
+    /** DELETE FROM t1 ... */
+    private void resolveDeleteTables(SqlStatement stmt, String sql) {
+        java.util.regex.Matcher m = DELETE_FROM_PATTERN.matcher(sql);
+        if (m.find()) {
+            String table = extractTableName(m.group(1));
+            if (table != null) {
+                stmt.getWriteTables().add(table);
+            }
+        }
+    }
+
+    /**
+     * 从 FROM/JOIN/INTO/UPDATE 子句捕获组中提取表名。
+     * 输入形如 "t_user" / "t_user u" / "schema.t_user AS u" / "(subquery) alias"。
+     * 子查询（以 "(" 开头）返回 null（近似忽略）。
+     */
+    private String extractTableName(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim();
+        if (s.isEmpty() || s.startsWith("(")) {
+            return null;
+        }
+        // 取第一个 token（表名或 schema.table），去除逗号/分号
+        s = s.split("[\\s,;]")[0];
+        // 去 schema 前缀，保留最后一段
+        int dot = s.lastIndexOf('.');
+        if (dot >= 0 && dot < s.length() - 1) {
+            s = s.substring(dot + 1);
+        }
+        // 去可能的反引号/双引号包裹
+        s = s.replaceAll("[`\"`]", "");
+        return s.isEmpty() ? null : s;
+    }
+
+    // SQL 关键字 + 表名捕获模式（大小写不敏感，multiline 以适配多行 SQL）
+    private static final java.util.regex.Pattern FROM_PATTERN =
+            java.util.regex.Pattern.compile("\\bFROM\\s+([^\\s()]+(?:\\s+(?:AS\\s+)?[^\\s()]+)?)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern JOIN_PATTERN =
+            java.util.regex.Pattern.compile("\\b(INNER\\s+|LEFT\\s+(?:OUTER\\s+)?|RIGHT\\s+(?:OUTER\\s+)?|FULL\\s+(?:OUTER\\s+)?)?JOIN\\s+([^\\s()]+(?:\\s+(?:AS\\s+)?[^\\s()]+)?)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern INSERT_INTO_PATTERN =
+            java.util.regex.Pattern.compile("\\bINSERT\\s+(?:OR\\s+REPLACE\\s+)?INTO\\s+([^\\s()]+)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern UPDATE_PATTERN =
+            java.util.regex.Pattern.compile("\\bUPDATE\\s+([^\\s()]+)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern DELETE_FROM_PATTERN =
+            java.util.regex.Pattern.compile("\\bDELETE\\s+FROM\\s+([^\\s()]+)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /**
      * 在原始 XML 文本中近似定位语句的起止行号。

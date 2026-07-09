@@ -9,7 +9,8 @@ public enum NodeStatus {
     CONFIRMED("已确认"),
     REJECTED("已驳回"),
     INVALID_CANDIDATE("无效候选"),
-    DELETED("已删除");
+    DELETED("已删除"),
+    STALE("待重扫");
 
     private final String description;
 

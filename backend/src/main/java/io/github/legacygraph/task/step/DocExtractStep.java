@@ -137,7 +137,11 @@ public class DocExtractStep implements AiScanStepExecutor {
                         return;
                     }
                     // 向量化：support 内部已用专用有界线程池 + 内存水位背压，这里直接委托
-                    support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                    // #20 修复：大文档（>20KB）延迟到 LLM 抽取完成后再向量化，避免 embedding 与 LLM 并发导致 OOM
+                    boolean deferVectorize = content.length() > 20000;
+                    if (!deferVectorize) {
+                        support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                    }
                     try {
                         // 内存保护：堆快满时跳过 LLM 调用，避免 OOM 中断扫描
                         if (!AiScanStepSupport.isMemoryHealthy()) {
@@ -177,6 +181,10 @@ public class DocExtractStep implements AiScanStepExecutor {
                         documentRepository.updateById(doc);
                         support.markExtractDone(projectId, versionId, filePath, "DOC_EXTRACT",
                                 "facts=" + count);
+                        // #20 修复：大文档延迟向量化——LLM 抽取完成后内存释放，再提交向量化
+                        if (deferVectorize) {
+                            support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                        }
                         // 更新进度（每 5 个文件写一次 DB，减少写入频率）
                         int done = processedCount.incrementAndGet();
                         if (done % 5 == 0 || done == totalDocs) {

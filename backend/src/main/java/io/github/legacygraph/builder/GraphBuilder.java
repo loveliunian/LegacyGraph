@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -61,6 +62,9 @@ public class GraphBuilder {
      */
     public List<GraphNode> buildApiNodes(String projectId, String versionId, List<ApiFact> apiFacts, String sourcePath) {
         List<GraphNode> nodes = new ArrayList<>();
+
+        // P3a：预先加载 BusinessObject 节点查找表，供 ApiEndpoint USES 匹配（按多别名索引）
+        Map<String, GraphNode> boLookup = buildBusinessObjectLookup(projectId, versionId);
 
         for (ApiFact api : apiFacts) {
             // 创建Controller节点（如果不存在）
@@ -147,6 +151,9 @@ public class GraphBuilder {
                     NodeStatus.CONFIRMED
             );
 
+            // P3a：ApiEndpoint -USES-> BusinessObject（按参数/返回值类型匹配）
+            linkApiEndpointToBusinessObjects(projectId, versionId, api, apiNode, boLookup);
+
             // 处理权限
             if (api.getPermissions() != null && !api.getPermissions().isEmpty()) {
                 for (String perm : api.getPermissions()) {
@@ -178,6 +185,162 @@ public class GraphBuilder {
         }
 
         return nodes;
+    }
+
+    // ==================== P3a: ApiEndpoint -> BusinessObject USES 边 ====================
+
+    /** 与 BusinessObjectExtractor.ENTITY_SUFFIXES 对齐，用于剥离实体类后缀提升匹配率 */
+    private static final Set<String> BO_ENTITY_SUFFIXES = Set.of(
+            "Entity", "DO", "PO", "BO", "DTO", "VO", "Model", "Domain");
+
+    /** 基本类型与常见框架/集合类型，匹配时跳过 */
+    private static final Set<String> BASIC_TYPES = Set.of(
+            "int", "long", "short", "byte", "float", "double", "char", "boolean", "void",
+            "String", "Integer", "Long", "Short", "Byte", "Float", "Double", "Character",
+            "Boolean", "Object", "Number", "BigDecimal", "BigInteger", "Date", "LocalDate",
+            "LocalDateTime", "LocalTime", "Timestamp", "Time", "UUID", "InputStream",
+            "OutputStream", "MultipartFile", "HttpServletRequest", "HttpServletResponse",
+            "Principal", "Pageable", "Locale", "Class", "Throwable", "Exception", "Runnable",
+            "Iterable", "Iterator", "List", "Set", "Map", "Collection", "ArrayList", "HashMap",
+            "HashSet", "LinkedList", "Optional", "Stream", "ResponseEntity", "Page", "PageImpl"
+    );
+
+    /**
+     * 预加载当前 project/version 下的 BusinessObject 节点，按多种别名建立索引。
+     * nodeKey 形如 "bo:user"（已剥离实体后缀并小写），nodeName/displayName 形如 "User"。
+     */
+    private Map<String, GraphNode> buildBusinessObjectLookup(String projectId, String versionId) {
+        Map<String, GraphNode> lookup = new HashMap<>();
+        List<GraphNode> boNodes = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.BusinessObject.name(),
+                null, null, null, 5000);
+        if (boNodes == null || boNodes.isEmpty()) {
+            return lookup;
+        }
+        for (GraphNode bo : boNodes) {
+            indexBusinessObjectAlias(lookup, bo, bo.getNodeKey());
+            indexBusinessObjectAlias(lookup, bo, stripBoPrefix(bo.getNodeKey()));
+            indexBusinessObjectAlias(lookup, bo, bo.getNodeName());
+            indexBusinessObjectAlias(lookup, bo, bo.getDisplayName());
+        }
+        return lookup;
+    }
+
+    private void indexBusinessObjectAlias(Map<String, GraphNode> lookup, GraphNode bo, String alias) {
+        if (alias == null || alias.isBlank()) return;
+        String trimmed = alias.trim();
+        lookup.putIfAbsent(trimmed, bo);
+        lookup.putIfAbsent(trimmed.toLowerCase(), bo);
+        String stripped = stripEntitySuffix(trimmed);
+        if (stripped != null && !stripped.equals(trimmed)) {
+            lookup.putIfAbsent(stripped, bo);
+            lookup.putIfAbsent(stripped.toLowerCase(), bo);
+        }
+    }
+
+    private String stripBoPrefix(String nodeKey) {
+        if (nodeKey == null) return null;
+        return nodeKey.startsWith("bo:") ? nodeKey.substring(3) : nodeKey;
+    }
+
+    /** 去掉实体类后缀，镜像 BusinessObjectExtractor.cleanClassName 行为 */
+    private String stripEntitySuffix(String name) {
+        if (name == null || name.isBlank()) return name;
+        for (String suffix : BO_ENTITY_SUFFIXES) {
+            if (name.endsWith(suffix) && name.length() > suffix.length()) {
+                return name.substring(0, name.length() - suffix.length());
+            }
+        }
+        return name;
+    }
+
+    /**
+     * 将 ApiEndpoint 与其参数/返回值类型对应的 BusinessObject 建立 USES 边。
+     * 类型来源：方法签名参数、返回值类型、@RequestBody、其余请求参数。
+     */
+    private void linkApiEndpointToBusinessObjects(String projectId, String versionId,
+            ApiFact api, GraphNode apiNode, Map<String, GraphNode> boLookup) {
+        if (boLookup.isEmpty() || apiNode == null) return;
+
+        Set<String> candidateTypes = new LinkedHashSet<>();
+        // 1. 方法签名中的参数类型：methodName(paramType1, paramType2)
+        collectCandidateTypesFromSignature(api.getMethodSignature(), candidateTypes);
+        // 2. 返回值类型（可能含泛型，如 ResponseEntity<UserDTO>）
+        collectCandidateTypes(api.getResponseType(), candidateTypes);
+        // 3. @RequestBody 类型
+        if (api.getRequestBody() != null) {
+            collectCandidateTypes(api.getRequestBody().getType(), candidateTypes);
+        }
+        // 4. 其余请求参数类型
+        if (api.getRequestParams() != null) {
+            for (ApiFact.ApiParameter param : api.getRequestParams()) {
+                collectCandidateTypes(param.getType(), candidateTypes);
+            }
+        }
+
+        String apiNodeKey = apiNode.getNodeKey();
+        Set<String> linkedBoIds = new HashSet<>();
+        for (String typeName : candidateTypes) {
+            GraphNode bo = findBusinessObjectByType(typeName, boLookup);
+            if (bo == null) continue;
+            if (!linkedBoIds.add(bo.getId())) continue;
+            createEdge(projectId, versionId,
+                    apiNode.getId(), bo.getId(),
+                    EdgeType.USES.name(),
+                    apiNodeKey + "->uses->" + bo.getNodeKey(),
+                    SourceType.CODE_AST.name(),
+                    BigDecimal.valueOf(0.9),
+                    NodeStatus.CONFIRMED
+            );
+        }
+    }
+
+    /** 从 "methodName(paramType1, paramType2)" 签名中抽取参数类型简单名 */
+    private void collectCandidateTypesFromSignature(String methodSignature, Set<String> out) {
+        if (methodSignature == null || methodSignature.isBlank()) return;
+        int parenStart = methodSignature.indexOf('(');
+        int parenEnd = methodSignature.lastIndexOf(')');
+        if (parenStart < 0 || parenEnd <= parenStart) return;
+        String paramsPart = methodSignature.substring(parenStart + 1, parenEnd).trim();
+        if (paramsPart.isEmpty()) return;
+        for (String p : paramsPart.split(",")) {
+            collectCandidateTypes(p.trim(), out);
+        }
+    }
+
+    /**
+     * 从类型字符串中抽取候选类型简单名（处理泛型、数组、包名），跳过基本/常见类型。
+     * 例如 "ResponseEntity&lt;UserDTO&gt;" → ["UserDTO"]；"List&lt;String&gt;" → []（String 被跳过）
+     */
+    private void collectCandidateTypes(String typeStr, Set<String> out) {
+        if (typeStr == null || typeStr.isBlank()) return;
+        String normalized = typeStr.replaceAll("[<>,\\[\\]]", " ");
+        for (String token : normalized.split("\\s+")) {
+            if (token.isBlank()) continue;
+            String simple = token.contains(".") ? token.substring(token.lastIndexOf('.') + 1) : token;
+            if (simple.isBlank() || isPrimitiveOrBasicType(simple)) continue;
+            out.add(simple);
+        }
+    }
+
+    private GraphNode findBusinessObjectByType(String simpleName, Map<String, GraphNode> boLookup) {
+        if (simpleName == null || simpleName.isBlank()) return null;
+        GraphNode bo = boLookup.get(simpleName);
+        if (bo != null) return bo;
+        bo = boLookup.get(simpleName.toLowerCase());
+        if (bo != null) return bo;
+        String stripped = stripEntitySuffix(simpleName);
+        if (stripped != null && !stripped.equals(simpleName)) {
+            bo = boLookup.get(stripped);
+            if (bo != null) return bo;
+            bo = boLookup.get(stripped.toLowerCase());
+            if (bo != null) return bo;
+        }
+        return null;
+    }
+
+    private boolean isPrimitiveOrBasicType(String simpleName) {
+        return BASIC_TYPES.contains(simpleName);
     }
 
     /**
@@ -234,21 +397,14 @@ public class GraphBuilder {
                     NodeStatus.CONFIRMED
             );
 
-            // P1-1：绑定 Java Mapper 接口方法 ↔ SqlStatement（按 namespace.methodId 匹配 Method 节点）
+            // P1-1：绑定 Java Mapper 接口方法 ↔ SqlStatement（按 namespace + methodId 匹配 Method 节点）
             // 打通 Service→Method→SqlStatement→Table 全链路
-            String methodNodeKey = mapperKey + "." + stmt.getId() + "()";
-            GraphNode methodNode = neo4jGraphDao.findNode(
-                    projectId, versionId, NodeType.Method.name(), methodNodeKey).orElse(null);
-            // 回退：尝试不带 () 的 key
-            if (methodNode == null) {
-                methodNode = neo4jGraphDao.findNode(
-                        projectId, versionId, NodeType.Method.name(), mapperKey + "." + stmt.getId()).orElse(null);
-            }
+            GraphNode methodNode = findMapperMethodNode(projectId, versionId, mapperKey, stmt.getId());
             if (methodNode != null) {
                 createEdge(projectId, versionId,
                         methodNode.getId(), sqlNode.getId(),
                         EdgeType.EXECUTES.name(),
-                        methodNodeKey + "->executes->" + sqlKey,
+                        methodNode.getNodeKey() + "->executes->" + sqlKey,
                         SourceType.CODE_AST.name(),
                         BigDecimal.valueOf(0.95),
                         NodeStatus.CONFIRMED
@@ -354,9 +510,6 @@ public class GraphBuilder {
             List<io.github.legacygraph.extractors.DatabaseMetadataExtractor.TableMetadata> tables) {
         if (tables == null || tables.isEmpty()) return;
 
-        List<GraphNode> allNodes = new ArrayList<>();
-        List<GraphEdge> allEdges = new ArrayList<>();
-
         // 构建表名映射，用于启发式推断
         Map<String, String> tableNameToKey = new HashMap<>();
         for (var tableMeta : tables) {
@@ -368,38 +521,62 @@ public class GraphBuilder {
 
         // 第一遍：创建所有表节点和字段节点
         Map<String, GraphNode> tableNodes = new HashMap<>();
+        int nodeCount = 0, edgeCount = 0;
         for (var tableMeta : tables) {
             String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
-            String tableId = IdUtil.fastUUID();
 
             // 表节点
-            GraphNode tableNode = buildNode(projectId, versionId, tableId,
-                    NodeType.Table.name(), tableKey, tableMeta.getTableName(),
-                    tableMeta.getTableName(), tableMeta.getTableComment(),
-                    SourceType.DB_METADATA.name(), null, BigDecimal.ONE, NodeStatus.CONFIRMED,
-                    "DATABASE_SCAN");
-            allNodes.add(tableNode);
+            GraphNode tableNode = writer.upsertNode(GraphNodeClaim.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .nodeType(NodeType.Table.name())
+                    .nodeKey(tableKey)
+                    .nodeName(tableMeta.getTableName())
+                    .displayName(tableMeta.getTableName())
+                    .description(tableMeta.getTableComment())
+                    .sourceType(SourceType.DB_METADATA.name())
+                    .sourcePath(null)
+                    .confidence(BigDecimal.ONE)
+                    .status(NodeStatus.CONFIRMED.name())
+                    .scanType("DATABASE_SCAN")
+                    .build());
             tableNodes.put(tableKey, tableNode);
+            nodeCount++;
 
             // 字段节点 + HAS_COLUMN 边
             for (var colMeta : tableMeta.getColumns()) {
                 String colKey = tableKey + "." + colMeta.getColumnName();
-                String colId = IdUtil.fastUUID();
 
-                GraphNode colNode = buildNode(projectId, versionId, colId,
-                        NodeType.Column.name(), colKey, colMeta.getColumnName(),
-                        colMeta.getColumnName(), colMeta.getColumnComment(),
-                        SourceType.DB_METADATA.name(), null, BigDecimal.ONE, NodeStatus.CONFIRMED,
-                        "DATABASE_SCAN");
-                colNode.setProperties(buildColumnProperties(colMeta));
-                allNodes.add(colNode);
+                GraphNode colNode = writer.upsertNode(GraphNodeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .nodeType(NodeType.Column.name())
+                        .nodeKey(colKey)
+                        .nodeName(colMeta.getColumnName())
+                        .displayName(colMeta.getColumnName())
+                        .description(colMeta.getColumnComment())
+                        .sourceType(SourceType.DB_METADATA.name())
+                        .sourcePath(null)
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .scanType("DATABASE_SCAN")
+                        .properties(buildColumnProperties(colMeta))
+                        .build());
+                nodeCount++;
 
                 // HAS_COLUMN 边
-                allEdges.add(buildEdge(projectId, versionId,
-                        tableId, colId,
-                        EdgeType.HAS_COLUMN.name(),
-                        tableKey + "->has_column->" + colKey,
-                        SourceType.DB_METADATA.name(), BigDecimal.ONE, NodeStatus.CONFIRMED));
+                writer.upsertEdge(GraphEdgeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .fromNodeId(tableNode.getId())
+                        .toNodeId(colNode.getId())
+                        .edgeType(EdgeType.HAS_COLUMN.name())
+                        .edgeKey(tableKey + "->has_column->" + colKey)
+                        .sourceType(SourceType.DB_METADATA.name())
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .build());
+                edgeCount++;
             }
         }
 
@@ -428,6 +605,7 @@ public class GraphBuilder {
                             BigDecimal.valueOf(0.9),
                             NodeStatus.CONFIRMED);
                     realFkCount++;
+                    edgeCount++;
                 }
                 // 2. 启发式推断：列名模式 {table}_id, {table}Id, parent_id
                 else if (!Boolean.TRUE.equals(colMeta.getForeignKey())) {
@@ -436,24 +614,22 @@ public class GraphBuilder {
                         GraphNode refTable = tableNodes.get(inferredTable);
                         if (refTable != null) {
                             String fkEdgeKey = tableKey + "->references->" + inferredTable + "." + colMeta.getColumnName();
-                            allEdges.add(buildEdge(projectId, versionId,
+                            createEdge(projectId, versionId,
                                     tableNode.getId(), refTable.getId(),
                                     EdgeType.REFERENCES.name(),
                                     fkEdgeKey,
                                     SourceType.DB_METADATA.name(),
-                                    BigDecimal.valueOf(0.7),  // 较低置信度表示启发式
-                                    NodeStatus.PENDING_CONFIRM));
+                                    BigDecimal.valueOf(0.7),
+                                    NodeStatus.PENDING_CONFIRM);
                             inferredFkCount++;
+                            edgeCount++;
                         }
                     }
                 }
             }
         }
 
-        // 批量写入所有节点和边
-        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
-        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
-        log.info("Batch merged DB graph: {} nodes, {} edges (real FK: {}, inferred FK: {}, projectId={}, versionId={})",
+        log.info("Built DB graph with evidence: {} nodes, {} edges (real FK: {}, inferred FK: {}, projectId={}, versionId={})",
                 nodeCount, edgeCount, realFkCount, inferredFkCount, projectId, versionId);
     }
 
@@ -668,6 +844,36 @@ public class GraphBuilder {
         return findOrCreateNode(projectId, versionId, nodeType, nodeKey, nodeName,
                 displayName, description, sourceType, sourcePath,
                 startLine, endLine, confidence, status, null, null);
+    }
+
+    /**
+     * 查找或创建节点（带 properties）
+     */
+    private GraphNode findOrCreateNodeWithProperties(String projectId, String versionId,
+            String nodeType, String nodeKey, String nodeName,
+            String displayName, String description,
+            String sourceType, String sourcePath,
+            Integer startLine, Integer endLine,
+            BigDecimal confidence, NodeStatus status,
+            String scanType, String className, String properties) {
+        return writer.upsertNode(GraphNodeClaim.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .nodeType(nodeType)
+                .nodeKey(nodeKey)
+                .nodeName(nodeName)
+                .displayName(displayName)
+                .description(description)
+                .sourceType(sourceType)
+                .sourcePath(sourcePath)
+                .startLine(startLine)
+                .endLine(endLine)
+                .confidence(confidence)
+                .status(status != null ? status.name() : null)
+                .scanType(scanType)
+                .className(className)
+                .properties(properties)
+                .build());
     }
 
     /**
@@ -1581,7 +1787,8 @@ public class GraphBuilder {
                 continue;
             }
             NodeType classNodeType = inferNodeType(classInfo.getQualifiedName());
-            GraphNode classNode = findOrCreateNode(
+            String inheritProps = buildInheritProperties(classInfo);
+            GraphNode classNode = findOrCreateNodeWithProperties(
                     projectId, versionId,
                     classNodeType.name(),
                     classInfo.getQualifiedName(),
@@ -1595,7 +1802,8 @@ public class GraphBuilder {
                     BigDecimal.ONE,
                     NodeStatus.CONFIRMED,
                     "CODE_SCAN",
-                    classInfo.getQualifiedName()
+                    classInfo.getQualifiedName(),
+                    inheritProps
             );
             nodes.add(classNode);
 
@@ -1766,6 +1974,64 @@ public class GraphBuilder {
                 }
                 if (simpleName.equals(n.getNodeName())) {
                     return n;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 构建继承属性 JSON，保存 extendedTypes 和 implementedTypes 供 resolver 二次解析使用。
+     */
+    private String buildInheritProperties(JavaStructureExtractor.JavaClassInfo classInfo) {
+        try {
+            Map<String, Object> props = new HashMap<>();
+            if (classInfo.getExtendedTypes() != null && !classInfo.getExtendedTypes().isEmpty()) {
+                props.put("extendedTypes", classInfo.getExtendedTypes());
+            }
+            if (classInfo.getImplementedTypes() != null && !classInfo.getImplementedTypes().isEmpty()) {
+                props.put("implementedTypes", classInfo.getImplementedTypes());
+            }
+            if (props.isEmpty()) {
+                return null;
+            }
+            return OBJECT_MAPPER.writeValueAsString(props);
+        } catch (Exception e) {
+            log.debug("Failed to serialize inherit properties for {}: {}", classInfo.getQualifiedName(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 查找 Mapper 接口方法节点 —— 按 namespace + methodId 匹配。
+     * Method nodeKey 格式为 FQN.methodName(paramTypes)，如 com.example.UserMapper.selectById(Long)
+     * 先精确匹配（无参数方法），再按方法名前缀模糊匹配（有参数方法）。
+     */
+    private GraphNode findMapperMethodNode(String projectId, String versionId, String namespace, String methodId) {
+        if (namespace == null || namespace.isBlank() || methodId == null || methodId.isBlank()) {
+            return null;
+        }
+        String prefix = namespace + "." + methodId;
+        List<GraphNode> methodNodes = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Method.name(), null, null, null, 0);
+        if (methodNodes == null || methodNodes.isEmpty()) {
+            return null;
+        }
+        List<GraphNode> candidates = new ArrayList<>();
+        for (GraphNode m : methodNodes) {
+            String key = m.getNodeKey();
+            if (key == null) continue;
+            if (key.startsWith(prefix + "(")) {
+                candidates.add(m);
+            }
+        }
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+        if (candidates.size() > 1) {
+            for (GraphNode c : candidates) {
+                if (methodId.equals(c.getNodeName())) {
+                    return c;
                 }
             }
         }
@@ -2110,21 +2376,27 @@ public class GraphBuilder {
             List<io.github.legacygraph.extractors.ConfigItemExtractor.ConfigItemFact> configItems) {
         if (configItems == null || configItems.isEmpty()) return;
 
-        List<GraphNode> allNodes = new ArrayList<>();
-        List<GraphEdge> allEdges = new ArrayList<>();
+        int nodeCount = 0, edgeCount = 0;
 
         for (var item : configItems) {
             String configKey = "config:" + item.getKey();
-            String configId = IdUtil.fastUUID();
 
             // ConfigItem 节点
-            GraphNode configNode = buildNode(projectId, versionId, configId,
-                    NodeType.ConfigItem.name(), configKey, item.getKey(),
-                    item.getKey(), item.getSourceType(),
-                    SourceType.CODE_AST.name(), item.getSourcePath(),
-                    BigDecimal.ONE, NodeStatus.CONFIRMED,
-                    "CODE_SCAN");
-            allNodes.add(configNode);
+            GraphNode configNode = writer.upsertNode(GraphNodeClaim.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .nodeType(NodeType.ConfigItem.name())
+                    .nodeKey(configKey)
+                    .nodeName(item.getKey())
+                    .displayName(item.getKey())
+                    .description(item.getSourceType())
+                    .sourceType(SourceType.CODE_AST.name())
+                    .sourcePath(item.getSourcePath())
+                    .confidence(BigDecimal.ONE)
+                    .status(NodeStatus.CONFIRMED.name())
+                    .scanType("CODE_SCAN")
+                    .build());
+            nodeCount++;
 
             // Class -> ConfigItem USES 边
             if (item.getClassName() != null && !item.getClassName().isBlank()) {
@@ -2132,19 +2404,18 @@ public class GraphBuilder {
                 GraphNode classNode = findExistingNode(projectId, versionId,
                         NodeType.Service.name(), classKey);
                 if (classNode != null) {
-                    allEdges.add(buildEdge(projectId, versionId,
-                            classNode.getId(), configId,
+                    createEdge(projectId, versionId,
+                            classNode.getId(), configNode.getId(),
                             EdgeType.USES.name(),
                             classKey + "->uses->" + configKey,
                             SourceType.CODE_AST.name(),
-                            BigDecimal.ONE, NodeStatus.CONFIRMED));
+                            BigDecimal.ONE, NodeStatus.CONFIRMED);
+                    edgeCount++;
                 }
             }
         }
 
-        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
-        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
-        log.info("Built config graph: {} nodes, {} edges (projectId={}, versionId={})",
+        log.info("Built config graph with evidence: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
     }
 
@@ -2157,52 +2428,65 @@ public class GraphBuilder {
             List<io.github.legacygraph.extractors.ScheduledJobExtractor.ScheduledJobFact> jobs) {
         if (jobs == null || jobs.isEmpty()) return;
 
-        List<GraphNode> allNodes = new ArrayList<>();
-        List<GraphEdge> allEdges = new ArrayList<>();
+        int nodeCount = 0, edgeCount = 0;
 
         for (var job : jobs) {
             String jobKey = "job:" + job.getClassName() + "." + job.getMethodName();
-            String jobId = IdUtil.fastUUID();
 
             // ScheduledJob 节点
             String description = job.getCronExpression() != null
                     ? "Cron: " + job.getCronExpression()
                     : "Fixed: " + job.getFixedDelay() + "ms";
-            GraphNode jobNode = buildNode(projectId, versionId, jobId,
-                    NodeType.ScheduledJob.name(), jobKey, job.getMethodName(),
-                    job.getClassName() + "." + job.getMethodName(), description,
-                    SourceType.CODE_AST.name(), job.getSourcePath(),
-                    BigDecimal.ONE, NodeStatus.CONFIRMED,
-                    "CODE_SCAN");
-            jobNode.setStartLine(job.getStartLine());
-            jobNode.setEndLine(job.getEndLine());
-            allNodes.add(jobNode);
+            GraphNode jobNode = writer.upsertNode(GraphNodeClaim.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .nodeType(NodeType.ScheduledJob.name())
+                    .nodeKey(jobKey)
+                    .nodeName(job.getMethodName())
+                    .displayName(job.getClassName() + "." + job.getMethodName())
+                    .description(description)
+                    .sourceType(SourceType.CODE_AST.name())
+                    .sourcePath(job.getSourcePath())
+                    .startLine(job.getStartLine())
+                    .endLine(job.getEndLine())
+                    .confidence(BigDecimal.ONE)
+                    .status(NodeStatus.CONFIRMED.name())
+                    .scanType("CODE_SCAN")
+                    .build());
+            nodeCount++;
 
             if (job.getClassName() != null && job.getMethodName() != null) {
                 String methodKey = buildMethodKey(job.getClassName(), job.getMethodName(), job.getMethodSignature());
-                GraphNode methodNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
-                        NodeType.Method.name(), methodKey, job.getMethodName(),
-                        job.getMethodName(), "定时任务处理方法",
-                        SourceType.CODE_AST.name(), job.getSourcePath(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED,
-                        "CODE_SCAN");
-                methodNode.setStartLine(job.getStartLine());
-                methodNode.setEndLine(job.getEndLine());
-                methodNode.setClassName(job.getClassName());
-                allNodes.add(methodNode);
+                GraphNode methodNode = writer.upsertNode(GraphNodeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .nodeType(NodeType.Method.name())
+                        .nodeKey(methodKey)
+                        .nodeName(job.getMethodName())
+                        .displayName(job.getMethodName())
+                        .description("定时任务处理方法")
+                        .sourceType(SourceType.CODE_AST.name())
+                        .sourcePath(job.getSourcePath())
+                        .startLine(job.getStartLine())
+                        .endLine(job.getEndLine())
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .scanType("CODE_SCAN")
+                        .className(job.getClassName())
+                        .build());
+                nodeCount++;
 
-                allEdges.add(buildEdge(projectId, versionId,
-                        jobId, methodNode.getId(),
+                createEdge(projectId, versionId,
+                        jobNode.getId(), methodNode.getId(),
                         EdgeType.HANDLED_BY.name(),
                         jobKey + "->handled_by->" + methodKey,
                         SourceType.CODE_AST.name(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
             }
         }
 
-        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
-        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
-        log.info("Built scheduled job graph: {} nodes, {} edges (projectId={}, versionId={})",
+        log.info("Built scheduled job graph with evidence: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
     }
 
@@ -2215,76 +2499,97 @@ public class GraphBuilder {
             List<io.github.legacygraph.extractors.MQExtractor.MQConsumerFact> consumers) {
         if (consumers == null || consumers.isEmpty()) return;
 
-        List<GraphNode> allNodes = new ArrayList<>();
-        List<GraphEdge> allEdges = new ArrayList<>();
+        int nodeCount = 0, edgeCount = 0;
 
         for (var consumer : consumers) {
             String topicName = consumer.getTopic() != null ? consumer.getTopic() : "unknown";
             String consumerKey = "mq-consumer:" + consumer.getAnnotationType() + ":"
                     + nullToUnknown(consumer.getClassName()) + "."
                     + nullToUnknown(consumer.getMethodName()) + ":" + topicName;
-            String consumerId = IdUtil.fastUUID();
 
-            GraphNode consumerNode = buildNode(projectId, versionId, consumerId,
-                    NodeType.MQConsumer.name(), consumerKey, topicName,
-                    topicName,
-                    consumer.getAnnotationType() + " 消息消费者",
-                    SourceType.CODE_AST.name(), consumer.getSourcePath(),
-                    BigDecimal.ONE, NodeStatus.CONFIRMED,
-                    "CODE_SCAN");
-            consumerNode.setStartLine(consumer.getStartLine());
-            consumerNode.setEndLine(consumer.getEndLine());
-            allNodes.add(consumerNode);
+            GraphNode consumerNode = writer.upsertNode(GraphNodeClaim.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .nodeType(NodeType.MQConsumer.name())
+                    .nodeKey(consumerKey)
+                    .nodeName(topicName)
+                    .displayName(topicName)
+                    .description(consumer.getAnnotationType() + " 消息消费者")
+                    .sourceType(SourceType.CODE_AST.name())
+                    .sourcePath(consumer.getSourcePath())
+                    .startLine(consumer.getStartLine())
+                    .endLine(consumer.getEndLine())
+                    .confidence(BigDecimal.ONE)
+                    .status(NodeStatus.CONFIRMED.name())
+                    .scanType("CODE_SCAN")
+                    .build());
+            nodeCount++;
 
             String topicKey = "mq-topic:" + topicName;
-            GraphNode topicNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
-                    NodeType.MQTopic.name(), topicKey, topicName,
-                    topicName,
-                    consumer.getAnnotationType() + " 消息主题",
-                    SourceType.CODE_AST.name(), consumer.getSourcePath(),
-                    BigDecimal.ONE, NodeStatus.CONFIRMED,
-                    "CODE_SCAN");
-            allNodes.add(topicNode);
+            GraphNode topicNode = writer.upsertNode(GraphNodeClaim.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .nodeType(NodeType.MQTopic.name())
+                    .nodeKey(topicKey)
+                    .nodeName(topicName)
+                    .displayName(topicName)
+                    .description(consumer.getAnnotationType() + " 消息主题")
+                    .sourceType(SourceType.CODE_AST.name())
+                    .sourcePath(consumer.getSourcePath())
+                    .confidence(BigDecimal.ONE)
+                    .status(NodeStatus.CONFIRMED.name())
+                    .scanType("CODE_SCAN")
+                    .build());
+            nodeCount++;
 
-            allEdges.add(buildEdge(projectId, versionId,
+            createEdge(projectId, versionId,
                     consumerNode.getId(), topicNode.getId(),
                     EdgeType.CONSUMES.name(),
                     consumerKey + "->consumes->" + topicKey,
                     SourceType.CODE_AST.name(),
-                    BigDecimal.ONE, NodeStatus.CONFIRMED));
+                    BigDecimal.ONE, NodeStatus.CONFIRMED);
+            edgeCount++;
 
             if (consumer.getClassName() != null && consumer.getMethodName() != null) {
                 String methodKey = buildMethodKey(consumer.getClassName(), consumer.getMethodName(), consumer.getMethodSignature());
-                GraphNode methodNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
-                        NodeType.Method.name(), methodKey, consumer.getMethodName(),
-                        consumer.getMethodName(), "消息消费处理方法",
-                        SourceType.CODE_AST.name(), consumer.getSourcePath(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED,
-                        "CODE_SCAN");
-                methodNode.setStartLine(consumer.getStartLine());
-                methodNode.setEndLine(consumer.getEndLine());
-                methodNode.setClassName(consumer.getClassName());
-                allNodes.add(methodNode);
+                GraphNode methodNode = writer.upsertNode(GraphNodeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .nodeType(NodeType.Method.name())
+                        .nodeKey(methodKey)
+                        .nodeName(consumer.getMethodName())
+                        .displayName(consumer.getMethodName())
+                        .description("消息消费处理方法")
+                        .sourceType(SourceType.CODE_AST.name())
+                        .sourcePath(consumer.getSourcePath())
+                        .startLine(consumer.getStartLine())
+                        .endLine(consumer.getEndLine())
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .scanType("CODE_SCAN")
+                        .className(consumer.getClassName())
+                        .build());
+                nodeCount++;
 
-                allEdges.add(buildEdge(projectId, versionId,
+                createEdge(projectId, versionId,
                         consumerNode.getId(), methodNode.getId(),
                         EdgeType.HANDLED_BY.name(),
                         consumerKey + "->handled_by->" + methodKey,
                         SourceType.CODE_AST.name(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
 
-                allEdges.add(buildEdge(projectId, versionId,
+                createEdge(projectId, versionId,
                         methodNode.getId(), topicNode.getId(),
                         EdgeType.TRIGGERS.name(),
                         methodKey + "->triggers->" + topicKey,
                         SourceType.CODE_AST.name(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
             }
         }
 
-        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
-        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
-        log.info("Built MQ graph: {} nodes, {} edges (projectId={}, versionId={})",
+        log.info("Built MQ graph with evidence: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
     }
 
@@ -2297,88 +2602,117 @@ public class GraphBuilder {
             List<io.github.legacygraph.extractors.ExternalSystemExtractor.ExternalCallFact> calls) {
         if (calls == null || calls.isEmpty()) return;
 
-        List<GraphNode> allNodes = new ArrayList<>();
-        List<GraphEdge> allEdges = new ArrayList<>();
+        int nodeCount = 0, edgeCount = 0;
 
         for (var call : calls) {
             String edgeKeySuffix = call.getServiceName() != null ? call.getServiceName() : call.getBaseUrl();
             String systemKey = "ext:" + call.getClientType() + ":" + (edgeKeySuffix != null ? edgeKeySuffix : "unknown");
-            String systemId = IdUtil.fastUUID();
 
             // ExternalSystem 节点
-            GraphNode systemNode = buildNode(projectId, versionId, systemId,
-                    NodeType.ExternalSystem.name(), systemKey, edgeKeySuffix,
-                    edgeKeySuffix,
-                    call.getClientType() + " 外部调用",
-                    SourceType.CODE_AST.name(), call.getSourcePath(),
-                    BigDecimal.ONE, NodeStatus.CONFIRMED,
-                    "CODE_SCAN");
-            systemNode.setStartLine(call.getStartLine());
-            systemNode.setEndLine(call.getEndLine());
-            allNodes.add(systemNode);
+            GraphNode systemNode = writer.upsertNode(GraphNodeClaim.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .nodeType(NodeType.ExternalSystem.name())
+                    .nodeKey(systemKey)
+                    .nodeName(edgeKeySuffix)
+                    .displayName(edgeKeySuffix)
+                    .description(call.getClientType() + " 外部调用")
+                    .sourceType(SourceType.CODE_AST.name())
+                    .sourcePath(call.getSourcePath())
+                    .startLine(call.getStartLine())
+                    .endLine(call.getEndLine())
+                    .confidence(BigDecimal.ONE)
+                    .status(NodeStatus.CONFIRMED.name())
+                    .scanType("CODE_SCAN")
+                    .build());
+            nodeCount++;
 
             if (call.getBaseUrl() != null && !call.getBaseUrl().isBlank()) {
                 String apiKey = "external:" + call.getBaseUrl();
-                GraphNode externalApiNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
-                        NodeType.ApiEndpoint.name(), apiKey, call.getBaseUrl(),
-                        call.getBaseUrl(), "外部 API: " + call.getBaseUrl(),
-                        SourceType.CODE_AST.name(), call.getSourcePath(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED,
-                        "CODE_SCAN");
-                externalApiNode.setStartLine(call.getStartLine());
-                externalApiNode.setEndLine(call.getEndLine());
-                allNodes.add(externalApiNode);
+                GraphNode externalApiNode = writer.upsertNode(GraphNodeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .nodeType(NodeType.ApiEndpoint.name())
+                        .nodeKey(apiKey)
+                        .nodeName(call.getBaseUrl())
+                        .displayName(call.getBaseUrl())
+                        .description("外部 API: " + call.getBaseUrl())
+                        .sourceType(SourceType.CODE_AST.name())
+                        .sourcePath(call.getSourcePath())
+                        .startLine(call.getStartLine())
+                        .endLine(call.getEndLine())
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .scanType("CODE_SCAN")
+                        .build());
+                nodeCount++;
 
-                allEdges.add(buildEdge(projectId, versionId,
-                        systemId, externalApiNode.getId(),
+                createEdge(projectId, versionId,
+                        systemNode.getId(), externalApiNode.getId(),
                         EdgeType.CALLS_EXTERNAL.name(),
                         systemKey + "->calls_external->" + apiKey,
                         SourceType.CODE_AST.name(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
             }
 
             if (call.getClassName() != null && call.getMethodName() != null) {
                 String methodKey = buildMethodKey(call.getClassName(), call.getMethodName(), call.getMethodSignature());
-                GraphNode methodNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
-                        NodeType.Method.name(), methodKey, call.getMethodName(),
-                        call.getMethodName(), "外部系统调用方法",
-                        SourceType.CODE_AST.name(), call.getSourcePath(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED,
-                        "CODE_SCAN");
-                methodNode.setStartLine(call.getStartLine());
-                methodNode.setEndLine(call.getEndLine());
-                methodNode.setClassName(call.getClassName());
-                allNodes.add(methodNode);
+                GraphNode methodNode = writer.upsertNode(GraphNodeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .nodeType(NodeType.Method.name())
+                        .nodeKey(methodKey)
+                        .nodeName(call.getMethodName())
+                        .displayName(call.getMethodName())
+                        .description("外部系统调用方法")
+                        .sourceType(SourceType.CODE_AST.name())
+                        .sourcePath(call.getSourcePath())
+                        .startLine(call.getStartLine())
+                        .endLine(call.getEndLine())
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .scanType("CODE_SCAN")
+                        .className(call.getClassName())
+                        .build());
+                nodeCount++;
 
-                allEdges.add(buildEdge(projectId, versionId,
-                        methodNode.getId(), systemId,
+                createEdge(projectId, versionId,
+                        methodNode.getId(), systemNode.getId(),
                         EdgeType.CALLS_EXTERNAL.name(),
                         methodKey + "->calls_external->" + systemKey,
                         SourceType.CODE_AST.name(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
             } else if (call.getClassName() != null) {
                 NodeType classNodeType = inferNodeType(call.getClassName());
-                GraphNode classNode = buildNode(projectId, versionId, IdUtil.fastUUID(),
-                        classNodeType.name(), call.getClassName(),
-                        call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1),
-                        call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1),
-                        null,
-                        SourceType.CODE_AST.name(), call.getSourcePath(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED,
-                        "CODE_SCAN");
-                allNodes.add(classNode);
-                allEdges.add(buildEdge(projectId, versionId,
-                        classNode.getId(), systemId,
+                GraphNode classNode = writer.upsertNode(GraphNodeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .nodeType(classNodeType.name())
+                        .nodeKey(call.getClassName())
+                        .nodeName(call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1))
+                        .displayName(call.getClassName().substring(call.getClassName().lastIndexOf('.') + 1))
+                        .description(null)
+                        .sourceType(SourceType.CODE_AST.name())
+                        .sourcePath(call.getSourcePath())
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .scanType("CODE_SCAN")
+                        .build());
+                nodeCount++;
+
+                createEdge(projectId, versionId,
+                        classNode.getId(), systemNode.getId(),
                         EdgeType.CALLS_EXTERNAL.name(),
                         call.getClassName() + "->calls_external->" + systemKey,
                         SourceType.CODE_AST.name(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
             }
         }
 
-        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
-        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
-        log.info("Built external system graph: {} nodes, {} edges (projectId={}, versionId={})",
+        log.info("Built external system graph with evidence: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
     }
 
@@ -2483,41 +2817,55 @@ public class GraphBuilder {
             List<io.github.legacygraph.model.FrontendPageFact.FrontendButton> buttons,
             List<io.github.legacygraph.model.FrontendPageFact> pageFacts) {
 
-        List<GraphNode> allNodes = new ArrayList<>();
-        List<GraphEdge> allEdges = new ArrayList<>();
+        int nodeCount = 0, edgeCount = 0;
 
         // 1. 创建 Button 节点
         for (var button : buttons) {
             String buttonKey = "button:" + button.getText();
-            String buttonId = IdUtil.fastUUID();
 
-            GraphNode buttonNode = buildNode(projectId, versionId, buttonId,
-                    NodeType.Button.name(), buttonKey, button.getText(),
-                    button.getText(), button.getClickMethod(),
-                    SourceType.FRONTEND_AST.name(), null,
-                    BigDecimal.ONE, NodeStatus.CONFIRMED,
-                    "CODE_SCAN");
-            allNodes.add(buttonNode);
+            GraphNode buttonNode = writer.upsertNode(GraphNodeClaim.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .nodeType(NodeType.Button.name())
+                    .nodeKey(buttonKey)
+                    .nodeName(button.getText())
+                    .displayName(button.getText())
+                    .description(button.getClickMethod())
+                    .sourceType(SourceType.FRONTEND_AST.name())
+                    .sourcePath(null)
+                    .confidence(BigDecimal.ONE)
+                    .status(NodeStatus.CONFIRMED.name())
+                    .scanType("CODE_SCAN")
+                    .build());
+            nodeCount++;
 
             // Button -> Permission REQUIRES 边
             if (button.getPermission() != null && !button.getPermission().isBlank()) {
                 String permKey = "permission:" + button.getPermission();
-                String permId = IdUtil.fastUUID();
 
-                GraphNode permNode = buildNode(projectId, versionId, permId,
-                        NodeType.Permission.name(), permKey, button.getPermission(),
-                        button.getPermission(), "权限标识",
-                        SourceType.FRONTEND_AST.name(), null,
-                        BigDecimal.ONE, NodeStatus.CONFIRMED,
-                        "CODE_SCAN");
-                allNodes.add(permNode);
+                GraphNode permNode = writer.upsertNode(GraphNodeClaim.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .nodeType(NodeType.Permission.name())
+                        .nodeKey(permKey)
+                        .nodeName(button.getPermission())
+                        .displayName(button.getPermission())
+                        .description("权限标识")
+                        .sourceType(SourceType.FRONTEND_AST.name())
+                        .sourcePath(null)
+                        .confidence(BigDecimal.ONE)
+                        .status(NodeStatus.CONFIRMED.name())
+                        .scanType("CODE_SCAN")
+                        .build());
+                nodeCount++;
 
-                allEdges.add(buildEdge(projectId, versionId,
-                        buttonId, permId,
+                createEdge(projectId, versionId,
+                        buttonNode.getId(), permNode.getId(),
                         EdgeType.REQUIRES.name(),
                         buttonKey + "->requires->" + permKey,
                         SourceType.FRONTEND_AST.name(),
-                        BigDecimal.ONE, NodeStatus.CONFIRMED));
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
             }
 
             // Button -> ApiEndpoint CALLS 边（如果有 apiUrl）
@@ -2526,12 +2874,13 @@ public class GraphBuilder {
                 GraphNode apiNode = findExistingNode(projectId, versionId,
                         NodeType.ApiEndpoint.name(), apiKey);
                 if (apiNode != null) {
-                    allEdges.add(buildEdge(projectId, versionId,
-                            buttonId, apiNode.getId(),
+                    createEdge(projectId, versionId,
+                            buttonNode.getId(), apiNode.getId(),
                             EdgeType.CALLS.name(),
                             buttonKey + "->calls->" + apiKey,
                             SourceType.FRONTEND_AST.name(),
-                            BigDecimal.ONE, NodeStatus.CONFIRMED));
+                            BigDecimal.ONE, NodeStatus.CONFIRMED);
+                    edgeCount++;
                 }
             }
         }
@@ -2545,29 +2894,35 @@ public class GraphBuilder {
 
                 if (pageNode != null) {
                     String permKey = "permission:" + page.getPermission();
-                    String permId = IdUtil.fastUUID();
 
-                    GraphNode permNode = buildNode(projectId, versionId, permId,
-                            NodeType.Permission.name(), permKey, page.getPermission(),
-                            page.getPermission(), "页面访问权限",
-                            SourceType.FRONTEND_AST.name(), null,
-                            BigDecimal.ONE, NodeStatus.CONFIRMED,
-                            "CODE_SCAN");
-                    allNodes.add(permNode);
+                    GraphNode permNode = writer.upsertNode(GraphNodeClaim.builder()
+                            .projectId(projectId)
+                            .versionId(versionId)
+                            .nodeType(NodeType.Permission.name())
+                            .nodeKey(permKey)
+                            .nodeName(page.getPermission())
+                            .displayName(page.getPermission())
+                            .description("页面访问权限")
+                            .sourceType(SourceType.FRONTEND_AST.name())
+                            .sourcePath(null)
+                            .confidence(BigDecimal.ONE)
+                            .status(NodeStatus.CONFIRMED.name())
+                            .scanType("CODE_SCAN")
+                            .build());
+                    nodeCount++;
 
-                    allEdges.add(buildEdge(projectId, versionId,
-                            pageNode.getId(), permId,
+                    createEdge(projectId, versionId,
+                            pageNode.getId(), permNode.getId(),
                             EdgeType.REQUIRES.name(),
                             pageKey + "->requires->" + permKey,
                             SourceType.FRONTEND_AST.name(),
-                            BigDecimal.ONE, NodeStatus.CONFIRMED));
+                            BigDecimal.ONE, NodeStatus.CONFIRMED);
+                    edgeCount++;
                 }
             }
         }
 
-        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
-        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
-        log.info("Built frontend button/permission graph: {} nodes, {} edges (projectId={}, versionId={})",
+        log.info("Built frontend button/permission graph with evidence: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
     }
 

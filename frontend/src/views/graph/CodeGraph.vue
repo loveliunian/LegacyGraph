@@ -68,26 +68,13 @@
     <el-card
       v-if="graphData"
       class="mt-4">
-      <div class="graph-container">
-        <VueFlow
-          :nodes="nodes"
-          :edges="edges"
-          fit-view
-        >
-          <template #node-custom="nodeProps">
-            <div
-              class="custom-node"
-              :class="{
-                'high-confidence': nodeProps.data.confidence >= 0.8,
-                'low-confidence': nodeProps.data.confidence < 0.8
-              }"
-            >
-              <div class="node-header">{{ nodeProps.data.label }}</div>
-              <div class="node-body">{{ nodeProps.data.type }}</div>
-            </div>
-          </template>
-        </VueFlow>
-      </div>
+      <GraphViewerOptimized
+        :nodes="nodes"
+        :edges="edges"
+        :height="'600px'"
+        :editable="false"
+        :aggregation-threshold="100"
+      />
     </el-card>
 
     <el-card
@@ -133,13 +120,12 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { VueFlow } from '@vue-flow/core'
-import '@vue-flow/core/dist/style.css'
 import { graphApi } from '@/api'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { loadScanVersions } from '@/utils/versionsCache'
 import { dictLabel } from '@/utils/dict'
+import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
 
 interface GraphNode {
   id: string
@@ -149,6 +135,8 @@ interface GraphNode {
     label: string
     type: string
     confidence: number
+    status: string
+    evidenceCount: number
   }
 }
 
@@ -270,12 +258,14 @@ const processGraphData = (data: any[]) => {
         const props = node.properties || {}
         processedNodes.set(nodeId, {
           id: nodeId,
-          type: labels,
+          type: 'custom',
           position: { x, y },
           data: {
             label: props.displayName || props.nodeName || props.nodeKey || nodeId,
             type: labels,
-            confidence: props.confidence || 1
+            confidence: props.confidence || 1,
+            status: '',
+            evidenceCount: 0
           }
         })
         x += 180
@@ -383,39 +373,7 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.graph-container {
-  height: 600px;
-  width: 100%;
-}
-
 .mt-4 {
   margin-top: 1rem;
-}
-
-.custom-node {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #fff;
-  border: 2px solid #ddd;
-  min-width: 100px;
-  text-align: center;
-}
-
-.custom-node.high-confidence {
-  border-color: #67c23a;
-}
-
-.custom-node.low-confidence {
-  border-color: #e6a23c;
-}
-
-.node-header {
-  font-weight: bold;
-  font-size: 12px;
-}
-
-.node-body {
-  font-size: 10px;
-  color: #999;
 }
 </style>

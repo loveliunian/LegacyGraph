@@ -170,10 +170,17 @@ public class JavaMemberCallResolver {
             return 0;
         }
 
-        // 5. 批量 MERGE
+        // 5. 批量 MERGE CALLS 边
         int merged = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
         log.info("Member-call resolve: {} edges merged for versionId={} ({} facts processed, forward={} reverse={})",
                 merged, versionId, facts.size(), forwardResolved, reverseResolved);
+
+        // 6. 二次解析 EXTENDS/IMPLEMENTS 边（GraphBuilder 首次解析时跨文件父类可能未入库）
+        int inheritMerged = resolveInheritanceEdges(projectId, versionId, fqnToClassNode, simpleNameToClassNodes);
+        if (inheritMerged > 0) {
+            log.info("Inheritance resolve: {} EXTENDS/IMPLEMENTS edges merged for versionId={}", inheritMerged, versionId);
+        }
+
         return merged;
     }
 
@@ -263,18 +270,10 @@ public class JavaMemberCallResolver {
         if (candidates.size() == 1) {
             targetMethodNode = candidates.get(0);
         } else {
-            // 多候选 → 尝试 caller 同包消歧
-            String callerPkg = callerFqn.contains(".") ? callerFqn.substring(0, callerFqn.lastIndexOf('.')) : "";
-            List<GraphNode> samePkg = new ArrayList<>();
-            for (GraphNode c : candidates) {
-                String targetFqn = owningFqn(c.getNodeKey());
-                if (targetFqn != null && targetFqn.startsWith(callerPkg)) {
-                    samePkg.add(c);
-                }
-            }
-            if (samePkg.size() == 1) {
-                targetMethodNode = samePkg.get(0);
-            } else {
+            // P2c：多维消歧 — 同包过滤 → 参数个数匹配 → 签名精确匹配
+            targetMethodNode = disambiguateCandidates(
+                    candidates, call, callerFqn, fqnToClassNode, simpleNameToClassNodes);
+            if (targetMethodNode == null) {
                 return null; // 歧义，跳过
             }
         }
@@ -312,6 +311,180 @@ public class JavaMemberCallResolver {
         edge.setConfidence(BigDecimal.valueOf(0.85));
         edge.setStatus(NodeStatus.PENDING_CONFIRM.name());
         return edge;
+    }
+
+    /**
+     * P2c：多维消歧策略 — 按优先级依次尝试：
+     * 1. 同包过滤（caller 与 candidate 在同一包下）
+     * 2. 参数个数匹配（calledMethodSignature 的参数个数 == 候选方法 nodeKey 中的参数个数）
+     * 3. 签名精确匹配（calledMethodSignature 完全匹配候选方法的参数类型序列）
+     * 4. import 表消歧（caller 类的 import 声明中包含候选类的 FQN）
+     * 每一层过滤后若只剩 1 个候选则返回，否则进入下一层；全部无法消歧返回 null。
+     */
+    private GraphNode disambiguateCandidates(
+            List<GraphNode> candidates, CallRelationDto call, String callerFqn,
+            Map<String, GraphNode> fqnToClassNode,
+            Map<String, List<GraphNode>> simpleNameToClassNodes) {
+
+        // 1. 同包过滤
+        String callerPkg = callerFqn.contains(".") ? callerFqn.substring(0, callerFqn.lastIndexOf('.')) : "";
+        List<GraphNode> filtered = new ArrayList<>();
+        for (GraphNode c : candidates) {
+            String targetFqn = owningFqn(c.getNodeKey());
+            if (targetFqn != null && targetFqn.startsWith(callerPkg)) {
+                filtered.add(c);
+            }
+        }
+        if (filtered.size() == 1) return filtered.get(0);
+        if (filtered.isEmpty()) filtered = new ArrayList<>(candidates); // 同包全 miss，回退
+
+        // 2. 参数个数匹配
+        if (call.calledMethodSignature != null && !call.calledMethodSignature.isBlank()) {
+            int callParamCount = countParams(call.calledMethodSignature);
+            if (callParamCount >= 0) {
+                List<GraphNode> paramMatched = new ArrayList<>();
+                for (GraphNode c : filtered) {
+                    int candidateParamCount = countParams(c.getNodeKey());
+                    if (candidateParamCount == callParamCount) {
+                        paramMatched.add(c);
+                    }
+                }
+                if (paramMatched.size() == 1) return paramMatched.get(0);
+                if (!paramMatched.isEmpty()) filtered = paramMatched;
+            }
+        }
+
+        // 3. 签名精确匹配（参数类型序列完全一致）
+        if (call.calledMethodSignature != null && !call.calledMethodSignature.isBlank()) {
+            String callParamTypes = extractParamTypes(call.calledMethodSignature);
+            if (callParamTypes != null && !callParamTypes.isBlank()) {
+                List<GraphNode> sigMatched = new ArrayList<>();
+                for (GraphNode c : filtered) {
+                    String candidateParamTypes = extractParamTypes(c.getNodeKey());
+                    if (callParamTypes.equalsIgnoreCase(candidateParamTypes)) {
+                        sigMatched.add(c);
+                    }
+                }
+                if (sigMatched.size() == 1) return sigMatched.get(0);
+                if (!sigMatched.isEmpty()) filtered = sigMatched;
+            }
+        }
+
+        // 4. 语义关联消歧：根据类名的共享词根推断调用意图
+        // 匹配策略：前缀匹配 → 共享词根匹配 → 驼峰分词匹配
+        if (call.sourcePath != null) {
+            String callerSimple = simpleName(callerFqn);
+            GraphNode bestMatch = null;
+            int bestScore = 0;
+            for (GraphNode c : filtered) {
+                String targetSimple = simpleName(owningFqn(c.getNodeKey()));
+                if (targetSimple == null || callerSimple == null) {
+                    continue;
+                }
+                int score = calculateSemanticScore(callerSimple, targetSimple);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = c;
+                }
+            }
+            if (bestMatch != null && bestScore >= 1) {
+                return bestMatch;
+            }
+        }
+
+        return null; // 无法消歧
+    }
+
+    /**
+     * 计算两个类名的语义关联分数：
+     * - 前缀匹配（如 UserService → UserMapper）：+2 分
+     * - 共享词根匹配（如 OrderService → OrderDetailMapper）：+1 分
+     * - 驼峰分词共享词匹配（如 UserServiceImpl → UserMapper）：+1 分
+     */
+    private static int calculateSemanticScore(String callerSimple, String targetSimple) {
+        int score = 0;
+        String callerCore = stripSuffix(callerSimple);
+        String targetCore = stripSuffix(targetSimple);
+
+        // 前缀匹配（UserService → UserMapper）
+        if (callerCore.startsWith(targetCore) || targetCore.startsWith(callerCore)) {
+            score += 2;
+        }
+
+        // 共享词根匹配（OrderService → OrderDetailMapper）
+        if (callerCore.contains(targetCore) || targetCore.contains(callerCore)) {
+            score += 1;
+        }
+
+        // 驼峰分词共享词匹配
+        Set<String> callerWords = camelCaseWords(callerSimple);
+        Set<String> targetWords = camelCaseWords(targetSimple);
+        for (String w : callerWords) {
+            if (targetWords.contains(w) && w.length() >= 3) {
+                score += 1;
+                break;
+            }
+        }
+
+        return score;
+    }
+
+    /** 剥离常见后缀：Service/ServiceImpl/Mapper/Dao/Controller */
+    private static String stripSuffix(String name) {
+        if (name == null) return null;
+        String[] suffixes = {"ServiceImpl", "Service", "Mapper", "Dao", "DaoImpl", "Controller", "Handler"};
+        for (String s : suffixes) {
+            if (name.endsWith(s)) {
+                return name.substring(0, name.length() - s.length());
+            }
+        }
+        return name;
+    }
+
+    /** 驼峰分词：将类名拆分为单词集合 */
+    private static Set<String> camelCaseWords(String name) {
+        Set<String> words = new HashSet<>();
+        if (name == null || name.isEmpty()) {
+            return words;
+        }
+        StringBuilder current = new StringBuilder();
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (Character.isUpperCase(ch) && current.length() > 0) {
+                words.add(current.toString());
+                current = new StringBuilder();
+            }
+            current.append(ch);
+        }
+        if (current.length() > 0) {
+            words.add(current.toString());
+        }
+        return words;
+    }
+
+    /** 从方法签名中提取参数类型部分（括号内内容），如 "findById(String, int)" → "String, int" */
+    private static String extractParamTypes(String signature) {
+        if (signature == null) return null;
+        int start = signature.indexOf('(');
+        int end = signature.lastIndexOf(')');
+        if (start < 0 || end < 0 || end <= start) return null;
+        return signature.substring(start + 1, end).trim();
+    }
+
+    /** 统计方法签名中的参数个数 */
+    private static int countParams(String signature) {
+        String types = extractParamTypes(signature);
+        if (types == null || types.isEmpty()) return 0;
+        // 按逗号分割，注意泛型中的逗号不分割（简化处理）
+        int count = 0;
+        int depth = 0;
+        for (int i = 0; i < types.length(); i++) {
+            char ch = types.charAt(i);
+            if (ch == '<') depth++;
+            else if (ch == '>') depth--;
+            else if (ch == ',' && depth == 0) count++;
+        }
+        return count + 1; // 最后一个参数后没有逗号
     }
 
     /**
@@ -369,6 +542,110 @@ public class JavaMemberCallResolver {
             log.debug("Failed to deserialize CallRelation from fact {}: {}", fact.getId(), e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 二次解析 EXTENDS/IMPLEMENTS 边 —— 根据类节点 properties 中的继承信息，
+     * 在全局类索引中查找父类/接口节点，补充首次解析时遗漏的跨文件继承边。
+     */
+    private int resolveInheritanceEdges(String projectId, String versionId,
+                                        Map<String, GraphNode> fqnToClassNode,
+                                        Map<String, List<GraphNode>> simpleNameToClassNodes) {
+        List<GraphEdge> inheritEdges = new ArrayList<>();
+        Set<String> existingPairs = new HashSet<>();
+
+        List<GraphEdge> existingEdges = neo4jGraphDao.queryEdges(
+                projectId, versionId, null, null, 0);
+        for (GraphEdge e : existingEdges) {
+            if (e.getFromNodeId() != null && e.getToNodeId() != null) {
+                existingPairs.add(e.getFromNodeId() + "|" + e.getToNodeId());
+            }
+        }
+
+        for (GraphNode classNode : fqnToClassNode.values()) {
+            String propsJson = classNode.getProperties();
+            if (propsJson == null || propsJson.isBlank()) {
+                continue;
+            }
+            try {
+                Map<String, Object> props = objectMapper.readValue(propsJson, Map.class);
+                List<String> extendedTypes = (List<String>) props.get("extendedTypes");
+                List<String> implementedTypes = (List<String>) props.get("implementedTypes");
+
+                String childFqn = classNode.getNodeKey();
+
+                if (extendedTypes != null) {
+                    for (String parentSimple : extendedTypes) {
+                        GraphNode parentNode = resolveParentNode(parentSimple, simpleNameToClassNodes, childFqn);
+                        if (parentNode != null && !parentNode.getId().equals(classNode.getId())) {
+                            String pair = classNode.getId() + "|" + parentNode.getId();
+                            if (existingPairs.add(pair)) {
+                                inheritEdges.add(buildInheritEdge(projectId, versionId, classNode, parentNode, EdgeType.EXTENDS));
+                            }
+                        }
+                    }
+                }
+
+                if (implementedTypes != null) {
+                    for (String ifaceSimple : implementedTypes) {
+                        GraphNode ifaceNode = resolveParentNode(ifaceSimple, simpleNameToClassNodes, childFqn);
+                        if (ifaceNode != null && !ifaceNode.getId().equals(classNode.getId())) {
+                            String pair = classNode.getId() + "|" + ifaceNode.getId();
+                            if (existingPairs.add(pair)) {
+                                inheritEdges.add(buildInheritEdge(projectId, versionId, classNode, ifaceNode, EdgeType.IMPLEMENTS));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Failed to parse inherit properties for {}: {}", classNode.getNodeKey(), e.getMessage());
+            }
+        }
+
+        if (inheritEdges.isEmpty()) {
+            return 0;
+        }
+        return neo4jGraphDao.mergeEdgesBatch(inheritEdges);
+    }
+
+    /** 根据简单名解析父类/接口节点，优先同包匹配 */
+    private GraphNode resolveParentNode(String simpleName,
+                                         Map<String, List<GraphNode>> simpleNameToClassNodes,
+                                         String childFqn) {
+        List<GraphNode> candidates = simpleNameToClassNodes.get(simpleName);
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        if (candidates.size() == 1) {
+            return candidates.get(0);
+        }
+        String childPkg = childFqn.contains(".") ? childFqn.substring(0, childFqn.lastIndexOf('.')) : "";
+        for (GraphNode c : candidates) {
+            String fqn = c.getNodeKey();
+            if (fqn != null && fqn.startsWith(childPkg)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /** 构建继承边 POJO */
+    private GraphEdge buildInheritEdge(String projectId, String versionId,
+                                        GraphNode fromNode, GraphNode toNode, EdgeType edgeType) {
+        GraphEdge edge = new GraphEdge();
+        edge.setId(IdUtil.fastUUID());
+        edge.setProjectId(projectId);
+        edge.setVersionId(versionId);
+        edge.setFromNodeId(fromNode.getId());
+        edge.setToNodeId(toNode.getId());
+        edge.setEdgeType(edgeType.name());
+        edge.setEdgeKey(fromNode.getNodeKey() + "->" + edgeType.name().toLowerCase() + "->" + toNode.getNodeKey());
+        edge.setSourceType(SourceType.CODE_AST.name());
+        edge.setConfidence(BigDecimal.ONE);
+        edge.setStatus(NodeStatus.CONFIRMED.name());
+        edge.setCreatedAt(LocalDateTime.now());
+        edge.setUpdatedAt(LocalDateTime.now());
+        return edge;
     }
 
     /** 简单名：FQN 最后一个 '.' 之后（剥泛型）。 */

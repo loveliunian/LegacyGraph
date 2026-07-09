@@ -65,8 +65,10 @@ public class FrontendApiExtractor {
      * 抽取项目常用的 request helper：get('/xxx') / post(`/xxx/${id}`)
      */
     private void extractRequestHelperCalls(String[] lines, List<FrontendPageFact.FrontendApiCall> result, Path file) {
+        // 第2组捕获引号（含反引号），第3组捕获 URL 内容。
+        // 反引号内容允许 ${var} 模板插值；普通引号内容不允许跨引号字符。
         Pattern pattern = Pattern.compile(
-                "(?<![\\w.])(get|post|put|delete|patch)\\s*(?:<[^>]+>)?\\s*\\(\\s*([`'\"])([^`'\"]+)\\2",
+                "(?<![\\w.])(get|post|put|delete|patch)\\s*(?:<[^>]+>)?\\s*\\(\\s*(['\"`])((?:[^'\"`]|\\\\['\"`])+)\\2",
                 Pattern.CASE_INSENSITIVE);
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];

@@ -154,7 +154,9 @@ class GraphBuilderTest {
                 "/tmp/OrderService.java",
                 5,
                 15,
-                List.of(createMethod, cancelMethod)
+                List.of(createMethod, cancelMethod),
+                List.of(),
+                List.of()
         );
 
         graphBuilder.buildJavaStructureGraph("project-1", "v1", List.of(classInfo));

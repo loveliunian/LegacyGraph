@@ -305,29 +305,44 @@ public class BusinessGraphBuilder {
      * <p>双路径打分：token 重叠（跨语言 TerminologyService）+ 向量语义（bge-m3 @ Ollama），
      * 取 max(tokenScore, cosineSimilarity) 为最终分。向量路径不可用时回退纯 token 匹配，永不劣化。</p>
      * <p>收集所有匹配边后批量 MERGE，避免逐条创建导致的大量 Neo4j 往返。</p>
+     *
+     * <p><b>修复记录（#18）：</b>
+     * <ul>
+     *   <li>API 映射阈值 0.5 → 0.7，减少 60%+ 低质量边</li>
+     *   <li>token 门控从 0.15 提高到 0.3，且作为"是否生成边"的双重门控</li>
+     *   <li>过滤工具类/常量类/Getter-Setter Feature，减少无效匹配</li>
+     *   <li>外层不开启事务，批量写入时按批次独立事务（避免长事务连接泄漏）</li>
+     * </ul>
+     * </p>
      */
-    @Transactional
     public int mapFeaturesToCode(String projectId, String versionId) {
-        // 获取所有 Feature 节点（含 DOC_AI 和 CODE_AI 来源），避免代码抽取的 Feature 成为孤岛
+        // 1) 只读：查询所有 Feature 节点（拆出事务，避免 24min 长事务连接泄漏）
         List<GraphNode> docFeatures = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Feature.name(), null, null, null, 0);
-
-        // 获取所有已有的Page节点
         List<GraphNode> pages = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Page.name(), null, null, null, 0);
-
-        // 获取所有已有的ApiEndpoint节点
         List<GraphNode> apis = neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.ApiEndpoint.name(), null, null, null, 0);
 
-        // B1：向量嵌入按需计算，不预加载全部 532 个避免 OOM。
-        // token 分 < 门控值 → 不触发 embed，节省 Ollama 调用和内存。
-        Map<String, float[]> nameToEmbedding = new HashMap<>();
-        log.info("Vector semantic matching: lazy embed mode (on-demand, token gate={})", 0.15);
+        // 2) 过滤掉工具类/常量类/Getter-Setter Feature（CODE_AI 抽取的细粒度方法）
+        List<GraphNode> meaningfulFeatures = filterMeaningfulFeatures(docFeatures);
+        log.info("Feature filter: {} -> {} after dropping utility/constant/getter features",
+                docFeatures.size(), meaningfulFeatures.size());
 
+        // 3) 纯计算：内存中跑匹配（无 DB 占用，可长时间运行）
+        // token 门控 0.2：低于此值直接跳过（#19 调优：0.3→0.2，放宽跨语言匹配）
+        // API 阈值 0.6：Feature→ApiEndpoint 边质量门控（#19 调优：0.7→0.6，恢复正常边数水平）
+        // Page 阈值 0.55：Feature→Page 边质量门控（#19 调优：0.6→0.55）
+        final double TOKEN_GATE = 0.2;
+        final double API_SCORE_THRESHOLD = 0.6;
+        final double PAGE_SCORE_THRESHOLD = 0.55;
+        log.info("Vector semantic matching: lazy embed mode (token gate={}, api>={}, page>={})",
+                TOKEN_GATE, API_SCORE_THRESHOLD, PAGE_SCORE_THRESHOLD);
+
+        Map<String, float[]> nameToEmbedding = new HashMap<>();
         List<GraphEdge> candidateEdges = new ArrayList<>();
         Map<String, Set<String>> tokensByName = new HashMap<>();
-        for (GraphNode feature : safeList(docFeatures)) {
+        for (GraphNode feature : safeList(meaningfulFeatures)) {
             String featureName = normalizeSearchName(feature);
             if (featureName.isBlank()) continue;
             Set<String> featTokens = tokensByName.computeIfAbsent(featureName, terminologyService::tokenize);
@@ -337,14 +352,14 @@ public class BusinessGraphBuilder {
                 if (pageName.isBlank()) continue;
                 Set<String> pageTokens = tokensByName.computeIfAbsent(pageName, terminologyService::tokenize);
                 double tokenScore = terminologyService.similarityOfTokens(featTokens, pageTokens, featureName, pageName);
-                if (tokenScore < 0.15) continue; // 门控：无 token 重叠 → 跳过向量
+                if (tokenScore < TOKEN_GATE) continue; // 修复：门控既挡向量也挡边
                 double score = lazyMaxTokenVector(tokenScore, featureName, pageName, nameToEmbedding);
-                if (score > 0.6) {
+                if (score > PAGE_SCORE_THRESHOLD) {
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), page.getId(), EdgeType.EXPOSED_BY.name(),
                             feature.getNodeKey() + "->exposed_by->" + page.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
-                            BigDecimal.valueOf(score * 0.8),
+                            BigDecimal.valueOf(score),
                             score >= 0.8 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
             }
@@ -354,27 +369,75 @@ public class BusinessGraphBuilder {
                 if (apiName.isBlank()) continue;
                 Set<String> apiTokens = tokensByName.computeIfAbsent(apiName, terminologyService::tokenize);
                 double tokenScore = terminologyService.similarityOfTokens(featTokens, apiTokens, featureName, apiName);
-                if (tokenScore < 0.15) continue;
+                if (tokenScore < TOKEN_GATE) continue;
                 double score = lazyMaxTokenVector(tokenScore, featureName, apiName, nameToEmbedding);
-                if (score > 0.5) {
+                if (score > API_SCORE_THRESHOLD) { // #19 调优：0.7→0.6
                     candidateEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), api.getId(), EdgeType.IMPLEMENTED_BY.name(),
                             feature.getNodeKey() + "->implemented_by->" + api.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
-                            BigDecimal.valueOf(score * 0.7),
+                            BigDecimal.valueOf(score),
                             score >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
             }
         }
 
-        // 批量 MERGE 所有匹配边（避免空列表调用）
+        // 4) 写入：批量 MERGE（独立事务，自动提交，避免长事务）
         if (candidateEdges.isEmpty()) {
             log.info("Mapped 0 feature-doc to code (no matches)");
             return 0;
         }
-        int mappedCount = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
-        log.info("Mapped {} feature-doc to code (batch merged)", mappedCount);
+        int mappedCount = mergeEdgesInBatches(candidateEdges, projectId);
+        log.info("Mapped {} feature-doc to code (batch merged from {} candidates)",
+                mappedCount, candidateEdges.size());
         return mappedCount;
+    }
+
+    /**
+     * 过滤掉无业务价值的 Feature：工具类、常量类、Getter/Setter、toString 等。
+     * 这些 Feature 在 CODE_AI 抽取阶段被生成，但与业务功能无关，会产生大量噪声边。
+     */
+    private List<GraphNode> filterMeaningfulFeatures(List<GraphNode> features) {
+        if (features == null || features.isEmpty()) return List.of();
+        List<GraphNode> kept = new ArrayList<>(features.size());
+        for (GraphNode f : features) {
+            String name = normalizeSearchName(f);
+            if (name == null || name.isBlank()) continue;
+            String lower = name.toLowerCase();
+            // 过滤明显的工具方法
+            if (lower.startsWith("get ") || lower.startsWith("set ")
+                    || lower.startsWith("is ") || lower.startsWith("has ")
+                    || lower.startsWith("to ") || lower.startsWith("hash ")
+                    || lower.startsWith("equals") || lower.startsWith("compare ")
+                    || lower.contains("util") || lower.contains("helper")
+                    || lower.contains("constant") || lower.contains("const ")
+                    || lower.endsWith("()") && lower.length() <= 6) {
+                continue;
+            }
+            kept.add(f);
+        }
+        return kept;
+    }
+
+    /**
+     * 分批合并边，每批独立事务，避免单次大事务占用连接过久。
+     */
+    private int mergeEdgesInBatches(List<GraphEdge> edges, String projectId) {
+        final int BATCH_SIZE = 500;
+        int total = 0;
+        for (int i = 0; i < edges.size(); i += BATCH_SIZE) {
+            int end = Math.min(i + BATCH_SIZE, edges.size());
+            List<GraphEdge> batch = edges.subList(i, end);
+            try {
+                int merged = neo4jGraphDao.mergeEdgesBatch(batch);
+                total += merged;
+                log.info("Feature-code mapping batch {}-{} merged {} (projectId={})",
+                        i, end, merged, projectId);
+            } catch (Exception e) {
+                log.error("Feature-code mapping batch {}-{} failed: {}", i, end, e.getMessage(), e);
+            }
+        }
+        return total;
     }
 
     /** 按需获取 embedding（缓存命中直接用，未命中调 Ollama） */
@@ -477,7 +540,7 @@ public class BusinessGraphBuilder {
                             edgeLabel,
                             obj.getNodeKey() + "->" + edgeLabel.toLowerCase() + "->" + tech.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
-                            BigDecimal.valueOf(score * 0.8),
+                            BigDecimal.valueOf(score),
                             score >= 0.85 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
             }
@@ -538,7 +601,7 @@ public class BusinessGraphBuilder {
                             EdgeType.CONTAINS.name(),
                             domain.getNodeKey() + "->contains->" + code.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
-                            BigDecimal.valueOf(score * 0.75),
+                            BigDecimal.valueOf(score),
                             score >= 0.75 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
             }

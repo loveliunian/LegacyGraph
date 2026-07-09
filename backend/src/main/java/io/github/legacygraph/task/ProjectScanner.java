@@ -100,6 +100,13 @@ public class ProjectScanner {
     /** 成员调用二次扫描解析器（可选）：ADAPTER_SCAN 后对全局图谱解析 Service→Mapper 等 CALLS 边 */
     private io.github.legacygraph.builder.JavaMemberCallResolver javaMemberCallResolver;
 
+    /** 外部工具对照校验服务（可选）：MEMBER_CALL_RESOLVE 后对图谱做外部工具交叉验证 */
+    private io.github.legacygraph.verification.ExternalVerificationService externalVerificationService;
+
+    /** 外部验证开关（默认关闭），开启后在 MEMBER_CALL_RESOLVE 与 DATABASE_SCAN 之间执行 EXTERNAL_VERIFY */
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.external-verification.enabled:false}")
+    private boolean externalVerificationEnabled;
+
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.github.legacygraph.service.graph.GraphCacheInvalidator graphCacheInvalidator;
@@ -246,6 +253,11 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSystemOverviewIngestService(SystemOverviewIngestService systemOverviewIngestService) {
         this.systemOverviewIngestService = systemOverviewIngestService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setExternalVerificationService(io.github.legacygraph.verification.ExternalVerificationService externalVerificationService) {
+        this.externalVerificationService = externalVerificationService;
     }
 
     /**
@@ -539,6 +551,31 @@ public class ProjectScanner {
                 } catch (Exception e) {
                     log.warn("Member-call resolution failed (non-blocking): versionId={}, err={}", versionId, e.getMessage());
                     completeTask(resolveTask, "failed: " + e.getMessage(), e.getMessage());
+                }
+            }
+
+            // === EXTERNAL_VERIFY 阶段：外部工具对照校验 ===
+            if (externalVerificationEnabled && externalVerificationService != null) {
+                if (isCancelled(versionId)) return;
+                ScanTask externalVerifyTask = createTask(projectId, versionId, "EXTERNAL_VERIFY", "外部工具对照校验");
+                try {
+                    log.info("Scan still running: projectId={}, versionId={}, phase=EXTERNAL_VERIFY, detail=starting external verification",
+                            projectId, versionId);
+                    ScanContext verifyContext = ScanContext.builder()
+                            .projectId(projectId)
+                            .versionId(versionId)
+                            .baseDir(baseDir)
+                            .backendDir(backendDir)
+                            .frontendDir(frontendDir)
+                            .config(new ConcurrentHashMap<>())
+                            .build();
+                    externalVerificationService.executeVerification(projectId, versionId, verifyContext);
+                    completeTask(externalVerifyTask, "External verification completed", null);
+                    log.info("Scan still running: projectId={}, versionId={}, phase=EXTERNAL_VERIFY, detail=completed",
+                            projectId, versionId);
+                } catch (Exception e) {
+                    log.error("EXTERNAL_VERIFY 阶段失败，但不阻塞后续步骤: {}", e.getMessage(), e);
+                    completeTask(externalVerifyTask, "failed: " + e.getMessage(), e.getMessage());
                 }
             }
 

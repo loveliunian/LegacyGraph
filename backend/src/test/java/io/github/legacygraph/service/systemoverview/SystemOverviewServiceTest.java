@@ -38,12 +38,12 @@ class SystemOverviewServiceTest {
     }
 
     @Test
-    void getOverview_returns12DomainsAnd5Paths() {
+    void getOverview_returns12DomainsAnd12Paths() {
         SystemOverviewDTO dto = service.getOverview("self", "v1");
 
         assertEquals("self", dto.getProjectId());
         assertEquals(12, dto.getMappings().size());
-        assertEquals(5, dto.getCorePaths().size());
+        assertEquals(12, dto.getCorePaths().size());
         assertEquals(12, dto.getTotalDomains());
     }
 

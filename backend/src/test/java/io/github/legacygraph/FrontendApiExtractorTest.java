@@ -122,10 +122,10 @@ class FrontendApiExtractorTest {
 
         assertTrue(calls.stream().anyMatch(c ->
                 "get".equals(c.getMethod())
-                        && "/lg/projects/${projectId}/scan-versions/${versionId}/progress".equals(c.getUrl())));
+                        && "/lg/projects/{projectId}/scan-versions/{versionId}/progress".equals(c.getUrl())));
         assertTrue(calls.stream().anyMatch(c ->
                 "post".equals(c.getMethod())
-                        && "/lg/projects/${projectId}/scan-versions/${versionId}/cancel".equals(c.getUrl())));
+                        && "/lg/projects/{projectId}/scan-versions/{versionId}/cancel".equals(c.getUrl())));
     }
 
     // ---------------------------------------------------------------
