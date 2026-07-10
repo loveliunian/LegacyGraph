@@ -1043,28 +1043,31 @@ const renderMarkdown = (text?: string) => {
 
 <style scoped>
 .agent-page { padding: 0; }
-.help-collapse { background: #f0f9ff; border: 1px solid #b3d8ff; border-radius: 8px; }
-.help-content { padding: 0 16px 16px; font-size: 14px; line-height: 1.8; color: #303133; }
+.help-collapse { background: var(--el-color-primary-light-9); border: 1px solid var(--el-color-primary-light-7); border-radius: 8px; }
+.help-content { padding: 0 16px 16px; font-size: 14px; line-height: 1.8; color: var(--el-text-color-primary); }
 .help-content ol { padding-left: 20px; }
-.card-header { display: flex; align-items: center; }
+
+.agent-section { margin-top: 16px; }
+.section-header { display: flex; align-items: center; margin-bottom: 16px; }
+.section-title { margin-left: 8px; font-weight: 600; color: var(--el-text-color-primary); }
 
 .agent-card { cursor: pointer; transition: all 0.2s; height: 100%; display: flex; flex-direction: column; }
-.agent-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(64, 158, 255, 0.15); }
+.agent-card:hover { transform: translateY(-2px); box-shadow: var(--el-box-shadow-light); }
 .agent-card-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
-.agent-icon { color: #409eff; flex-shrink: 0; margin-top: 2px; }
+.agent-icon { color: var(--el-color-primary); flex-shrink: 0; margin-top: 2px; }
 .agent-title-row { flex: 1; min-width: 0; }
-.agent-title-row h4 { margin: 0 0 4px 0; font-size: 15px; color: #303133; }
-.agent-desc { font-size: 13px; color: #606266; margin: 0 0 10px; line-height: 1.5; min-height: 36px; }
-.agent-extra { border-top: 1px solid #ebeef5; padding-top: 10px; margin-top: auto; }
-.agent-scenario, .agent-input-hint { display: flex; align-items: flex-start; gap: 4px; font-size: 12px; color: #909399; line-height: 1.5; margin-bottom: 4px; }
-.agent-scenario .el-icon, .agent-input-hint .el-icon { color: #c0c4cc; flex-shrink: 0; margin-top: 1px; }
+.agent-title-row h4 { margin: 0 0 4px 0; font-size: 15px; color: var(--el-text-color-primary); }
+.agent-desc { font-size: 13px; color: var(--el-text-color-secondary); margin: 0 0 10px; line-height: 1.5; min-height: 36px; }
+.agent-extra { border-top: 1px solid var(--el-border-color); padding-top: 10px; margin-top: auto; }
+.agent-scenario, .agent-input-hint { display: flex; align-items: flex-start; gap: 4px; font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.5; margin-bottom: 4px; }
+.agent-scenario .el-icon, .agent-input-hint .el-icon { color: var(--el-text-color-disabled); flex-shrink: 0; margin-top: 1px; }
 
 .result-content { max-height: 65vh; overflow: auto; }
-.result-summary { font-size: 14px; line-height: 1.7; color: #303133; background: #f5f7fa; padding: 12px 16px; border-radius: 6px; border-left: 3px solid #409eff; }
-.result-issue { background: #fafafa; padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; }
+.result-summary { font-size: 14px; line-height: 1.7; color: var(--el-text-color-primary); background: var(--el-bg-color-overlay); padding: 12px 16px; border-radius: 6px; border-left: 3px solid var(--el-color-primary); }
+.result-issue { background: var(--el-bg-color-overlay); padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; }
 .result-issue p { margin: 6px 0 0; font-size: 13px; line-height: 1.6; }
 .issue-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.code-block { background: #1e1e1e; color: #d4d4d4; padding: 14px 16px; border-radius: 6px; font-size: 13px; line-height: 1.6; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-.pr-body { background: #fafafa; padding: 12px 16px; border-radius: 6px; font-size: 14px; line-height: 1.8; }
-.pr-body :deep(code) { background: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+.code-block { background: var(--el-bg-color-page); color: var(--el-text-color-regular); padding: 14px 16px; border-radius: 6px; font-size: 13px; line-height: 1.6; overflow-x: auto; white-space: pre-wrap; word-break: break-word; border: 1px solid var(--el-border-color-lighter); }
+.pr-body { background: var(--el-bg-color-overlay); padding: 12px 16px; border-radius: 6px; font-size: 14px; line-height: 1.8; }
+.pr-body :deep(code) { background: var(--el-fill-color); padding: 2px 6px; border-radius: 3px; font-size: 13px; }
 </style>

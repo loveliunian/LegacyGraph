@@ -160,22 +160,22 @@ public class HybridRetrievalService {
     /**
      * 解析 versionId：如果为空则查找项目最新版本。
      * <p>
-     * 关键：lg_vector_document.version_id 存储为无连字符格式（与 Neo4j 对齐），
-     * 传入的标准 UUID（带连字符）需规范化为无连字符，否则检索恒返回 0 条。
+     * 关键：lg_vector_document.version_id 存储为标准 UUID 格式（与 lg_scan_version 对齐），
+     * 保持原始格式不变，确保与外键约束一致。
      */
     private String resolveVersionId(String projectId, String versionId) {
         if (versionId != null && !versionId.isBlank()) {
-            return versionId.replace("-", "");
+            return versionId;
         }
         try {
             String latestVersionId = vectorDocumentRepository.findLatestVersionId(projectId);
             if (latestVersionId != null) {
                 log.debug("Resolved to latest versionId: {} for project: {}", latestVersionId, projectId);
-                return latestVersionId.replace("-", "");
+                return latestVersionId;
             }
         } catch (Exception e) {
             log.warn("Failed to resolve latest versionId for project: {}", projectId, e);
         }
-        return versionId != null ? versionId.replace("-", "") : null;
+        return versionId;
     }
 }

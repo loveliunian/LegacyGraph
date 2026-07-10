@@ -1,75 +1,132 @@
+/* ====== 品牌字体系统 ====== */
 :root {
-  --el-color-primary: #409eff;
-  --el-color-primary-light-3: #79bbff;
-  --el-color-primary-light-5: #a0cfff;
-  --el-color-primary-light-7: #c6e2ff;
-  --el-color-primary-light-8: #d9ecff;
-  --el-color-primary-light-9: #ecf5ff;
-  --el-color-primary-dark-2: #337ecc;
-  --el-color-success: #67c23a;
-  --el-color-warning: #e6a23c;
-  --el-color-danger: #f56c6c;
-  --el-color-error: #f56c6c;
-  --el-color-info: #909399;
-  --el-bg-color: #f5f7fa;
-  --el-bg-color-page: #f2f3f5;
-  --el-bg-color-overlay: #ffffff;
-  --el-text-color-primary: #303133;
-  --el-text-color-regular: #606266;
-  --el-text-color-secondary: #909399;
-  --el-text-color-placeholder: #a8abb2;
-  --el-text-color-disabled: #c0c4cc;
-  --el-border-color: #dcdfe6;
-  --el-border-color-light: #e4e7ed;
-  --el-border-color-lighter: #ebeef5;
-  --el-border-color-extra-light: #f2f6fc;
-  --el-border-color-dark: #d4d7de;
-  --el-fill-color: #f0f2f5;
-  --el-fill-color-light: #f5f7fa;
-  --el-fill-color-lighter: #fafafa;
-  --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
-  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 0.12);
-  --el-box-shadow-lighter: 0 2px 12px 0 rgba(0, 0, 0, 0.03);
-  --el-box-shadow-dark: 0 16px 48px 8px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.08);
-  --el-disabled-bg-color: #f5f7fa;
-  --el-disabled-text-color: #c0c4cc;
+  --font-display: 'DM Serif Display', Georgia, 'Times New Roman', serif;
+  --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'SF Mono', 'Menlo', monospace;
 }
 
-html.dark {
-  --el-color-primary: #409eff;
-  --el-color-primary-light-3: #3375b9;
-  --el-color-primary-light-5: #2a598a;
-  --el-color-primary-light-7: #213d5c;
-  --el-color-primary-light-8: #1d3043;
-  --el-color-primary-light-9: #18222c;
-  --el-color-primary-dark-2: #66b1ff;
-  --el-color-success: #67c23a;
-  --el-color-warning: #e6a23c;
-  --el-color-danger: #f56c6c;
-  --el-color-error: #f56c6c;
+/* ====== 品牌色系 — 浅色模式 ====== */
+:root {
+  --el-color-primary: #6366F1;
+  --el-color-primary-light-3: #9293F4;
+  --el-color-primary-light-5: #B1B3F8;
+  --el-color-primary-light-7: #D0D1FE;
+  --el-color-primary-light-8: #E0E0FC;
+  --el-color-primary-light-9: #EFF0FE;
+  --el-color-primary-dark-2: #4F52C1;
+  --el-color-success: #14B8A6;
+  --el-color-success-light-3: #5ACEC1;
+  --el-color-success-light-5: #8ADBD3;
+  --el-color-success-light-7: #B9EAE4;
+  --el-color-success-light-8: #D0F0EC;
+  --el-color-success-light-9: #E8F8F6;
+  --el-color-success-dark-2: #109385;
+  --el-color-warning: #F59E0B;
+  --el-color-warning-light-3: #FABB52;
+  --el-color-warning-light-5: #FACE85;
+  --el-color-warning-light-7: #FBE2B8;
+  --el-color-warning-light-8: #FBEBD1;
+  --el-color-warning-light-9: #FCF5EA;
+  --el-color-warning-dark-2: #C47E09;
+  --el-color-danger: #EF4444;
+  --el-color-error: #EF4444;
+  --el-color-danger-light-3: #F48282;
+  --el-color-danger-light-5: #F7A2A2;
+  --el-color-danger-light-7: #FAC1C1;
+  --el-color-danger-light-8: #FBD1D1;
+  --el-color-danger-light-9: #FCE1E1;
+  --el-color-danger-dark-2: #BF3636;
   --el-color-info: #909399;
-  --el-bg-color: #141414;
-  --el-bg-color-page: #0a0a0a;
-  --el-bg-color-overlay: #1d1e1f;
-  --el-text-color-primary: #e5eaf3;
-  --el-text-color-regular: #cfd3dc;
-  --el-text-color-secondary: #a3a6ad;
-  --el-text-color-placeholder: #8d9095;
-  --el-text-color-disabled: #6c6e72;
-  --el-border-color: #4c4d4f;
-  --el-border-color-light: #414243;
-  --el-border-color-lighter: #363637;
-  --el-border-color-extra-light: #2b2b2c;
-  --el-border-color-dark: #58585b;
-  --el-fill-color: #303030;
-  --el-fill-color-light: #262727;
-  --el-fill-color-lighter: #1d1d1d;
+  --el-color-info-light-3: #B0B1B9;
+  --el-color-info-light-5: #C8C9CC;
+  --el-color-info-light-7: #DFE0E2;
+  --el-color-info-light-8: #E7E8E9;
+  --el-color-info-light-9: #EFEFF1;
+  --el-color-info-dark-2: #73767A;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f5f5f7;
+  --el-bg-color-overlay: #ffffff;
+  --el-text-color-primary: #1D1D1F;
+  --el-text-color-regular: #424245;
+  --el-text-color-secondary: #6E6E73;
+  --el-text-color-placeholder: #A1A1A6;
+  --el-text-color-disabled: #C7C7CC;
+  --el-border-color: #D1D1D6;
+  --el-border-color-light: #E5E5EA;
+  --el-border-color-lighter: #EDEDF0;
+  --el-border-color-extra-light: #F5F5F7;
+  --el-border-color-dark: #C1C1C6;
+  --el-fill-color: #F5F5F7;
+  --el-fill-color-light: #FAFAFA;
+  --el-fill-color-lighter: #FDFDFD;
+  --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 0.08);
+  --el-box-shadow-lighter: 0 2px 12px 0 rgba(0, 0, 0, 0.03);
+  --el-box-shadow-dark: 0 16px 48px 8px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.08);
+  --el-disabled-bg-color: #F5F5F7;
+  --el-disabled-text-color: #C7C7CC;
+}
+
+/* ====== 品牌色系 — 深色模式 ====== */
+html.dark {
+  --el-color-primary: #818CF8;
+  --el-color-primary-light-3: #5A62AE;
+  --el-color-primary-light-5: #41467C;
+  --el-color-primary-light-7: #272A4A;
+  --el-color-primary-light-8: #1A1C32;
+  --el-color-primary-light-9: #0D0E19;
+  --el-color-primary-dark-2: #9AA3FA;
+  --el-color-success: #2DD4BF;
+  --el-color-success-light-3: #209486;
+  --el-color-success-light-5: #176A60;
+  --el-color-success-light-7: #0E4039;
+  --el-color-success-light-8: #092A26;
+  --el-color-success-light-9: #051513;
+  --el-color-success-dark-2: #57DDCC;
+  --el-color-warning: #FBBF24;
+  --el-color-warning-light-3: #AF8619;
+  --el-color-warning-light-5: #7D6012;
+  --el-color-warning-light-7: #4B390B;
+  --el-color-warning-light-8: #322607;
+  --el-color-warning-light-9: #191304;
+  --el-color-warning-dark-2: #FCCC4F;
+  --el-color-danger: #F87171;
+  --el-color-error: #F87171;
+  --el-color-danger-light-3: #AE4F4F;
+  --el-color-danger-light-5: #7C3939;
+  --el-color-danger-light-7: #4A2222;
+  --el-color-danger-light-8: #321717;
+  --el-color-danger-light-9: #190B0B;
+  --el-color-danger-dark-2: #F98D8D;
+  --el-color-info: #9CA3AF;
+  --el-color-info-light-3: #6D727B;
+  --el-color-info-light-5: #4E5258;
+  --el-color-info-light-7: #2F3135;
+  --el-color-info-light-8: #1F2123;
+  --el-color-info-light-9: #101012;
+  --el-color-info-dark-2: #B0B5BF;
+  --el-bg-color: #1C1C1E;
+  --el-bg-color-page: #000000;
+  --el-bg-color-overlay: #2C2C2E;
+  --el-text-color-primary: #F5F5F7;
+  --el-text-color-regular: #D1D1D6;
+  --el-text-color-secondary: #8E8E93;
+  --el-text-color-placeholder: #636366;
+  --el-text-color-disabled: #48484A;
+  --el-border-color: #48484A;
+  --el-border-color-light: #38383A;
+  --el-border-color-lighter: #2C2C2E;
+  --el-border-color-extra-light: #1C1C1E;
+  --el-border-color-dark: #545458;
+  --el-fill-color: #2C2C2E;
+  --el-fill-color-light: #1C1C1E;
+  --el-fill-color-lighter: #1C1C1E;
   --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.36), 0 8px 16px -8px rgba(0, 0, 0, 0.72);
-  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 0.72);
+  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 0.48);
   --el-box-shadow-lighter: 0 2px 12px 0 rgba(0, 0, 0, 0.24);
   --el-box-shadow-dark: 0 16px 48px 8px rgba(0, 0, 0, 0.48), 0 12px 32px rgba(0, 0, 0, 0.48);
-  --el-disabled-bg-color: #2c2c2c;
-  --el-disabled-text-color: #56585c;
+  --el-disabled-bg-color: #2C2C2E;
+  --el-disabled-text-color: #48484A;
 }
 
 * {
@@ -80,7 +137,9 @@ html.dark {
 
 html, body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -212,3 +271,19 @@ body {
 
 .word-break-all { word-break: break-all; }
 .word-break-keep { word-break: keep-all; }
+
+/* ====== 页面过渡动画 ====== */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}

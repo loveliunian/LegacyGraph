@@ -433,7 +433,7 @@ const handlePageChange = (page: number) => {
   display: flex;
   gap: 8px;
   padding: 4px 0;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
 }

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模型配置 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+.page-header {
+  margin-bottom: var(--space-6);
+}
+.page-header h1 {
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+.page-header .subtitle {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
+
+/* Provider Grid */
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+/* Provider Card */
+.provider-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.2s;
+}
+.provider-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.provider-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+  flex-shrink: 0;
+}
+.provider-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.icon-openai { background: #10A37F; color: #fff; }
+.icon-azure { background: #0078D4; color: #fff; }
+.icon-local { background: var(--c-primary-bg); color: var(--c-primary); }
+
+.provider-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-4);
+}
+
+.provider-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: var(--space-5);
+  flex: 1;
+}
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.info-row .label {
+  color: var(--el-text-color-secondary);
+}
+.info-row .value {
+  color: var(--el-text-color-regular);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-info { background: var(--c-info-bg); color: var(--c-info); }
+
+.provider-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1.4;
+}
+.btn-primary { background: var(--c-primary); color: #fff; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-default { background: var(--el-bg-color); color: var(--el-text-color-regular); border: 1px solid var(--el-border-color); }
+.btn-default:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* Add Provider Card */
+.add-provider-card {
+  background: var(--el-bg-color);
+  border: 2px dashed var(--el-border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  min-height: 240px;
+}
+.add-provider-card:hover {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+}
+.add-provider-card svg {
+  width: 32px;
+  height: 32px;
+  color: var(--el-text-color-placeholder);
+}
+.add-provider-card span {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
+}
+
+/* Theme toggle */
+.dark-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: all 0.2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.dark-toggle svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">
+  <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+  <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="page-container">
+  <div class="page-header">
+    <h1>模型配置</h1>
+    <p class="subtitle">配置 AI 模型提供商和参数</p>
+  </div>
+
+  <div class="provider-grid">
+    <!-- OpenAI -->
+    <div class="provider-card">
+      <div class="provider-icon icon-openai">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.28 9.82a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A5.98 5.98 0 0 0 7.39.59a6.06 6.06 0 0 0-5.12 5.14A5.98 5.98 0 0 0 .88 10.4a6.05 6.05 0 0 0 2.93 6.02A5.98 5.98 0 0 0 4.32 21.3a6.06 6.06 0 0 0 6.51 2.9 5.98 5.98 0 0 0 7.86 1.43 6.06 6.06 0 0 0 5.12-5.14 5.98 5.98 0 0 0 1.4-4.67zm-9.56 10.34a4.48 4.48 0 0 1-2.88-1.04l.14-.08 4.78-2.76a.79.79 0 0 0 .39-.68v-6.73l2.02 1.17a.07.07 0 0 1 .04.05v5.58a4.5 4.5 0 0 1-4.49 4.49zm-9.67-4.13a4.47 4.47 0 0 1-.53-3.01l.14.09 4.78 2.76a.78.78 0 0 0 .78 0l5.84-3.37v2.33a.08.08 0 0 1-.03.06l-4.84 2.79a4.5 4.5 0 0 1-6.14-1.65zm-1.97-8.64a4.49 4.49 0 0 1 2.37-1.97V11.1a.79.79 0 0 0 .39.68l5.82 3.36-2.02 1.17a.07.07 0 0 1-.07 0l-4.83-2.79a4.5 4.5 0 0 1-1.66-6.02zm16.57 3.86L12.82 7.6l2.02-1.16a.08.08 0 0 1 .07 0l4.83 2.79a4.49 4.49 0 0 1-.68 8.1v-5.63a.79.79 0 0 0-.42-.7zm2.01-3.02l-.14-.09-4.77-2.78a.79.79 0 0 0-.78 0L7.88 7.22V4.88a.07.07 0 0 1 .03-.06l4.83-2.79a4.5 4.5 0 0 1 6.15 1.65 4.49 4.49 0 0 1-.53 3.81zm-11.84 5.64l-2.02-1.16a.08.08 0 0 1-.04-.06V6.18a4.5 4.5 0 0 1 7.38-3.46l-.14.08-4.78 2.76a.79.79 0 0 0-.39.68zm1.1-2.36l2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5z"/></svg>
+      </div>
+      <div class="provider-name">OpenAI</div>
+      <div class="provider-info">
+        <div class="info-row">
+          <span class="label">API Key</span>
+          <span class="value">sk-****3fGx</span>
+        </div>
+        <div class="info-row">
+          <span class="label">模型</span>
+          <span class="value">GPT-4</span>
+        </div>
+        <div class="info-row">
+          <span class="label">状态</span>
+          <span class="tag tag-success">已连接</span>
+        </div>
+      </div>
+      <div class="provider-actions">
+        <button class="btn btn-default btn-sm">测试连接</button>
+        <button class="btn btn-primary btn-sm">配置</button>
+      </div>
+    </div>
+
+    <!-- Azure OpenAI -->
+    <div class="provider-card">
+      <div class="provider-icon icon-azure">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.003 2L4 7.437h9.738L8.085 22h5.771L20 7.437h.017L21.018 2z"/></svg>
+      </div>
+      <div class="provider-name">Azure OpenAI</div>
+      <div class="provider-info">
+        <div class="info-row">
+          <span class="label">API Key</span>
+          <span class="value">*****</span>
+        </div>
+        <div class="info-row">
+          <span class="label">模型</span>
+          <span class="value">GPT-4 Turbo</span>
+        </div>
+        <div class="info-row">
+          <span class="label">状态</span>
+          <span class="tag tag-info">未配置</span>
+        </div>
+      </div>
+      <div class="provider-actions">
+        <button class="btn btn-primary btn-sm">配置</button>
+      </div>
+    </div>
+
+    <!-- 本地模型 -->
+    <div class="provider-card">
+      <div class="provider-icon icon-local">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div class="provider-name">本地模型</div>
+      <div class="provider-info">
+        <div class="info-row">
+          <span class="label">Endpoint</span>
+          <span class="value">http://localhost:8080</span>
+        </div>
+        <div class="info-row">
+          <span class="label">模型</span>
+          <span class="value">Llama-2</span>
+        </div>
+        <div class="info-row">
+          <span class="label">状态</span>
+          <span class="tag tag-success">已连接</span>
+        </div>
+      </div>
+      <div class="provider-actions">
+        <button class="btn btn-default btn-sm">测试连接</button>
+        <button class="btn btn-primary btn-sm">配置</button>
+      </div>
+    </div>
+
+    <!-- Add Provider -->
+    <div class="add-provider-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>+ 添加提供商</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const sun = document.getElementById('icon-sun');
+  const moon = document.getElementById('icon-moon');
+  const observer = new MutationObserver(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    sun.style.display = isDark ? 'none' : 'block';
+    moon.style.display = isDark ? 'block' : 'none';
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+</script>
+</body>
+</html>

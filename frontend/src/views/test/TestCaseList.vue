@@ -623,7 +623,7 @@ const generateCases = async () => {
 }
 
 .step-path {
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: #303133;
 }
 

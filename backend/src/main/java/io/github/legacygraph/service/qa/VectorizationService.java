@@ -158,7 +158,7 @@ public class VectorizationService {
             // 内存保护：每个 chunk embedding 前检查堆水位
             Runtime rt = Runtime.getRuntime();
             double memRatio = (double) (rt.totalMemory() - rt.freeMemory()) / rt.maxMemory();
-            if (memRatio > 0.85) {
+            if (memRatio > 0.70) {
                 log.warn("Vectorization aborted (memory high at chunk {}/{}) for {}: {}% heap used",
                         chunkIndex, estimatedChunks, sourceUri, (int) (memRatio * 100));
                 break;

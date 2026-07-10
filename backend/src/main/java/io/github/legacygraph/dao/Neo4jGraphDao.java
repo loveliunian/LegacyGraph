@@ -372,6 +372,95 @@ public class Neo4jGraphDao {
         return projectionRepo.averageNodeDegree(projectId, versionId);
     }
 
+    // ---- 图谱质量评估查询 ----
+
+    /** 版本级节点类型分布，返回每行 {nodeType, cnt} */
+    public List<Map<String, Object>> nodeTypeDistribution(String projectId, String versionId) {
+        return projectionRepo.nodeTypeDistribution(projectId, versionId);
+    }
+
+    /** 版本级边类型分布，返回每行 {edgeType, cnt} */
+    public List<Map<String, Object>> edgeTypeDistribution(String projectId, String versionId) {
+        return projectionRepo.edgeTypeDistribution(projectId, versionId);
+    }
+
+    /** 统计孤立节点数（无任何边的节点） */
+    public long countIsolatedNodes(String projectId, String versionId) {
+        return projectionRepo.countIsolatedNodes(projectId, versionId);
+    }
+
+    /**
+     * 统计指定标签中缺少必需边类型的节点数（约束违反计数）。
+     *
+     * @param nodeLabel 节点标签
+     * @param edgeTypes 必需的边类型列表（满足任意一个即可）
+     * @return 缺少所有指定边类型的节点数
+     */
+    public long countNodesWithoutEdgeTypes(String projectId, String versionId,
+                                            String nodeLabel, List<String> edgeTypes) {
+        return projectionRepo.countNodesWithoutEdgeTypes(projectId, versionId, nodeLabel, edgeTypes);
+    }
+
+    /**
+     * 抽样边用于准确性评估：返回指定数量的边，每条边包含 fromNodeId/toNodeId/edgeType/fromNodeType/toNodeType。
+     */
+    public List<Map<String, Object>> sampleEdgesForAccuracy(String projectId, String versionId, int sampleSize) {
+        String cypher = "MATCH (n)-[r]-(m) WHERE n.projectId=$projectId AND n.versionId=$versionId " +
+                "RETURN n.nodeId as fromNodeId, n.nodeType as fromNodeType, " +
+                "m.nodeId as toNodeId, m.nodeType as toNodeType, type(r) as edgeType LIMIT $limit";
+        Map<String, Object> params = Map.of("projectId", projectId, "versionId", versionId, "limit", sampleSize);
+        return projectionRepo.executeReadQuery(cypher, params);
+    }
+
+    // ---- Blast Radius 传播分析查询 ----
+
+    /**
+     * 按 sourcePath 查询文件中包含的所有图谱节点（用于变更影响分析）。
+     * <p>versionId 为 null 时查询项目下所有版本。详见
+     * {@link Neo4jProjectionRepository#findNodesBySourcePath}。</p>
+     *
+     * @return 每行包含 {nodeId, nodeKey, nodeName, nodeType, sourcePath}
+     */
+    public List<Map<String, Object>> findNodesBySourcePath(String projectId, String versionId,
+                                                            String sourcePath) {
+        return projectionRepo.findNodesBySourcePath(projectId, versionId, sourcePath);
+    }
+
+    /**
+     * 反向依赖查询 — 查找指向目标节点集合的入边源节点（Blast Radius 传播分析核心查询）。
+     * <p>versionId 为 null 时查询项目下所有版本。详见
+     * {@link Neo4jProjectionRepository#findReverseDependents}。</p>
+     *
+     * @param targetNodeIds 变更文件中节点的 ID 集合
+     * @param edgeTypes     反向遍历的边类型白名单
+     * @return 每行包含 {sourceId, sourceKey, sourceName, sourceType, targetId, targetKey, edgeType}
+     */
+    public List<Map<String, Object>> findReverseDependents(String projectId, String versionId,
+                                                            Collection<String> targetNodeIds,
+                                                            List<String> edgeTypes) {
+        return projectionRepo.findReverseDependents(projectId, versionId, targetNodeIds, edgeTypes);
+    }
+
+    /**
+     * 查询指定节点集合之间的所有边（仅按 projectId 过滤，不限定 versionId）。
+     * <p>用于 Blast Radius 受影响子图的边集构建。详见
+     * {@link Neo4jProjectionRepository#queryEdgesForNodesByProject}。</p>
+     *
+     * @return 每行包含 {id, type, source, target}
+     */
+    public List<Map<String, Object>> queryEdgesForNodesByProject(String projectId, List<String> nodeIds) {
+        return projectionRepo.queryEdgesForNodesByProject(projectId, nodeIds);
+    }
+
+    /**
+     * 通用只读 Cypher 查询委托，避免 service 层直接依赖 Neo4j Driver。
+     *
+     * @return 每行结果为 Map
+     */
+    public List<Map<String, Object>> executeReadQuery(String cypher, Map<String, Object> params) {
+        return projectionRepo.executeReadQuery(cypher, params);
+    }
+
     // ==================== 删除 / 清理 → AdminRepository ====================
 
     public void deleteGraph(String projectId, String versionId) {
@@ -413,5 +502,13 @@ public class Neo4jGraphDao {
 
     public void ensureIndexesAndConstraints() {
         schemaRepo.ensureIndexesAndConstraints();
+    }
+
+    /**
+     * 存根：查找孤立节点（无入边和出边的节点），待完整实现。
+     */
+    public List<GraphNode> findIsolatedNodes(String projectId, String versionId, String nodeType) {
+        log.debug("findIsolatedNodes stub: projectId={}, versionId={}, nodeType={}", projectId, versionId, nodeType);
+        return List.of();
     }
 }

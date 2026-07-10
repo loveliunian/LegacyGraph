@@ -1,17 +1,40 @@
 <template>
   <div class="graph-diff-page">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>图谱版本对比</span>
-          <el-tag
-            type="info"
-            size="small">
-            跨版本节点/边差异分析
-          </el-tag>
+    <!-- 页面头部：标题 + 内联差异摘要 + 对比操作 -->
+    <div class="page-header">
+      <div class="header-left">
+        <div class="header-title-row">
+          <h3>图谱版本对比</h3>
+          <div
+            v-if="diffResult"
+            class="inline-stats">
+            <span class="stat-item">
+              <span class="stat-num success">{{ diffResult.addedNodes?.length || 0 }}</span>
+              <span class="stat-text">新增节点</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num danger">{{ diffResult.removedNodes?.length || 0 }}</span>
+              <span class="stat-text">删除节点</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num success">{{ diffResult.addedEdges?.length || 0 }}</span>
+              <span class="stat-text">新增边</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num danger">{{ diffResult.removedEdges?.length || 0 }}</span>
+              <span class="stat-text">删除边</span>
+            </span>
+          </div>
         </div>
-      </template>
+        <p class="header-desc">跨版本节点/边差异分析</p>
+      </div>
+    </div>
 
+    <!-- 版本选择表单：去除 el-card，div 布局 -->
+    <div class="diff-form">
       <el-form
         :inline="true"
         label-width="100px">
@@ -50,18 +73,23 @@
           </el-button>
         </el-form-item>
       </el-form>
-    </el-card>
+    </div>
 
-    <!-- 差异结果 -->
+    <!-- 差异结果：去除 el-card，使用 panel-section div 布局 -->
     <el-row
       v-if="diffResult"
       :gutter="16"
-      style="margin-top: 16px;">
+      class="diff-row">
       <el-col :span="12">
-        <el-card>
-          <template #header>
-            <span>新增节点 ({{ diffResult.addedNodes?.length || 0 }})</span>
-          </template>
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">新增节点</span>
+            <el-tag
+              type="success"
+              size="small">
+              {{ diffResult.addedNodes?.length || 0 }}
+            </el-tag>
+          </div>
           <el-table
             :data="diffResult.addedNodes"
             border
@@ -76,13 +104,18 @@
               label="类型"
               width="120" />
           </el-table>
-        </el-card>
+        </div>
       </el-col>
       <el-col :span="12">
-        <el-card>
-          <template #header>
-            <span>删除节点 ({{ diffResult.removedNodes?.length || 0 }})</span>
-          </template>
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">删除节点</span>
+            <el-tag
+              type="danger"
+              size="small">
+              {{ diffResult.removedNodes?.length || 0 }}
+            </el-tag>
+          </div>
           <el-table
             :data="diffResult.removedNodes"
             border
@@ -97,19 +130,24 @@
               label="类型"
               width="120" />
           </el-table>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
 
     <el-row
       v-if="diffResult"
       :gutter="16"
-      style="margin-top: 16px;">
+      class="diff-row">
       <el-col :span="12">
-        <el-card>
-          <template #header>
-            <span>新增边 ({{ diffResult.addedEdges?.length || 0 }})</span>
-          </template>
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">新增边</span>
+            <el-tag
+              type="success"
+              size="small">
+              {{ diffResult.addedEdges?.length || 0 }}
+            </el-tag>
+          </div>
           <el-table
             :data="diffResult.addedEdges"
             border
@@ -127,13 +165,18 @@
               label="类型"
               width="120" />
           </el-table>
-        </el-card>
+        </div>
       </el-col>
       <el-col :span="12">
-        <el-card>
-          <template #header>
-            <span>删除边 ({{ diffResult.removedEdges?.length || 0 }})</span>
-          </template>
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">删除边</span>
+            <el-tag
+              type="danger"
+              size="small">
+              {{ diffResult.removedEdges?.length || 0 }}
+            </el-tag>
+          </div>
           <el-table
             :data="diffResult.removedEdges"
             border
@@ -151,32 +194,9 @@
               label="类型"
               width="120" />
           </el-table>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
-
-    <!-- 统计摘要 -->
-    <el-card
-      v-if="diffResult"
-      style="margin-top: 16px;">
-      <template #header><span>差异摘要</span></template>
-      <el-descriptions
-        :column="4"
-        border>
-        <el-descriptions-item label="新增节点">
-          <el-tag type="success">{{ diffResult.addedNodes?.length || 0 }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="删除节点">
-          <el-tag type="danger">{{ diffResult.removedNodes?.length || 0 }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="新增边">
-          <el-tag type="success">{{ diffResult.addedEdges?.length || 0 }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="删除边">
-          <el-tag type="danger">{{ diffResult.removedEdges?.length || 0 }}</el-tag>
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-card>
   </div>
 </template>
 
@@ -231,6 +251,109 @@ onMounted(() => { loadVersions() })
 </script>
 
 <style scoped>
-.graph-diff-page { padding: 0; }
-.card-header { display: flex; justify-content: space-between; align-items: center; }
+.graph-diff-page {
+  padding: 16px;
+}
+
+/* ===== 页面头部 ===== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-left h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.header-desc {
+  margin: 6px 0 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+/* ===== 行内统计 ===== */
+.inline-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.inline-stats .stat-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-num {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stat-num.success {
+  color: var(--el-color-success);
+}
+
+.stat-num.danger {
+  color: var(--el-color-danger);
+}
+
+.stat-text {
+  color: var(--el-text-color-secondary);
+}
+
+.stat-sep {
+  color: var(--el-border-color);
+}
+
+/* ===== 版本选择表单 ===== */
+.diff-form {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--el-border-color-light);
+  margin-bottom: 16px;
+}
+
+/* ===== 差异结果面板 ===== */
+.diff-row {
+  margin-bottom: 16px;
+}
+
+.panel-section {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.panel-section :deep(.el-table) {
+  border: none;
+}
 </style>

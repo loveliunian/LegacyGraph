@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跨仓影响分析 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font-body); color: var(--el-text-color-primary); background: var(--el-bg-color-page); line-height: 1.6; }
+.content-area { max-width: 1200px; margin: 0 auto; padding: var(--space-6); }
+.page-header { margin-bottom: var(--space-6); }
+.page-title { font-family: var(--font-display); font-size: 28px; color: var(--el-text-color-primary); margin-bottom: 4px; }
+.page-subtitle { font-size: 14px; color: var(--el-text-color-secondary); }
+.dark-toggle { position: fixed; top: 16px; right: 16px; z-index: 100; background: var(--el-fill-color); border: 1px solid var(--el-border-color); color: var(--el-text-color-primary); padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font-body); font-size: 13px; transition: background .2s; }
+.dark-toggle:hover { background: var(--el-fill-color-light); }
+
+/* Repo selector */
+.repo-selector {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+.repo-selector label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+.repo-selector select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  outline: none;
+  min-width: 220px;
+  flex: 1;
+}
+.repo-arrow {
+  font-size: 20px;
+  color: var(--el-text-color-placeholder);
+}
+
+/* Impact matrix */
+.matrix-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+.matrix-card .card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-5);
+}
+.impact-matrix {
+  width: 100%;
+  border-collapse: collapse;
+}
+.impact-matrix th,
+.impact-matrix td {
+  padding: 12px 16px;
+  text-align: center;
+  font-size: 14px;
+  border: 1px solid var(--el-border-color-lighter);
+}
+.impact-matrix th {
+  background: var(--el-fill-color);
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+.impact-matrix th.row-header {
+  text-align: left;
+  min-width: 140px;
+}
+.impact-matrix th.corner { background: transparent; border: none; }
+.impact-cell {
+  border-radius: var(--radius-sm);
+  width: 100%;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+}
+.impact-none { background: var(--el-fill-color-light); color: var(--c-info); }
+.impact-low { background: var(--c-success-bg); color: var(--c-success); }
+.impact-medium { background: var(--c-warning-bg); color: var(--c-warning); }
+.impact-high { background: var(--c-danger-bg); color: var(--c-danger); }
+
+/* Impact list */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-4);
+}
+.impact-list {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.impact-item {
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.impact-item:last-child { border-bottom: none; }
+.impact-item:hover { background: var(--el-fill-color-light); }
+.impact-severity {
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.impact-severity.high { background: var(--c-danger-bg); color: var(--c-danger); }
+.impact-severity.medium { background: var(--c-warning-bg); color: var(--c-warning); }
+.impact-severity.low { background: var(--c-success-bg); color: var(--c-success); }
+.impact-body { flex: 1; }
+.impact-service {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  margin-bottom: 2px;
+}
+.impact-type {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 4px;
+}
+.impact-desc {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  line-height: 1.5;
+}
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')">Toggle Dark</button>
+
+<div class="content-area">
+  <div class="page-header">
+    <div class="page-title">跨仓影响分析</div>
+    <div class="page-subtitle">分析代码变更对跨仓库依赖的影响</div>
+  </div>
+
+  <div class="repo-selector">
+    <label>源仓库</label>
+    <select>
+      <option>backend-core (main)</option>
+      <option>payment-service (main)</option>
+      <option>notification-service (main)</option>
+      <option>shared-utils (main)</option>
+    </select>
+    <span class="repo-arrow">&rarr;</span>
+    <label>目标仓库</label>
+    <select>
+      <option>payment-service (main)</option>
+      <option>backend-core (main)</option>
+      <option>notification-service (main)</option>
+      <option>shared-utils (main)</option>
+    </select>
+  </div>
+
+  <div class="matrix-card">
+    <div class="card-title">影响矩阵</div>
+    <table class="impact-matrix">
+      <thead>
+        <tr>
+          <th class="corner"></th>
+          <th>backend-core</th>
+          <th>payment-service</th>
+          <th>notification-service</th>
+          <th>shared-utils</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th class="row-header">backend-core</th>
+          <td><div class="impact-cell impact-none">--</div></td>
+          <td><div class="impact-cell impact-high">高</div></td>
+          <td><div class="impact-cell impact-medium">中</div></td>
+          <td><div class="impact-cell impact-high">高</div></td>
+        </tr>
+        <tr>
+          <th class="row-header">payment-service</th>
+          <td><div class="impact-cell impact-low">低</div></td>
+          <td><div class="impact-cell impact-none">--</div></td>
+          <td><div class="impact-cell impact-none">无</div></td>
+          <td><div class="impact-cell impact-medium">中</div></td>
+        </tr>
+        <tr>
+          <th class="row-header">notification-service</th>
+          <td><div class="impact-cell impact-medium">中</div></td>
+          <td><div class="impact-cell impact-none">无</div></td>
+          <td><div class="impact-cell impact-none">--</div></td>
+          <td><div class="impact-cell impact-low">低</div></td>
+        </tr>
+        <tr>
+          <th class="row-header">shared-utils</th>
+          <td><div class="impact-cell impact-high">高</div></td>
+          <td><div class="impact-cell impact-medium">中</div></td>
+          <td><div class="impact-cell impact-low">低</div></td>
+          <td><div class="impact-cell impact-none">--</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title">详细影响列表</div>
+  <div class="impact-list">
+    <div class="impact-item">
+      <span class="impact-severity high">高</span>
+      <div class="impact-body">
+        <div class="impact-service">backend-core &rarr; payment-service</div>
+        <div class="impact-type">API 接口变更</div>
+        <div class="impact-desc">backend-core 中 PaymentClient 接口新增了必填参数 orderId，payment-service 需同步更新调用签名，否则将导致运行时 NullPointerException。</div>
+      </div>
+    </div>
+    <div class="impact-item">
+      <span class="impact-severity medium">中</span>
+      <div class="impact-body">
+        <div class="impact-service">backend-core &rarr; notification-service</div>
+        <div class="impact-type">数据模型变更</div>
+        <div class="impact-desc">UserEvent DTO 新增了 avatarUrl 字段，notification-service 的模板渲染引擎需要适配新字段以避免序列化异常。</div>
+      </div>
+    </div>
+    <div class="impact-item">
+      <span class="impact-severity low">低</span>
+      <div class="impact-body">
+        <div class="impact-service">shared-utils &rarr; notification-service</div>
+        <div class="impact-type">工具函数弃用</div>
+        <div class="impact-desc">shared-utils 中 DateUtils.format() 标记为 @Deprecated，建议 notification-service 迁移到新的 DateFormatter API，当前版本仍可正常使用。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

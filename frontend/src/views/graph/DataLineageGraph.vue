@@ -1,68 +1,97 @@
 <template>
   <div class="data-lineage-graph">
+    <!-- 页面头部：标题 + 内联统计 + 刷新按钮 -->
     <div class="page-header">
-      <h3>数据血缘图谱</h3>
-      <el-button
-        type="primary"
-        size="small"
-        :loading="loading"
-        @click="refreshGraph">
-        <el-icon><Refresh /></el-icon>
-        刷新图谱
-      </el-button>
+      <div class="header-left">
+        <div class="header-title-row">
+          <h3>数据血缘图谱</h3>
+          <div
+            v-if="tables.length > 0"
+            class="inline-stats">
+            <span class="stat-item">
+              <span class="stat-num primary">{{ tables.length }}</span>
+              <span class="stat-text">数据表</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num success">{{ totalColumns }}</span>
+              <span class="stat-text">字段</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num warning">{{ totalRelations }}</span>
+              <span class="stat-text">关系</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <el-button
+          type="primary"
+          size="small"
+          :loading="loading"
+          @click="refreshGraph">
+          <el-icon><Refresh /></el-icon>
+          刷新图谱
+        </el-button>
+      </div>
     </div>
 
     <el-row :gutter="16">
+      <!-- 左侧数据表列表：去除 el-card，panel-section div -->
       <el-col :span="5">
-        <el-card class="table-card">
-          <template #header>
-            <span>数据表</span>
+        <div class="panel-section table-panel">
+          <div class="panel-header">
+            <span class="panel-title">数据表</span>
             <el-tag
               size="small"
               type="info">
               {{ tables.length }} 个
             </el-tag>
-          </template>
-          <el-input
-            v-model="searchKeyword"
-            placeholder="搜索表名"
-            prefix-icon="Search"
-            size="small"
-            style="margin-bottom: 12px;"
-          />
-          <div class="table-list">
-            <div
-              v-if="tables.length === 0 && !loading"
-              class="table-empty">
-              <el-empty
-                description="暂无数据表"
-                :image-size="60" />
-            </div>
-            <div
-              v-for="table in filteredTables"
-              :key="table.id"
-              class="table-item"
-              :class="{ active: selectedTable === table.id }"
-              @click="selectTable(table.id)"
-            >
+          </div>
+          <div class="panel-body">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="搜索表名"
+              prefix-icon="Search"
+              size="small"
+              style="margin-bottom: 12px;"
+            />
+            <div class="table-list">
               <div
-                class="table-icon"
-                :class="table.type">
-                <el-icon><Tickets /></el-icon>
+                v-if="tables.length === 0 && !loading"
+                class="table-empty">
+                <el-empty
+                  description="暂无数据表"
+                  :image-size="60" />
               </div>
-              <div class="table-info">
-                <div class="table-name">{{ table.name }}</div>
-                <div class="table-desc">
-                  {{ table.columnCount }} 字段 · {{ table.relationCount }} 关联
+              <div
+                v-for="table in filteredTables"
+                :key="table.id"
+                class="table-item"
+                :class="{ active: selectedTable === table.id }"
+                @click="selectTable(table.id)"
+              >
+                <div
+                  class="table-icon"
+                  :class="table.type">
+                  <el-icon><Tickets /></el-icon>
+                </div>
+                <div class="table-info">
+                  <div class="table-name">{{ table.name }}</div>
+                  <div class="table-desc">
+                    {{ table.columnCount }} 字段 · {{ table.relationCount }} 关联
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
 
+      <!-- 中间图谱区域：去除 el-card，graph-area div 直接展示 -->
       <el-col :span="14">
-        <el-card class="graph-card">
+        <div class="graph-area">
           <div class="graph-toolbar">
             <el-button-group>
               <el-button
@@ -109,7 +138,7 @@
               <div class="placeholder-content">
                 <el-icon
                   :size="64"
-                  color="#c0c4cc">
+                  class="placeholder-icon">
                   <Share />
                 </el-icon>
                 <p>数据血缘可视化</p>
@@ -122,7 +151,7 @@
               <div class="placeholder-content">
                 <el-icon
                   :size="64"
-                  color="#e6a23c">
+                  class="placeholder-icon-warning">
                   <WarningFilled />
                 </el-icon>
                 <p>暂无血缘数据</p>
@@ -151,17 +180,18 @@
               </template>
             </VueFlow>
           </div>
-        </el-card>
+        </div>
       </el-col>
 
+      <!-- 右侧详情区域：去除 el-card，panel-section div -->
       <el-col :span="5">
-        <el-card
+        <div
           v-if="selectedTableName"
-          class="detail-card">
-          <template #header>
-            <span>表结构详情</span>
-          </template>
-          <div class="table-detail">
+          class="panel-section detail-panel">
+          <div class="panel-header">
+            <span class="panel-title">表结构详情</span>
+          </div>
+          <div class="panel-body table-detail">
             <h4>{{ selectedTableName }}</h4>
             <div class="detail-item">
               <span class="label">字段数</span>
@@ -184,53 +214,31 @@
               <span class="value">{{ tableDetail.relationCount }}</span>
             </div>
           </div>
-        </el-card>
+        </div>
 
-        <el-card
+        <div
           v-if="tableRisks.length > 0"
-          class="risk-card"
-          style="margin-top: 16px;">
-          <template #header>
-            <span>数据风险提示</span>
-          </template>
-          <div class="risk-list">
-            <div
-              v-for="risk in tableRisks"
-              :key="risk.id"
-              class="risk-item">
-              <el-tag
-                :type="risk.level === 'high' ? 'danger' : risk.level === 'medium' ? 'warning' : 'info'"
-                size="small"
-              >
-                {{ risk.level === 'high' ? '高风险' : risk.level === 'medium' ? '中风险' : '低风险' }}
-              </el-tag>
-              <span class="risk-text">{{ risk.text }}</span>
+          class="panel-section risk-panel">
+          <div class="panel-header">
+            <span class="panel-title">数据风险提示</span>
+          </div>
+          <div class="panel-body">
+            <div class="risk-list">
+              <div
+                v-for="risk in tableRisks"
+                :key="risk.id"
+                class="risk-item">
+                <el-tag
+                  :type="risk.level === 'high' ? 'danger' : risk.level === 'medium' ? 'warning' : 'info'"
+                  size="small"
+                >
+                  {{ risk.level === 'high' ? '高风险' : risk.level === 'medium' ? '中风险' : '低风险' }}
+                </el-tag>
+                <span class="risk-text">{{ risk.text }}</span>
+              </div>
             </div>
           </div>
-        </el-card>
-
-        <el-card
-          v-if="tables.length > 0 && !selectedTable"
-          class="stats-card"
-          style="margin-top: 16px;">
-          <template #header>
-            <span>数据统计</span>
-          </template>
-          <div class="stat-list">
-            <div class="stat-item">
-              <span class="stat-label">已扫描表</span>
-              <span class="stat-value">{{ tables.length }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">总字段数</span>
-              <span class="stat-value">{{ totalColumns }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">总关系数</span>
-              <span class="stat-value">{{ totalRelations }}</span>
-            </div>
-          </div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
   </div>
@@ -619,23 +627,206 @@ onMounted(async () => {
 
 <style scoped>
 .data-lineage-graph {
-  padding: 20px;
+  padding: 16px;
 }
 
+/* ===== 页面头部 ===== */
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 16px;
 }
 
-.page-header h3 {
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-left h3 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ===== 行内统计 ===== */
+.inline-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.inline-stats .stat-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-num {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stat-num.primary {
+  color: var(--el-color-primary);
+}
+
+.stat-num.success {
+  color: var(--el-color-success);
+}
+
+.stat-num.warning {
+  color: var(--el-color-warning);
+}
+
+.stat-text {
+  color: var(--el-text-color-secondary);
+}
+
+.stat-sep {
+  color: var(--el-border-color);
+}
+
+/* ===== 面板通用样式 ===== */
+.panel-section {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.panel-body {
+  padding: 12px 14px;
+}
+
+/* ===== 图谱区域 ===== */
+.graph-area {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.graph-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+}
+
+.graph-context {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.graph-container {
+  height: 550px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--el-bg-color-page);
+  position: relative;
+}
+
+.graph-loading {
+  text-align: center;
+  color: var(--el-text-color-secondary);
+}
+
+.graph-placeholder .placeholder-content {
+  text-align: center;
+  color: var(--el-text-color-secondary);
+}
+
+.graph-placeholder p {
+  margin: 12px 0;
+  font-size: 16px;
+}
+
+.placeholder-icon {
+  color: var(--el-text-color-disabled);
+}
+
+.placeholder-icon-warning {
+  color: var(--el-color-warning);
+}
+
+.placeholder-tip {
+  font-size: 13px !important;
+  color: var(--el-text-color-disabled) !important;
+}
+
+.vue-flow-container {
+  width: 100%;
+  height: 100%;
+}
+
+.lineage-node {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--el-bg-color);
+  border: 2px solid var(--el-border-color);
+  min-width: 80px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.lineage-node.table-node {
+  border-color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+}
+
+.lineage-node.api-node {
+  border-color: var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
+}
+
+.lineage-node.service-node {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.node-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-type {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+}
+
+/* ===== 数据表列表 ===== */
 .table-list {
   max-height: 500px;
   overflow-y: auto;
@@ -655,11 +846,11 @@ onMounted(async () => {
 }
 
 .table-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color);
 }
 
 .table-item.active {
-  background-color: #ecf5ff;
+  background-color: var(--el-color-primary-light-9);
 }
 
 .table-icon {
@@ -670,18 +861,18 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   margin-right: 10px;
-  background-color: #f0f9eb;
-  color: #67c23a;
+  background-color: var(--el-color-success-light-9);
+  color: var(--el-color-success);
 }
 
 .table-icon.relation {
-  background-color: #ecf5ff;
-  color: #409eff;
+  background-color: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
 }
 
 .table-icon.main {
-  background-color: #fef0f0;
-  color: #f56c6c;
+  background-color: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
 }
 
 .table-info {
@@ -692,127 +883,43 @@ onMounted(async () => {
 .table-name {
   font-weight: 500;
   font-size: 14px;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .table-desc {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-top: 2px;
 }
 
-.graph-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.graph-context {
-  font-size: 13px;
-  color: #606266;
-}
-
-.graph-container {
-  height: 550px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fafafa;
-  border-radius: 4px;
-  position: relative;
-}
-
-.graph-loading {
-  text-align: center;
-  color: #909399;
-}
-
-.graph-placeholder .placeholder-content {
-  text-align: center;
-  color: #909399;
-}
-
-.graph-placeholder p {
-  margin: 12px 0;
-  font-size: 16px;
-}
-
-.placeholder-tip {
-  font-size: 13px !important;
-  color: #c0c4cc !important;
-}
-
-.stats {
-  margin-top: 16px;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-
-.vue-flow-container {
-  width: 100%;
-  height: 100%;
-}
-
-.lineage-node {
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: #fff;
-  border: 2px solid #ddd;
-  min-width: 80px;
-  text-align: center;
-  font-size: 12px;
-}
-
-.lineage-node.table-node {
-  border-color: #13c2c2;
-  background: #e6fffb;
-}
-
-.lineage-node.api-node {
-  border-color: #e6a23c;
-  background: #fff7e6;
-}
-
-.lineage-node.service-node {
-  border-color: #409eff;
-  background: #ecf5ff;
-}
-
-.node-label {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.node-type {
-  font-size: 10px;
-  color: #999;
-}
-
+/* ===== 表结构详情 ===== */
 .table-detail h4 {
   margin: 0 0 12px 0;
   font-size: 15px;
   font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 
 .detail-item {
   display: flex;
   justify-content: space-between;
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .detail-item .label {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 13px;
 }
 
 .detail-item .value {
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
+}
+
+/* ===== 风险提示 ===== */
+.risk-panel {
+  margin-top: 16px;
 }
 
 .risk-item {
@@ -820,36 +927,12 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .risk-text {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.4;
-}
-
-.stat-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.stat-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-}
-
-.stat-label {
-  color: #909399;
-  font-size: 13px;
-}
-
-.stat-value {
-  font-weight: 600;
-  color: #303133;
-  font-size: 14px;
 }
 </style>

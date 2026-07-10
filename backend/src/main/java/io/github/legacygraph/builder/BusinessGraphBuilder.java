@@ -87,7 +87,6 @@ public class BusinessGraphBuilder {
      * 构建业务图谱节点
      * 自动创建证据关联，并将业务流程关联到所属业务域（按顺序匹配）
      */
-    @Transactional
     public void buildBusinessGraph(String projectId, String versionId, DocUnderstandingAgent.BusinessFactExtraction facts) {
         buildBusinessGraph(projectId, versionId, facts, null, SourceType.DOC_AI.name());
     }
@@ -95,7 +94,6 @@ public class BusinessGraphBuilder {
     /**
      * 构建业务图谱节点，并保留文档来源路径用于 AI 证据追溯。
      */
-    @Transactional
     public void buildBusinessGraph(String projectId, String versionId,
                                    DocUnderstandingAgent.BusinessFactExtraction facts,
                                    String sourcePath) {
@@ -108,7 +106,6 @@ public class BusinessGraphBuilder {
      * @param sourceType 节点来源类型（DOC_AI / CODE_AI），用于区分文档抽取与代码抽取的事实来源
      * @param sourcePath 来源文件路径（可为 null）
      */
-    @Transactional
     public void buildBusinessGraph(String projectId, String versionId,
                                    DocUnderstandingAgent.BusinessFactExtraction facts,
                                    String sourcePath,
@@ -613,6 +610,57 @@ public class BusinessGraphBuilder {
         }
         int totalMapped = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
         log.info("Mapped domain-code: {} edges (batch merged, projectId={})", totalMapped, projectId);
+        return totalMapped;
+    }
+
+    /**
+     * 业务流程 ↔ 接口对齐。
+     *
+     * <p>将 BusinessProcess 按名称相似度对齐到 ApiEndpoint，
+     * 建立 {@link EdgeType#IMPLEMENTS} 边，连通业务流程层与接口层。
+     * 阈值沿用定稿值 0.55（与 Page 匹配一致）。</p>
+     */
+    @Transactional
+    public int mapBusinessProcessesToApis(String projectId, String versionId) {
+        List<GraphNode> processes = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.BusinessProcess.name(), null, null, null, 0);
+        if (processes == null || processes.isEmpty()) {
+            log.info("Skip process-api mapping: no business processes found");
+            return 0;
+        }
+        List<GraphNode> apis = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.ApiEndpoint.name(), null, null, null, 0);
+        if (apis == null || apis.isEmpty()) {
+            log.info("Skip process-api mapping: no api endpoints found");
+            return 0;
+        }
+
+        List<GraphEdge> candidateEdges = new ArrayList<>();
+        for (GraphNode process : processes) {
+            String processName = normalizeSearchName(process);
+            if (processName.isBlank()) continue;
+            for (GraphNode api : apis) {
+                String apiName = normalizeSearchName(api);
+                if (apiName.isBlank()) continue;
+                double score = terminologyService.calculateSimilarity(processName, apiName);
+                if (score > 0.55) {
+                    candidateEdges.add(buildEdgePOJO(projectId, versionId,
+                            process.getId(), api.getId(),
+                            EdgeType.IMPLEMENTS.name(),
+                            process.getNodeKey() + "->implements->" + api.getNodeKey(),
+                            SourceType.AI_INFERENCE.name(),
+                            BigDecimal.valueOf(score),
+                            score >= 0.75 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
+                }
+            }
+        }
+
+        if (candidateEdges.isEmpty()) {
+            log.info("Mapped process-api: 0 edges (no matches, projectId={})", projectId);
+            return 0;
+        }
+        int totalMapped = neo4jGraphDao.mergeEdgesBatch(candidateEdges);
+        log.info("Mapped process-api: {} edges (batch merged, projectId={})", totalMapped, projectId);
         return totalMapped;
     }
 

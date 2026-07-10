@@ -4,6 +4,7 @@ import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.extractors.JavaControllerExtractor;
 import io.github.legacygraph.extractors.JavaStructureExtractor;
+import io.github.legacygraph.extractors.PackageExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
 import io.github.legacygraph.model.ApiFact;
 import lombok.extern.slf4j.Slf4j;
@@ -34,11 +35,14 @@ public class JavaCodeAdapter implements ExtractionAdapter {
     private final GraphBuilder graphBuilder;
     private final JavaControllerExtractor controllerExtractor = new JavaControllerExtractor();
     private final JavaStructureExtractor structureExtractor;
+    private final PackageExtractor packageExtractor;
     private final ServiceCallExtractor callExtractor;
 
-    public JavaCodeAdapter(GraphBuilder graphBuilder, JavaStructureExtractor structureExtractor) {
+    public JavaCodeAdapter(GraphBuilder graphBuilder, JavaStructureExtractor structureExtractor,
+                           PackageExtractor packageExtractor) {
         this.graphBuilder = graphBuilder;
         this.structureExtractor = structureExtractor;
+        this.packageExtractor = packageExtractor;
         this.callExtractor = new ServiceCallExtractor();
     }
 
@@ -76,6 +80,10 @@ public class JavaCodeAdapter implements ExtractionAdapter {
             List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(file);
             List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
                     context.getProjectId(), context.getVersionId(), structures);
+            // 基于类结构与 import 构建 Package 节点及 BELONGS_TO / DEPENDS_ON 边
+            graphBuilder.buildPackageGraph(
+                    context.getProjectId(), context.getVersionId(),
+                    packageExtractor.extract(structures));
 
             List<ApiFact> apiFacts = controllerExtractor.extractFromFile(file);
             if (apiFacts.isEmpty()) {

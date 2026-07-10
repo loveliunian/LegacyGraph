@@ -248,4 +248,12 @@ public class CodeUnderstandingReportService {
             return List.of();
         }
     }
+
+    /**
+     * 存根：生成聚合 Markdown 报告，待完整实现。
+     */
+    public String generateAggregatedMarkdown(String projectId, String versionId) {
+        log.debug("generateAggregatedMarkdown stub: projectId={}, versionId={}", projectId, versionId);
+        return null;
+    }
 }

@@ -598,7 +598,7 @@ public class EnhancedQaAgent {
             return currentContext;
         }
         try {
-            String vid = versionId != null ? versionId.replace("-", "") : null;
+            String vid = IdUtil.normalizeId(versionId);
             List<GraphNode> nodes = neo4jGraphDao.queryNodes(
                     projectId, vid, nodeType, null, null, null, 0);
             if (nodes == null || nodes.isEmpty()) {
@@ -809,7 +809,7 @@ public class EnhancedQaAgent {
      */
     private String resolveTableNodeId(String projectId, String versionId, String tableName) {
         if (tableName == null || tableName.isBlank()) return null;
-        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        String normalizedVersionId = IdUtil.normalizeId(versionId);
         List<GraphNode> tables = neo4jGraphDao.queryNodes(
             projectId, normalizedVersionId, "Table", null, null, null, 200);
         return tables.stream()

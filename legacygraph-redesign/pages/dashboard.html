@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegacyGraph - 工作台</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    :root {
+      --font-display: 'DM Serif Display', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px;
+      --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+      --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-lighter: #B1B3F8; --c-primary-lightest: #D0D1FE; --c-primary-bg: #EFF0FE; --c-primary-dark: #4F52C1;
+      --c-success: #14B8A6; --c-success-bg: #E8F8F6; --c-success-light: #5ACEC1;
+      --c-warning: #F59E0B; --c-warning-bg: #FCF5EA; --c-warning-light: #FABB52;
+      --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+      --c-info: #909399; --c-info-bg: #EFEFF1;
+      --gradient-brand: linear-gradient(135deg, #6366F1, #8B5CF6, #A78BFA);
+      --gradient-icon-code: linear-gradient(135deg, #6366F1, #818CF8);
+      --gradient-icon-db: linear-gradient(135deg, #14B8A6, #2DD4BF);
+      --gradient-icon-doc: linear-gradient(135deg, #F59E0B, #FBBF24);
+      --gradient-icon-graph: linear-gradient(135deg, #8B5CF6, #A78BFA);
+      --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+      --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+      --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+      --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+    }
+    html.dark {
+      --c-primary: #818CF8; --c-primary-light: #9293F4; --c-primary-lighter: #B1B3F8; --c-primary-lightest: #D0D1FE; --c-primary-bg: #0D0E19; --c-primary-dark: #6366F1;
+      --c-success: #2DD4BF; --c-success-bg: #051513; --c-success-light: #5ACEC1;
+      --c-warning: #FBBF24; --c-warning-bg: #2A2008; --c-warning-light: #FABB52;
+      --c-danger: #F87171; --c-danger-bg: #2A1010;
+      --c-info: #9CA3AF; --c-info-bg: #1A1A1E;
+      --gradient-brand: linear-gradient(135deg, #818CF8, #A78BFA, #C4B5FD);
+      --gradient-icon-code: linear-gradient(135deg, #818CF8, #A78BFA);
+      --gradient-icon-db: linear-gradient(135deg, #2DD4BF, #5EEAD4);
+      --gradient-icon-doc: linear-gradient(135deg, #FBBF24, #FCD34D);
+      --gradient-icon-graph: linear-gradient(135deg, #A78BFA, #C4B5FD);
+      --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+      --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+      --el-fill-color: #2C2C2E; --el-fill-color-light: #1C1C1E;
+      --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--font-body); color: var(--el-text-color-primary); background: var(--el-bg-color-page); min-height: 100vh; }
+
+    /* === Top Header === */
+    .top-header {
+      height: 56px;
+      background: var(--el-bg-color);
+      border-bottom: 1px solid var(--el-border-color-light);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-left .logo-mark {
+      display: flex;
+      align-items: center;
+    }
+    .header-left .brand-name {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--c-primary);
+    }
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .nav-tab {
+      position: relative;
+      padding: 0 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--el-text-color-secondary);
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+      user-select: none;
+    }
+    .nav-tab:hover {
+      color: var(--el-text-color-primary);
+      background: var(--el-fill-color-light);
+    }
+    .nav-tab.active { color: var(--c-primary); }
+    .nav-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 16px;
+      right: 16px;
+      height: 2px;
+      background: var(--c-primary);
+      border-radius: 1px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; background: transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--el-text-color-secondary);
+      transition: background 0.2s, color 0.2s;
+    }
+    .icon-btn:hover {
+      background: var(--el-fill-color);
+      color: var(--el-text-color-primary);
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+    .notification-wrapper { position: relative; }
+    .notification-dot {
+      position: absolute; top: 6px; right: 7px;
+      width: 7px; height: 7px;
+      background: var(--c-danger);
+      border-radius: 50%;
+      border: 1.5px solid var(--el-bg-color);
+    }
+    .user-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--gradient-brand);
+      color: #fff;
+      font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .user-section {
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer; padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.2s;
+    }
+    .user-section:hover { background: var(--el-fill-color); }
+    .dropdown-arrow { color: var(--el-text-color-placeholder); font-size: 10px; }
+
+    /* === Content Area === */
+    .content-area { padding: 24px; }
+
+    /* === Page Header === */
+    .page-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .page-header-left h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--el-text-color-primary);
+      margin-bottom: 4px;
+    }
+    .page-header-left .subtitle {
+      font-size: 14px;
+      color: var(--el-text-color-secondary);
+    }
+    .page-header-right .dropdown-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--el-bg-color);
+      border: 1px solid var(--el-border-color);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-family: var(--font-body);
+      color: var(--el-text-color-regular);
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .page-header-right .dropdown-btn:hover {
+      border-color: var(--c-primary);
+      color: var(--c-primary);
+    }
+    .page-header-right .dropdown-btn svg {
+      width: 14px; height: 14px;
+      color: var(--el-text-color-placeholder);
+    }
+
+    /* === Main Grid === */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* === Stat Cards === */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--el-bg-color);
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .stat-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .stat-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .stat-icon svg { width: 22px; height: 22px; color: #fff; }
+    .stat-icon.indigo { background: var(--gradient-icon-code); }
+    .stat-icon.teal { background: var(--gradient-icon-db); }
+    .stat-icon.amber { background: var(--gradient-icon-doc); }
+    .stat-icon.violet { background: var(--gradient-icon-graph); }
+    .stat-trend {
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+    .stat-trend.up { color: var(--c-success); background: var(--c-success-bg); }
+    .stat-trend.down { color: var(--c-danger); background: var(--c-danger-bg); }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+    .stat-card.indigo .stat-value { color: var(--c-primary); }
+    .stat-card.teal .stat-value { color: var(--c-success); }
+    .stat-card.amber .stat-value { color: var(--c-warning); }
+    .stat-card.violet .stat-value { color: var(--gradient-icon-graph); }
+    .stat-label {
+      font-size: 13px;
+      color: var(--el-text-color-secondary);
+    }
+
+    /* === Two-Column Rows === */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    /* === Card === */
+    .card {
+      background: var(--el-bg-color);
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--el-text-color-primary);
+      margin-bottom: 20px;
+    }
+
+    /* === Horizontal Bar Chart === */
+    .hbar-list { display: flex; flex-direction: column; gap: 14px; }
+    .hbar-item {
+      display: grid;
+      grid-template-columns: 70px 1fr 40px;
+      align-items: center;
+      gap: 12px;
+    }
+    .hbar-label {
+      font-size: 13px;
+      color: var(--el-text-color-regular);
+      text-align: right;
+    }
+    .hbar-track {
+      height: 10px;
+      background: var(--el-fill-color);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .hbar-fill {
+      height: 100%;
+      border-radius: 5px;
+      transition: width 0.6s ease;
+    }
+    .hbar-fill.class { background: var(--c-primary); }
+    .hbar-fill.function { background: var(--c-success); }
+    .hbar-fill.variable { background: var(--c-warning); }
+    .hbar-fill.module { background: var(--gradient-icon-graph); }
+    .hbar-fill.other { background: var(--el-text-color-placeholder); }
+    .hbar-pct {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      color: var(--el-text-color-primary);
+    }
+
+    /* === Data Source Status === */
+    .ds-list { display: flex; flex-direction: column; gap: 12px; }
+    .ds-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      background: var(--el-fill-color-light);
+      transition: background 0.2s;
+    }
+    .ds-row:hover { background: var(--el-fill-color); }
+    .ds-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .ds-icon svg { width: 18px; height: 18px; color: #fff; }
+    .ds-icon.indigo { background: var(--gradient-icon-code); }
+    .ds-icon.teal { background: var(--gradient-icon-db); }
+    .ds-icon.amber { background: var(--gradient-icon-doc); }
+    .ds-icon.violet { background: var(--gradient-icon-graph); }
+    .ds-info { flex: 1; }
+    .ds-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--el-text-color-primary);
+      margin-bottom: 2px;
+    }
+    .ds-status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-tag {
+      font-size: 12px;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+    .status-tag.connected { color: var(--c-success); background: var(--c-success-bg); }
+    .status-tag.partial { color: var(--c-warning); background: var(--c-warning-bg); }
+    .status-tag.disconnected { color: var(--c-danger); background: var(--c-danger-bg); }
+    .ds-count {
+      font-size: 12px;
+      color: var(--el-text-color-placeholder);
+    }
+
+    /* === Vertical Bar Chart === */
+    .vbar-chart {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-around;
+      height: 160px;
+      padding: 0 10px;
+      gap: 16px;
+    }
+    .vbar-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+    .vbar-wrapper {
+      width: 100%;
+      height: 120px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .vbar {
+      width: 48px;
+      border-radius: 6px 6px 2px 2px;
+      transition: height 0.6s ease;
+    }
+    .vbar.high { background: linear-gradient(180deg, var(--c-success), #0D9488); height: 108px; }
+    .vbar.medium { background: linear-gradient(180deg, var(--c-warning), #D97706); height: 84px; }
+    .vbar.low { background: linear-gradient(180deg, var(--c-danger), #DC2626); height: 48px; }
+    .vbar-pct {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      color: var(--el-text-color-primary);
+    }
+    .vbar-label {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    /* === Circular Progress === */
+    .progress-circle-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .progress-circle {
+      position: relative;
+      width: 120px; height: 120px;
+    }
+    .progress-circle svg {
+      transform: rotate(-90deg);
+      width: 120px; height: 120px;
+    }
+    .progress-circle .circle-bg {
+      fill: none;
+      stroke: var(--el-fill-color);
+      stroke-width: 10;
+    }
+    .progress-circle .circle-fill {
+      fill: none;
+      stroke: var(--c-primary);
+      stroke-width: 10;
+      stroke-linecap: round;
+      stroke-dasharray: 314;
+      stroke-dashoffset: 88;
+      transition: stroke-dashoffset 0.6s ease;
+    }
+    .progress-circle .circle-text {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 26px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--c-primary);
+    }
+    .progress-label {
+      font-size: 13px;
+      color: var(--el-text-color-secondary);
+      margin-top: 8px;
+    }
+    .sub-progress-list { width: 100%; }
+    .sub-progress-item {
+      margin-bottom: 12px;
+    }
+    .sub-progress-item:last-child { margin-bottom: 0; }
+    .sub-progress-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .sub-progress-name {
+      font-size: 13px;
+      color: var(--el-text-color-regular);
+    }
+    .sub-progress-pct {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      color: var(--el-text-color-primary);
+    }
+    .sub-progress-track {
+      height: 6px;
+      background: var(--el-fill-color);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .sub-progress-fill {
+      height: 100%;
+      border-radius: 3px;
+    }
+    .sub-progress-fill.code { background: var(--c-primary); width: 85%; }
+    .sub-progress-fill.doc { background: var(--c-warning); width: 60%; }
+    .sub-progress-fill.graph { background: var(--c-success); width: 70%; }
+
+    /* === Right Column Cards === */
+    .right-col { display: flex; flex-direction: column; gap: 16px; }
+
+    .project-card .project-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .project-card .project-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--el-text-color-primary);
+      margin-bottom: 4px;
+    }
+    .project-card .project-desc {
+      font-size: 13px;
+      color: var(--el-text-color-secondary);
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    .project-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: var(--el-fill-color-light);
+      border-radius: var(--radius-md);
+    }
+    .project-stat-item {
+      text-align: center;
+    }
+    .project-stat-value {
+      font-size: 16px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--el-text-color-primary);
+    }
+    .project-stat-label {
+      font-size: 11px;
+      color: var(--el-text-color-placeholder);
+      margin-top: 2px;
+    }
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--c-primary);
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+      font-family: var(--font-body);
+      transition: color 0.2s;
+    }
+    .link-btn:hover { color: var(--c-primary-dark); }
+    .link-btn svg { width: 14px; height: 14px; }
+
+    /* Pending review card */
+    .review-card {
+      border-left: 3px solid var(--c-warning);
+    }
+    .review-list {
+      display: flex;
+      flex-direction: column;
+    }
+    .review-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--el-border-color-lighter);
+    }
+    .review-item:last-of-type { border-bottom: none; }
+    .review-item-title {
+      font-size: 13px;
+      color: var(--el-text-color-regular);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-right: 12px;
+    }
+    .review-item-time {
+      font-size: 12px;
+      color: var(--el-text-color-placeholder);
+      flex-shrink: 0;
+    }
+
+    /* Quick actions card */
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .action-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 10px;
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--el-fill-color-light);
+    }
+    .action-item:hover {
+      border-color: var(--c-primary-lighter);
+      background: var(--c-primary-bg);
+    }
+    .action-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .action-icon svg { width: 18px; height: 18px; color: #fff; }
+    .action-icon.scan { background: var(--gradient-icon-code); }
+    .action-icon.graph { background: var(--gradient-icon-graph); }
+    .action-icon.export { background: var(--gradient-icon-db); }
+    .action-icon.ai { background: var(--gradient-icon-doc); }
+    .action-label {
+      font-size: 12px;
+      color: var(--el-text-color-regular);
+    }
+
+    /* === Responsive === */
+    @media (max-width: 1200px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .right-col { display: grid; grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 900px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .two-col { grid-template-columns: 1fr; }
+      .right-col { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Header -->
+  <header class="top-header">
+    <div class="header-left">
+      <div class="logo-mark">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="14,1 25.5,7.5 25.5,20.5 14,27 2.5,20.5 2.5,7.5" fill="url(#hexGrad)" stroke="none"/>
+          <polygon points="14,5 21.5,9 21.5,19 14,23 6.5,19 6.5,9" fill="none" stroke="#fff" stroke-width="1.2"/>
+          <circle cx="14" cy="14" r="3" fill="#fff" opacity="0.9"/>
+          <defs>
+            <linearGradient id="hexGrad" x1="2.5" y1="1" x2="25.5" y2="27">
+              <stop offset="0%" stop-color="#6366F1"/>
+              <stop offset="100%" stop-color="#A78BFA"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span class="brand-name">LegacyGraph</span>
+    </div>
+
+    <nav class="header-center">
+      <div class="nav-tab active">工作台</div>
+      <div class="nav-tab">项目管理</div>
+      <div class="nav-tab">系统管理</div>
+    </nav>
+
+    <div class="header-right">
+      <button class="icon-btn" id="themeToggle" title="切换主题">
+        <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:none;">
+          <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+        <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <div class="notification-wrapper">
+        <button class="icon-btn" title="通知">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+        </button>
+        <span class="notification-dot"></span>
+      </div>
+      <div class="user-section">
+        <div class="user-avatar">张</div>
+        <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <!-- Content Area -->
+  <main class="content-area">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <h1>工作台</h1>
+        <p class="subtitle">欢迎回来，张三</p>
+      </div>
+      <div class="page-header-right">
+        <button class="dropdown-btn">
+          切换项目
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="main-grid">
+      <!-- Left Column -->
+      <div class="left-col">
+        <!-- Row 1: Stat Cards -->
+        <div class="stat-grid">
+          <div class="stat-card indigo">
+            <div class="stat-card-top">
+              <div class="stat-icon indigo">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+              </div>
+              <span class="stat-trend up">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                12%
+              </span>
+            </div>
+            <div class="stat-value">1,234</div>
+            <div class="stat-label">总节点数</div>
+          </div>
+
+          <div class="stat-card teal">
+            <div class="stat-card-top">
+              <div class="stat-icon teal">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </div>
+              <span class="stat-trend up">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                8%
+              </span>
+            </div>
+            <div class="stat-value">5,678</div>
+            <div class="stat-label">总边数</div>
+          </div>
+
+          <div class="stat-card amber">
+            <div class="stat-card-top">
+              <div class="stat-icon amber">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+              </div>
+              <span class="stat-trend up">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                2
+              </span>
+            </div>
+            <div class="stat-value">12</div>
+            <div class="stat-label">项目数</div>
+          </div>
+
+          <div class="stat-card violet">
+            <div class="stat-card-top">
+              <div class="stat-icon violet">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <span class="stat-trend down">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                3%
+              </span>
+            </div>
+            <div class="stat-value">87.5<span style="font-size:14px;font-weight:400;">%</span></div>
+            <div class="stat-label">平均置信度</div>
+          </div>
+        </div>
+
+        <!-- Row 2: Node Distribution + Data Source Status -->
+        <div class="two-col">
+          <!-- Node Type Distribution -->
+          <div class="card">
+            <div class="card-title">节点类型分布</div>
+            <div class="hbar-list">
+              <div class="hbar-item">
+                <span class="hbar-label">Class</span>
+                <div class="hbar-track"><div class="hbar-fill class" style="width:35%"></div></div>
+                <span class="hbar-pct">35%</span>
+              </div>
+              <div class="hbar-item">
+                <span class="hbar-label">Function</span>
+                <div class="hbar-track"><div class="hbar-fill function" style="width:28%"></div></div>
+                <span class="hbar-pct">28%</span>
+              </div>
+              <div class="hbar-item">
+                <span class="hbar-label">Variable</span>
+                <div class="hbar-track"><div class="hbar-fill variable" style="width:18%"></div></div>
+                <span class="hbar-pct">18%</span>
+              </div>
+              <div class="hbar-item">
+                <span class="hbar-label">Module</span>
+                <div class="hbar-track"><div class="hbar-fill module" style="width:12%"></div></div>
+                <span class="hbar-pct">12%</span>
+              </div>
+              <div class="hbar-item">
+                <span class="hbar-label">Other</span>
+                <div class="hbar-track"><div class="hbar-fill other" style="width:7%"></div></div>
+                <span class="hbar-pct">7%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Source Status -->
+          <div class="card">
+            <div class="card-title">数据源状态</div>
+            <div class="ds-list">
+              <div class="ds-row">
+                <div class="ds-icon indigo">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                  </svg>
+                </div>
+                <div class="ds-info">
+                  <div class="ds-name">代码仓库</div>
+                  <div class="ds-status-row">
+                    <span class="status-tag connected">已连接</span>
+                    <span class="ds-count">3 个仓库</span>
+                  </div>
+                </div>
+              </div>
+              <div class="ds-row">
+                <div class="ds-icon teal">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                  </svg>
+                </div>
+                <div class="ds-info">
+                  <div class="ds-name">数据库</div>
+                  <div class="ds-status-row">
+                    <span class="status-tag connected">已连接</span>
+                    <span class="ds-count">2 个数据库</span>
+                  </div>
+                </div>
+              </div>
+              <div class="ds-row">
+                <div class="ds-icon amber">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                </div>
+                <div class="ds-info">
+                  <div class="ds-name">文档</div>
+                  <div class="ds-status-row">
+                    <span class="status-tag partial">部分连接</span>
+                    <span class="ds-count">5 个文档</span>
+                  </div>
+                </div>
+              </div>
+              <div class="ds-row">
+                <div class="ds-icon violet">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/>
+                  </svg>
+                </div>
+                <div class="ds-info">
+                  <div class="ds-name">API</div>
+                  <div class="ds-status-row">
+                    <span class="status-tag disconnected">未连接</span>
+                    <span class="ds-count">0 个接口</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Confidence Distribution + Migration Readiness -->
+        <div class="two-col">
+          <!-- Confidence Distribution -->
+          <div class="card">
+            <div class="card-title">置信度分布</div>
+            <div class="vbar-chart">
+              <div class="vbar-col">
+                <span class="vbar-pct">45%</span>
+                <div class="vbar-wrapper"><div class="vbar high"></div></div>
+                <span class="vbar-label">高 (&gt;0.8)</span>
+              </div>
+              <div class="vbar-col">
+                <span class="vbar-pct">35%</span>
+                <div class="vbar-wrapper"><div class="vbar medium"></div></div>
+                <span class="vbar-label">中 (0.5-0.8)</span>
+              </div>
+              <div class="vbar-col">
+                <span class="vbar-pct">20%</span>
+                <div class="vbar-wrapper"><div class="vbar low"></div></div>
+                <span class="vbar-label">低 (&lt;0.5)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Migration Readiness -->
+          <div class="card">
+            <div class="card-title">迁移就绪度</div>
+            <div class="progress-circle-wrapper">
+              <div class="progress-circle">
+                <svg viewBox="0 0 120 120">
+                  <circle class="circle-bg" cx="60" cy="60" r="50"/>
+                  <circle class="circle-fill" cx="60" cy="60" r="50"/>
+                </svg>
+                <span class="circle-text">72%</span>
+              </div>
+              <span class="progress-label">整体就绪度</span>
+            </div>
+            <div class="sub-progress-list">
+              <div class="sub-progress-item">
+                <div class="sub-progress-head">
+                  <span class="sub-progress-name">代码分析</span>
+                  <span class="sub-progress-pct">85%</span>
+                </div>
+                <div class="sub-progress-track">
+                  <div class="sub-progress-fill code"></div>
+                </div>
+              </div>
+              <div class="sub-progress-item">
+                <div class="sub-progress-head">
+                  <span class="sub-progress-name">文档解析</span>
+                  <span class="sub-progress-pct">60%</span>
+                </div>
+                <div class="sub-progress-track">
+                  <div class="sub-progress-fill doc"></div>
+                </div>
+              </div>
+              <div class="sub-progress-item">
+                <div class="sub-progress-head">
+                  <span class="sub-progress-name">图谱构建</span>
+                  <span class="sub-progress-pct">70%</span>
+                </div>
+                <div class="sub-progress-track">
+                  <div class="sub-progress-fill graph"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column -->
+      <div class="right-col">
+        <!-- Current Project Card -->
+        <div class="card project-card">
+          <div class="project-head">
+            <div class="project-name">电商平台重构</div>
+            <span class="status-tag connected" style="font-size:12px;">进行中</span>
+          </div>
+          <div class="project-desc">微服务架构迁移项目，涵盖订单、支付、用户中心等核心模块的拆分与重构。</div>
+          <div class="project-stats">
+            <div class="project-stat-item">
+              <div class="project-stat-value">856</div>
+              <div class="project-stat-label">节点数</div>
+            </div>
+            <div class="project-stat-item">
+              <div class="project-stat-value">2,134</div>
+              <div class="project-stat-label">边数</div>
+            </div>
+            <div class="project-stat-item">
+              <div class="project-stat-value">01-15</div>
+              <div class="project-stat-label">最近扫描</div>
+            </div>
+          </div>
+          <button class="link-btn">
+            查看详情
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
+        <!-- Pending Review Card -->
+        <div class="card review-card">
+          <div class="card-title">待审核</div>
+          <div class="review-list">
+            <div class="review-item">
+              <span class="review-item-title">订单模块依赖关系变更审核</span>
+              <span class="review-item-time">10 分钟前</span>
+            </div>
+            <div class="review-item">
+              <span class="review-item-title">支付接口数据源接入确认</span>
+              <span class="review-item-time">30 分钟前</span>
+            </div>
+            <div class="review-item">
+              <span class="review-item-title">用户中心 API 文档更新审核</span>
+              <span class="review-item-time">1 小时前</span>
+            </div>
+            <div class="review-item">
+              <span class="review-item-title">库存管理模块节点合并请求</span>
+              <span class="review-item-time">2 小时前</span>
+            </div>
+            <div class="review-item">
+              <span class="review-item-title">系统架构图谱版本升级确认</span>
+              <span class="review-item-time">3 小时前</span>
+            </div>
+          </div>
+          <div style="text-align:right;margin-top:12px;">
+            <button class="link-btn">
+              查看全部
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Actions Card -->
+        <div class="card">
+          <div class="card-title">快速操作</div>
+          <div class="action-grid">
+            <div class="action-item">
+              <div class="action-icon scan">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+              </div>
+              <span class="action-label">新建扫描</span>
+            </div>
+            <div class="action-item">
+              <div class="action-icon graph">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <span class="action-label">查看图谱</span>
+            </div>
+            <div class="action-item">
+              <div class="action-icon export">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </div>
+              <span class="action-label">导出报告</span>
+            </div>
+            <div class="action-item">
+              <div class="action-icon ai">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2a4 4 0 0 1 4 4c0 1.95-1.4 3.58-3.25 3.93"/><path d="M8.24 9.93A4 4 0 0 1 12 2"/><circle cx="12" cy="14" r="4"/><path d="M12 18v4"/><path d="M8 22h8"/>
+                </svg>
+              </div>
+              <span class="action-label">AI 分析</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      const html = document.documentElement;
+      const sunIcon = document.getElementById('sunIcon');
+      const moonIcon = document.getElementById('moonIcon');
+      const toggle = document.getElementById('themeToggle');
+
+      const savedTheme = localStorage.getItem('lg-theme');
+      if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        html.classList.add('dark');
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+      }
+
+      toggle.addEventListener('click', function() {
+        const isDark = html.classList.toggle('dark');
+        sunIcon.style.display = isDark ? 'block' : 'none';
+        moonIcon.style.display = isDark ? 'none' : 'block';
+        localStorage.setItem('lg-theme', isDark ? 'dark' : 'light');
+      });
+    })();
+  </script>
+</body>
+</html>

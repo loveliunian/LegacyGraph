@@ -22,7 +22,6 @@ import io.github.legacygraph.util.JwtUtil;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 import io.github.legacygraph.util.IdUtil;
 
 @RestController
@@ -59,7 +58,7 @@ public class ReviewController {
             return latest.getId();
         }
         // 兜底：用零 UUID 避免违反 NOT NULL 约束
-        return "00000000-0000-0000-0000-000000000000";
+        return "00000000000000000000000000000000";
     }
 
     @GetMapping

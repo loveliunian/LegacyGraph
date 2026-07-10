@@ -1,5 +1,6 @@
 <template>
   <div class="error-page">
+    <div class="error-bg-grid"></div>
     <div class="error-content">
       <div class="error-code">403</div>
       <h1 class="error-title">{{ $t('common.forbidden') }}</h1>
@@ -7,11 +8,14 @@
       <div class="error-actions">
         <el-button
           type="primary"
+          size="large"
           @click="goHome">
           <el-icon><House /></el-icon>
           {{ $t('common.backToHome') }}
         </el-button>
-        <el-button @click="goBack">
+        <el-button
+          size="large"
+          @click="goBack">
           <el-icon><ArrowLeft /></el-icon>
           {{ $t('common.back') }}
         </el-button>
@@ -45,51 +49,66 @@ function goBack() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: var(--el-bg-color-page);
   position: relative;
   overflow: hidden;
 }
 
-.error-page::before {
-  content: '';
+.error-bg-grid {
   position: absolute;
-  width: 200%;
-  height: 200%;
-  top: -50%;
-  left: -50%;
-  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-  animation: rotate 20s linear infinite;
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  inset: 0;
+  background-image:
+    linear-gradient(var(--el-border-color-lighter) 1px, transparent 1px),
+    linear-gradient(90deg, var(--el-border-color-lighter) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black 30%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black 30%, transparent 70%);
+  opacity: 0.6;
 }
 
 .error-content {
   text-align: center;
-  color: white;
   z-index: 1;
   position: relative;
+  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .error-code {
-  font-size: 120px;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 140px;
+  font-weight: 400;
   line-height: 1;
-  margin-bottom: 20px;
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, var(--el-color-danger) 0%, var(--el-color-danger-dark-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.04em;
 }
 
 .error-title {
-  font-size: 32px;
+  font-family: var(--font-body);
+  font-size: 28px;
   margin: 0 0 12px 0;
   font-weight: 600;
+  color: var(--el-text-color-primary);
+  letter-spacing: -0.01em;
 }
 
 .error-desc {
-  font-size: 16px;
-  opacity: 0.9;
+  font-size: 15px;
+  color: var(--el-text-color-secondary);
   margin-bottom: 40px;
 }
 
@@ -101,18 +120,18 @@ function goBack() {
 }
 
 .error-actions .el-button {
-  padding: 12px 24px;
+  padding: 12px 28px;
   font-size: 15px;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 @media (max-width: 768px) {
   .error-code {
-    font-size: 80px;
+    font-size: 90px;
   }
 
   .error-title {
-    font-size: 24px;
+    font-size: 22px;
   }
 
   .error-desc {

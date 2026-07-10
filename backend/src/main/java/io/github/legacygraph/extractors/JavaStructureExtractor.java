@@ -73,6 +73,12 @@ public class JavaStructureExtractor {
                 .map(pd -> pd.getNameAsString())
                 .orElse("");
 
+        // 提取文件级 import 语句全名（如 com.foo.bar.Baz / com.foo.bar.*），用于包级 DEPENDS_ON 接线
+        List<String> imports = new ArrayList<>();
+        for (var imp : cu.getImports()) {
+            imports.add(imp.getNameAsString());
+        }
+
         for (ClassOrInterfaceDeclaration clazz : cu.findAll(ClassOrInterfaceDeclaration.class)) {
             String className = clazz.getNameAsString();
             String qualifiedName = clazz.getFullyQualifiedName()
@@ -97,7 +103,8 @@ public class JavaStructureExtractor {
                     clazz.getEnd().map(p -> p.line).orElse(null),
                     new ArrayList<>(),
                     extendedTypes,
-                    implementedTypes
+                    implementedTypes,
+                    imports
             );
 
             for (MethodDeclaration method : clazz.getMethods()) {
@@ -148,6 +155,8 @@ public class JavaStructureExtractor {
         private List<String> extendedTypes = new ArrayList<>();
         /** implements 的接口简单名列表 */
         private List<String> implementedTypes = new ArrayList<>();
+        /** 当前文件 import 语句列表（全名，如 com.foo.bar.Baz 或 com.foo.bar.*）— 用于包级 DEPENDS_ON 接线 */
+        private List<String> imports = new ArrayList<>();
     }
 
     @Data

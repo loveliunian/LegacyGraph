@@ -48,4 +48,27 @@ public final class IdUtil {
         }
         return new String(buf);
     }
+
+    /**
+     * 归一化 UUID：去除连字符。
+     * <p>
+     * PostgreSQL uuid 列经 JDBC 读取时返回 36 位带连字符格式，
+     * 而 Neo4j / Redis 缓存键使用 32 位无连字符格式。
+     * 统一在此归一化，确保读写一致。null 安全。
+     */
+    /** UUID 格式正则：8-4-4-4-12 十六进制 */
+    private static final java.util.regex.Pattern UUID_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+
+    /**
+     * 规范化 ID：仅对标准 UUID 格式去连字符，非 UUID 格式保持原样。
+     */
+    public static String normalizeId(String id) {
+        if (id == null) return null;
+        if (UUID_PATTERN.matcher(id).matches()) {
+            return id.replace("-", "");
+        }
+        return id;
+    }
 }

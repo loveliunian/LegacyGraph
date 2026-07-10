@@ -27,6 +27,8 @@ class HighRiskEndpointSecurityTest {
         assertAdminOnly(SystemOverviewIngestController.class, "ingest", SystemOverviewIngestRequest.class);
         assertAdminOnly(SystemOverviewIngestController.class, "ingestBuiltins", String.class, String.class);
         assertAdminOnly(PluginController.class, "register", ExternalPluginDescriptor.class);
+        assertAdminOnly(PluginController.class, "enable", String.class);
+        assertAdminOnly(PluginController.class, "disable", String.class);
         assertAdminOnly(SelfAnalysisController.class, "bootstrap", String.class, String.class, String.class);
     }
 

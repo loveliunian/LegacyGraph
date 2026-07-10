@@ -118,4 +118,12 @@ public class SystemOverviewDocumentService {
                 ? "default"
                 : value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
+
+    /**
+     * 存根：生成系统总览 Markdown 内容，待完整实现。
+     */
+    public String generateMarkdownContent(String projectId, String versionId) {
+        log.debug("generateMarkdownContent stub: projectId={}, versionId={}", projectId, versionId);
+        return null;
+    }
 }

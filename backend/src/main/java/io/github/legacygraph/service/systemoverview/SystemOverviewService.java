@@ -1,7 +1,12 @@
 package io.github.legacygraph.service.systemoverview;
 
+import io.github.legacygraph.common.EdgeType;
+import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.systemoverview.LayerMappingDTO;
 import io.github.legacygraph.dto.systemoverview.SystemOverviewDTO;
+import io.github.legacygraph.entity.GraphEdge;
+import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +40,7 @@ import java.util.stream.Collectors;
 public class SystemOverviewService {
 
     private final KnowledgeClaimService knowledgeClaimService;
+    private final Neo4jGraphDao graphDao;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -133,8 +139,11 @@ public class SystemOverviewService {
         appendDomainBreakdown(sb, mappings);
         appendTableImpact(sb, mappings);
         appendMermaidGraph(sb, claims);
+        appendCoreThroughChain(sb, projectId, versionId);
+        appendGraphStatsSummary(sb, projectId, versionId);
+        appendModuleDependencyMermaid(sb, projectId, versionId);
 
-        sb.append("\n## 8. QA 文档基础\n\n");
+        sb.append("\n## 11. QA 文档基础\n\n");
         sb.append("- 本报告沉淀资料扫描后的业务/功能/代码/数据关系，可作为后续 QA 文档生成的事实基础。\n");
         sb.append("- QA 文档应优先引用业务域、功能、Controller/API、代码模块、数据表与核心贯穿链路。\n");
         sb.append("- 对未覆盖或低置信关系，应回到 Claim、证据或图谱查询确认，避免把推断写成已确认事实。\n\n");
@@ -152,6 +161,108 @@ public class SystemOverviewService {
     // ──────────── 动态投影（M2 修复）────────────
 
     /**
+     * 从图谱直接查询四层映射，替代 knowledge_claim 回退。
+     * <p>
+     * 优先从 Neo4j 图谱查询 BusinessDomain → Feature/BusinessProcess → Controller/Service → Table
+     * 的四层结构。若图谱无数据则回退到 Claim 投影，再回退到内置映射。
+     * </p>
+     */
+    private List<LayerMappingDTO> buildGraphBasedMappings(String projectId, String versionId) {
+        try {
+            List<Map<String, Object>> domainContains = graphDao.businessDomainContains(projectId, versionId);
+            List<Map<String, Object>> apiRelations = graphDao.apiImplementationRelations(projectId, versionId);
+
+            if ((apiRelations == null || apiRelations.isEmpty())
+                    && (domainContains == null || domainContains.isEmpty())) {
+                log.debug("No graph data for projectId={}, versionId={}, falling back to claims", projectId, versionId);
+                return Collections.emptyList();
+            }
+
+            // 构建 API key/name → 实现关系索引
+            Map<String, Map<String, Object>> apiByName = new HashMap<>();
+            Map<String, Map<String, Object>> apiByKey = new HashMap<>();
+            if (apiRelations != null) {
+                for (Map<String, Object> api : apiRelations) {
+                    String key = toStr(api.get("nodeKey"));
+                    String name = toStr(api.get("displayName"));
+                    if (key != null) apiByKey.put(key, api);
+                    if (name != null) apiByName.put(name, api);
+                }
+            }
+
+            // 构建 feature → domain 映射
+            Map<String, String> featureToDomain = new HashMap<>();
+            if (domainContains != null) {
+                for (Map<String, Object> row : domainContains) {
+                    String domain = toStr(row.get("domainDisplayName"));
+                    if (domain == null) domain = toStr(row.get("domainName"));
+                    List<?> features = (List<?>) row.get("features");
+                    if (features != null && domain != null) {
+                        for (Object f : features) {
+                            String fname = toStr(f);
+                            if (fname != null) {
+                                featureToDomain.putIfAbsent(fname, domain);
+                            }
+                        }
+                    }
+                }
+            }
+
+            List<LayerMappingDTO> mappings = new ArrayList<>();
+            if (apiRelations != null) {
+                for (Map<String, Object> api : apiRelations) {
+                    String apikey = toStr(api.get("nodeKey"));
+                    String display = toStr(api.get("displayName"));
+                    List<String> controllers = toStrList(api.get("controllers"));
+                    List<String> services = toStrList(api.get("services"));
+                    List<String> tables = toStrList(api.get("tables"));
+
+                    // 匹配业务域
+                    String domain = featureToDomain.get(apikey);
+                    if (domain == null) domain = featureToDomain.get(display);
+                    if (domain == null && !controllers.isEmpty()) {
+                        domain = controllers.get(0) + " 域";
+                    }
+                    if (domain == null) domain = "未分类";
+
+                    String controller = controllers.isEmpty() ? null : controllers.get(0);
+                    String service = services.isEmpty() ? null : services.get(0);
+
+                    mappings.add(mapping(domain, display, display,
+                            controller, apikey, service,
+                            tables.isEmpty() ? null : tables, "GRAPH"));
+                }
+            }
+
+            // 若图谱查不到 API 实现关系，但有业务域数据，仍输出域级映射
+            if (mappings.isEmpty() && domainContains != null) {
+                for (Map<String, Object> row : domainContains) {
+                    String domain = toStr(row.get("domainDisplayName"));
+                    if (domain == null) domain = toStr(row.get("domainName"));
+                    List<?> features = (List<?>) row.get("features");
+                    if (features != null) {
+                        for (Object f : features) {
+                            String fname = toStr(f);
+                            mappings.add(mapping(domain, fname, fname,
+                                    null, null, null, null, "GRAPH"));
+                        }
+                    }
+                }
+            }
+
+            if (mappings.isEmpty()) {
+                return Collections.emptyList();
+            }
+            log.info("Graph-based projection: {} mappings from graph (projectId={}, versionId={})",
+                    mappings.size(), projectId, versionId);
+            return mappings;
+        } catch (Exception e) {
+            log.warn("Failed to build graph-based mappings, falling back to claims: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
      * 从 lg_knowledge_claim 动态投影四层映射。
      * <p>
      * 查询 CONFIRMED/PENDING_CONFIRM 状态的 Claim，按 subjectKey 聚合为 LayerMappingDTO。
@@ -159,6 +270,12 @@ public class SystemOverviewService {
      * </p>
      */
     private List<LayerMappingDTO> buildDynamicMappings(String projectId, String versionId) {
+        // 优先从图谱直接查询四层结构
+        List<LayerMappingDTO> graphMappings = buildGraphBasedMappings(projectId, versionId);
+        if (!graphMappings.isEmpty()) {
+            return graphMappings;
+        }
+
         try {
             List<KnowledgeClaim> claims = knowledgeClaimService.listClaims(
                     projectId, versionId, null, null, null, null, 500);
@@ -505,6 +622,201 @@ public class SystemOverviewService {
             sb.append("  \"更多关系\" -.-> \"请查看上方图谱关系明细\"\n");
         }
         sb.append("```\n");
+    }
+
+    // ──────────── SubTask 15.4: 核心贯穿链路（图谱直查）────────────
+
+    /**
+     * 核心贯穿链路：Table → SqlStatement → Mapper → Service → Controller → ApiEndpoint → Page。
+     * 从图谱直接查询完整链路，找出前 5 条最长的贯穿链路。
+     */
+    private void appendCoreThroughChain(StringBuilder sb, String projectId, String versionId) {
+        sb.append("\n## 8. 核心贯穿链路（图谱直查）\n\n");
+        try {
+            List<Map<String, Object>> apiRelations = graphDao.apiImplementationRelations(projectId, versionId);
+            if (apiRelations == null || apiRelations.isEmpty()) {
+                sb.append("暂无图谱贯穿链路数据。\n");
+                return;
+            }
+
+            // 构建链路字符串并按长度排序
+            List<String> chains = new ArrayList<>();
+            for (Map<String, Object> api : apiRelations) {
+                String apiName = toStr(api.get("displayName"));
+                if (apiName == null) apiName = toStr(api.get("nodeKey"));
+                List<String> controllers = toStrList(api.get("controllers"));
+                List<String> services = toStrList(api.get("services"));
+                List<String> tables = toStrList(api.get("tables"));
+
+                // 构建 Table → Mapper → Service → Controller → ApiEndpoint 链路
+                List<String> parts = new ArrayList<>();
+                if (!tables.isEmpty()) parts.add(String.join(" / ", tables));
+                if (!services.isEmpty()) parts.add(services.get(0));
+                if (!controllers.isEmpty()) parts.add(controllers.get(0));
+                if (apiName != null) parts.add(apiName);
+
+                if (parts.size() >= 2) {
+                    chains.add(String.join(" → ", parts));
+                }
+            }
+
+            // 按链路长度（节点数）降序，取前 5
+            chains.sort((a, b) -> {
+                long lenA = a.chars().filter(c -> c == '→').count();
+                long lenB = b.chars().filter(c -> c == '→').count();
+                return Long.compare(lenB, lenA);
+            });
+
+            int limit = Math.min(5, chains.size());
+            if (limit == 0) {
+                sb.append("暂无完整贯穿链路。\n");
+                return;
+            }
+            for (int i = 0; i < limit; i++) {
+                sb.append(String.format("%d. %s\n", i + 1, chains.get(i)));
+            }
+            if (chains.size() > 5) {
+                sb.append(String.format("\n（共 %d 条链路，展示前 5 条）\n", chains.size()));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to append core through chain: {}", e.getMessage());
+            sb.append("贯穿链路查询失败。\n");
+        }
+    }
+
+    // ──────────── SubTask 15.5: 图谱统计摘要 ────────────
+
+    /**
+     * 图谱统计摘要：节点总数、边总数、各类型节点/边数量分布。
+     */
+    private void appendGraphStatsSummary(StringBuilder sb, String projectId, String versionId) {
+        sb.append("\n## 9. 图谱统计摘要\n\n");
+        try {
+            Map<String, Object> stats = graphDao.versionGraphStats(projectId, versionId);
+            long totalNodes = toLong(stats.get("totalNodes"));
+            long totalEdges = toLong(stats.get("totalEdges"));
+
+            sb.append("### 9.1 总览\n\n");
+            sb.append(String.format("- 节点总数: %d\n", totalNodes));
+            sb.append(String.format("- 边总数: %d\n", totalEdges));
+            Object avgConf = stats.get("avgConfidence");
+            sb.append(String.format("- 平均置信度: %s\n",
+                    avgConf instanceof Number ? String.format("%.4f", ((Number) avgConf).doubleValue()) : "-"));
+
+            // 节点类型分布
+            sb.append("\n### 9.2 节点类型分布\n\n");
+            sb.append("| 节点类型 | 数量 |\n");
+            sb.append("|---|---:|\n");
+            List<Map<String, Object>> nodeDist = graphDao.nodeTypeDistribution(projectId, versionId);
+            if (nodeDist != null && !nodeDist.isEmpty()) {
+                for (Map<String, Object> row : nodeDist) {
+                    sb.append(String.format("| %s | %d |\n",
+                            toStr(row.get("nodeType")), toLong(row.get("cnt"))));
+                }
+            } else {
+                sb.append("| (无数据) | 0 |\n");
+            }
+
+            // 边类型分布
+            sb.append("\n### 9.3 边类型分布\n\n");
+            sb.append("| 边类型 | 数量 |\n");
+            sb.append("|---|---:|\n");
+            List<Map<String, Object>> edgeDist = graphDao.edgeTypeDistribution(projectId, versionId);
+            if (edgeDist != null && !edgeDist.isEmpty()) {
+                for (Map<String, Object> row : edgeDist) {
+                    sb.append(String.format("| %s | %d |\n",
+                            toStr(row.get("edgeType")), toLong(row.get("cnt"))));
+                }
+            } else {
+                sb.append("| (无数据) | 0 |\n");
+            }
+        } catch (Exception e) {
+            log.warn("Failed to append graph stats summary: {}", e.getMessage());
+            sb.append("图谱统计摘要查询失败。\n");
+        }
+    }
+
+    // ──────────── SubTask 15.5: 模块依赖 Mermaid 图 ────────────
+
+    /**
+     * 模块依赖 Mermaid 图：基于 Package 的 DEPENDS_ON 边生成 graph TD 格式。
+     */
+    private void appendModuleDependencyMermaid(StringBuilder sb, String projectId, String versionId) {
+        sb.append("\n## 10. 模块依赖关系图\n\n");
+        try {
+            List<GraphNode> packages = graphDao.queryNodes(projectId, versionId,
+                    NodeType.Package.name(), null, null, null, 200);
+            List<GraphEdge> edges = graphDao.queryEdges(projectId, versionId,
+                    EdgeType.DEPENDS_ON.name(), null, 500);
+
+            if (packages == null || packages.isEmpty()) {
+                sb.append("暂无 Package 节点，无法生成模块依赖图。\n");
+                return;
+            }
+
+            // 构建 nodeId → nodeKey 映射
+            Map<String, String> idToKey = new HashMap<>();
+            for (GraphNode pkg : packages) {
+                String key = pkg.getNodeKey() != null ? pkg.getNodeKey() : pkg.getId();
+                idToKey.put(pkg.getId(), key);
+            }
+
+            sb.append("```mermaid\n");
+            sb.append("graph TD\n");
+            int edgeCount = 0;
+            if (edges != null) {
+                for (GraphEdge edge : edges) {
+                    String fromKey = idToKey.get(edge.getFromNodeId());
+                    String toKey = idToKey.get(edge.getToNodeId());
+                    if (fromKey == null) fromKey = edge.getFromNodeId();
+                    if (toKey == null) toKey = edge.getToNodeId();
+                    if (fromKey != null && toKey != null) {
+                        sb.append(String.format("  \"%s\" --> \"%s\"\n",
+                                mermaidLabel(fromKey), mermaidLabel(toKey)));
+                        edgeCount++;
+                    }
+                }
+            }
+            if (edgeCount == 0) {
+                sb.append("  \"无依赖关系\"\n");
+            }
+            sb.append("```\n");
+            sb.append(String.format("\n（共 %d 个 Package，%d 条 DEPENDS_ON 依赖）\n",
+                    packages.size(), edgeCount));
+        } catch (Exception e) {
+            log.warn("Failed to append module dependency mermaid: {}", e.getMessage());
+            sb.append("模块依赖图生成失败。\n");
+        }
+    }
+
+    // ──────────── 辅助方法 ────────────
+
+    private String toStr(Object value) {
+        if (value == null) return null;
+        String s = String.valueOf(value);
+        return s.isBlank() || "null".equals(s) ? null : s;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> toStrList(Object value) {
+        if (value == null) return Collections.emptyList();
+        if (value instanceof List<?> list) {
+            List<String> result = new ArrayList<>();
+            for (Object item : list) {
+                String s = toStr(item);
+                if (s != null) result.add(s);
+            }
+            return result;
+        }
+        return Collections.emptyList();
+    }
+
+    private long toLong(Object value) {
+        if (value instanceof Number n) return n.longValue();
+        if (value instanceof String s) {
+            try { return Long.parseLong(s); } catch (NumberFormatException e) { return 0L; }
+        }
+        return 0L;
     }
 
     private String toPath(LayerMappingDTO mapping) {

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统设置 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.page-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+.page-header {
+  margin-bottom: var(--space-6);
+}
+.page-header h1 {
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+/* Section Card */
+.settings-section {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.section-title .icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.section-title .icon svg {
+  width: 18px;
+  height: 18px;
+}
+.icon-indigo { background: var(--c-primary-bg); color: var(--c-primary); }
+.icon-teal { background: var(--c-success-bg); color: var(--c-success); }
+.icon-amber { background: var(--c-warning-bg); color: var(--c-warning); }
+.icon-gray { background: var(--c-info-bg); color: var(--c-info); }
+
+/* Form Layout */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+}
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-item.full-width {
+  grid-column: 1 / -1;
+}
+.form-item label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--el-text-color-regular);
+}
+.form-item .required::after {
+  content: '*';
+  color: var(--c-danger);
+  margin-left: 2px;
+}
+.form-input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+.form-input:focus { border-color: var(--c-primary); }
+.form-input::placeholder { color: var(--el-text-color-placeholder); }
+textarea.form-input {
+  height: 80px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+select.form-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236E6E73' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+/* Upload Area */
+.upload-area {
+  border: 2px dashed var(--el-border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  min-height: 120px;
+}
+.upload-area:hover {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+}
+.upload-area svg {
+  width: 36px;
+  height: 36px;
+  color: var(--el-text-color-placeholder);
+}
+.upload-area span {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+.upload-area .hint {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+}
+
+/* Toggle Switch */
+.form-row-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+.form-row-inline + .form-row-inline {
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.toggle-label {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+}
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--el-border-color);
+  border-radius: 12px;
+  transition: background 0.3s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.3s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--c-primary);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1.4;
+}
+.btn-primary { background: var(--c-primary); color: #fff; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-default { background: var(--el-bg-color); color: var(--el-text-color-regular); border: 1px solid var(--el-border-color); }
+.btn-default:hover { border-color: var(--c-primary); color: var(--c-primary); }
+
+/* Bottom Actions */
+.form-actions-bottom {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: var(--space-5);
+}
+
+/* Theme toggle */
+.dark-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: all 0.2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.dark-toggle svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">
+  <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+  <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="page-container">
+  <div class="page-header">
+    <h1>系统设置</h1>
+  </div>
+
+  <!-- 基本设置 -->
+  <div class="settings-section">
+    <div class="section-title">
+      <div class="icon icon-indigo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </div>
+      基本设置
+    </div>
+    <div class="form-grid">
+      <div class="form-item">
+        <label>系统名称</label>
+        <input type="text" class="form-input" value="LegacyGraph" />
+      </div>
+      <div class="form-item">
+        <label>&nbsp;</label>
+      </div>
+      <div class="form-item full-width">
+        <label>系统描述</label>
+        <textarea class="form-input" placeholder="请输入系统描述">LegacyGraph - 智能遗留系统分析与迁移平台</textarea>
+      </div>
+      <div class="form-item full-width">
+        <label>Logo</label>
+        <div class="upload-area">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>点击或拖拽上传 Logo</span>
+          <span class="hint">支持 PNG、JPG、SVG 格式，大小不超过 2MB</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 安全设置 -->
+  <div class="settings-section">
+    <div class="section-title">
+      <div class="icon icon-teal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      安全设置
+    </div>
+    <div class="form-grid">
+      <div class="form-item">
+        <label>会话超时 (min)</label>
+        <input type="number" class="form-input" value="30" />
+      </div>
+      <div class="form-item">
+        <label>密码策略</label>
+        <select class="form-input">
+          <option value="strong" selected>强 - 包含大小写、数字、特殊字符，至少8位</option>
+          <option value="medium">中 - 包含字母和数字，至少6位</option>
+          <option value="weak">弱 - 至少4位</option>
+        </select>
+      </div>
+      <div class="form-item full-width">
+        <div class="form-row-inline">
+          <span class="toggle-label">双因素认证 (2FA)</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通知设置 -->
+  <div class="settings-section">
+    <div class="section-title">
+      <div class="icon icon-amber">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </div>
+      通知设置
+    </div>
+    <div class="form-grid">
+      <div class="form-item full-width">
+        <div class="form-row-inline">
+          <span class="toggle-label">邮件通知</span>
+          <label class="toggle-switch">
+            <input type="checkbox" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="form-item">
+        <label>邮件服务器</label>
+        <input type="text" class="form-input" value="smtp.company.com" />
+      </div>
+      <div class="form-item">
+        <label>端口</label>
+        <input type="number" class="form-input" value="465" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 高级设置 -->
+  <div class="settings-section">
+    <div class="section-title">
+      <div class="icon icon-gray">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      高级设置
+    </div>
+    <div class="form-grid">
+      <div class="form-item">
+        <label>最大并发扫描数</label>
+        <input type="number" class="form-input" value="5" />
+      </div>
+      <div class="form-item">
+        <label>日志保留天数</label>
+        <input type="number" class="form-input" value="90" />
+      </div>
+      <div class="form-item full-width">
+        <div class="form-row-inline">
+          <span class="toggle-label">自动清理过期数据</span>
+          <label class="toggle-switch">
+            <input type="checkbox" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Actions -->
+  <div class="form-actions-bottom">
+    <button class="btn btn-default">重置默认</button>
+    <button class="btn btn-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      保存设置
+    </button>
+  </div>
+</div>
+
+<script>
+  const sun = document.getElementById('icon-sun');
+  const moon = document.getElementById('icon-moon');
+  const observer = new MutationObserver(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    sun.style.display = isDark ? 'none' : 'block';
+    moon.style.display = isDark ? 'block' : 'none';
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+</script>
+</body>
+</html>

@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegacyGraph - 工作台</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    :root {
+      --font-display: 'DM Serif Display', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --space-4: 16px; --space-5: 20px; --space-6: 24px;
+      --radius-sm: 6px; --radius-md: 8px;
+      --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+      --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+      --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+      --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+      --c-info: #909399; --c-info-bg: #EFEFF1;
+      --gradient-brand: linear-gradient(135deg, #6366F1, #8B5CF6, #A78BFA);
+      --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+      --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+      --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+      --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+    }
+    html.dark {
+      --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+      --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+      --gradient-brand: linear-gradient(135deg, #818CF8, #A78BFA, #C4B5FD);
+      --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+      --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+      --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--font-body); color: var(--el-text-color-primary); background: var(--el-bg-color-page); min-height: 100vh; }
+
+    /* === Top Header === */
+    .top-header {
+      height: 56px;
+      background: var(--el-bg-color);
+      border-bottom: 1px solid var(--el-border-color-light);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-left .logo-mark {
+      display: flex;
+      align-items: center;
+    }
+    .header-left .brand-name {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--c-primary);
+    }
+
+    /* === Center Nav Tabs === */
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .nav-tab {
+      position: relative;
+      padding: 0 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--el-text-color-secondary);
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+      user-select: none;
+    }
+    .nav-tab:hover {
+      color: var(--el-text-color-primary);
+      background: var(--el-fill-color-light);
+    }
+    .nav-tab.active {
+      color: var(--c-primary);
+    }
+    .nav-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 16px;
+      right: 16px;
+      height: 2px;
+      background: var(--c-primary);
+      border-radius: 1px;
+    }
+
+    /* === Right Controls === */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--el-text-color-secondary);
+      transition: background 0.2s, color 0.2s;
+    }
+    .icon-btn:hover {
+      background: var(--el-fill-color);
+      color: var(--el-text-color-primary);
+    }
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+    .lang-selector {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.2s;
+    }
+    .lang-selector:hover {
+      background: var(--el-fill-color);
+    }
+    .notification-wrapper {
+      position: relative;
+    }
+    .notification-dot {
+      position: absolute;
+      top: 6px;
+      right: 7px;
+      width: 7px;
+      height: 7px;
+      background: var(--c-danger);
+      border-radius: 50%;
+      border: 1.5px solid var(--el-bg-color);
+    }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--gradient-brand);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .user-section {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.2s;
+    }
+    .user-section:hover {
+      background: var(--el-fill-color);
+    }
+    .dropdown-arrow {
+      color: var(--el-text-color-placeholder);
+      font-size: 10px;
+    }
+
+    /* === Content Area === */
+    .content-area {
+      padding: var(--space-6);
+    }
+
+    /* === Page Header === */
+    .page-header {
+      margin-bottom: var(--space-6);
+    }
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--el-text-color-primary);
+      margin-bottom: 4px;
+    }
+    .page-header .subtitle {
+      font-size: 14px;
+      color: var(--el-text-color-secondary);
+    }
+
+    /* === Stat Cards Grid === */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--space-5);
+    }
+    .stat-card {
+      background: var(--el-bg-color);
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      transition: box-shadow 0.2s;
+    }
+    .stat-card:hover {
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+    .stat-card .stat-label {
+      font-size: 13px;
+      color: var(--el-text-color-secondary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-card .stat-label svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+    .stat-card .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--el-text-color-primary);
+      line-height: 1.2;
+    }
+    .stat-card .stat-value .stat-unit {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--el-text-color-placeholder);
+      margin-left: 2px;
+    }
+    .stat-card.nodes .stat-value { color: var(--c-primary); }
+    .stat-card.edges .stat-value { color: var(--c-success); }
+    .stat-card.projects .stat-value { color: var(--c-warning); }
+    .stat-card.tasks .stat-value { color: var(--c-danger); }
+  </style>
+</head>
+<body>
+  <!-- Top Header -->
+  <header class="top-header">
+    <!-- Left: Logo + Brand -->
+    <div class="header-left">
+      <div class="logo-mark">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="14,1 25.5,7.5 25.5,20.5 14,27 2.5,20.5 2.5,7.5" fill="url(#hexGrad)" stroke="none"/>
+          <polygon points="14,5 21.5,9 21.5,19 14,23 6.5,19 6.5,9" fill="none" stroke="#fff" stroke-width="1.2"/>
+          <circle cx="14" cy="14" r="3" fill="#fff" opacity="0.9"/>
+          <defs>
+            <linearGradient id="hexGrad" x1="2.5" y1="1" x2="25.5" y2="27">
+              <stop offset="0%" stop-color="#6366F1"/>
+              <stop offset="100%" stop-color="#A78BFA"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span class="brand-name">LegacyGraph</span>
+    </div>
+
+    <!-- Center: Nav Tabs -->
+    <nav class="header-center">
+      <div class="nav-tab active">工作台</div>
+      <div class="nav-tab">项目管理</div>
+      <div class="nav-tab">系统管理</div>
+    </nav>
+
+    <!-- Right: Controls -->
+    <div class="header-right">
+      <!-- Theme Toggle -->
+      <button class="icon-btn" id="themeToggle" title="切换主题">
+        <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:none;">
+          <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+        <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+
+      <!-- Language Selector -->
+      <span class="lang-selector">中文 / EN</span>
+
+      <!-- Notification Bell -->
+      <div class="notification-wrapper">
+        <button class="icon-btn" title="通知">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+        </button>
+        <span class="notification-dot"></span>
+      </div>
+
+      <!-- User Avatar -->
+      <div class="user-section">
+        <div class="user-avatar">张</div>
+        <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <!-- Content Area -->
+  <main class="content-area">
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1>工作台</h1>
+      <p class="subtitle">欢迎回来，张三</p>
+    </div>
+
+    <!-- Stat Cards Grid -->
+    <div class="stat-grid">
+      <!-- Card 1: Total Nodes -->
+      <div class="stat-card nodes">
+        <div class="stat-label">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="var(--c-primary)" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          </svg>
+          总节点数
+        </div>
+        <div class="stat-value">1,234</div>
+      </div>
+
+      <!-- Card 2: Total Edges -->
+      <div class="stat-card edges">
+        <div class="stat-label">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="var(--c-success)" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+          总边数
+        </div>
+        <div class="stat-value">5,678</div>
+      </div>
+
+      <!-- Card 3: Projects -->
+      <div class="stat-card projects">
+        <div class="stat-label">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="var(--c-warning)" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          项目数
+        </div>
+        <div class="stat-value">12</div>
+      </div>
+
+      <!-- Card 4: Tasks Today -->
+      <div class="stat-card tasks">
+        <div class="stat-label">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="var(--c-danger)" stroke-width="2">
+            <polyline points="12 8 12 12 14 14"/><circle cx="12" cy="12" r="10"/>
+          </svg>
+          今日任务
+        </div>
+        <div class="stat-value">5<span class="stat-unit">项</span></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      const html = document.documentElement;
+      const sunIcon = document.getElementById('sunIcon');
+      const moonIcon = document.getElementById('moonIcon');
+      const toggle = document.getElementById('themeToggle');
+
+      // Check saved preference or system preference
+      const savedTheme = localStorage.getItem('lg-theme');
+      if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        html.classList.add('dark');
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+      }
+
+      toggle.addEventListener('click', function() {
+        const isDark = html.classList.toggle('dark');
+        sunIcon.style.display = isDark ? 'block' : 'none';
+        moonIcon.style.display = isDark ? 'none' : 'block';
+        localStorage.setItem('lg-theme', isDark ? 'dark' : 'light');
+      });
+    })();
+  </script>
+</body>
+</html>

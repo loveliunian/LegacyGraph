@@ -1,0 +1,921 @@
+{
+  "data": [
+    {
+      "id": "page-design-system",
+      "title": "设计系统基础",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/design-system.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-login",
+      "title": "登录页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 480,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-app-layout",
+      "title": "全局导航布局",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 960,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/app-layout.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-project-layout",
+      "title": "项目详情布局",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1440,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/project-layout.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-system-layout",
+      "title": "系统管理布局",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1920,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/system-layout.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-dashboard",
+      "title": "工作台",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 0,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/dashboard.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-project-list",
+      "title": "项目列表",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 480,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/project-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-project-overview",
+      "title": "项目概览",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 960,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/project-overview.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-scan-task-list",
+      "title": "扫描任务",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1440,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/scan-task-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-unified-graph",
+      "title": "统一图谱",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1920,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/unified-graph.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-evidence-workbench",
+      "title": "证据工作台",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2400,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/evidence-workbench.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-graph-qa",
+      "title": "QA 问答",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2880,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/graph-qa.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-user-list",
+      "title": "用户管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3360,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/user-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-error-pages",
+      "title": "错误页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3840,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/error-pages.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-agent-hub",
+      "title": "AI 助手",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 4320,
+        "y": 1561,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/agent-hub.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-code-repo-list",
+      "title": "代码仓库",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 0,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/code-repo-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-database-list",
+      "title": "数据库",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 480,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/database-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-document-list",
+      "title": "文档",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 960,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/document-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-code-graph",
+      "title": "代码图谱",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1440,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/code-graph.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-business-graph",
+      "title": "业务图谱",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1920,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/business-graph.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-feature-graph",
+      "title": "功能图谱",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2400,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/feature-graph.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-data-lineage-graph",
+      "title": "数据血缘",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2880,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/data-lineage-graph.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-runtime-graph",
+      "title": "运行链路",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3360,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/runtime-graph.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-graph-diff",
+      "title": "图谱对比",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3840,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/graph-diff.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-review-list",
+      "title": "审核列表",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 4320,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/review-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-review-history",
+      "title": "审核历史",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 4800,
+        "y": 2160,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/review-history.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-fact-list",
+      "title": "事实管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 0,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/fact-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-evidence-search",
+      "title": "证据搜索",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 480,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/evidence-search.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-test-case-list",
+      "title": "测试用例",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 960,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/test-case-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-test-case-editor",
+      "title": "编辑测试用例",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1440,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/test-case-editor.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-test-run-list",
+      "title": "测试执行",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1920,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/test-run-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-test-run-detail",
+      "title": "执行详情",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2400,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/test-run-detail.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-scan-version-list",
+      "title": "扫描版本",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2880,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/scan-version-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-change-task-list",
+      "title": "变更任务",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3360,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/change-task-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-pr-workbench",
+      "title": "PR 工作台",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3840,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/pr-workbench.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-risk-list",
+      "title": "迁移风险",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 4320,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/risk-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-risk-detail",
+      "title": "风险详情",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 4800,
+        "y": 2648,
+        "group": 3
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/risk-detail.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-validation-report",
+      "title": "验证报告",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 0,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/validation-report.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-understanding-report",
+      "title": "理解报告",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 480,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/understanding-report.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-vector-search",
+      "title": "向量搜索",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 960,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/vector-search.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-knowledge-workbench",
+      "title": "知识库",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1440,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/knowledge-workbench.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-system-overview-workbench",
+      "title": "系统概览",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1920,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/system-overview-workbench.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-evidence-conflict",
+      "title": "证据冲突",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2400,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/evidence-conflict.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-agent-history",
+      "title": "执行历史",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2880,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/agent-history.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-graphify-job-center",
+      "title": "Graphify 任务中心",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3360,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/graphify-job-center.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-graphify-diff",
+      "title": "Graphify 差异分析",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3840,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/graphify-diff.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-graphify-quality",
+      "title": "Graphify 质量面板",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 4320,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/graphify-quality.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-cross-repo-impact",
+      "title": "跨仓影响分析",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 4800,
+        "y": 3136,
+        "group": 4
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/cross-repo-impact.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-create-scan",
+      "title": "新建扫描",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 0,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/create-scan.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-dictionary-list",
+      "title": "数据字典",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 480,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/dictionary-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-system-settings",
+      "title": "系统设置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 960,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/system-settings.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-llm-provider-settings",
+      "title": "模型配置",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1440,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/llm-provider-settings.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-prompt-list",
+      "title": "提示词管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 1920,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/prompt-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-plugin-management",
+      "title": "插件管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2400,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/plugin-management.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-log-list",
+      "title": "日志管理",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 2880,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/log-list.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-log-detail",
+      "title": "日志详情",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 3360,
+        "y": 3644,
+        "group": 5
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/log-detail.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-color-migration",
+      "title": "颜色迁移对照",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 0,
+        "y": 4174,
+        "group": 6
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/color-migration.html",
+        "interactions": []
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "tablet",
+    "projectName": "LegacyGraph 前端重设计"
+  }
+}

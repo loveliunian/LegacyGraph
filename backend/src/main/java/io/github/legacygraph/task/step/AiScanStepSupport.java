@@ -52,7 +52,7 @@ public class AiScanStepSupport {
     /** 向量化任务队列上限：超出即拒绝（背压），防止内容文本在队列里无限堆积导致 OOM */
     private static final int VECTOR_QUEUE_CAPACITY = 4;
     /** 内存水位线：堆使用率超过此值时拒绝新的向量化任务（背压，而非事后跳过） */
-    private static final double MEMORY_HIGH_WATERMARK = 0.80;
+    private static final double MEMORY_HIGH_WATERMARK = 0.60;
 
     /** 向量化分片参数（#20 调优：2000→1200，减少单次 embedding 内存峰值） */
     private static final int VECTOR_CHUNK_SIZE = 1200;

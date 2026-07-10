@@ -1,7 +1,29 @@
 <template>
   <div class="runtime-graph">
     <div class="page-header">
-      <h3>运行链路图谱</h3>
+      <div class="header-left">
+        <div class="header-title-row">
+          <h3>运行链路图谱</h3>
+          <div
+            v-if="traces.length > 0"
+            class="inline-stats">
+            <span class="stat-item">
+              <span class="stat-num primary">{{ services.length }}</span>
+              <span class="stat-text">服务</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num success">{{ instanceCount }}</span>
+              <span class="stat-text">实例</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num danger">{{ errorCount }}</span>
+              <span class="stat-text">错误</span>
+            </span>
+          </div>
+        </div>
+      </div>
       <div class="header-actions">
         <el-select
           v-model="selectedEnv"
@@ -41,45 +63,47 @@
 
     <el-row :gutter="16">
       <el-col :span="6">
-        <el-card class="trace-card">
-          <template #header>
-            <span>最近请求链路</span>
-          </template>
-          <div class="trace-list">
-            <div
-              v-if="traces.length === 0 && !loading"
-              class="trace-empty">
-              <el-empty
-                description="暂无链路数据"
-                :image-size="60" />
-            </div>
-            <div
-              v-for="trace in traces"
-              :key="trace.id"
-              class="trace-item"
-              :class="{ active: selectedTrace === trace.id }"
-              @click="selectTrace(trace.id)"
-            >
-              <div class="trace-header">
-                <el-tag
-                  size="small"
-                  :type="trace.status === 'success' ? 'success' : 'danger'">
-                  {{ trace.status === 'success' ? '成功' : '失败' }}
-                </el-tag>
-                <span class="trace-duration">{{ trace.duration }}ms</span>
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">最近请求链路</span>
+          </div>
+          <div class="panel-body">
+            <div class="trace-list">
+              <div
+                v-if="traces.length === 0 && !loading"
+                class="trace-empty">
+                <el-empty
+                  description="暂无链路数据"
+                  :image-size="60" />
               </div>
-              <div class="trace-api">{{ trace.api }}</div>
-              <div class="trace-meta">
-                <span>{{ trace.time }}</span>
-                <span>{{ trace.serviceCount }} 个服务</span>
+              <div
+                v-for="trace in traces"
+                :key="trace.id"
+                class="trace-item"
+                :class="{ active: selectedTrace === trace.id }"
+                @click="selectTrace(trace.id)"
+              >
+                <div class="trace-header">
+                  <el-tag
+                    size="small"
+                    :type="trace.status === 'success' ? 'success' : 'danger'">
+                    {{ trace.status === 'success' ? '成功' : '失败' }}
+                  </el-tag>
+                  <span class="trace-duration">{{ trace.duration }}ms</span>
+                </div>
+                <div class="trace-api">{{ trace.api }}</div>
+                <div class="trace-meta">
+                  <span>{{ trace.time }}</span>
+                  <span>{{ trace.serviceCount }} 个服务</span>
+                </div>
               </div>
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
 
       <el-col :span="12">
-        <el-card class="graph-card">
+        <div class="graph-area">
           <div class="graph-toolbar">
             <el-button-group>
               <el-button
@@ -119,18 +143,11 @@
               <div class="placeholder-content">
                 <el-icon
                   :size="64"
-                  color="#c0c4cc">
+                  class="placeholder-icon">
                   <Connection />
                 </el-icon>
                 <p>运行链路可视化</p>
                 <p class="placeholder-tip">选择左侧请求链路查看调用拓扑</p>
-                <div
-                  v-if="traces.length > 0"
-                  class="stats">
-                  <el-tag type="primary">服务数: {{ services.length }}</el-tag>
-                  <el-tag type="success">实例数: {{ instanceCount }}</el-tag>
-                  <el-tag type="danger">错误数: {{ errorCount }}</el-tag>
-                </div>
               </div>
             </div>
             <div
@@ -164,79 +181,81 @@
               </div>
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
 
       <el-col :span="6">
-        <el-card class="service-card">
-          <template #header>
-            <span>服务详情</span>
-          </template>
-          <div
-            v-if="services.length === 0 && !loading"
-            class="trace-empty">
-            <el-empty
-              description="暂无服务数据"
-              :image-size="60" />
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">服务详情</span>
           </div>
-          <div
-            v-else
-            class="service-list">
+          <div class="panel-body">
             <div
-              v-for="service in services"
-              :key="service.id"
-              class="service-item"
-              :class="{ active: selectedService === service.id }"
-              @click="selectService(service.id)"
-            >
-              <div class="service-header">
-                <span class="service-name">{{ service.name }}</span>
-                <el-tag
-                  size="small"
-                  :type="service.health === 'healthy' ? 'success' : 'danger'">
-                  {{ service.health === 'healthy' ? '健康' : '异常' }}
-                </el-tag>
-              </div>
-              <div class="service-stats">
-                <span>QPS: {{ service.qps }}</span>
-                <span>P99: {{ service.p99 }}ms</span>
-                <span>错误率: {{ service.errorRate }}%</span>
+              v-if="services.length === 0 && !loading"
+              class="trace-empty">
+              <el-empty
+                description="暂无服务数据"
+                :image-size="60" />
+            </div>
+            <div
+              v-else
+              class="service-list">
+              <div
+                v-for="service in services"
+                :key="service.id"
+                class="service-item"
+                :class="{ active: selectedService === service.id }"
+                @click="selectService(service.id)"
+              >
+                <div class="service-header">
+                  <span class="service-name">{{ service.name }}</span>
+                  <el-tag
+                    size="small"
+                    :type="service.health === 'healthy' ? 'success' : 'danger'">
+                    {{ service.health === 'healthy' ? '健康' : '异常' }}
+                  </el-tag>
+                </div>
+                <div class="service-stats">
+                  <span>QPS: {{ service.qps }}</span>
+                  <span>P99: {{ service.p99 }}ms</span>
+                  <span>错误率: {{ service.errorRate }}%</span>
+                </div>
               </div>
             </div>
           </div>
-        </el-card>
+        </div>
 
-        <el-card
-          class="slow-card"
-          style="margin-top: 16px;">
-          <template #header>
-            <span>慢请求 Top 5</span>
-          </template>
-          <div
-            v-if="slowRequests.length === 0 && !loading"
-            class="trace-empty">
-            <el-empty
-              description="暂无慢请求数据"
-              :image-size="40" />
+        <div class="panel-section slow-panel">
+          <div class="panel-header">
+            <span class="panel-title">慢请求 Top 5</span>
           </div>
-          <div
-            v-else
-            class="slow-list">
+          <div class="panel-body">
             <div
-              v-for="slow in slowRequests"
-              :key="slow.id"
-              class="slow-item">
-              <div class="slow-api">{{ slow.api }}</div>
-              <div class="slow-info">
-                <span class="slow-duration">{{ slow.avgDuration }}ms</span>
-                <span class="slow-count">{{ slow.count }} 次</span>
+              v-if="slowRequests.length === 0 && !loading"
+              class="trace-empty">
+              <el-empty
+                description="暂无慢请求数据"
+                :image-size="40" />
+            </div>
+            <div
+              v-else
+              class="slow-list">
+              <div
+                v-for="slow in slowRequests"
+                :key="slow.id"
+                class="slow-item">
+                <div class="slow-api">{{ slow.api }}</div>
+                <div class="slow-info">
+                  <span class="slow-duration">{{ slow.avgDuration }}ms</span>
+                  <span class="slow-count">{{ slow.count }} 次</span>
+                </div>
+                <el-progress
+                  :percentage="slow.warningLevel * 20"
+                  :status="slow.warningLevel >= 4 ? 'exception' : 'warning'" />
               </div>
-              <el-progress
-                :percentage="slow.warningLevel * 20"
-                :status="slow.warningLevel >= 4 ? 'exception' : 'warning'" />
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
   </div>
@@ -259,7 +278,7 @@
         width="120"
         align="center">
         <template #default="{ row }">
-          <span :style="{ color: row.p99 > 1000 ? '#f56c6c' : '#e6a23c' }">{{ row.p99 }}ms</span>
+          <span :style="{ color: row.p99 > 1000 ? 'var(--el-color-danger)' : 'var(--el-color-warning)' }">{{ row.p99 }}ms</span>
         </template>
       </el-table-column>
       <el-table-column
@@ -268,7 +287,7 @@
         width="100"
         align="center">
         <template #default="{ row }">
-          <span :style="{ color: row.errorRate > 5 ? '#f56c6c' : '#e6a23c' }">{{ row.errorRate }}%</span>
+          <span :style="{ color: row.errorRate > 5 ? 'var(--el-color-danger)' : 'var(--el-color-warning)' }">{{ row.errorRate }}%</span>
         </template>
       </el-table-column>
       <el-table-column
@@ -509,21 +528,29 @@ onMounted(async () => {
 
 <style scoped>
 .runtime-graph {
-  padding: 0;
+  padding: 16px;
 }
 
+/* ===== 页面头部 ===== */
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  align-items: flex-start;
+  margin-bottom: 16px;
 }
 
-.page-header h3 {
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-left h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .header-actions {
@@ -532,6 +559,158 @@ onMounted(async () => {
   align-items: center;
 }
 
+/* ===== 行内统计 ===== */
+.inline-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.inline-stats .stat-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-num {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stat-num.primary {
+  color: var(--el-color-primary);
+}
+
+.stat-num.success {
+  color: var(--el-color-success);
+}
+
+.stat-num.danger {
+  color: var(--el-color-danger);
+}
+
+.stat-text {
+  color: var(--el-text-color-secondary);
+}
+
+.stat-sep {
+  color: var(--el-border-color);
+}
+
+/* ===== 面板通用样式 ===== */
+.panel-section {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.panel-body {
+  padding: 12px 14px;
+}
+
+/* ===== 图谱区域 ===== */
+.graph-area {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.graph-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+}
+
+.graph-container {
+  min-height: 500px;
+  background: var(--el-bg-color-page);
+}
+
+.graph-state {
+  height: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-secondary);
+}
+
+.graph-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-content {
+  text-align: center;
+  color: var(--el-text-color-secondary);
+}
+
+.placeholder-content p {
+  margin: 12px 0 4px 0;
+  font-size: 16px;
+}
+
+.placeholder-icon {
+  color: var(--el-text-color-disabled);
+}
+
+.placeholder-tip {
+  font-size: 12px !important;
+}
+
+.trace-detail-view {
+  height: 500px;
+}
+
+.trace-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.trace-service-node {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  border: 2px solid var(--el-border-color);
+  text-align: center;
+  min-width: 100px;
+}
+
+.trace-service-node.healthy {
+  border-color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+}
+
+.trace-service-node.error {
+  border-color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+
+/* ===== 请求链路列表 ===== */
 .trace-list {
   display: flex;
   flex-direction: column;
@@ -549,16 +728,16 @@ onMounted(async () => {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.3s;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--el-border-color-light);
 }
 
 .trace-item:hover {
-  background: #f5f7fa;
+  background: var(--el-fill-color);
 }
 
 .trace-item.active {
-  background: #ecf5ff;
-  border-color: #409eff;
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary);
 }
 
 .trace-header {
@@ -571,13 +750,13 @@ onMounted(async () => {
 .trace-duration {
   font-size: 12px;
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .trace-api {
   font-size: 13px;
-  color: #303133;
-  font-family: monospace;
+  color: var(--el-text-color-primary);
+  font-family: var(--font-mono);
   margin-bottom: 4px;
 }
 
@@ -585,103 +764,10 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
-.graph-card {
-  height: 100%;
-}
-
-.graph-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.graph-container {
-  min-height: 500px;
-  background: #fafafa;
-  border-radius: 4px;
-}
-
-.graph-state {
-  height: 500px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #909399;
-}
-
-.graph-placeholder {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.placeholder-content {
-  text-align: center;
-  color: #909399;
-}
-
-.placeholder-content p {
-  margin: 12px 0 4px 0;
-  font-size: 16px;
-}
-
-.placeholder-tip {
-  font-size: 12px !important;
-}
-
-.stats {
-  margin-top: 20px;
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.trace-detail-view {
-  height: 500px;
-}
-
-.trace-flow {
-  width: 100%;
-  height: 100%;
-}
-
-.trace-service-node {
-  padding: 8px 14px;
-  border-radius: 8px;
-  background: #fff;
-  border: 2px solid #ddd;
-  text-align: center;
-  min-width: 100px;
-}
-
-.trace-service-node.healthy {
-  border-color: #67c23a;
-  background: #f0f9eb;
-}
-
-.trace-service-node.error {
-  border-color: #f56c6c;
-  background: #fef0f0;
-}
-
-.service-name {
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.service-meta {
-  font-size: 10px;
-  color: #999;
-  margin-top: 2px;
-}
-
+/* ===== 服务详情 ===== */
 .service-list {
   display: flex;
   flex-direction: column;
@@ -693,16 +779,16 @@ onMounted(async () => {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.3s;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--el-border-color-light);
 }
 
 .service-item:hover {
-  background: #f5f7fa;
+  background: var(--el-fill-color);
 }
 
 .service-item.active {
-  background: #ecf5ff;
-  border-color: #409eff;
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary);
 }
 
 .service-header {
@@ -715,15 +801,26 @@ onMounted(async () => {
 .service-name {
   font-size: 13px;
   font-weight: 500;
-  color: #303133;
-  font-family: monospace;
+  color: var(--el-text-color-primary);
+  font-family: var(--font-mono);
+}
+
+.service-meta {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
 }
 
 .service-stats {
   display: flex;
   gap: 12px;
   font-size: 11px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
+}
+
+/* ===== 慢请求 ===== */
+.slow-panel {
+  margin-top: 16px;
 }
 
 .slow-list {
@@ -734,13 +831,13 @@ onMounted(async () => {
 
 .slow-item {
   padding-bottom: 12px;
-  border-bottom: 1px dashed #ebeef5;
+  border-bottom: 1px dashed var(--el-border-color-light);
 }
 
 .slow-api {
   font-size: 12px;
-  color: #303133;
-  font-family: monospace;
+  color: var(--el-text-color-primary);
+  font-family: var(--font-mono);
   margin-bottom: 4px;
 }
 
@@ -753,11 +850,11 @@ onMounted(async () => {
 .slow-duration {
   font-size: 12px;
   font-weight: 500;
-  color: #f56c6c;
+  color: var(--el-color-danger);
 }
 
 .slow-count {
   font-size: 11px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 </style>

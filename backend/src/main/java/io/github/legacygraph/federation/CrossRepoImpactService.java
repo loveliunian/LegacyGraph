@@ -2,6 +2,7 @@ package io.github.legacygraph.federation;
 
 import io.github.legacygraph.entity.Project;
 import io.github.legacygraph.service.scan.ProjectService;
+import io.github.legacygraph.util.IdUtil;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -307,8 +308,7 @@ public class CrossRepoImpactService {
      * 归一化版本 ID（去除横线）。
      */
     private static String normalizeId(String id) {
-        if (id == null) return null;
-        return id.replace("-", "");
+        return IdUtil.normalizeId(id);
     }
 
     // ===================== DTO =====================

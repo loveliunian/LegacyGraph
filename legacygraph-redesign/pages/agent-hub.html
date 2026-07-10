@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 助手中心 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: var(--space-5);
+}
+.breadcrumb span { color: var(--el-text-color-primary); font-weight: 500; }
+.breadcrumb svg { width: 14px; height: 14px; color: var(--el-text-color-placeholder); }
+.page-header {
+  margin-bottom: var(--space-6);
+}
+.page-header h1 {
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+.page-header .desc {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+.agent-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.agent-card:hover {
+  border-color: var(--c-primary);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.08);
+}
+.agent-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.agent-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.agent-icon svg { width: 24px; height: 24px; color: #fff; }
+.icon-indigo { background: linear-gradient(135deg, #6366F1, #818CF8); }
+.icon-teal { background: linear-gradient(135deg, #14B8A6, #2DD4BF); }
+.icon-amber { background: linear-gradient(135deg, #F59E0B, #FBBF24); }
+.agent-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+.agent-info .agent-desc {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 6px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.agent-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  margin-bottom: var(--space-4);
+}
+.stat-item {
+  text-align: center;
+}
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  line-height: 1.2;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+}
+.agent-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1.4;
+  flex: 1;
+  justify-content: center;
+}
+.btn-primary { background: var(--c-primary); color: #fff; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-default { background: var(--el-bg-color); color: var(--el-text-color-regular); border: 1px solid var(--el-border-color); }
+.btn-default:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.dark-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: all 0.2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.dark-toggle svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">
+  <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+  <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="page-container">
+  <div class="breadcrumb">
+    <span>系统设置</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    <span style="color:var(--el-text-color-primary);font-weight:500">AI 助手中心</span>
+  </div>
+
+  <div class="page-header">
+    <h1>AI 助手中心</h1>
+    <p class="desc">管理和配置 AI 智能助手</p>
+  </div>
+
+  <div class="agent-grid">
+    <!-- Card 1: 代码分析 Agent -->
+    <div class="agent-card">
+      <div class="agent-top">
+        <div class="agent-icon icon-indigo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </div>
+        <div class="agent-info">
+          <h3>代码分析 Agent</h3>
+          <p class="agent-desc">自动分析代码结构和依赖关系</p>
+          <span class="tag tag-success">活跃</span>
+        </div>
+      </div>
+      <div class="agent-stats">
+        <div class="stat-item">
+          <div class="stat-value">156</div>
+          <div class="stat-label">执行次数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">95.2%</div>
+          <div class="stat-label">成功率</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">3.2s</div>
+          <div class="stat-label">平均耗时</div>
+        </div>
+      </div>
+      <div class="agent-actions">
+        <button class="btn btn-default">配置</button>
+        <button class="btn btn-primary">执行</button>
+      </div>
+    </div>
+
+    <!-- Card 2: 文档理解 Agent -->
+    <div class="agent-card">
+      <div class="agent-top">
+        <div class="agent-icon icon-teal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div class="agent-info">
+          <h3>文档理解 Agent</h3>
+          <p class="agent-desc">解析技术文档提取关键信息</p>
+          <span class="tag tag-success">活跃</span>
+        </div>
+      </div>
+      <div class="agent-stats">
+        <div class="stat-item">
+          <div class="stat-value">89</div>
+          <div class="stat-label">执行次数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">91.3%</div>
+          <div class="stat-label">成功率</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">5.8s</div>
+          <div class="stat-label">平均耗时</div>
+        </div>
+      </div>
+      <div class="agent-actions">
+        <button class="btn btn-default">配置</button>
+        <button class="btn btn-primary">执行</button>
+      </div>
+    </div>
+
+    <!-- Card 3: 变更评估 Agent -->
+    <div class="agent-card">
+      <div class="agent-top">
+        <div class="agent-icon icon-amber">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        </div>
+        <div class="agent-info">
+          <h3>变更评估 Agent</h3>
+          <p class="agent-desc">评估代码变更的影响范围</p>
+          <span class="tag tag-warning">测试中</span>
+        </div>
+      </div>
+      <div class="agent-stats">
+        <div class="stat-item">
+          <div class="stat-value">23</div>
+          <div class="stat-label">执行次数</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">87.5%</div>
+          <div class="stat-label">成功率</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">4.6s</div>
+          <div class="stat-label">平均耗时</div>
+        </div>
+      </div>
+      <div class="agent-actions">
+        <button class="btn btn-default">配置</button>
+        <button class="btn btn-primary">执行</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const sun = document.getElementById('icon-sun');
+  const moon = document.getElementById('icon-moon');
+  const observer = new MutationObserver(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    sun.style.display = isDark ? 'none' : 'block';
+    moon.style.display = isDark ? 'block' : 'none';
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>证据搜索 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body); font-size: 14px; color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page); line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+.page-container { max-width: 1200px; margin: 0 auto; padding: var(--space-5) var(--space-6); }
+.breadcrumb { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: var(--space-4); }
+.breadcrumb a { color: var(--c-primary); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb span { margin: 0 6px; color: var(--el-text-color-placeholder); }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
+.page-header h1 { font-family: var(--font-body); font-size: 20px; font-weight: 700; color: var(--el-text-color-primary); }
+.dark-toggle {
+  width: 36px; height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--el-text-color-secondary); font-size: 16px; transition: all .2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.search-form {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: var(--space-5);
+  padding: var(--space-5); background: var(--el-bg-color); border: 1px solid var(--el-border-color-light);
+  border-radius: var(--radius-lg);
+}
+.search-form input, .search-form select {
+  height: 36px; padding: 0 12px; border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm); background: var(--el-bg-color); color: var(--el-text-color-regular);
+  font-family: var(--font-body); font-size: 13px; outline: none; transition: border-color .2s;
+}
+.search-form input:focus, .search-form select:focus { border-color: var(--c-primary); }
+.search-form input::placeholder { color: var(--el-text-color-placeholder); }
+.search-form input[type="text"] { flex: 1; min-width: 200px; }
+.btn-search {
+  height: 36px; padding: 0 16px; border: none; border-radius: var(--radius-sm);
+  background: var(--c-primary); color: #fff; font-family: var(--font-body); font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: background .2s;
+}
+.btn-search:hover { background: var(--c-primary-light); }
+.card {
+  background: var(--el-bg-color); border: 1px solid var(--el-border-color-light);
+  border-radius: var(--radius-lg); overflow: hidden;
+}
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { background: var(--el-fill-color-light); }
+th {
+  padding: 12px 16px; text-align: left; font-weight: 600; color: var(--el-text-color-secondary);
+  border-bottom: 1px solid var(--el-border-color-lighter); white-space: nowrap; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+td {
+  padding: 12px 16px; color: var(--el-text-color-regular);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--el-fill-color-light); }
+.tag {
+  display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 500;
+  line-height: 1.8; white-space: nowrap;
+}
+.tag-primary { background: var(--c-primary-bg); color: var(--c-primary); }
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.tag-info { background: var(--c-info-bg); color: var(--c-info); }
+.truncated { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pagination {
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;
+  border-top: 1px solid var(--el-border-color-lighter); font-size: 13px; color: var(--el-text-color-secondary);
+}
+.pagination-btns { display: flex; gap: 4px; }
+.pagination-btns button {
+  width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color); color: var(--el-text-color-regular); cursor: pointer; font-size: 13px;
+  transition: all .2s;
+}
+.pagination-btns button.active { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+.pagination-btns button:hover:not(.active) { border-color: var(--c-primary); color: var(--c-primary); }
+</style>
+</head>
+<body>
+<div class="page-container">
+  <div class="breadcrumb"><a href="#">LegacyGraph</a><span>/</span>证据搜索</div>
+
+  <div class="page-header">
+    <h1>证据搜索</h1>
+    <button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">&#9790;</button>
+  </div>
+
+  <div class="search-form">
+    <input type="text" placeholder="搜索关键词..." />
+    <select><option>全部类型</option><option>代码片段</option><option>配置文件</option><option>日志记录</option><option>文档引用</option></select>
+    <select><option>全部置信度</option><option>高 (>=80%)</option><option>中 (50%-79%)</option><option>低 (<50%)</option></select>
+    <select><option>全部来源</option><option>代码仓库</option><option>数据库</option><option>文档系统</option><option>运行日志</option></select>
+    <button class="btn-search">搜索</button>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>证据ID</th><th>证据内容</th><th>关联事实</th><th>类型</th>
+            <th>置信度</th><th>来源</th><th>采集时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">E-101</td>
+            <td class="truncated" title="@EnableWebSecurity 注解出现在 SecurityConfig.java 第12行">@EnableWebSecurity 注解出现在 SecurityConfig.java 第12行</td>
+            <td style="font-family:var(--font-mono)">F-001</td>
+            <td><span class="tag tag-primary">代码片段</span></td>
+            <td style="font-family:var(--font-mono);font-size:12px">96%</td>
+            <td><span class="tag tag-success">代码仓库</span></td>
+            <td>2024-03-15 10:30</td>
+          </tr>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">E-102</td>
+            <td class="truncated" title="application.yml 中 spring.redis.cluster.nodes 配置了6个节点地址">application.yml 中 spring.redis.cluster.nodes 配置了6个节点地址</td>
+            <td style="font-family:var(--font-mono)">F-003</td>
+            <td><span class="tag tag-warning">配置文件</span></td>
+            <td style="font-family:var(--font-mono);font-size:12px">91%</td>
+            <td><span class="tag tag-primary">代码仓库</span></td>
+            <td>2024-03-14 09:15</td>
+          </tr>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">E-103</td>
+            <td class="truncated" title="PRD文档 v2.3 第45节描述了订单取消的30分钟超时策略">PRD文档 v2.3 第45节描述了订单取消的30分钟超时策略</td>
+            <td style="font-family:var(--font-mono)">F-002</td>
+            <td><span class="tag tag-info">文档引用</span></td>
+            <td style="font-family:var(--font-mono);font-size:12px">68%</td>
+            <td><span class="tag tag-warning">文档系统</span></td>
+            <td>2024-03-13 14:20</td>
+          </tr>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">E-104</td>
+            <td class="truncated" title="Nginx access.log 中检测到 /api/upload 接口平均响应时间2.1秒">Nginx access.log 中检测到 /api/upload 接口平均响应时间2.1秒</td>
+            <td style="font-family:var(--font-mono)">F-004</td>
+            <td><span class="tag tag-danger">日志记录</span></td>
+            <td style="font-family:var(--font-mono);font-size:12px">55%</td>
+            <td><span class="tag tag-info">运行日志</span></td>
+            <td>2024-03-12 18:40</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span>共 4 条记录</span>
+      <div class="pagination-btns">
+        <button class="active">1</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

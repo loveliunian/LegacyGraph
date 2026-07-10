@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据字典 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+.page-header {
+  margin-bottom: var(--space-6);
+}
+.page-header h1 {
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+.search-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: var(--space-5);
+  background: var(--el-bg-color);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color-lighter);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+.search-form .field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.search-form .field label {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  white-space: nowrap;
+}
+.search-form input,
+.search-form select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-form input { width: 200px; }
+.search-form select { width: 140px; padding-right: 28px; }
+.search-form input:focus,
+.search-form select:focus { border-color: var(--c-primary); }
+.search-form input::placeholder { color: var(--el-text-color-placeholder); }
+.search-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1.4;
+}
+.btn-primary { background: var(--c-primary); color: #fff; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-default { background: var(--el-bg-color); color: var(--el-text-color-regular); border: 1px solid var(--el-border-color); }
+.btn-default:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn-text { background: none; color: var(--c-primary); padding: 4px 8px; font-size: 13px; }
+.btn-text:hover { opacity: 0.8; }
+.btn-text.btn-text-danger { color: var(--c-danger); }
+.table-wrap {
+  background: var(--el-bg-color);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color-lighter);
+  overflow: hidden;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+thead th {
+  text-align: left;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  white-space: nowrap;
+}
+tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--el-fill-color-light); }
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tag-primary { background: var(--c-primary-bg); color: var(--c-primary); }
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-info { background: var(--c-info-bg); color: var(--c-info); }
+.tag-warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.tag-danger { background: var(--c-danger-bg); color: var(--c-danger); }
+.mono { font-family: var(--font-mono); font-size: 13px; color: var(--el-text-color-secondary); }
+.action-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.pagination .info {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.page-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.page-btn:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.page-btn.active { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+.page-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Expandable row */
+.expand-toggle {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--c-primary);
+  font-size: 13px;
+  user-select: none;
+}
+.expand-toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s;
+}
+.expand-toggle.open svg {
+  transform: rotate(90deg);
+}
+.sub-row-container {
+  display: none;
+}
+.sub-row-container.show {
+  display: table-row-group;
+}
+.sub-row td {
+  padding: 0 16px 12px 56px !important;
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.sub-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.sub-table thead th {
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.sub-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+.sub-table tbody tr:last-child td { border-bottom: none; }
+
+/* Theme toggle */
+.dark-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: all 0.2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.dark-toggle svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">
+  <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+  <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="page-container">
+  <div class="page-header">
+    <h1>数据字典</h1>
+  </div>
+
+  <div class="search-form">
+    <div class="field">
+      <label>字典名称</label>
+      <input type="text" placeholder="请输入字典名称" />
+    </div>
+    <div class="field">
+      <label>字典编码</label>
+      <input type="text" placeholder="请输入字典编码" />
+    </div>
+    <div class="search-actions">
+      <button class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        搜索
+      </button>
+      <button class="btn btn-default">重置</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px;"></th>
+          <th>字典编码</th>
+          <th>字典名称</th>
+          <th>状态</th>
+          <th>描述</th>
+          <th>字典项数</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Row 1: sys_user_role -->
+        <tr data-dict="sys_user_role">
+          <td>
+            <span class="expand-toggle" onclick="toggleDict(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </td>
+          <td><span class="mono">sys_user_role</span></td>
+          <td>用户角色</td>
+          <td><span class="tag tag-success">启用</span></td>
+          <td style="color:var(--el-text-color-secondary)">系统中用户角色分类</td>
+          <td>3</td>
+          <td>
+            <div class="action-group">
+              <button class="btn btn-text">查看字典项</button>
+              <button class="btn btn-text">编辑</button>
+              <button class="btn btn-text btn-text-danger">删除</button>
+            </div>
+          </td>
+        </tr>
+        <tr class="sub-row-container" id="sub-sys_user_role">
+          <td></td>
+          <td colspan="6">
+            <table class="sub-table">
+              <thead>
+                <tr>
+                  <th>字典项标签</th>
+                  <th>字典项值</th>
+                  <th>排序</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>管理员</td>
+                  <td><span class="mono">admin</span></td>
+                  <td>1</td>
+                </tr>
+                <tr>
+                  <td>开发者</td>
+                  <td><span class="mono">developer</span></td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>观察者</td>
+                  <td><span class="mono">observer</span></td>
+                  <td>3</td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Row 2: scan_type -->
+        <tr data-dict="scan_type">
+          <td>
+            <span class="expand-toggle" onclick="toggleDict(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </td>
+          <td><span class="mono">scan_type</span></td>
+          <td>扫描类型</td>
+          <td><span class="tag tag-success">启用</span></td>
+          <td style="color:var(--el-text-color-secondary)">系统支持的扫描任务类型</td>
+          <td>4</td>
+          <td>
+            <div class="action-group">
+              <button class="btn btn-text">查看字典项</button>
+              <button class="btn btn-text">编辑</button>
+              <button class="btn btn-text btn-text-danger">删除</button>
+            </div>
+          </td>
+        </tr>
+        <tr class="sub-row-container" id="sub-scan_type">
+          <td></td>
+          <td colspan="6">
+            <table class="sub-table">
+              <thead>
+                <tr>
+                  <th>字典项标签</th>
+                  <th>字典项值</th>
+                  <th>排序</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>全量扫描</td>
+                  <td><span class="mono">full</span></td>
+                  <td>1</td>
+                </tr>
+                <tr>
+                  <td>增量扫描</td>
+                  <td><span class="mono">incremental</span></td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>快速扫描</td>
+                  <td><span class="mono">quick</span></td>
+                  <td>3</td>
+                </tr>
+                <tr>
+                  <td>自定义扫描</td>
+                  <td><span class="mono">custom</span></td>
+                  <td>4</td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Row 3: node_type -->
+        <tr data-dict="node_type">
+          <td>
+            <span class="expand-toggle" onclick="toggleDict(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </td>
+          <td><span class="mono">node_type</span></td>
+          <td>节点类型</td>
+          <td><span class="tag tag-success">启用</span></td>
+          <td style="color:var(--el-text-color-secondary)">图谱节点类型分类</td>
+          <td>4</td>
+          <td>
+            <div class="action-group">
+              <button class="btn btn-text">查看字典项</button>
+              <button class="btn btn-text">编辑</button>
+              <button class="btn btn-text btn-text-danger">删除</button>
+            </div>
+          </td>
+        </tr>
+        <tr class="sub-row-container" id="sub-node_type">
+          <td></td>
+          <td colspan="6">
+            <table class="sub-table">
+              <thead>
+                <tr>
+                  <th>字典项标签</th>
+                  <th>字典项值</th>
+                  <th>排序</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>服务节点</td>
+                  <td><span class="mono">service</span></td>
+                  <td>1</td>
+                </tr>
+                <tr>
+                  <td>数据库节点</td>
+                  <td><span class="mono">database</span></td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>API 节点</td>
+                  <td><span class="mono">api</span></td>
+                  <td>3</td>
+                </tr>
+                <tr>
+                  <td>消息队列节点</td>
+                  <td><span class="mono">mq</span></td>
+                  <td>4</td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Row 4: evidence_status -->
+        <tr data-dict="evidence_status">
+          <td>
+            <span class="expand-toggle" onclick="toggleDict(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </td>
+          <td><span class="mono">evidence_status</span></td>
+          <td>证据状态</td>
+          <td><span class="tag tag-danger">禁用</span></td>
+          <td style="color:var(--el-text-color-secondary)">证据审核与验证状态</td>
+          <td>3</td>
+          <td>
+            <div class="action-group">
+              <button class="btn btn-text">查看字典项</button>
+              <button class="btn btn-text">编辑</button>
+              <button class="btn btn-text btn-text-danger">删除</button>
+            </div>
+          </td>
+        </tr>
+        <tr class="sub-row-container" id="sub-evidence_status">
+          <td></td>
+          <td colspan="6">
+            <table class="sub-table">
+              <thead>
+                <tr>
+                  <th>字典项标签</th>
+                  <th>字典项值</th>
+                  <th>排序</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>待验证</td>
+                  <td><span class="mono">pending</span></td>
+                  <td>1</td>
+                </tr>
+                <tr>
+                  <td>已确认</td>
+                  <td><span class="mono">confirmed</span></td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>已驳回</td>
+                  <td><span class="mono">rejected</span></td>
+                  <td>3</td>
+                </tr>
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="pagination">
+      <span class="info">共 4 条记录</span>
+      <button class="page-btn disabled">&lt;</button>
+      <button class="page-btn active">1</button>
+      <button class="page-btn disabled">&gt;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const sun = document.getElementById('icon-sun');
+  const moon = document.getElementById('icon-moon');
+  const observer = new MutationObserver(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    sun.style.display = isDark ? 'none' : 'block';
+    moon.style.display = isDark ? 'block' : 'none';
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+  function toggleDict(el) {
+    const row = el.closest('tr');
+    const dictName = row.getAttribute('data-dict');
+    const subRow = document.getElementById('sub-' + dictName);
+    el.classList.toggle('open');
+    subRow.classList.toggle('show');
+  }
+</script>
+</body>
+</html>

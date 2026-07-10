@@ -38,7 +38,6 @@ public class FrontendGraphBuilder {
     /**
      * 构建前端页面图谱（带源文件路径）
      */
-    @Transactional
     public void buildFrontendGraph(String projectId, String versionId, List<FrontendPageFact> pages, String sourcePath) {
         buildFrontendGraph(projectId, versionId, pages);
     }
@@ -46,7 +45,6 @@ public class FrontendGraphBuilder {
     /**
      * 构建前端页面图谱
      */
-    @Transactional
     public void buildFrontendGraph(String projectId, String versionId, List<FrontendPageFact> pages) {
         for (FrontendPageFact page : pages) {
             buildPageNode(projectId, versionId, page, null);
@@ -121,7 +119,7 @@ public class FrontendGraphBuilder {
                 GraphNode permNode = findOrCreateNode(
                         projectId, versionId,
                         NodeType.Permission.name(),
-                        permKey,
+                        permKey.toLowerCase(),
                         permKey,
                         permKey,
                         null,
@@ -206,7 +204,7 @@ public class FrontendGraphBuilder {
                     GraphNode permNode = findOrCreateNode(
                             projectId, versionId,
                             NodeType.Permission.name(),
-                            permKey,
+                            permKey.toLowerCase(),
                             permKey,
                             permKey,
                             null,
@@ -254,7 +252,6 @@ public class FrontendGraphBuilder {
      * 构建前端API与后端API的关联图谱
      * 处理独立抽取出来的前端API调用，匹配后端ApiEndpoint并创建调用关系
      */
-    @Transactional
     public void buildFrontendApiGraph(String projectId, String versionId,
             java.util.List<io.github.legacygraph.model.FrontendPageFact.FrontendApiCall> apiCalls) {
         log.info("Building frontend API graph: projectId={}, versionId={}, apiCalls={}",

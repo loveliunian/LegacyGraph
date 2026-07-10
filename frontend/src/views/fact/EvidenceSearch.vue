@@ -323,7 +323,7 @@ onMounted(() => {
   border: 1px solid #e4e7ed;
   border-radius: 4px;
   padding: 12px;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;

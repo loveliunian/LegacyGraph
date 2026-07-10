@@ -36,6 +36,7 @@ import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
 import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 import io.github.legacygraph.service.scan.DatabaseMetadataScanService;
+import io.github.legacygraph.service.scan.FileChangeDetector;
 import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import io.github.legacygraph.service.systemoverview.SystemOverviewIngestService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -97,6 +98,10 @@ public class ProjectScanner {
     private AssetDiscoveryService assetDiscoveryService;
     private SystemOverviewDocumentService systemOverviewDocumentService;
     private SystemOverviewIngestService systemOverviewIngestService;
+    /** 项目约定入库服务（可选）：扫描完成后把技术栈/分层/命名约定向量化为 PROJECT_CONVENTION */
+    private io.github.legacygraph.service.scan.ProjectConventionIngestService projectConventionIngestService;
+    /** 可复用组件标记服务（可选）：扫描完成后标记被多次继承的基类为 reusable */
+    private io.github.legacygraph.service.scan.ReusableComponentMarker reusableComponentMarker;
     /** 成员调用二次扫描解析器（可选）：ADAPTER_SCAN 后对全局图谱解析 Service→Mapper 等 CALLS 边 */
     private io.github.legacygraph.builder.JavaMemberCallResolver javaMemberCallResolver;
 
@@ -110,6 +115,18 @@ public class ProjectScanner {
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.github.legacygraph.service.graph.GraphCacheInvalidator graphCacheInvalidator;
+
+    /** 增量扫描开关（基于文件 SHA-256 哈希），默认开启 */
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.scan.incremental.enabled:true}")
+    private boolean incrementalScanEnabled;
+
+    /** 文件变更检测器（可选）：ADAPTER_SCAN 前检测变更文件，实现基于内容哈希的增量扫描 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private FileChangeDetector fileChangeDetector;
+
+    /** Blast Radius 分析器（可选）：增量扫描检测到变更文件后，分析影响范围并标记受影响节点 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.scan.BlastRadiusAnalyzer blastRadiusAnalyzer;
 
     /** 扫描后 AI 编排默认开关（legacy-graph.ai.*），scanScope 未显式指定时生效 */
     @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.enable-default:true}")
@@ -253,6 +270,18 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSystemOverviewIngestService(SystemOverviewIngestService systemOverviewIngestService) {
         this.systemOverviewIngestService = systemOverviewIngestService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setProjectConventionIngestService(
+            io.github.legacygraph.service.scan.ProjectConventionIngestService projectConventionIngestService) {
+        this.projectConventionIngestService = projectConventionIngestService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setReusableComponentMarker(
+            io.github.legacygraph.service.scan.ReusableComponentMarker reusableComponentMarker) {
+        this.reusableComponentMarker = reusableComponentMarker;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -492,12 +521,53 @@ public class ProjectScanner {
             // L8修复：移除重复的 isCancelled 检查（上一行已检查）
             boolean shouldScanCode = scopeScanTypes == null || scopeScanTypes.isEmpty()
                     || scopeScanTypes.contains("CODE_SCAN");
+
+            // === 增量扫描：基于文件 SHA-256 哈希检测变更文件 ===
+            // 首次扫描（无历史快照）→ 全量；有快照 → 仅对变更文件执行 ExtractionAdapter
+            Set<String> incrementalChangedPaths = null;
+            Map<String, String> incrementalSnapshotContents = null;
+            if (incrementalScanEnabled && fileChangeDetector != null
+                    && baseDir != null && !baseDir.isBlank() && shouldScanCode) {
+                try {
+                    Map<String, String> pathToContent = collectAdapterCandidateContents(baseDir);
+                    if (!pathToContent.isEmpty()) {
+                        Set<String> priorSnapshots = fileChangeDetector.getUnchangedFiles(projectId);
+                        if (priorSnapshots.isEmpty()) {
+                            // 首次扫描：无历史快照，全量扫描；扫描完成后统一记录快照
+                            log.info("Incremental scan: first scan (no prior snapshots), full scan: {} candidate files (projectId={}, versionId={})",
+                                    pathToContent.size(), projectId, versionId);
+                        } else {
+                            // 增量扫描：仅处理内容变更的文件
+                            List<String> changed = fileChangeDetector.detectChangedFiles(projectId, pathToContent);
+                            incrementalChangedPaths = new HashSet<>(changed);
+                            log.info("Incremental scan: {} of {} candidate files changed (projectId={}, versionId={})",
+                                    changed.size(), pathToContent.size(), projectId, versionId);
+                            // Blast Radius 分析：基于上次扫描的图谱，反向遍历找受变更影响的节点并标记
+                            if (blastRadiusAnalyzer != null && !changed.isEmpty()) {
+                                try {
+                                    var blastResult = blastRadiusAnalyzer.analyzeBlastRadius(projectId, changed);
+                                    blastRadiusAnalyzer.markAffectedNodes(projectId, blastResult);
+                                    log.info("Blast radius analysis: {} affected nodes marked (projectId={}, versionId={})",
+                                            blastResult.affectedNodeIds().size(), projectId, versionId);
+                                } catch (Exception e) {
+                                    log.warn("Blast radius analysis failed, continuing scan: {}", e.getMessage());
+                                }
+                            }
+                        }
+                        // 缓存待记录内容，扫描完成后统一 upsert 快照
+                        incrementalSnapshotContents = pathToContent;
+                    }
+                } catch (Exception e) {
+                    log.warn("Incremental change detection failed, fallback to full scan: {}", e.getMessage());
+                }
+            }
+
             int adapterCount = 0;
             if (shouldScanCode || shouldScanDocs) {
                 log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
                         projectId, versionId);
                 ScanTask adapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
-                adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan);
+                adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan, incrementalChangedPaths);
                 completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
                 log.info("Adapter registry scan processed {} assets", adapterCount);
 
@@ -536,6 +606,15 @@ public class ProjectScanner {
                         projectId, versionId);
                 ScanTask skippedAdapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
                 completeTask(skippedAdapterTask, "未选择代码/文档扫描类型，已跳过", null, "SKIPPED");
+            }
+
+            // === 增量扫描：扫描完成后更新所有候选文件的哈希快照（供下次增量比对） ===
+            if (incrementalSnapshotContents != null && fileChangeDetector != null) {
+                try {
+                    fileChangeDetector.recordSnapshots(projectId, incrementalSnapshotContents);
+                } catch (Exception e) {
+                    log.warn("Failed to record file snapshots after scan: {}", e.getMessage());
+                }
             }
 
             // 3b. 成员调用二次扫描：所有 Java 文件抽取完成后，对全局图谱解析 Service→Mapper 等 CALLS 边。
@@ -953,6 +1032,9 @@ public class ProjectScanner {
     }
 
     void generateSystemOverviewDocument(String projectId, String versionId) {
+        // 项目约定向量化 + 可复用组件标记（与系统总览文档并列，失败不阻塞）
+        runPostScanConventionIngest(projectId, versionId);
+
         if (systemOverviewDocumentService == null) {
             log.debug("SystemOverviewDocumentService not available, skip markdown generation: versionId={}", versionId);
             return;
@@ -972,6 +1054,35 @@ public class ProjectScanner {
         } catch (Exception e) {
             log.warn("Failed to generate system overview markdown after scan: versionId={}, error={}",
                     versionId, e.getMessage());
+        }
+    }
+
+    /**
+     * 扫描后置增强：项目约定向量化（PROJECT_CONVENTION）+ 可复用组件标记（reusable）。
+     *
+     * <p>由 {@link #generateSystemOverviewDocument} 在扫描完成时调用（覆盖 AI 未启用与 AI 启用两条路径），
+     * 失败只 warn，不阻塞扫描主流程。两个子任务独立 try/catch，互不影响。
+     *
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     */
+    public void runPostScanConventionIngest(String projectId, String versionId) {
+        // 1. 项目约定向量化（技术栈 + 分层规范 + 命名约定）
+        if (projectConventionIngestService != null) {
+            try {
+                projectConventionIngestService.ingest(projectId, versionId);
+            } catch (Exception e) {
+                log.warn("Post-scan convention ingest failed: versionId={}, error={}", versionId, e.getMessage());
+            }
+        }
+        // 2. 可复用组件标记（统计 EXTENDS 入度，标记 reusable=true）
+        if (reusableComponentMarker != null) {
+            try {
+                int marked = reusableComponentMarker.mark(projectId, versionId);
+                log.info("Post-scan reusable component marking: versionId={}, marked={}", versionId, marked);
+            } catch (Exception e) {
+                log.warn("Post-scan reusable component marking failed: versionId={}, error={}", versionId, e.getMessage());
+            }
         }
     }
 
@@ -1659,12 +1770,13 @@ public class ProjectScanner {
 
     private int scanAssetsWithAdapters(String projectId, String versionId,
                                        String baseDir, String backendDir, String frontendDir, ScanTask task) {
-        return scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, task, null);
+        return scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, task, null, null);
     }
 
     private int scanAssetsWithAdapters(String projectId, String versionId,
                                        String baseDir, String backendDir, String frontendDir,
-                                       ScanTask task, ResolvedScanPlan resolvedPlan) {
+                                       ScanTask task, ResolvedScanPlan resolvedPlan,
+                                       Set<String> changedPaths) {
         if (baseDir == null || extractionAdapterRegistry == null) {
             return 0;
         }
@@ -1699,7 +1811,7 @@ public class ProjectScanner {
             ResolvedScanPlan effectivePlan = resolvedPlan != null
                     ? resolvedPlan
                     : singleRepoPlan(projectId, versionId, baseDir, backendDir, frontendDir);
-            return scanDiscoveredAssetsWithAdapters(projectId, versionId, context, effectivePlan, task);
+            return scanDiscoveredAssetsWithAdapters(projectId, versionId, context, effectivePlan, task, changedPaths);
         }
 
         try {
@@ -1717,6 +1829,17 @@ public class ProjectScanner {
                         })
                         .filter(this::isAdapterCandidate)
                         .collect(Collectors.toList());
+            }
+
+            // 增量扫描：仅保留内容变更的文件，跳过未变更文件以避免重复抽取
+            if (changedPaths != null && !changedPaths.isEmpty()) {
+                final Path rootForRel = root;
+                int beforeFilter = files.size();
+                files = files.stream()
+                        .filter(f -> changedPaths.contains(rootForRel.relativize(f).toString()))
+                        .collect(Collectors.toList());
+                log.info("Incremental adapter scan: {} of {} candidate files changed (projectId={}, versionId={})",
+                        files.size(), beforeFilter, projectId, versionId);
             }
 
             int total = files.size();
@@ -1788,7 +1911,8 @@ public class ProjectScanner {
     private int scanDiscoveredAssetsWithAdapters(String projectId, String versionId,
                                                  ScanContext context,
                                                  ResolvedScanPlan plan,
-                                                 ScanTask task) {
+                                                 ScanTask task,
+                                                 Set<String> changedPaths) {
         AssetDiscoveryService.DiscoveryResult discoveryResult = assetDiscoveryService.discoverAssets(plan);
         List<SourceAsset> assets = discoveryResult.getAssets();
         int discoveredCount = discoveryResult.getDiscoveredCount();
@@ -1799,22 +1923,32 @@ public class ProjectScanner {
                     discoveredCount, assets.size(), plan.getMaxFiles());
         }
 
+        // 增量扫描：仅对变更文件执行抽取；快照与删除检测仍使用完整 assets 列表
+        List<SourceAsset> assetsToExtract = assets;
+        if (changedPaths != null && !changedPaths.isEmpty()) {
+            assetsToExtract = assets.stream()
+                    .filter(a -> a.getRelativePath() != null && changedPaths.contains(a.getRelativePath()))
+                    .collect(Collectors.toList());
+            log.info("Incremental adapter scan: {} of {} discovered assets changed (projectId={}, versionId={})",
+                    assetsToExtract.size(), assets.size(), projectId, versionId);
+        }
+
         // 使用并发 Adapter 执行器（替换原顺序 for 循环）
         // 若 adapterExecutionService 为 null（测试环境），回退到直调 adapter registry
         int processed;
         if (adapterExecutionService != null) {
             processed = adapterExecutionService.executeDiscoveredAssets(
-                    context, assets, discoveredCount, task,
+                    context, assetsToExtract, discoveredCount, task,
                     () -> isCancelled(versionId),
                     plan.isIncremental(),
                     assetDiscoveryService);
         } else {
             // fallback: 顺序执行（测试兼容）
             processed = 0;
-            int total = assets.size();
+            int total = assetsToExtract.size();
             int visited = 0;
             logTaskProgress(task, 0, total, "adapter candidate files");
-            for (SourceAsset asset : assets) {
+            for (SourceAsset asset : assetsToExtract) {
                 if (isCancelled(versionId)) break;
                 visited++;
                 try {
@@ -1901,6 +2035,67 @@ public class ProjectScanner {
                 || name.endsWith(".md")
                 || name.endsWith(".pdf")
                 || name.endsWith(".docx")
+                || name.endsWith(".txt")
+                || name.endsWith(".rst")
+                || name.endsWith(".adoc")
+                || name.endsWith(".html")
+                || name.endsWith(".htm");
+    }
+
+    /**
+     * 收集适配器候选文本文件内容，用于增量哈希比对。
+     * <p>
+     * 仅读取文本类文件（.java/.xml/.vue/.ts/.js/.md/.txt/.html 等）；
+     * 二进制文件（.pdf/.docx）跳过（始终视为变更，保证安全）。
+     * 文件路径使用相对路径（相对于项目根目录 baseDir）。
+     *
+     * @param baseDir 项目根目录
+     * @return 文件相对路径 → 文本内容
+     */
+    private Map<String, String> collectAdapterCandidateContents(String baseDir) {
+        Map<String, String> pathToContent = new HashMap<>();
+        Path root = Paths.get(baseDir);
+        if (!Files.exists(root)) {
+            return pathToContent;
+        }
+        try (java.util.stream.Stream<Path> stream = Files.walk(root, 10)) {
+            List<Path> files = stream
+                    .filter(Files::isRegularFile)
+                    .filter(p -> {
+                        String pathStr = p.toString();
+                        return !pathStr.contains("/node_modules/") && !pathStr.contains("/.git/")
+                                && !pathStr.contains("/target/") && !pathStr.contains("/dist/")
+                                && !pathStr.contains("/build/") && !pathStr.contains("/__pycache__/")
+                                && !pathStr.contains("/.idea/") && !pathStr.contains("/.vscode/");
+                    })
+                    .filter(this::isTextAdapterCandidate)
+                    .collect(Collectors.toList());
+            for (Path file : files) {
+                try {
+                    String relativePath = root.relativize(file).toString();
+                    String content = Files.readString(file);
+                    pathToContent.put(relativePath, content);
+                } catch (IOException e) {
+                    log.debug("Skip reading file for hashing: {}", file);
+                }
+            }
+        } catch (IOException e) {
+            log.warn("collectAdapterCandidateContents failed for {}: {}", baseDir, e.getMessage());
+        }
+        return pathToContent;
+    }
+
+    /** 仅文本类适配器候选文件（二进制如 .pdf/.docx 不参与哈希，始终视为变更） */
+    private boolean isTextAdapterCandidate(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".java")
+                || name.endsWith(".xml")
+                || name.endsWith(".vue")
+                || name.endsWith(".jsx")
+                || name.endsWith(".tsx")
+                || name.endsWith(".ts")
+                || name.endsWith(".js")
+                || name.endsWith(".md")
                 || name.endsWith(".txt")
                 || name.endsWith(".rst")
                 || name.endsWith(".adoc")

@@ -21,6 +21,8 @@ public class ApiFact {
     private ApiParameter requestBody;
     private String responseType;
     private List<String> annotations;
+    /** 接口摘要（Javadoc 第一行或方法描述） */
+    private String summary;
     private List<String> permissions;
     private String sourcePath;
     private Integer startLine;

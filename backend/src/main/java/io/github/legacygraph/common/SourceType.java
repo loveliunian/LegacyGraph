@@ -19,7 +19,9 @@ public enum SourceType {
     TEST_EXECUTION("测试执行"),
     RUNTIME_TRACE("运行时链路"),
     MANUAL_CONFIRM("人工确认"),
-    MANUAL_FACT("手动事实");
+    MANUAL_FACT("手动事实"),
+    /** 传递闭包/规则补全：由 EdgeCompletionService 推导出的非确定性边，默认 PENDING_CONFIRM */
+    TRANSITIVE_CLOSURE("传递闭包补全");
 
     private final String description;
 

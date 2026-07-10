@@ -637,7 +637,7 @@ onMounted(async () => {
 }
 
 .markdown-body :deep(pre code) {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;
   color: #d4d4d4;
@@ -647,7 +647,7 @@ onMounted(async () => {
 
 /* 行内代码 */
 .markdown-body :deep(code) {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   padding: 2px 6px;
   border-radius: 4px;

@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LegacyGraph Design System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-lighter: #B1B3F8; --c-primary-lightest: #D0D1FE; --c-primary-bg: #EFF0FE; --c-primary-dark: #4F52C1;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --gradient-brand: linear-gradient(135deg, #6366F1, #8B5CF6, #A78BFA);
+  --gradient-icon-code: linear-gradient(135deg, #6366F1, #818CF8);
+  --gradient-icon-db: linear-gradient(135deg, #14B8A6, #2DD4BF);
+  --gradient-icon-doc: linear-gradient(135deg, #F59E0B, #FBBF24);
+  --gradient-icon-graph: linear-gradient(135deg, #8B5CF6, #A78BFA);
+  --el-color-primary: #6366F1;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+}
+
+html.dark {
+  --c-primary: #818CF8; --c-primary-light: #5A62AE; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --gradient-brand: linear-gradient(135deg, #818CF8, #A78BFA, #C4B5FD);
+  --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-body);
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+  transition: background 0.3s, color 0.3s;
+}
+
+/* Dark mode toggle */
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: all 0.3s;
+}
+.theme-toggle:hover {
+  border-color: var(--c-primary);
+  box-shadow: 0 2px 12px rgba(99,102,241,0.2);
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Section */
+.ds-section {
+  margin-bottom: var(--space-10);
+  padding-bottom: var(--space-10);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.ds-section:last-child {
+  border-bottom: none;
+}
+
+.section-label {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-primary);
+  margin-bottom: var(--space-2);
+}
+
+.section-title {
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-6);
+}
+
+/* Page Header */
+.page-header {
+  text-align: center;
+  padding: 80px 0 60px;
+}
+.page-header h1 {
+  font-family: var(--font-display);
+  font-size: 48px;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-3);
+}
+.page-header .subtitle {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  font-weight: 400;
+}
+
+/* Color Swatches */
+.swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.swatch-group {
+  margin-bottom: var(--space-6);
+}
+.swatch-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-3);
+}
+.swatch-row {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 80px;
+  text-align: center;
+}
+.swatch-color {
+  width: 80px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color-lighter);
+  margin-bottom: var(--space-1);
+}
+.swatch-hex {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.3;
+}
+.swatch-name {
+  font-size: 10px;
+  color: var(--el-text-color-placeholder);
+  line-height: 1.3;
+}
+.gradient-swatch .swatch-color {
+  height: 48px;
+}
+
+/* Typography */
+.type-sample {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  background: var(--el-bg-color);
+}
+.type-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  margin-top: var(--space-2);
+}
+
+/* Spacing */
+.spacing-demo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.spacing-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.spacing-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  width: 120px;
+  flex-shrink: 0;
+}
+.spacing-bar {
+  height: 24px;
+  background: var(--gradient-icon-code);
+  border-radius: var(--radius-sm);
+  opacity: 0.8;
+}
+.spacing-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  width: 40px;
+}
+
+/* Radius */
+.radius-grid {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.radius-item {
+  text-align: center;
+  width: 100px;
+}
+.radius-box {
+  width: 80px;
+  height: 64px;
+  margin: 0 auto var(--space-2);
+  background: var(--gradient-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.radius-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+.radius-value {
+  font-size: 10px;
+  color: var(--el-text-color-placeholder);
+}
+
+/* Component Patterns */
+.component-demo {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+.component-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.component-variant-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-primary);
+  margin-bottom: var(--space-2);
+  margin-top: var(--space-4);
+}
+.component-variant-label:first-of-type {
+  margin-top: 0;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--c-primary);
+  color: #fff;
+}
+.btn-primary:hover { opacity: 0.9; }
+.btn-default {
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  border: 1px solid var(--el-border-color);
+}
+.btn-default:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+.btn-text {
+  background: transparent;
+  border: none;
+  color: var(--c-primary);
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.btn-text:hover { opacity: 0.7; }
+
+/* Breadcrumb */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: var(--space-3);
+}
+.breadcrumb span { color: var(--el-text-color-placeholder); }
+.breadcrumb a {
+  color: var(--el-text-color-secondary);
+  text-decoration: none;
+}
+.breadcrumb a:hover { color: var(--c-primary); }
+
+/* Page Header component */
+.comp-pageheader h2 {
+  font-family: var(--font-body);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-1);
+}
+.comp-pageheader .desc {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: var(--space-4);
+}
+.comp-pageheader .actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.comp-pageheader .title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* SearchForm */
+.search-form {
+  background: var(--el-fill-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+.search-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 160px;
+}
+.search-field label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--el-text-color-secondary);
+}
+.search-field input,
+.search-field select {
+  height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-md);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-field input:focus,
+.search-field select:focus {
+  border-color: var(--c-primary);
+}
+.search-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* StatCard */
+.stat-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+.stat-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  transition: box-shadow 0.2s;
+}
+.stat-card:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stat-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.stat-info {}
+.stat-number {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  line-height: 1.2;
+}
+.stat-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+/* StatusTag */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+.tag-success { color: #0D9488; background: #E8F8F6; }
+.tag-warning { color: #D97706; background: #FCF5EA; }
+.tag-danger { color: #DC2626; background: #FCE1E1; }
+.tag-primary { color: var(--c-primary); background: var(--c-primary-bg); }
+.tag-info { color: var(--c-info); background: var(--c-info-bg); }
+
+html.dark .tag-success { color: #2DD4BF; background: rgba(45,212,191,0.15); }
+html.dark .tag-warning { color: #FBBF24; background: rgba(251,191,36,0.15); }
+html.dark .tag-danger { color: #F87171; background: rgba(248,113,113,0.15); }
+html.dark .tag-primary { color: var(--c-primary); background: var(--c-primary-bg); }
+html.dark .tag-info { color: var(--c-info); background: rgba(156,163,175,0.15); }
+
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* EmptyState */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+.empty-state svg {
+  width: 64px;
+  height: 64px;
+  fill: none;
+  stroke: var(--el-border-color);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  margin-bottom: var(--space-4);
+}
+.empty-state .empty-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-1);
+}
+.empty-state .empty-desc {
+  font-size: 13px;
+  color: var(--el-text-color-placeholder);
+}
+
+/* DataTable */
+.data-table-wrapper {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table thead th {
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  white-space: nowrap;
+}
+.data-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  color: var(--el-text-color-regular);
+}
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.data-table tbody tr:hover {
+  background: var(--el-fill-color-light);
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-4) 0;
+}
+.pagination-btn {
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0 4px;
+  font-family: var(--font-body);
+}
+.pagination-btn:hover {
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+}
+.pagination-btn.active {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
+}
+.pagination-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pagination-btn.disabled:hover {
+  border-color: var(--el-border-color);
+  color: var(--el-text-color-regular);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stat-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .page-header h1 {
+    font-size: 36px;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- Dark Mode Toggle -->
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换深色模式">
+  <svg id="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+  <svg id="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<!-- 1. Page Title -->
+<div class="container">
+  <div class="page-header">
+    <h1>LegacyGraph Design System</h1>
+    <p class="subtitle">Design Tokens &amp; Component Patterns v1.0</p>
+  </div>
+
+  <!-- 2. Color Palette -->
+  <div class="ds-section">
+    <p class="section-label">Foundation</p>
+    <h2 class="section-title">Color Palette</h2>
+
+    <!-- Primary Scale -->
+    <div class="swatch-group">
+      <p class="swatch-group-title">Primary / 主色</p>
+      <div class="swatch-row">
+        <div class="swatch">
+          <div class="swatch-color" style="background:#3730A3"></div>
+          <div class="swatch-hex">#3730A3</div>
+          <div class="swatch-name">dark</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-primary-dark)"></div>
+          <div class="swatch-hex">var(--c-primary-dark)</div>
+          <div class="swatch-name">primary-dark</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-primary)"></div>
+          <div class="swatch-hex">var(--c-primary)</div>
+          <div class="swatch-name">primary</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-primary-light)"></div>
+          <div class="swatch-hex">var(--c-primary-light)</div>
+          <div class="swatch-name">primary-light</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-primary-lighter)"></div>
+          <div class="swatch-hex">var(--c-primary-lighter)</div>
+          <div class="swatch-name">primary-lighter</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-primary-lightest)"></div>
+          <div class="swatch-hex">var(--c-primary-lightest)</div>
+          <div class="swatch-name">primary-lightest</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-primary-bg)"></div>
+          <div class="swatch-hex">var(--c-primary-bg)</div>
+          <div class="swatch-name">primary-bg</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Semantic -->
+    <div class="swatch-group">
+      <p class="swatch-group-title">Semantic / 语义色</p>
+      <div class="swatch-row">
+        <!-- Success -->
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-success)"></div>
+          <div class="swatch-hex">var(--c-success)</div>
+          <div class="swatch-name">Success</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-success-bg)"></div>
+          <div class="swatch-hex">var(--c-success-bg)</div>
+          <div class="swatch-name">Success BG</div>
+        </div>
+        <!-- Warning -->
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-warning)"></div>
+          <div class="swatch-hex">var(--c-warning)</div>
+          <div class="swatch-name">Warning</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-warning-bg)"></div>
+          <div class="swatch-hex">var(--c-warning-bg)</div>
+          <div class="swatch-name">Warning BG</div>
+        </div>
+        <!-- Danger -->
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-danger)"></div>
+          <div class="swatch-hex">var(--c-danger)</div>
+          <div class="swatch-name">Danger</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-danger-bg)"></div>
+          <div class="swatch-hex">var(--c-danger-bg)</div>
+          <div class="swatch-name">Danger BG</div>
+        </div>
+        <!-- Info -->
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-info)"></div>
+          <div class="swatch-hex">var(--c-info)</div>
+          <div class="swatch-name">Info</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--c-info-bg)"></div>
+          <div class="swatch-hex">var(--c-info-bg)</div>
+          <div class="swatch-name">Info BG</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Neutral -->
+    <div class="swatch-group">
+      <p class="swatch-group-title">Neutral / 中性色</p>
+      <div class="swatch-row">
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-text-color-primary)"></div>
+          <div class="swatch-hex">var(--el-text-color-primary)</div>
+          <div class="swatch-name">Text Primary</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-text-color-regular)"></div>
+          <div class="swatch-hex">var(--el-text-color-regular)</div>
+          <div class="swatch-name">Text Regular</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-text-color-secondary)"></div>
+          <div class="swatch-hex">var(--el-text-color-secondary)</div>
+          <div class="swatch-name">Text Secondary</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-text-color-placeholder)"></div>
+          <div class="swatch-hex">var(--el-text-color-placeholder)</div>
+          <div class="swatch-name">Placeholder</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-bg-color-page)"></div>
+          <div class="swatch-hex">var(--el-bg-color-page)</div>
+          <div class="swatch-name">BG Page</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-bg-color)"></div>
+          <div class="swatch-hex">var(--el-bg-color)</div>
+          <div class="swatch-name">BG Card</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-border-color)"></div>
+          <div class="swatch-hex">var(--el-border-color)</div>
+          <div class="swatch-name">Border</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-border-color-light)"></div>
+          <div class="swatch-hex">var(--el-border-color-light)</div>
+          <div class="swatch-name">Border Light</div>
+        </div>
+        <div class="swatch">
+          <div class="swatch-color" style="background:var(--el-border-color-lighter)"></div>
+          <div class="swatch-hex">var(--el-border-color-lighter)</div>
+          <div class="swatch-name">Border Lighter</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gradients -->
+    <div class="swatch-group">
+      <p class="swatch-group-title">Gradients / 渐变</p>
+      <div class="swatch-row">
+        <div class="swatch gradient-swatch">
+          <div class="swatch-color" style="background:var(--gradient-brand)"></div>
+          <div class="swatch-hex">--gradient-brand</div>
+          <div class="swatch-name">Brand</div>
+        </div>
+        <div class="swatch gradient-swatch">
+          <div class="swatch-color" style="background:var(--gradient-icon-code)"></div>
+          <div class="swatch-hex">--gradient-icon-code</div>
+          <div class="swatch-name">Code</div>
+        </div>
+        <div class="swatch gradient-swatch">
+          <div class="swatch-color" style="background:var(--gradient-icon-db)"></div>
+          <div class="swatch-hex">--gradient-icon-db</div>
+          <div class="swatch-name">Database</div>
+        </div>
+        <div class="swatch gradient-swatch">
+          <div class="swatch-color" style="background:var(--gradient-icon-doc)"></div>
+          <div class="swatch-hex">--gradient-icon-doc</div>
+          <div class="swatch-name">Document</div>
+        </div>
+        <div class="swatch gradient-swatch">
+          <div class="swatch-color" style="background:var(--gradient-icon-graph)"></div>
+          <div class="swatch-hex">--gradient-icon-graph</div>
+          <div class="swatch-name">Graph</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Typography -->
+  <div class="ds-section">
+    <p class="section-label">Foundation</p>
+    <h2 class="section-title">Typography / 字体排版</h2>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-display); font-size:36px; color:var(--el-text-color-primary)">LegacyGraph</div>
+      <div class="type-meta">Display / DM Serif Display / 36px</div>
+    </div>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-body); font-size:24px; font-weight:700; color:var(--el-text-color-primary)">知识图谱管理平台</div>
+      <div class="type-meta">H1 / DM Sans / 24px / 700</div>
+    </div>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-body); font-size:20px; font-weight:600; color:var(--el-text-color-primary)">项目概览</div>
+      <div class="type-meta">H2 / DM Sans / 20px / 600</div>
+    </div>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-body); font-size:16px; font-weight:600; color:var(--el-text-color-primary)">数据源配置</div>
+      <div class="type-meta">H3 / DM Sans / 16px / 600</div>
+    </div>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-body); font-size:14px; font-weight:400; color:var(--el-text-color-regular)">LegacyGraph 是一个基于 AI 的知识图谱理解平台，帮助团队从代码仓库、数据库和文档中自动构建知识图谱，实现技术遗产的智能管理与洞察分析。通过多源数据接入与图谱可视化，让复杂的系统架构变得一目了然。</div>
+      <div class="type-meta">Body / DM Sans / 14px / 400</div>
+    </div>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-body); font-size:12px; font-weight:400; color:var(--el-text-color-secondary)">上次更新于 2026-07-10 14:30，由系统自动生成</div>
+      <div class="type-meta">Caption / DM Sans / 12px / 400</div>
+    </div>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-body); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.08em; color:var(--c-primary)">SECTION LABEL</div>
+      <div class="type-meta">Overline / DM Sans / 11px / 500 / uppercase</div>
+    </div>
+
+    <div class="type-sample">
+      <div style="font-family:var(--font-mono); font-size:13px; font-weight:400; color:var(--el-text-color-regular)"><code>const projectName = "legacy-graph"</code></div>
+      <div class="type-meta">Mono / JetBrains Mono / 13px / 400</div>
+    </div>
+  </div>
+
+  <!-- 4. Spacing -->
+  <div class="ds-section">
+    <p class="section-label">Foundation</p>
+    <h2 class="section-title">Spacing / 间距</h2>
+    <div class="spacing-demo">
+      <div class="spacing-item">
+        <div class="spacing-label">--space-1</div>
+        <div class="spacing-bar" style="width:4px"></div>
+        <div class="spacing-value">4px</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-label">--space-2</div>
+        <div class="spacing-bar" style="width:8px"></div>
+        <div class="spacing-value">8px</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-label">--space-3</div>
+        <div class="spacing-bar" style="width:12px"></div>
+        <div class="spacing-value">12px</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-label">--space-4</div>
+        <div class="spacing-bar" style="width:16px"></div>
+        <div class="spacing-value">16px</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-label">--space-5</div>
+        <div class="spacing-bar" style="width:20px"></div>
+        <div class="spacing-value">20px</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-label">--space-6</div>
+        <div class="spacing-bar" style="width:24px"></div>
+        <div class="spacing-value">24px</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-label">--space-8</div>
+        <div class="spacing-bar" style="width:32px"></div>
+        <div class="spacing-value">32px</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-label">--space-10</div>
+        <div class="spacing-bar" style="width:40px"></div>
+        <div class="spacing-value">40px</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Border Radius -->
+  <div class="ds-section">
+    <p class="section-label">Foundation</p>
+    <h2 class="section-title">Border Radius / 圆角</h2>
+    <div class="radius-grid">
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:var(--radius-sm)"></div>
+        <div class="radius-label">--radius-sm</div>
+        <div class="radius-value">6px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:var(--radius-md)"></div>
+        <div class="radius-label">--radius-md</div>
+        <div class="radius-value">8px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:var(--radius-lg)"></div>
+        <div class="radius-label">--radius-lg</div>
+        <div class="radius-value">12px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:var(--radius-xl)"></div>
+        <div class="radius-label">--radius-xl</div>
+        <div class="radius-value">16px</div>
+      </div>
+      <div class="radius-item">
+        <div class="radius-box" style="border-radius:var(--radius-full)"></div>
+        <div class="radius-label">--radius-full</div>
+        <div class="radius-value">9999px</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Component Patterns -->
+  <div class="ds-section" style="border-bottom:none;">
+    <p class="section-label">Components</p>
+    <h2 class="section-title">Component Patterns / 组件模式</h2>
+
+    <!-- 6a. PageHeader -->
+    <div class="component-demo">
+      <div class="component-label">&lt;PageHeader /&gt;</div>
+
+      <div class="component-variant-label">Variant: Minimal</div>
+      <div class="comp-pageheader" style="padding:var(--space-4) 0; border-bottom:1px solid var(--el-border-color-lighter); margin-bottom:var(--space-6);">
+        <div class="title-row">
+          <h2>项目列表</h2>
+          <button class="btn btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            新建项目
+          </button>
+        </div>
+      </div>
+
+      <div class="component-variant-label">Variant: With Description</div>
+      <div class="comp-pageheader" style="padding:var(--space-4) 0; border-bottom:1px solid var(--el-border-color-lighter); margin-bottom:var(--space-6);">
+        <h2>统一知识图谱</h2>
+        <p class="desc">管理所有数据源的知识图谱，支持代码仓库、数据库和文档的多源融合分析</p>
+        <div class="actions">
+          <button class="btn btn-primary">开始分析</button>
+          <button class="btn btn-default">导出配置</button>
+        </div>
+      </div>
+
+      <div class="component-variant-label">Variant: With Breadcrumb</div>
+      <div class="comp-pageheader" style="padding:var(--space-4) 0;">
+        <div class="breadcrumb">
+          <a href="#">工作台</a> <span>/</span> <a href="#">项目管理</a> <span>/</span> 项目详情
+        </div>
+        <h2>项目概览</h2>
+      </div>
+    </div>
+
+    <!-- 6b. SearchForm -->
+    <div class="component-demo">
+      <div class="component-label">&lt;SearchForm /&gt;</div>
+      <div class="search-form">
+        <div class="search-field">
+          <label>关键词</label>
+          <input type="text" placeholder="搜索项目名称..." />
+        </div>
+        <div class="search-field">
+          <label>状态</label>
+          <select>
+            <option>全部状态</option>
+            <option>活跃</option>
+            <option>已归档</option>
+          </select>
+        </div>
+        <div class="search-field">
+          <label>创建日期</label>
+          <input type="text" placeholder="2026-07-01 ~ 2026-07-10" />
+        </div>
+        <div class="search-actions">
+          <button class="btn btn-primary btn-sm">搜索</button>
+          <button class="btn btn-default btn-sm">重置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6c. StatCard -->
+    <div class="component-demo">
+      <div class="component-label">&lt;StatCard /&gt;</div>
+      <div class="stat-card-grid">
+        <!-- Code repos -->
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--gradient-icon-code)">
+            <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="4" x2="10" y2="20"/></svg>
+          </div>
+          <div class="stat-info">
+            <div class="stat-number">12</div>
+            <div class="stat-label">代码仓库</div>
+          </div>
+        </div>
+        <!-- Databases -->
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--gradient-icon-db)">
+            <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          </div>
+          <div class="stat-info">
+            <div class="stat-number">5</div>
+            <div class="stat-label">数据库</div>
+          </div>
+        </div>
+        <!-- Documents -->
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--gradient-icon-doc)">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div class="stat-info">
+            <div class="stat-number">23</div>
+            <div class="stat-label">文档</div>
+          </div>
+        </div>
+        <!-- Graphs -->
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--gradient-icon-graph)">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><line x1="12" y1="12" x2="6" y2="6"/><line x1="12" y1="12" x2="18" y2="6"/><line x1="12" y1="12" x2="6" y2="18"/><line x1="12" y1="12" x2="18" y2="18"/></svg>
+          </div>
+          <div class="stat-info">
+            <div class="stat-number">8</div>
+            <div class="stat-label">知识图谱</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6d. StatusTag -->
+    <div class="component-demo">
+      <div class="component-label">&lt;StatusTag /&gt;</div>
+
+      <div class="component-variant-label">Success</div>
+      <div class="tag-grid" style="margin-bottom:var(--space-4)">
+        <span class="tag tag-success">已确认</span>
+        <span class="tag tag-success">通过</span>
+        <span class="tag tag-success">活跃</span>
+      </div>
+
+      <div class="component-variant-label">Warning</div>
+      <div class="tag-grid" style="margin-bottom:var(--space-4)">
+        <span class="tag tag-warning">待审核</span>
+        <span class="tag tag-warning">进行中</span>
+      </div>
+
+      <div class="component-variant-label">Danger</div>
+      <div class="tag-grid" style="margin-bottom:var(--space-4)">
+        <span class="tag tag-danger">已驳回</span>
+        <span class="tag tag-danger">失败</span>
+      </div>
+
+      <div class="component-variant-label">Primary</div>
+      <div class="tag-grid" style="margin-bottom:var(--space-4)">
+        <span class="tag tag-primary">处理中</span>
+      </div>
+
+      <div class="component-variant-label">Info</div>
+      <div class="tag-grid">
+        <span class="tag tag-info">已取消</span>
+        <span class="tag tag-info">跳过</span>
+      </div>
+    </div>
+
+    <!-- 6e. EmptyState -->
+    <div class="component-demo">
+      <div class="component-label">&lt;EmptyState /&gt;</div>
+      <div class="empty-state">
+        <svg viewBox="0 0 64 64">
+          <rect x="8" y="16" width="48" height="36" rx="4"/>
+          <line x1="20" y1="28" x2="44" y2="28"/>
+          <line x1="20" y1="36" x2="36" y2="36"/>
+          <circle cx="32" cy="12" r="4"/>
+          <line x1="32" y1="8" x2="32" y2="4"/>
+          <line x1="36.9" y1="7.1" x2="39.5" y2="4.5"/>
+          <line x1="27.1" y1="7.1" x2="24.5" y2="4.5"/>
+        </svg>
+        <div class="empty-title">暂无数据</div>
+        <div class="empty-desc">请创建项目后开始使用</div>
+      </div>
+    </div>
+
+    <!-- 6f. DataTable -->
+    <div class="component-demo">
+      <div class="component-label">&lt;DataTable /&gt;</div>
+      <div class="data-table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>名称</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-family:var(--font-mono); color:var(--el-text-color-placeholder)">#001</td>
+              <td style="color:var(--el-text-color-primary); font-weight:500">统一知识图谱</td>
+              <td><span class="tag tag-success">活跃</span></td>
+              <td style="color:var(--el-text-color-secondary)">2026-07-08 14:30</td>
+              <td>
+                <button class="btn-text">编辑</button>
+                <button class="btn-text" style="color:var(--c-danger)">删除</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-family:var(--font-mono); color:var(--el-text-color-placeholder)">#002</td>
+              <td style="color:var(--el-text-color-primary); font-weight:500">用户服务分析</td>
+              <td><span class="tag tag-warning">进行中</span></td>
+              <td style="color:var(--el-text-color-secondary)">2026-07-06 09:15</td>
+              <td>
+                <button class="btn-text">编辑</button>
+                <button class="btn-text" style="color:var(--c-danger)">删除</button>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-family:var(--font-mono); color:var(--el-text-color-placeholder)">#003</td>
+              <td style="color:var(--el-text-color-primary); font-weight:500">数据迁移审计</td>
+              <td><span class="tag tag-danger">失败</span></td>
+              <td style="color:var(--el-text-color-secondary)">2026-07-04 16:42</td>
+              <td>
+                <button class="btn-text">编辑</button>
+                <button class="btn-text" style="color:var(--c-danger)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 6g. Pagination -->
+      <div class="pagination" style="margin-top:var(--space-4)">
+        <button class="pagination-btn disabled">&lsaquo;</button>
+        <button class="pagination-btn active">1</button>
+        <button class="pagination-btn">2</button>
+        <button class="pagination-btn">3</button>
+        <button class="pagination-btn">4</button>
+        <button class="pagination-btn">&rsaquo;</button>
+      </div>
+    </div>
+
+  </div><!-- /ds-section -->
+
+  <div style="text-align:center; padding:40px 0 60px;">
+    <p style="font-size:12px; color:var(--el-text-color-placeholder);">LegacyGraph Design System v1.0 &mdash; Built with CSS Variables</p>
+  </div>
+</div>
+
+<script>
+  // Dark mode toggle icon switching
+  const html = document.documentElement;
+  const sunIcon = document.getElementById('icon-sun');
+  const moonIcon = document.getElementById('icon-moon');
+  const toggle = document.querySelector('.theme-toggle');
+
+  function updateIcons() {
+    if (html.classList.contains('dark')) {
+      sunIcon.style.display = 'none';
+      moonIcon.style.display = 'block';
+    } else {
+      sunIcon.style.display = 'block';
+      moonIcon.style.display = 'none';
+    }
+  }
+
+  toggle.addEventListener('click', function() {
+    html.classList.toggle('dark');
+    updateIcons();
+  });
+
+  // Initialize icon state
+  updateIcons();
+</script>
+
+</body>
+</html>

@@ -77,7 +77,7 @@ async function copyCode() {
 }
 
 .code-viewer__content code {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.5;
   color: #333;

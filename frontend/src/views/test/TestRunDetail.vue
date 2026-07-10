@@ -225,7 +225,7 @@ onMounted(() => {
   background: #f5f7fa;
   padding: 8px 12px;
   border-radius: 4px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-all;
 }

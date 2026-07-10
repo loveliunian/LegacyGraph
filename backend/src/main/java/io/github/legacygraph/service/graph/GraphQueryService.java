@@ -13,6 +13,7 @@ import io.github.legacygraph.repository.FactRepository;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import io.github.legacygraph.repository.*;
 import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.util.IdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -286,7 +287,7 @@ public class GraphQueryService {
     }
 
     private List<Map<String, Object>> getTablesNodesUncached(String projectId, String versionId) {
-        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        String normalizedVersionId = IdUtil.normalizeId(versionId);
         List<GraphNode> tableNodes = neo4jGraphDao.queryNodes(
                 projectId, normalizedVersionId, "Table", null, null, null, 0);
 
@@ -357,7 +358,7 @@ public class GraphQueryService {
 
     private Map<String, Object> getUnifiedGraphUncached(String versionId, Double minConfidence, String statusFilter) {
         // 标准化 versionId：Neo4j 存储无横线格式，PG 查询用原始带横线格式
-        String neo4jVersionId = versionId != null ? versionId.replace("-", "") : null;
+        String neo4jVersionId = IdUtil.normalizeId(versionId);
 
         // 从 scanVersionRepository 获取 projectId（用原始带横线 versionId 查询 PG UUID 列）
         ScanVersion version = scanVersionRepository.lambdaQuery()
@@ -807,7 +808,7 @@ public class GraphQueryService {
      * PG JDBC 返回带横线的 UUID，Neo4j 写入时使用 MyBatis-Plus 生成的无横线格式。
      */
     private String normalizeVersionId(String versionId) {
-        return versionId != null ? versionId.replace("-", "") : null;
+        return IdUtil.normalizeId(versionId);
     }
 
     // ==================== API 节点列表（代码图谱查询联动） ====================
@@ -817,7 +818,7 @@ public class GraphQueryService {
      * 返回轻量字段：id, nodeKey, displayName, nodeName。
      */
     public List<Map<String, Object>> getApiEndpoints(String projectId, String versionId) {
-        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        String normalizedVersionId = IdUtil.normalizeId(versionId);
         List<GraphNode> nodes = neo4jGraphDao.queryNodes(
                 projectId, normalizedVersionId, "ApiEndpoint", null, null, null, 0);
         return nodes.stream().map(node -> {

@@ -398,7 +398,7 @@ onMounted(() => {
   background: #282c34;
   border-radius: 8px;
   overflow: hidden;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: var(--font-mono);
   border: 1px solid #3e4451;
 }
 

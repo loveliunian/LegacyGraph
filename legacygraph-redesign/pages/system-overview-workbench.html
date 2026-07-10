@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统概览 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-body);
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+}
+.content-area {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+.page-header { margin-bottom: var(--space-6); }
+.page-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+.page-subtitle {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+.dark-toggle {
+  position: fixed; top: 16px; right: 16px; z-index: 100;
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color);
+  color: var(--el-text-color-primary);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  transition: background .2s;
+}
+.dark-toggle:hover { background: var(--el-fill-color-light); }
+.stats-bar {
+  display: flex;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+.stat-item {
+  flex: 1;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--el-text-color-primary);
+  line-height: 1.2;
+}
+.stat-value.green { color: var(--c-success); }
+.stat-value.orange { color: var(--c-warning); }
+.stat-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
+.topo-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+.topo-card .card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: var(--space-5);
+}
+.topo-svg {
+  width: 100%;
+  overflow: visible;
+}
+.legend {
+  display: flex;
+  gap: var(--space-6);
+  justify-content: center;
+  padding: var(--space-4) 0;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.legend-dot.healthy { background: var(--c-success); }
+.legend-dot.degraded { background: var(--c-warning); }
+.legend-dot.down { background: var(--c-danger); }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')">Toggle Dark</button>
+
+<div class="content-area">
+  <div class="page-header">
+    <div class="page-title">系统概览</div>
+    <div class="page-subtitle">全局系统架构和拓扑总览</div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-value">8</div>
+      <div class="stat-label">服务总数</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value green">87.5%</div>
+      <div class="stat-label">健康率</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">45ms</div>
+      <div class="stat-label">平均响应</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value orange">0.3%</div>
+      <div class="stat-label">错误率</div>
+    </div>
+  </div>
+
+  <div class="topo-card">
+    <div class="card-title">系统拓扑</div>
+    <svg class="topo-svg" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
+      <!-- Arrows (connections) -->
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#A1A1A6"/>
+        </marker>
+      </defs>
+      <!-- Gateway -> Auth -->
+      <line x1="500" y1="80" x2="200" y2="170" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- Gateway -> User Svc -->
+      <line x1="500" y1="80" x2="500" y2="170" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- Gateway -> Order Svc -->
+      <line x1="500" y1="80" x2="800" y2="170" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- Auth -> User Svc -->
+      <line x1="270" y1="210" x2="430" y2="210" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- User Svc -> Order Svc -->
+      <line x1="570" y1="210" x2="730" y2="210" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- User Svc -> DB -->
+      <line x1="500" y1="250" x2="300" y2="350" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- Order Svc -> DB -->
+      <line x1="800" y1="250" x2="350" y2="360" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- Order Svc -> MQ -->
+      <line x1="800" y1="250" x2="680" y2="350" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- MQ -> Notification -->
+      <line x1="700" y1="390" x2="700" y2="430" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <!-- User Svc -> Cache -->
+      <line x1="430" y1="240" x2="170" y2="350" stroke="#D1D1D6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+      <!-- Service boxes -->
+      <!-- API Gateway (green/healthy) -->
+      <rect x="420" y="40" width="160" height="50" rx="8" fill="#E8F8F6" stroke="#14B8A6" stroke-width="2"/>
+      <text x="500" y="70" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#14B8A6">API Gateway</text>
+
+      <!-- Auth Service (green) -->
+      <rect x="130" y="180" width="140" height="50" rx="8" fill="#E8F8F6" stroke="#14B8A6" stroke-width="2"/>
+      <text x="200" y="210" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#14B8A6">Auth Service</text>
+
+      <!-- User Service (green) -->
+      <rect x="430" y="180" width="140" height="50" rx="8" fill="#E8F8F6" stroke="#14B8A6" stroke-width="2"/>
+      <text x="500" y="210" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#14B8A6">User Service</text>
+
+      <!-- Order Service (yellow/degraded) -->
+      <rect x="730" y="180" width="140" height="50" rx="8" fill="#FCF5EA" stroke="#F59E0B" stroke-width="2"/>
+      <text x="800" y="210" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#F59E0B">Order Service</text>
+
+      <!-- Redis Cache (green) -->
+      <rect x="100" y="350" width="140" height="50" rx="8" fill="#E8F8F6" stroke="#14B8A6" stroke-width="2"/>
+      <text x="170" y="380" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#14B8A6">Redis Cache</text>
+
+      <!-- PostgreSQL (green) -->
+      <rect x="250" y="350" width="140" height="50" rx="8" fill="#E8F8F6" stroke="#14B8A6" stroke-width="2"/>
+      <text x="320" y="380" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#14B8A6">PostgreSQL</text>
+
+      <!-- Message Queue (yellow/degraded) -->
+      <rect x="620" y="350" width="160" height="50" rx="8" fill="#FCF5EA" stroke="#F59E0B" stroke-width="2"/>
+      <text x="700" y="380" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#F59E0B">Message Queue</text>
+
+      <!-- Notification (red/down) -->
+      <rect x="620" y="430" width="160" height="50" rx="8" fill="#FCE1E1" stroke="#EF4444" stroke-width="2"/>
+      <text x="700" y="460" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" fill="#EF4444">Notification</text>
+    </svg>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot healthy"></div>
+      <span>健康</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot degraded"></div>
+      <span>降级</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot down"></div>
+      <span>宕机</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

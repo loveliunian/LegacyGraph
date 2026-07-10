@@ -1,0 +1,196 @@
+/* ====== LegacyGraph Design System - Brand CSS ====== */
+
+/* Font System */
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-display: 'DM Serif Display', Georgia, 'Times New Roman', serif;
+  --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ====== Spacing System (8px grid) ====== */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+}
+
+/* ====== Border Radius ====== */
+:root {
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+}
+
+/* ====== Typography Scale ====== */
+:root {
+  --text-display: 36px;
+  --text-h1: 24px;
+  --text-h2: 20px;
+  --text-h3: 16px;
+  --text-body: 14px;
+  --text-caption: 12px;
+  --text-overline: 11px;
+  --text-mono: 13px;
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.3;
+  --leading-normal: 1.4;
+  --leading-relaxed: 1.5;
+  --leading-loose: 1.6;
+}
+
+/* ====== Brand Colors — Light Mode ====== */
+:root {
+  --c-primary: #6366F1;
+  --c-primary-light: #9293F4;
+  --c-primary-lighter: #B1B3F8;
+  --c-primary-lightest: #D0D1FE;
+  --c-primary-bg: #EFF0FE;
+  --c-primary-dark: #4F52C1;
+
+  --c-success: #14B8A6;
+  --c-success-light: #5ACEC1;
+  --c-success-lighter: #8ADBD3;
+  --c-success-lightest: #B9EAE4;
+  --c-success-bg: #E8F8F6;
+  --c-success-dark: #109385;
+
+  --c-warning: #F59E0B;
+  --c-warning-light: #FABB52;
+  --c-warning-lighter: #FACE85;
+  --c-warning-lightest: #FBE2B8;
+  --c-warning-bg: #FCF5EA;
+  --c-warning-dark: #C47E09;
+
+  --c-danger: #EF4444;
+  --c-danger-light: #F48282;
+  --c-danger-lighter: #F7A2A2;
+  --c-danger-lightest: #FAC1C1;
+  --c-danger-bg: #FCE1E1;
+  --c-danger-dark: #BF3636;
+
+  --c-info: #909399;
+  --c-info-light: #B0B1B9;
+  --c-info-lighter: #C8C9CC;
+  --c-info-lightest: #DFE0E2;
+  --c-info-bg: #EFEFF1;
+
+  /* Brand gradient */
+  --gradient-brand: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A78BFA 100%);
+  --gradient-brand-subtle: linear-gradient(135deg, #EFF0FE 0%, #EDE9FE 50%, #F5F3FF 100%);
+
+  /* Icon gradients */
+  --gradient-icon-code: linear-gradient(135deg, #6366F1, #818CF8);
+  --gradient-icon-db: linear-gradient(135deg, #14B8A6, #2DD4BF);
+  --gradient-icon-doc: linear-gradient(135deg, #F59E0B, #FBBF24);
+  --gradient-icon-graph: linear-gradient(135deg, #8B5CF6, #A78BFA);
+
+  /* Element Plus overrides */
+  --el-color-primary: #6366F1;
+  --el-color-primary-light-3: #9293F4;
+  --el-color-primary-light-5: #B1B3F8;
+  --el-color-primary-light-7: #D0D1FE;
+  --el-color-primary-light-8: #E0E0FC;
+  --el-color-primary-light-9: #EFF0FE;
+  --el-color-primary-dark-2: #4F52C1;
+  --el-color-success: #14B8A6;
+  --el-color-warning: #F59E0B;
+  --el-color-danger: #EF4444;
+  --el-color-error: #EF4444;
+  --el-color-info: #909399;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #F5F5F7;
+  --el-bg-color-overlay: #ffffff;
+  --el-text-color-primary: #1D1D1F;
+  --el-text-color-regular: #424245;
+  --el-text-color-secondary: #6E6E73;
+  --el-text-color-placeholder: #A1A1A6;
+  --el-text-color-disabled: #C7C7CC;
+  --el-border-color: #D1D1D6;
+  --el-border-color-light: #E5E5EA;
+  --el-border-color-lighter: #EDEDF0;
+  --el-border-color-extra-light: #F5F5F7;
+  --el-border-color-dark: #C1C1C6;
+  --el-fill-color: #F5F5F7;
+  --el-fill-color-light: #FAFAFA;
+  --el-fill-color-lighter: #FDFDFD;
+  --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 0.08);
+  --el-box-shadow-lighter: 0 2px 12px 0 rgba(0, 0, 0, 0.03);
+  --el-box-shadow-dark: 0 16px 48px 8px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* ====== Brand Colors — Dark Mode ====== */
+html.dark {
+  --c-primary: #818CF8;
+  --c-primary-light: #5A62AE;
+  --c-primary-lighter: #41467C;
+  --c-primary-lightest: #272A4A;
+  --c-primary-bg: #0D0E19;
+  --c-primary-dark: #9AA3FA;
+
+  --c-success: #2DD4BF;
+  --c-success-light: #209486;
+  --c-success-lighter: #176A60;
+  --c-success-lightest: #0E4039;
+  --c-success-bg: #051513;
+  --c-success-dark: #57DDCC;
+
+  --c-warning: #FBBF24;
+  --c-danger: #F87171;
+  --c-info: #9CA3AF;
+
+  --gradient-brand: linear-gradient(135deg, #818CF8 0%, #A78BFA 50%, #C4B5FD 100%);
+
+  --gradient-icon-code: linear-gradient(135deg, #818CF8, #A5B4FC);
+  --gradient-icon-db: linear-gradient(135deg, #2DD4BF, #5EEAD4);
+  --gradient-icon-doc: linear-gradient(135deg, #FBBF24, #FCD34D);
+  --gradient-icon-graph: linear-gradient(135deg, #A78BFA, #C4B5FD);
+
+  --el-color-primary: #818CF8;
+  --el-color-primary-light-3: #5A62AE;
+  --el-color-primary-light-5: #41467C;
+  --el-color-primary-light-7: #272A4A;
+  --el-color-primary-light-8: #1A1C32;
+  --el-color-primary-light-9: #0D0E19;
+  --el-color-primary-dark-2: #9AA3FA;
+  --el-color-success: #2DD4BF;
+  --el-color-warning: #FBBF24;
+  --el-color-danger: #F87171;
+  --el-color-error: #F87171;
+  --el-color-info: #9CA3AF;
+  --el-bg-color: #1C1C1E;
+  --el-bg-color-page: #000000;
+  --el-bg-color-overlay: #2C2C2E;
+  --el-text-color-primary: #F5F5F7;
+  --el-text-color-regular: #D1D1D6;
+  --el-text-color-secondary: #8E8E93;
+  --el-text-color-placeholder: #636366;
+  --el-text-color-disabled: #48484A;
+  --el-border-color: #48484A;
+  --el-border-color-light: #38383A;
+  --el-border-color-lighter: #2C2C2E;
+  --el-border-color-extra-light: #1C1C1E;
+  --el-border-color-dark: #545458;
+  --el-fill-color: #2C2C2E;
+  --el-fill-color-light: #1C1C1E;
+  --el-fill-color-lighter: #1C1C1E;
+  --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.36), 0 8px 16px -8px rgba(0, 0, 0, 0.72);
+  --el-box-shadow-light: 0 0 12px rgba(0, 0, 0, 0.48);
+  --el-box-shadow-lighter: 0 2px 12px 0 rgba(0, 0, 0, 0.24);
+  --el-box-shadow-dark: 0 16px 48px 8px rgba(0, 0, 0, 0.48), 0 12px 32px rgba(0, 0, 0, 0.48);
+}
+
+/* ====== Global Reset ====== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: var(--font-body); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background: var(--el-bg-color-page); color: var(--el-text-color-primary); transition: background-color 0.3s, color 0.3s; }
+#app { height: 100%; }

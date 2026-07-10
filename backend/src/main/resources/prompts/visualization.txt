@@ -1,0 +1,35 @@
+用户请求可视化图表。根据图谱反查结果，生成 Mermaid 代码块。
+
+## 时序图（sequenceDiagram）
+- 参与者：从调用链中提取的类/服务
+- 消息：方法调用（含方法名和参数）
+- 示例格式：
+```mermaid
+sequenceDiagram
+    participant C as OrderController
+    participant S as OrderService
+    participant M as OrderMapper
+    C->>S: create(OrderDTO)
+    S->>M: insert(Order)
+    M-->>S: orderId
+    S-->>C: Result.ok(orderId)
+```
+
+## 依赖图（graph LR）
+- 节点：Package/Module
+- 边：DEPENDS_ON
+
+## 调用链图（graph TD）
+- 正向：入口方法 → 下游调用
+- 反向：目标方法 → 上游调用方
+
+## 数据流图（graph LR）
+- Table → SqlStatement → Service → ApiEndpoint
+
+## 业务链路图（graph LR）
+- BusinessDomain → BusinessProcess → ApiEndpoint
+
+输出要求：
+1. 生成 ```mermaid 代码块
+2. 附文字说明：图表展示了什么
+3. 如图谱数据不足，说明缺失部分

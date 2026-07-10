@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>执行历史 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-body);
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+}
+.content-area {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+.page-header { margin-bottom: var(--space-6); }
+.page-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+.dark-toggle {
+  position: fixed; top: 16px; right: 16px; z-index: 100;
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color);
+  color: var(--el-text-color-primary);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  transition: background .2s;
+}
+.dark-toggle:hover { background: var(--el-fill-color-light); }
+.search-form {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+}
+.form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 160px; }
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+.form-group input,
+.form-group select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  outline: none;
+  transition: border-color .2s;
+}
+.form-group input:focus,
+.form-group select:focus { border-color: var(--c-primary); }
+.btn {
+  height: 36px; padding: 0 20px; border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body); font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: opacity .2s; white-space: nowrap;
+}
+.btn:hover { opacity: .85; }
+.btn-primary { background: var(--c-primary); color: #fff; }
+.btn-default { background: var(--el-fill-color); color: var(--el-text-color-regular); border: 1px solid var(--el-border-color); }
+.table-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.table-card table { width: 100%; border-collapse: collapse; }
+.table-card th {
+  background: var(--el-fill-color);
+  font-size: 13px; font-weight: 600;
+  color: var(--el-text-color-secondary);
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  white-space: nowrap;
+}
+.table-card td {
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  vertical-align: middle;
+}
+.table-card tr:last-child td { border-bottom: none; }
+.table-card tr:hover td { background: var(--el-fill-color-light); }
+.tag {
+  display: inline-block; padding: 2px 8px;
+  border-radius: 10px; font-size: 12px; font-weight: 500; white-space: nowrap;
+}
+.tag-scan { background: var(--c-primary-bg); color: var(--c-primary); }
+.tag-analysis { background: var(--c-success-bg); color: var(--c-success); }
+.tag-repair { background: var(--c-warning-bg); color: var(--c-warning); }
+.tag-validate { background: var(--c-info-bg); color: var(--c-info); }
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-running { background: var(--c-primary-bg); color: var(--c-primary); }
+.tag-failed { background: var(--c-danger-bg); color: var(--c-danger); }
+.action-link {
+  color: var(--c-primary); font-size: 13px; cursor: pointer;
+  text-decoration: none;
+}
+.action-link:hover { text-decoration: underline; }
+.mono { font-family: var(--font-mono); font-size: 13px; color: var(--el-text-color-secondary); }
+.summary-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')">Toggle Dark</button>
+
+<div class="content-area">
+  <div class="page-header">
+    <div class="page-title">执行历史</div>
+  </div>
+
+  <div class="search-form">
+    <div class="form-group">
+      <label>Agent名称</label>
+      <input type="text" placeholder="搜索Agent名称...">
+    </div>
+    <div class="form-group">
+      <label>执行状态</label>
+      <select>
+        <option>全部</option>
+        <option>成功</option>
+        <option>运行中</option>
+        <option>失败</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>时间范围</label>
+      <select>
+        <option>全部</option>
+        <option>最近1小时</option>
+        <option>最近24小时</option>
+        <option>最近7天</option>
+        <option>最近30天</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;align-self:flex-end;">
+      <button class="btn btn-primary">查询</button>
+      <button class="btn btn-default">重置</button>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>执行ID</th>
+          <th>Agent名称</th>
+          <th>执行类型</th>
+          <th>输入摘要</th>
+          <th>状态</th>
+          <th>耗时</th>
+          <th>执行时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="mono">EXE-1001</span></td>
+          <td style="font-weight:600;color:var(--el-text-color-primary)">CodeScanner</td>
+          <td><span class="tag tag-scan">扫描</span></td>
+          <td><span class="summary-text">扫描 user-service 代码仓库，增量分析</span></td>
+          <td><span class="tag tag-success">成功</span></td>
+          <td><span class="mono">2m 34s</span></td>
+          <td><span class="mono">2026-07-10 10:15</span></td>
+          <td><a class="action-link">查看详情</a></td>
+        </tr>
+        <tr>
+          <td><span class="mono">EXE-1002</span></td>
+          <td style="font-weight:600;color:var(--el-text-color-primary)">RelationExtractor</td>
+          <td><span class="tag tag-analysis">分析</span></td>
+          <td><span class="summary-text">提取 OrderController 的调用关系图谱</span></td>
+          <td><span class="tag tag-running">运行中</span></td>
+          <td><span class="mono">--</span></td>
+          <td><span class="mono">2026-07-10 10:42</span></td>
+          <td><a class="action-link">查看详情</a></td>
+        </tr>
+        <tr>
+          <td><span class="mono">EXE-0998</span></td>
+          <td style="font-weight:600;color:var(--el-text-color-primary)">ConflictResolver</td>
+          <td><span class="tag tag-repair">修复</span></td>
+          <td><span class="summary-text">处理 UserService 依赖关系冲突 CF-001</span></td>
+          <td><span class="tag tag-success">成功</span></td>
+          <td><span class="mono">45s</span></td>
+          <td><span class="mono">2026-07-09 16:20</span></td>
+          <td><a class="action-link">查看详情</a></td>
+        </tr>
+        <tr>
+          <td><span class="mono">EXE-0995</span></td>
+          <td style="font-weight:600;color:var(--el-text-color-primary)">SchemaValidator</td>
+          <td><span class="tag tag-validate">校验</span></td>
+          <td><span class="summary-text">校验 payment-gateway 模块配置一致性</span></td>
+          <td><span class="tag tag-failed">失败</span></td>
+          <td><span class="mono">1m 12s</span></td>
+          <td><span class="mono">2026-07-09 11:05</span></td>
+          <td><a class="action-link">查看详情</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

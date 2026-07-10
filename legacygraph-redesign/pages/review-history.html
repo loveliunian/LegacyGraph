@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审核历史 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body); font-size: 14px; color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page); line-height: 1.6; -webkit-font-smoothing: antialiased;
+}
+.page-container { max-width: 1200px; margin: 0 auto; padding: var(--space-5) var(--space-6); }
+.breadcrumb { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: var(--space-4); }
+.breadcrumb a { color: var(--c-primary); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb span { margin: 0 6px; color: var(--el-text-color-placeholder); }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
+.page-header h1 { font-family: var(--font-body); font-size: 20px; font-weight: 700; color: var(--el-text-color-primary); }
+.dark-toggle {
+  width: 36px; height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--el-text-color-secondary); font-size: 16px; transition: all .2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.search-form {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: var(--space-5);
+  padding: var(--space-5); background: var(--el-bg-color); border: 1px solid var(--el-border-color-light);
+  border-radius: var(--radius-lg);
+}
+.search-form input, .search-form select {
+  height: 36px; padding: 0 12px; border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm); background: var(--el-bg-color); color: var(--el-text-color-regular);
+  font-family: var(--font-body); font-size: 13px; outline: none; transition: border-color .2s;
+}
+.search-form input:focus, .search-form select:focus { border-color: var(--c-primary); }
+.search-form input::placeholder { color: var(--el-text-color-placeholder); }
+.search-form input[type="text"] { flex: 1; min-width: 200px; }
+.btn-search {
+  height: 36px; padding: 0 16px; border: none; border-radius: var(--radius-sm);
+  background: var(--c-primary); color: #fff; font-family: var(--font-body); font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: background .2s;
+}
+.btn-search:hover { background: var(--c-primary-light); }
+.card {
+  background: var(--el-bg-color); border: 1px solid var(--el-border-color-light);
+  border-radius: var(--radius-lg); overflow: hidden;
+}
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead { background: var(--el-fill-color-light); }
+th {
+  padding: 12px 16px; text-align: left; font-weight: 600; color: var(--el-text-color-secondary);
+  border-bottom: 1px solid var(--el-border-color-lighter); white-space: nowrap; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+td {
+  padding: 12px 16px; color: var(--el-text-color-regular);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--el-fill-color-light); }
+.tag {
+  display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 500;
+  line-height: 1.8; white-space: nowrap;
+}
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-danger { background: var(--c-danger-bg); color: var(--c-danger); }
+.pagination {
+  display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;
+  border-top: 1px solid var(--el-border-color-lighter); font-size: 13px; color: var(--el-text-color-secondary);
+}
+.pagination-btns { display: flex; gap: 4px; }
+.pagination-btns button {
+  width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color); color: var(--el-text-color-regular); cursor: pointer; font-size: 13px;
+  transition: all .2s;
+}
+.pagination-btns button.active { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+.pagination-btns button:hover:not(.active) { border-color: var(--c-primary); color: var(--c-primary); }
+</style>
+</head>
+<body>
+<div class="page-container">
+  <div class="breadcrumb"><a href="#">LegacyGraph</a><span>/</span>审核历史</div>
+
+  <div class="page-header">
+    <h1>审核历史</h1>
+    <button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">&#9790;</button>
+  </div>
+
+  <div class="search-form">
+    <input type="text" placeholder="搜索事实描述..." />
+    <select><option>全部结果</option><option>通过</option><option>驳回</option></select>
+    <input type="date" />
+    <span style="color:var(--el-text-color-placeholder);line-height:36px">至</span>
+    <input type="date" />
+    <button class="btn-search">搜索</button>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>审核ID</th><th>事实描述</th><th>审核人</th><th>审核结果</th>
+            <th>审核意见</th><th>审核时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">RV-20240215</td>
+            <td>缓存层使用Redis集群部署，采用一致性哈希分片策略</td>
+            <td>陈审核</td>
+            <td><span class="tag tag-success">通过</span></td>
+            <td>描述准确，与代码实现一致，建议补充过期策略说明</td>
+            <td>2024-02-20 11:30</td>
+          </tr>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">RV-20240208</td>
+            <td>用户权限系统基于RBAC模型，支持动态角色分配</td>
+            <td>刘审核</td>
+            <td><span class="tag tag-success">通过</span></td>
+            <td>事实描述清晰，与系统设计文档吻合</td>
+            <td>2024-02-10 15:45</td>
+          </tr>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">RV-20240128</td>
+            <td>数据库读写分离通过MyCat中间件实现，主库同步延迟&lt;100ms</td>
+            <td>陈审核</td>
+            <td><span class="tag tag-danger">驳回</span></td>
+            <td>延迟数据缺乏监控依据，需补充性能测试报告</td>
+            <td>2024-02-01 09:20</td>
+          </tr>
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--c-primary)">RV-20240118</td>
+            <td>日志采集采用ELK技术栈，日志保留周期为30天</td>
+            <td>张审核</td>
+            <td><span class="tag tag-danger">驳回</span></td>
+            <td>当前已改为Loki+Prometheus方案，事实已过时</td>
+            <td>2024-01-22 16:10</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span>共 4 条记录</span>
+      <div class="pagination-btns">
+        <button class="active">1</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

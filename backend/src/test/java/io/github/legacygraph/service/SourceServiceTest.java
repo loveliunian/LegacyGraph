@@ -9,6 +9,8 @@ import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocChunkRepository;
 import io.github.legacygraph.repository.DocumentRepository;
+import io.github.legacygraph.repository.ScanVersionRepository;
+import io.github.legacygraph.entity.ScanVersion;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +43,9 @@ class SourceServiceTest {
 
     @Mock
     private DocChunkRepository docChunkRepository;
+
+    @Mock
+    private ScanVersionRepository scanVersionRepository;
 
     @InjectMocks
     private SourceService sourceService;
@@ -93,6 +98,7 @@ class SourceServiceTest {
 
         when(documentRepository.selectById("doc-1")).thenReturn(doc);
         when(documentRepository.updateById(any(Document.class))).thenReturn(1);
+        when(scanVersionRepository.selectById("v1")).thenReturn(new ScanVersion());
 
         Map<String, Object> result = sourceService.parseDocument("proj-1", "doc-1");
         assertNotNull(result);

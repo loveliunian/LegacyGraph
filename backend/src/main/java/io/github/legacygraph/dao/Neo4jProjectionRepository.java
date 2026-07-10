@@ -473,4 +473,225 @@ public class Neo4jProjectionRepository {
             return edges;
         }
     }
+
+    // ==================== 图谱质量评估查询 ====================
+
+    /**
+     * 版本级节点类型分布 — 按标签聚合各类型节点数。
+     * <p>用于图谱质量评估的完整性指标。</p>
+     *
+     * @return 每行包含 {nodeType, count}
+     */
+    public List<Map<String, Object>> nodeTypeDistribution(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "UNWIND labels(n) AS label " +
+                "WITH label AS nodeType, count(*) AS cnt " +
+                "RETURN nodeType, cnt " +
+                "ORDER BY cnt DESC";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId)));
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
+
+    /**
+     * 版本级边类型分布 — 按关系类型聚合各类型边数。
+     *
+     * @return 每行包含 {edgeType, count}
+     */
+    public List<Map<String, Object>> edgeTypeDistribution(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH ()-[r]->() WHERE r.projectId = $projectId AND r.versionId = $versionId " +
+                "RETURN type(r) AS edgeType, count(*) AS cnt " +
+                "ORDER BY cnt DESC";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId)));
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
+
+    /**
+     * 统计孤立节点数（无任何边的节点）。
+     */
+    public long countIsolatedNodes(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "OPTIONAL MATCH (n)-[r]-() WHERE r.projectId = $projectId AND r.versionId = $versionId " +
+                "WITH n, count(r) AS cnt WHERE cnt = 0 " +
+                "RETURN count(n) AS total";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId)));
+            if (result.hasNext()) {
+                Object v = result.next().get("total");
+                if (v instanceof Number n) return n.longValue();
+            }
+            return 0L;
+        }
+    }
+
+    /**
+     * 统计指定标签中缺少必需边类型的节点数（约束违反计数）。
+     * <p>
+     * 检查某类节点是否至少有一条指定类型的边（任意方向）。
+     * 例如：Method 节点是否至少有一条 CONTAINS 或 BELONGS_TO 边。
+     * </p>
+     *
+     * @param nodeLabel  节点标签（如 "Method", "Column", "ApiEndpoint", "SqlStatement"）
+     * @param edgeTypes  必需的边类型列表（满足任意一个即可）
+     * @return 缺少所有指定边类型的节点数
+     */
+    public long countNodesWithoutEdgeTypes(String projectId, String versionId,
+                                            String nodeLabel, List<String> edgeTypes) {
+        if (edgeTypes == null || edgeTypes.isEmpty()) return 0L;
+        try (Session session = neo4jDriver.session()) {
+            // 构建关系类型过滤条件：type(r) IN $edgeTypes
+            String cypher =
+                "MATCH (n:" + CypherCatalog.safeIdentifier(nodeLabel, "nodeLabel") +
+                " {projectId: $projectId, versionId: $versionId}) " +
+                "OPTIONAL MATCH (n)-[r]-() WHERE r.projectId = $projectId AND r.versionId = $versionId " +
+                "AND type(r) IN $edgeTypes " +
+                "WITH n, count(r) AS cnt WHERE cnt = 0 " +
+                "RETURN count(n) AS total";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId),
+                    "edgeTypes", edgeTypes));
+            if (result.hasNext()) {
+                Object v = result.next().get("total");
+                if (v instanceof Number n) return n.longValue();
+            }
+            return 0L;
+        }
+    }
+
+    // ==================== Blast Radius 传播分析查询 ====================
+
+    /**
+     * 按 sourcePath 查询文件中包含的所有图谱节点（用于变更影响分析）。
+     * <p>versionId 为 null 时不限定版本，查询项目下所有版本中来自该文件的节点。</p>
+     *
+     * @return 每行包含 {nodeId, nodeKey, nodeName, nodeType, sourcePath}
+     */
+    public List<Map<String, Object>> findNodesBySourcePath(String projectId, String versionId,
+                                                            String sourcePath) {
+        if (sourcePath == null || sourcePath.isEmpty()) return List.of();
+        try (Session session = neo4jDriver.session()) {
+            StringBuilder cypher = new StringBuilder(
+                "MATCH (n) WHERE n.projectId = $projectId AND n.sourcePath = $sourcePath");
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("sourcePath", sourcePath);
+            if (versionId != null) {
+                cypher.append(" AND n.versionId = $versionId");
+                params.put("versionId", normalizeId(versionId));
+            }
+            cypher.append(" RETURN n.id AS nodeId, n.nodeKey AS nodeKey, n.nodeName AS nodeName, ")
+                  .append("labels(n)[0] AS nodeType, n.sourcePath AS sourcePath");
+            Result result = session.run(cypher.toString(), params);
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
+
+    /**
+     * 反向依赖查询 — 查找指向目标节点集合的入边源节点（Blast Radius 传播分析核心查询）。
+     * <p>给定一组目标节点（变更文件中的节点），查找所有 (source)-[r]->(target) 中
+     * target 属于目标集合、且边类型在白名单内的 source 节点，即受变更影响的依赖者。</p>
+     * <p>versionId 为 null 时不限定版本。</p>
+     *
+     * @param targetNodeIds 变更文件中节点的 ID 集合
+     * @param edgeTypes     反向遍历的边类型白名单（CALLS/READS/WRITES/BELONGS_TO/DEPENDS_ON/IMPLEMENTS/EXTENDS）
+     * @return 每行包含 {sourceId, sourceKey, sourceName, sourceType, targetId, targetKey, edgeType}
+     */
+    public List<Map<String, Object>> findReverseDependents(String projectId, String versionId,
+                                                            Collection<String> targetNodeIds,
+                                                            List<String> edgeTypes) {
+        if (targetNodeIds == null || targetNodeIds.isEmpty()
+                || edgeTypes == null || edgeTypes.isEmpty()) {
+            return List.of();
+        }
+        try (Session session = neo4jDriver.session()) {
+            StringBuilder cypher = new StringBuilder(
+                "MATCH (source)-[r]->(target) " +
+                "WHERE target.id IN $targetNodeIds " +
+                "AND r.projectId = $projectId " +
+                "AND type(r) IN $edgeTypes");
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("targetNodeIds", new ArrayList<>(targetNodeIds));
+            params.put("edgeTypes", edgeTypes);
+            if (versionId != null) {
+                cypher.append(" AND r.versionId = $versionId");
+                params.put("versionId", normalizeId(versionId));
+            }
+            cypher.append(" RETURN DISTINCT source.id AS sourceId, source.nodeKey AS sourceKey, ")
+                  .append("source.nodeName AS sourceName, labels(source)[0] AS sourceType, ")
+                  .append("target.id AS targetId, target.nodeKey AS targetKey, ")
+                  .append("type(r) AS edgeType");
+            Result result = session.run(cypher.toString(), params);
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
+
+    /**
+     * 查询指定节点集合之间的所有边（仅按 projectId 过滤，不限定 versionId）。
+     * <p>用于 Blast Radius 受影响子图的边集构建。</p>
+     *
+     * @return 每行包含 {id, type, source, target}
+     */
+    public List<Map<String, Object>> queryEdgesForNodesByProject(String projectId, List<String> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) return List.of();
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (from)-[r]->(to) " +
+                "WHERE r.projectId = $projectId " +
+                "AND from.id IN $nodeIds AND to.id IN $nodeIds " +
+                "RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "nodeIds", nodeIds));
+            List<Map<String, Object>> edges = new ArrayList<>();
+            while (result.hasNext()) {
+                edges.add(result.next().asMap());
+            }
+            return edges;
+        }
+    }
+
+    /**
+     * 通用只读 Cypher 查询，返回每行结果 asMap。
+     * 供 service 层调用，避免 service 直接依赖 Neo4j Driver。
+     */
+    public List<Map<String, Object>> executeReadQuery(String cypher, Map<String, Object> params) {
+        try (Session session = neo4jDriver.session()) {
+            Result result = session.run(cypher, params != null ? params : Map.of());
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (result.hasNext()) {
+                rows.add(result.next().asMap());
+            }
+            return rows;
+        }
+    }
 }

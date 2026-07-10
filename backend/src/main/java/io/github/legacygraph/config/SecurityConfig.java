@@ -42,6 +42,7 @@ public class SecurityConfig {
                                 "/lg/auth/logout",
                                 "/lg/projects/*/sources/documents/*/download",
                                 "/lg/projects/*/sources/browse-directory",
+                                "/lg/plugins",
                                 "/qa/ask/stream",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",

@@ -3,6 +3,7 @@ package io.github.legacygraph.extractors.adapter;
 import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.extractors.JavaStructureExtractor;
+import io.github.legacygraph.extractors.PackageExtractor;
 import io.github.legacygraph.extractors.ServiceCallExtractor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -26,12 +27,15 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
     private final FactPersister factPersister;
     private final ServiceCallExtractor callExtractor;
     private final JavaStructureExtractor structureExtractor;
+    private final PackageExtractor packageExtractor;
 
     public JavaServiceCallAdapter(GraphBuilder graphBuilder, FactPersister factPersister,
-                                   JavaStructureExtractor structureExtractor) {
+                                   JavaStructureExtractor structureExtractor,
+                                   PackageExtractor packageExtractor) {
         this.graphBuilder = graphBuilder;
         this.factPersister = factPersister;
         this.structureExtractor = structureExtractor;
+        this.packageExtractor = packageExtractor;
         this.callExtractor = new ServiceCallExtractor();
     }
 
@@ -62,6 +66,10 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
             List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(asset.getFile());
             List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
                     context.getProjectId(), context.getVersionId(), structures);
+            // 基于类结构与 import 构建 Package 节点及 BELONGS_TO / DEPENDS_ON 边
+            graphBuilder.buildPackageGraph(
+                    context.getProjectId(), context.getVersionId(),
+                    packageExtractor.extract(structures));
 
             List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(asset.getFile().toFile());
             if (calls.isEmpty()) {

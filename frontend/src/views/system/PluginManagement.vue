@@ -65,6 +65,16 @@
           label="版本"
           width="120" />
         <el-table-column
+          label="状态"
+          width="100">
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.enabled"
+              :loading="togglingId === row.id"
+              @change="(val: boolean) => togglePlugin(row, val)" />
+          </template>
+        </el-table-column>
+        <el-table-column
           prop="description"
           label="描述"
           show-overflow-tooltip />
@@ -106,6 +116,16 @@
           :span="2">
           {{ selectedPlugin.description || '无描述' }}
         </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="selectedPlugin.enabled ? 'success' : 'info'">
+            {{ selectedPlugin.enabled ? '已启用' : '已禁用' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item
+          v-if="selectedPlugin.menuSection"
+          label="菜单归属">
+          {{ selectedPlugin.menuSection }}
+        </el-descriptions-item>
         <el-descriptions-item
           v-if="selectedPlugin.metadata && Object.keys(selectedPlugin.metadata).length > 0"
           label="元数据"
@@ -128,6 +148,7 @@ const plugins = ref<PluginDescriptor[]>([])
 const filterType = ref<PluginDescriptor['type'] | undefined>()
 const detailVisible = ref(false)
 const selectedPlugin = ref<PluginDescriptor | null>(null)
+const togglingId = ref<string | null>(null)
 
 const getTypeTag = (type: PluginDescriptor['type']) => {
   const map = {
@@ -164,6 +185,25 @@ const loadPlugins = async () => {
 const showDetail = (row: PluginDescriptor) => {
   selectedPlugin.value = row
   detailVisible.value = true
+}
+
+const togglePlugin = async (plugin: PluginDescriptor, enabled: boolean) => {
+  togglingId.value = plugin.id
+  try {
+    const updated = enabled
+      ? await pluginApi.enable(plugin.id)
+      : await pluginApi.disable(plugin.id)
+    const idx = plugins.value.findIndex(p => p.id === plugin.id)
+    if (idx !== -1) {
+      plugins.value[idx] = updated
+    }
+    ElMessage.success(`${plugin.name} 已${enabled ? '启用' : '禁用'}`)
+  } catch (error) {
+    ElMessage.error(`${enabled ? '启用' : '禁用'}失败`)
+    console.error(error)
+  } finally {
+    togglingId.value = null
+  }
 }
 
 watch(filterType, () => {
@@ -216,7 +256,7 @@ onMounted(() => {
 
 .plugin-management .metadata-pre {
   margin: 0;
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;

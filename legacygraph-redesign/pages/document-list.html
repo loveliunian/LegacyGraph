@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文档 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --gradient-icon-code: linear-gradient(135deg, #6366F1, #818CF8);
+  --gradient-icon-db: linear-gradient(135deg, #14B8A6, #2DD4BF);
+  --gradient-icon-doc: linear-gradient(135deg, #F59E0B, #FBBF24);
+  --gradient-icon-graph: linear-gradient(135deg, #8B5CF6, #A78BFA);
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.page-container { max-width: 1200px; margin: 0 auto; padding: var(--space-6); }
+.breadcrumb {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  color: var(--el-text-color-secondary); margin-bottom: var(--space-5);
+}
+.breadcrumb span { color: var(--el-text-color-primary); font-weight: 500; }
+.breadcrumb svg { width: 14px; height: 14px; color: var(--el-text-color-placeholder); }
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+.page-header h1 {
+  font-family: var(--font-body); font-size: 22px; font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border: none; border-radius: var(--radius-sm);
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all 0.2s; line-height: 1.4;
+}
+.btn-primary { background: var(--c-primary); color: #fff; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-default {
+  background: var(--el-bg-color); color: var(--el-text-color-regular);
+  border: 1px solid var(--el-border-color);
+}
+.btn-default:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn svg { width: 16px; height: 16px; }
+.search-form {
+  display: flex; align-items: center; gap: 12px;
+  padding: var(--space-5); background: var(--el-fill-color);
+  border-radius: var(--radius-md); margin-bottom: var(--space-5); flex-wrap: wrap;
+}
+.search-form input,
+.search-form select {
+  height: 36px; padding: 0 12px; border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 14px;
+  color: var(--el-text-color-primary); background: var(--el-bg-color);
+  outline: none; transition: border-color 0.2s;
+}
+.search-form input { width: 200px; }
+.search-form select { width: 150px; padding-right: 28px; }
+.search-form input:focus,
+.search-form select:focus { border-color: var(--c-primary); }
+.search-form input::placeholder { color: var(--el-text-color-placeholder); }
+.table-wrap {
+  background: var(--el-bg-color); border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color-lighter); overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; padding: 12px 16px; font-weight: 600; font-size: 13px;
+  color: var(--el-text-color-secondary); background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-lighter); white-space: nowrap;
+}
+tbody td {
+  padding: 12px 16px; border-bottom: 1px solid var(--el-border-color-lighter);
+  color: var(--el-text-color-regular); font-size: 14px;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--el-fill-color-light); }
+.mono { font-family: var(--font-mono); font-size: 13px; color: var(--el-text-color-secondary); }
+.tag {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px;
+  font-size: 12px; font-weight: 500; white-space: nowrap;
+}
+.tag-info { background: var(--c-info-bg); color: var(--c-info); }
+.tag-primary { background: var(--c-primary-bg); color: var(--c-primary); }
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-danger { background: var(--c-danger-bg); color: var(--c-danger); }
+.tag-warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.progress-wrap { display: flex; align-items: center; gap: 8px; }
+.progress-bar {
+  width: 80px; height: 6px; background: var(--el-fill-color);
+  border-radius: 3px; overflow: hidden;
+}
+.progress-bar .fill { height: 100%; background: var(--c-primary); border-radius: 3px; transition: width 0.3s; }
+.progress-bar .fill.warning { background: var(--c-warning); }
+.progress-text { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; }
+.doc-name {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 500; color: var(--el-text-color-primary);
+}
+.doc-icon {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  background: var(--gradient-icon-doc); display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.doc-icon svg { width: 16px; height: 16px; color: #fff; }
+.action-link {
+  color: var(--c-primary); cursor: pointer; font-size: 13px;
+  background: none; border: none; font-family: var(--font-body); padding: 2px 4px;
+}
+.action-link:hover { text-decoration: underline; }
+.action-link + .action-link { margin-left: 8px; }
+.pagination {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  padding: 12px 16px; border-top: 1px solid var(--el-border-color-lighter);
+}
+.pagination .info { margin-right: auto; font-size: 13px; color: var(--el-text-color-secondary); }
+.page-btn {
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--el-border-color); border-radius: var(--radius-sm);
+  background: var(--el-bg-color); color: var(--el-text-color-regular); font-size: 13px;
+  cursor: pointer; transition: all 0.2s;
+}
+.page-btn:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.page-btn.active { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+.page-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.dark-toggle {
+  position: fixed; top: 16px; right: 16px; width: 40px; height: 40px;
+  border-radius: 50%; border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color); color: var(--el-text-color-secondary);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  z-index: 100; transition: all 0.2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.dark-toggle svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">
+  <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+  <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="page-container">
+  <div class="breadcrumb">
+    <span>项目管理</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    <span>电商平台重构</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    <span style="color:var(--el-text-color-primary);font-weight:500">文档</span>
+  </div>
+
+  <div class="page-header">
+    <h1>文档</h1>
+    <button class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      上传文档
+    </button>
+  </div>
+
+  <div class="search-form">
+    <input type="text" placeholder="搜索文档名称..." />
+    <select>
+      <option value="">全部类型</option>
+      <option>API文档</option>
+      <option>技术方案</option>
+      <option>架构设计</option>
+      <option>README</option>
+    </select>
+    <select>
+      <option value="">全部状态</option>
+      <option>已解析</option>
+      <option>解析中</option>
+      <option>未解析</option>
+    </select>
+    <button class="btn btn-primary">搜索</button>
+    <button class="btn btn-default">重置</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>文档名称</th>
+          <th>类型</th>
+          <th>来源</th>
+          <th>解析状态</th>
+          <th>实体数</th>
+          <th>更新时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="doc-name">
+              <div class="doc-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              API接口文档
+            </div>
+          </td>
+          <td><span class="tag tag-primary">API文档</span></td>
+          <td class="mono">main-app/docs</td>
+          <td>
+            <div class="progress-wrap">
+              <div class="progress-bar"><div class="fill" style="width:100%"></div></div>
+              <span class="progress-text">已解析 100%</span>
+            </div>
+          </td>
+          <td>156</td>
+          <td>2024-03-01 14:30</td>
+          <td>
+            <button class="action-link">查看</button>
+            <button class="action-link">重新解析</button>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div class="doc-name">
+              <div class="doc-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              支付技术方案
+            </div>
+          </td>
+          <td><span class="tag tag-warning">技术方案</span></td>
+          <td class="mono">payment-service/doc</td>
+          <td>
+            <div class="progress-wrap">
+              <div class="progress-bar"><div class="fill warning" style="width:65%"></div></div>
+              <span class="progress-text">解析中 65%</span>
+            </div>
+          </td>
+          <td>87</td>
+          <td>2024-02-28 09:15</td>
+          <td>
+            <button class="action-link">查看</button>
+            <button class="action-link">取消解析</button>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div class="doc-name">
+              <div class="doc-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              架构设计文档
+            </div>
+          </td>
+          <td><span class="tag tag-info">架构设计</span></td>
+          <td class="mono">wiki/architecture</td>
+          <td>
+            <div class="progress-wrap">
+              <div class="progress-bar"><div class="fill" style="width:100%"></div></div>
+              <span class="progress-text">已解析 100%</span>
+            </div>
+          </td>
+          <td>234</td>
+          <td>2024-02-25 10:00</td>
+          <td>
+            <button class="action-link">查看</button>
+            <button class="action-link">重新解析</button>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div class="doc-name">
+              <div class="doc-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              </div>
+              README
+            </div>
+          </td>
+          <td><span class="tag tag-success">README</span></td>
+          <td class="mono">legacy-module</td>
+          <td>
+            <div class="progress-wrap">
+              <div class="progress-bar"><div class="fill" style="width:0%"></div></div>
+              <span class="progress-text">未解析</span>
+            </div>
+          </td>
+          <td>—</td>
+          <td>2024-02-20 16:45</td>
+          <td>
+            <button class="action-link">查看</button>
+            <button class="action-link">开始解析</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="pagination">
+      <span class="info">共 4 条记录</span>
+      <button class="page-btn disabled">&lt;</button>
+      <button class="page-btn active">1</button>
+      <button class="page-btn disabled">&gt;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const sun = document.getElementById('icon-sun');
+  const moon = document.getElementById('icon-moon');
+  const observer = new MutationObserver(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    sun.style.display = isDark ? 'none' : 'block';
+    moon.style.display = isDark ? 'block' : 'none';
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+</script>
+</body>
+</html>

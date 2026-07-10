@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>插件管理 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6);
+}
+.page-header {
+  margin-bottom: var(--space-6);
+}
+.page-header h1 {
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+.page-header .subtitle {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
+
+/* Plugin Grid */
+.plugin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+/* Plugin Card */
+.plugin-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  transition: box-shadow 0.2s;
+}
+.plugin-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.plugin-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: var(--space-4);
+}
+.plugin-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.plugin-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.icon-code { background: var(--c-primary-bg); color: var(--c-primary); }
+.icon-doc { background: var(--c-warning-bg); color: var(--c-warning); }
+.icon-graph { background: var(--c-success-bg); color: var(--c-success); }
+.icon-bell { background: var(--c-info-bg); color: var(--c-info); }
+
+.plugin-meta {
+  flex: 1;
+  min-width: 0;
+}
+.plugin-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 2px;
+}
+.plugin-version {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+}
+.plugin-desc {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: var(--space-4);
+  line-height: 1.5;
+}
+
+.plugin-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tag-success { background: var(--c-success-bg); color: var(--c-success); }
+.tag-info { background: var(--c-info-bg); color: var(--c-info); }
+
+.plugin-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1.4;
+}
+.btn-primary { background: var(--c-primary); color: #fff; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-default { background: var(--el-bg-color); color: var(--el-text-color-regular); border: 1px solid var(--el-border-color); }
+.btn-default:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn-danger-outline { background: var(--el-bg-color); color: var(--c-danger); border: 1px solid var(--el-border-color); }
+.btn-danger-outline:hover { border-color: var(--c-danger); background: var(--c-danger-bg); }
+.btn-success-outline { background: var(--el-bg-color); color: var(--c-success); border: 1px solid var(--el-border-color); }
+.btn-success-outline:hover { border-color: var(--c-success); background: var(--c-success-bg); }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+
+/* Add Plugin Card */
+.add-plugin-card {
+  background: var(--el-bg-color);
+  border: 2px dashed var(--el-border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  min-height: 200px;
+}
+.add-plugin-card:hover {
+  border-color: var(--c-primary);
+  background: var(--c-primary-bg);
+}
+.add-plugin-card svg {
+  width: 32px;
+  height: 32px;
+  color: var(--el-text-color-placeholder);
+}
+.add-plugin-card span {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
+}
+
+/* Theme toggle */
+.dark-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: all 0.2s;
+}
+.dark-toggle:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.dark-toggle svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" title="切换暗色模式">
+  <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+  <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="page-container">
+  <div class="page-header">
+    <h1>插件管理</h1>
+    <p class="subtitle">管理系统插件和扩展</p>
+  </div>
+
+  <div class="plugin-grid">
+    <!-- Plugin 1: 代码分析插件 -->
+    <div class="plugin-card">
+      <div class="plugin-header">
+        <div class="plugin-icon icon-code">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </div>
+        <div class="plugin-meta">
+          <div class="plugin-name">代码分析插件</div>
+          <div class="plugin-version">v1.2.0</div>
+        </div>
+      </div>
+      <div class="plugin-desc">提供代码结构分析和依赖检测</div>
+      <div class="plugin-footer">
+        <span class="tag tag-success">已启用</span>
+        <div class="plugin-actions">
+          <button class="btn btn-default btn-sm">配置</button>
+          <button class="btn btn-danger-outline btn-sm">禁用</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plugin 2: 文档解析插件 -->
+    <div class="plugin-card">
+      <div class="plugin-header">
+        <div class="plugin-icon icon-doc">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+        <div class="plugin-meta">
+          <div class="plugin-name">文档解析插件</div>
+          <div class="plugin-version">v1.0.3</div>
+        </div>
+      </div>
+      <div class="plugin-desc">解析多种格式的技术文档</div>
+      <div class="plugin-footer">
+        <span class="tag tag-success">已启用</span>
+        <div class="plugin-actions">
+          <button class="btn btn-default btn-sm">配置</button>
+          <button class="btn btn-danger-outline btn-sm">禁用</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plugin 3: Graphify 插件 -->
+    <div class="plugin-card">
+      <div class="plugin-header">
+        <div class="plugin-icon icon-graph">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><line x1="10.5" y1="11" x2="7.5" y2="7"/><line x1="13.5" y1="11" x2="16.5" y2="7"/><line x1="10.5" y1="13" x2="7.5" y2="17"/><line x1="13.5" y1="13" x2="16.5" y2="17"/></svg>
+        </div>
+        <div class="plugin-meta">
+          <div class="plugin-name">Graphify 插件</div>
+          <div class="plugin-version">v2.0.0</div>
+        </div>
+      </div>
+      <div class="plugin-desc">自动化图谱分析和质量评估</div>
+      <div class="plugin-footer">
+        <span class="tag tag-success">已启用</span>
+        <div class="plugin-actions">
+          <button class="btn btn-default btn-sm">配置</button>
+          <button class="btn btn-danger-outline btn-sm">禁用</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plugin 4: 通知插件 -->
+    <div class="plugin-card">
+      <div class="plugin-header">
+        <div class="plugin-icon icon-bell">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="plugin-meta">
+          <div class="plugin-name">通知插件</div>
+          <div class="plugin-version">v0.9.0</div>
+        </div>
+      </div>
+      <div class="plugin-desc">集成多种通知渠道</div>
+      <div class="plugin-footer">
+        <span class="tag tag-info">未启用</span>
+        <div class="plugin-actions">
+          <button class="btn btn-success-outline btn-sm">启用</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Plugin Card -->
+    <div class="add-plugin-card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>+ 安装插件</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const sun = document.getElementById('icon-sun');
+  const moon = document.getElementById('icon-moon');
+  const observer = new MutationObserver(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    sun.style.display = isDark ? 'none' : 'block';
+    moon.style.display = isDark ? 'block' : 'none';
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+</script>
+</body>
+</html>

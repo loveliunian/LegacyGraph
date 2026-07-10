@@ -131,6 +131,16 @@ public class TestCaseExtractor {
         private Integer startLine;
         private Integer endLine;
         private List<AssertionFact> assertions;
+        /** 测试内调用的被测方法列表（用于 VERIFIED_BY 边接线） */
+        private List<InvokedMethodCall> invokedMethodCalls = new ArrayList<>();
+    }
+
+    /**
+     * 测试内调用的被测方法事实。
+     */
+    @Data
+    public static class InvokedMethodCall {
+        private String methodName;
     }
 
     /**

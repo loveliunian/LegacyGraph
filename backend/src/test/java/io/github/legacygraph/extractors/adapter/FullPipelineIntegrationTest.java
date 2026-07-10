@@ -89,7 +89,7 @@ class FullPipelineIntegrationTest {
 
         // 构建 Adapter Registry（注册所有真实适配器）
         adapterRegistry = new ExtractionAdapterRegistry(List.of(
-                new JavaServiceCallAdapter(graphBuilder, factPersister, javaStructureExtractor),
+                new JavaServiceCallAdapter(graphBuilder, factPersister, javaStructureExtractor, new io.github.legacygraph.extractors.PackageExtractor()),
                 new MyBatisXmlAdapter(graphBuilder, factPersister),
                 new VueFrontendAdapter(frontendGraphBuilder, factPersister),
                 new DocumentAdapter(factPersister, new DocumentExtractor())

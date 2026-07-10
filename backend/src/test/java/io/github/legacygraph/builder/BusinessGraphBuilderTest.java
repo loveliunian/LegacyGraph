@@ -446,4 +446,125 @@ class BusinessGraphBuilderTest {
         // 全部从 BusinessObject 出发
         assertTrue(edges.stream().allMatch(e -> "bo-order".equals(e.getFromNodeId())));
     }
+
+    /**
+     * SubTask 5.1：验证 BusinessProcess--CONTAINS-->Feature 边构建。
+     * <p>buildBusinessGraph 对每个 BusinessProcess 落一个粗粒度 Feature（流程本身），
+     * 并对每个 step 落一个细粒度子 Feature，均建立 CONTAINS 边。
+     * 本测试断言 CONTAINS 边的类型、来源（Process）、目标（Feature）正确。</p>
+     */
+    @Test
+    void testProcessContainsFeatureEdge() {
+        when(writer.upsertNode(any(GraphNodeClaim.class))).thenAnswer(invocation -> {
+            GraphNodeClaim claim = invocation.getArgument(0);
+            GraphNode node = new GraphNode();
+            node.setId(claim.getNodeType() + ":" + claim.getNodeKey());
+            node.setNodeType(claim.getNodeType());
+            node.setNodeKey(claim.getNodeKey());
+            node.setNodeName(claim.getNodeName());
+            return node;
+        });
+        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenAnswer(invocation -> {
+            GraphEdgeClaim claim = invocation.getArgument(0);
+            GraphEdge edge = new GraphEdge();
+            edge.setId(claim.getEdgeType() + ":" + claim.getEdgeKey());
+            edge.setFromNodeId(claim.getFromNodeId());
+            edge.setToNodeId(claim.getToNodeId());
+            edge.setEdgeType(claim.getEdgeType());
+            edge.setEdgeKey(claim.getEdgeKey());
+            return edge;
+        });
+
+        DocUnderstandingAgent.BusinessFactExtraction facts =
+                new DocUnderstandingAgent.BusinessFactExtraction();
+        DocUnderstandingAgent.BusinessProcess process = new DocUnderstandingAgent.BusinessProcess();
+        process.setName("创建订单");
+        process.setSteps(List.of("选择商品", "提交订单"));
+        process.setConfidence(0.85);
+        facts.getBusinessProcesses().add(process);
+
+        businessGraphBuilder.buildBusinessGraph("project-1", "version-1", facts, "/docs/order.md");
+
+        // 捕获所有边
+        ArgumentCaptor<GraphEdgeClaim> edgeCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
+        verify(writer, atLeastOnce()).upsertEdge(edgeCaptor.capture());
+        List<GraphEdgeClaim> edges = edgeCaptor.getAllValues();
+
+        // 全部应为 CONTAINS 类型
+        assertTrue(edges.stream().allMatch(e -> EdgeType.CONTAINS.name().equals(e.getEdgeType())),
+                "所有边应为 CONTAINS 类型");
+
+        // 预期 3 条 CONTAINS 边：1 流程级 Feature + 2 step 级 Feature
+        assertEquals(3, edges.size(),
+                "应有 3 条 CONTAINS 边（1 流程级 + 2 step 级）");
+
+        // 来源节点应为 BusinessProcess
+        String processNodeId = NodeType.BusinessProcess.name() + ":" + "创建订单";
+        assertTrue(edges.stream().allMatch(e -> processNodeId.equals(e.getFromNodeId())),
+                "所有 CONTAINS 边来源应为 BusinessProcess 节点");
+
+        // 目标节点应为 Feature
+        assertTrue(edges.stream().allMatch(e ->
+                e.getToNodeId() != null && e.getToNodeId().startsWith(NodeType.Feature.name() + ":")),
+                "所有 CONTAINS 边目标应为 Feature 节点");
+
+        // 验证流程级 Feature 边存在（edgeKey 包含流程名）
+        assertTrue(edges.stream().anyMatch(e -> e.getEdgeKey().contains("创建订单")),
+                "应存在流程级 Feature 的 CONTAINS 边");
+        // 验证 step 级 Feature 边存在
+        assertTrue(edges.stream().anyMatch(e -> e.getEdgeKey().contains("选择商品")),
+                "应存在 step「选择商品」的 CONTAINS 边");
+        assertTrue(edges.stream().anyMatch(e -> e.getEdgeKey().contains("提交订单")),
+                "应存在 step「提交订单」的 CONTAINS 边");
+    }
+
+    /**
+     * SubTask 5.2：验证 BusinessProcess--IMPLEMENTS-->ApiEndpoint 边构建。
+     * <p>mapBusinessProcessesToApis 按名称相似度（阈值 0.55）连接 Process 和 ApiEndpoint。
+     * 本测试使用完全相同的名称确保匹配，断言 IMPLEMENTS 边确实被创建（count > 0），
+     * 且边类型、来源、目标正确。</p>
+     */
+    @Test
+    void testProcessImplementsApiEdge() {
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(invocation -> {
+            List<GraphEdge> edges = invocation.getArgument(0);
+            return edges.size();
+        });
+
+        GraphNode process = new GraphNode();
+        process.setId("process-1");
+        process.setNodeType(NodeType.BusinessProcess.name());
+        process.setNodeKey("process:create-order");
+        process.setNodeName("创建订单");
+
+        GraphNode api = new GraphNode();
+        api.setId("api-1");
+        api.setNodeType(NodeType.ApiEndpoint.name());
+        api.setNodeKey("POST /api/orders/create");
+        api.setNodeName("创建订单");
+        api.setDisplayName("创建订单");
+
+        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("version-1"),
+                eq(NodeType.BusinessProcess.name()), any(), any(), any(), anyInt()))
+                .thenReturn(List.of(process));
+        when(neo4jGraphDao.queryNodes(eq("project-1"), eq("version-1"),
+                eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt()))
+                .thenReturn(List.of(api));
+
+        int count = businessGraphBuilder.mapBusinessProcessesToApis("project-1", "version-1");
+
+        // 断言确实产生了边（相似度 = 1.0 > 0.55）
+        assertTrue(count > 0, "名称完全相同时应产生 IMPLEMENTS 边");
+
+        ArgumentCaptor<List<GraphEdge>> edgeCaptor = ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertEquals(1, edges.size());
+
+        GraphEdge edge = edges.get(0);
+        assertEquals(EdgeType.IMPLEMENTS.name(), edge.getEdgeType());
+        assertEquals("process-1", edge.getFromNodeId());
+        assertEquals("api-1", edge.getToNodeId());
+        assertTrue(edge.getEdgeKey().contains("->implements->"));
+    }
 }

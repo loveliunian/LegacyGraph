@@ -9,6 +9,7 @@ import io.github.legacygraph.entity.ChangeTask;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.service.qa.SemanticCache;
+import io.github.legacygraph.util.IdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -83,7 +84,7 @@ public class ColumnIngestService {
      */
     public void ingestAddedColumn(String projectId, String versionId,
                                   String tableName, String columnName, String columnType) {
-        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        String normalizedVersionId = IdUtil.normalizeId(versionId);
         List<GraphNode> tables = neo4jGraphDao.queryNodes(
                 projectId, normalizedVersionId, "Table", null, null, null, 200);
         GraphNode table = tables.stream()

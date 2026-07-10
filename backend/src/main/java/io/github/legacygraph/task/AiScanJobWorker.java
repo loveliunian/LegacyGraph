@@ -129,6 +129,9 @@ public class AiScanJobWorker {
     }
 
     private void generateSystemOverviewDocument(String projectId, String versionId) {
+        // 项目约定向量化 + 可复用组件标记（与 ProjectScanner 路径一致，覆盖 AI 完成路径）
+        projectScanner.runPostScanConventionIngest(projectId, versionId);
+
         if (systemOverviewDocumentService == null) {
             log.debug("SystemOverviewDocumentService not available, skip AI completion markdown generation: versionId={}",
                     versionId);

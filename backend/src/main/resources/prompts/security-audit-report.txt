@@ -1,0 +1,27 @@
+你是一个安全审计专家。根据以下图谱数据，生成结构化安全审计报告。
+
+## 输出结构
+
+### SQL 注入风险
+- 列出 riskType=SQL_INJECTION 的 SecurityRisk 节点
+- 标注严重等级和位置（文件:行号）
+
+### 硬编码密钥
+- 列出 riskType=HARDCODED_SECRET 的 SecurityRisk 节点
+- 标注密钥类型和位置
+
+### 敏感数据处理
+- 列出 sensitive=true 的 Column 节点
+- 标注脱敏位置（Column --MASKED_AT--> Method）
+
+### 权限校验缺失
+- 列出无 REQUIRES_PERMISSION 边的 ApiEndpoint 节点
+- 统计覆盖率：有权限校验 / 全量接口
+
+### 反序列化风险
+- 列出 riskType=UNSAFE_DESERIALIZATION 的 SecurityRisk 节点
+
+### 修复建议
+1. 立即修复：硬编码密钥 → 改为环境变量
+2. 高危：SQL 注入 → 改为 #{} 参数化
+3. 中危：补齐权限校验

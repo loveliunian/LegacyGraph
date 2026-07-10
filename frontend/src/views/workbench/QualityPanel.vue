@@ -2,26 +2,25 @@
   <div class="quality-panel">
     <div class="stats-grid">
       <!-- 节点统计 -->
-      <el-card shadow="hover">
-        <template #header>节点统计</template>
+      <section class="stat-section">
+        <h4 class="section-title">节点统计</h4>
         <div class="stat-row"><span>总节点</span><strong>{{ stats.totalNodes ?? 0 }}</strong></div>
         <div class="stat-row"><span>已确认</span><strong class="green">{{ stats.confirmedNodes ?? 0 }}</strong></div>
         <div class="stat-row"><span>待确认</span><strong class="orange">{{ stats.pendingNodes ?? 0 }}</strong></div>
         <div class="stat-row"><span>平均置信度</span><strong>{{ ((stats.avgConfidence ?? 0) * 100).toFixed(1) }}%</strong></div>
-      </el-card>
+      </section>
 
       <!-- 边统计 -->
-      <el-card shadow="hover">
-        <template #header>边统计</template>
+      <section class="stat-section">
+        <h4 class="section-title">边统计</h4>
         <div class="stat-row"><span>总边数</span><strong>{{ stats.totalEdges ?? 0 }}</strong></div>
         <div class="stat-row"><span>已确认</span><strong class="green">{{ stats.confirmedEdges ?? 0 }}</strong></div>
         <div class="stat-row"><span>待确认</span><strong class="orange">{{ stats.pendingEdges ?? 0 }}</strong></div>
-      </el-card>
+      </section>
 
       <!-- 质量问题 -->
-      <el-card
-        shadow="hover"
-        header="质量问题">
+      <section class="stat-section">
+        <h4 class="section-title">质量问题</h4>
         <div class="stat-row">
           <span>无证据节点</span>
           <strong class="red">{{ stats.noEvidenceNodes ?? 0 }}</strong>
@@ -54,12 +53,11 @@
           <span>Runtime-only 边</span>
           <strong class="blue">{{ stats.runtimeOnlyEdges ?? 0 }}</strong>
         </div>
-      </el-card>
+      </section>
 
       <!-- 覆盖指标 -->
-      <el-card
-        shadow="hover"
-        header="覆盖指标">
+      <section class="stat-section">
+        <h4 class="section-title">覆盖指标</h4>
         <div class="stat-row">
           <span>有证据节点率</span>
           <strong>{{ evidenceRate }}%</strong>
@@ -75,7 +73,7 @@
             :stroke-width="6"
             :color="confirmationColor" />
         </div>
-      </el-card>
+      </section>
     </div>
   </div>
 </template>
@@ -99,9 +97,9 @@ const confirmationRate = computed(() => {
   return Math.round((confirmed / total) * 100)
 })
 const confirmationColor = computed(() => {
-  if (confirmationRate.value >= 80) return '#67c23a'
-  if (confirmationRate.value >= 50) return '#e6a23c'
-  return '#f56c6c'
+  if (confirmationRate.value >= 80) return '#14B8A6'
+  if (confirmationRate.value >= 50) return '#F59E0B'
+  return '#EF4444'
 })
 
 async function loadQuality() {
@@ -119,14 +117,26 @@ onMounted(() => { loadQuality() })
 <style scoped>
 .quality-panel { padding: 4px 0; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.stat-section {
+  padding: 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay);
+}
+.section-title {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
 .stat-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 6px 0; border-bottom: 1px solid var(--el-border-color-lighter);
 }
 .stat-row:last-child { border-bottom: none; }
 .stat-row strong { font-size: 16px; margin: 0 8px; }
-.green { color: #67c23a; }
-.orange { color: #e6a23c; }
-.red { color: #f56c6c; }
-.blue { color: #409eff; }
+.green { color: var(--el-color-success); }
+.orange { color: var(--el-color-warning); }
+.red { color: var(--el-color-danger); }
+.blue { color: var(--el-color-primary); }
 </style>

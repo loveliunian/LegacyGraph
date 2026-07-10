@@ -50,7 +50,7 @@ class JavaServiceCallAdapterTest {
         classInfo.setMethods(List.of());
         when(structureExtractor.extractFromFile(any())).thenReturn(List.of(classInfo));
 
-        JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor);
+        JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor, new io.github.legacygraph.extractors.PackageExtractor());
         ScanContext context = ScanContext.builder()
                 .projectId("project-1")
                 .versionId("v1")
@@ -104,7 +104,7 @@ class JavaServiceCallAdapterTest {
         classInfo.setMethods(List.of());
         when(structureExtractor.extractFromFile(any())).thenReturn(List.of(classInfo));
 
-        JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor);
+        JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor, new io.github.legacygraph.extractors.PackageExtractor());
         ScanContext context = ScanContext.builder()
                 .projectId("project-1")
                 .versionId("v1")

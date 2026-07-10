@@ -7,6 +7,7 @@ import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocChunkRepository;
 import io.github.legacygraph.repository.DocumentRepository;
+import io.github.legacygraph.repository.ScanVersionRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -35,15 +36,18 @@ public class SourceService {
     private final DbConnectionRepository dbConnectionRepository;
     private final DocumentRepository documentRepository;
     private final DocChunkRepository docChunkRepository;
+    private final ScanVersionRepository scanVersionRepository;
 
     public SourceService(CodeRepoRepository codeRepoRepository,
                          DbConnectionRepository dbConnectionRepository,
                          DocumentRepository documentRepository,
-                         DocChunkRepository docChunkRepository) {
+                         DocChunkRepository docChunkRepository,
+                         ScanVersionRepository scanVersionRepository) {
         this.codeRepoRepository = codeRepoRepository;
         this.dbConnectionRepository = dbConnectionRepository;
         this.documentRepository = documentRepository;
         this.docChunkRepository = docChunkRepository;
+        this.scanVersionRepository = scanVersionRepository;
     }
 
     // ==================== Git 操作 ====================
@@ -199,6 +203,15 @@ public class SourceService {
             result.put("success", false);
             result.put("message", "文档文件路径为空，无法解析");
             return result;
+        }
+
+        String versionId = doc.getVersionId();
+        if (versionId != null && !versionId.isBlank()) {
+            if (scanVersionRepository.selectById(versionId) == null) {
+                result.put("success", false);
+                result.put("message", "版本不存在: " + versionId);
+                return result;
+            }
         }
 
         java.io.File file = new java.io.File(filePath);

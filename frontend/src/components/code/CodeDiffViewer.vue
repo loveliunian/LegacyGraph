@@ -409,7 +409,7 @@ defineExpose({
   border: 1px solid #ebeef5;
   border-radius: 8px;
   overflow: hidden;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
 .diff-header {

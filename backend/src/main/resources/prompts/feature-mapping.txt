@@ -27,6 +27,85 @@
 {productDoc}
 ```
 
+## 示例
+
+### 示例1
+输入：
+- 页面: order/list (权限: order:list)
+- 按钮: "新增订单" (权限: order:add)
+- API: POST /api/orders (权限: order:add)
+- Controller: OrderController.createOrder
+
+输出：
+```json
+{
+  "mappings": [
+    {
+      "pageKey": "order/list",
+      "buttonName": "新增订单",
+      "apiKey": "POST /api/orders",
+      "businessAction": "创建订单",
+      "permissionKey": "order:add",
+      "confidence": 0.95,
+      "evidence": [{"type": "vue", "excerpt": "新增订单按钮调用 POST /api/orders"}],
+      "conflicts": []
+    }
+  ],
+  "unmatched": []
+}
+```
+
+### 示例2
+输入：
+- 页面: user/profile
+- API: GET /api/users/:id
+- Controller: UserController.getUserById
+
+输出：
+```json
+{
+  "mappings": [
+    {
+      "pageKey": "user/profile",
+      "buttonName": null,
+      "apiKey": "GET /api/users/:id",
+      "businessAction": "查询用户信息",
+      "permissionKey": "user:query",
+      "confidence": 0.85,
+      "evidence": [{"type": "api", "excerpt": "GET /api/users/:id 对应页面用户信息加载"}],
+      "conflicts": []
+    }
+  ],
+  "unmatched": []
+}
+```
+
+### 示例3
+输入：
+- 页面: auth/login
+- 按钮: "登录"
+- API: POST /api/auth/login
+- 无法匹配的功能: 密码重置（无对应 API）
+
+输出：
+```json
+{
+  "mappings": [
+    {
+      "pageKey": "auth/login",
+      "buttonName": "登录",
+      "apiKey": "POST /api/auth/login",
+      "businessAction": "用户登录认证",
+      "permissionKey": null,
+      "confidence": 0.9,
+      "evidence": [{"type": "vue", "excerpt": "登录按钮提交表单到 /api/auth/login"}],
+      "conflicts": []
+    }
+  ],
+  "unmatched": ["密码重置"]
+}
+```
+
 ## 任务要求
 请将上述输入对齐为映射条目：
 - 每条映射关联：页面(pageKey)、按钮(buttonName)、API(apiKey)、业务动作(businessAction)、权限(permissionKey)。

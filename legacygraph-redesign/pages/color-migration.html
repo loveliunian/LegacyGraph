@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>颜色迁移对照手册 — LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-6: 24px;
+  --radius-md: 8px;
+  --c-primary: #6366F1; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-warning: #F59E0B; --c-danger: #EF4444; --c-info: #909399;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7;
+}
+
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  padding: var(--space-6);
+  min-height: 100vh;
+}
+
+/* ---------- Page container ---------- */
+.page {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* ---------- Header ---------- */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.page-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  letter-spacing: -0.02em;
+}
+
+.page-header .subtitle {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
+
+/* Dark mode toggle */
+.dark-toggle {
+  flex-shrink: 0;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.dark-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--el-border-color);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--el-bg-color);
+  transition: transform 0.2s;
+}
+
+.dark-toggle input:checked + .toggle-track {
+  background: var(--c-primary);
+}
+
+.dark-toggle input:checked + .toggle-track::after {
+  transform: translateX(18px);
+}
+
+/* ---------- Section ---------- */
+.section {
+  margin-bottom: var(--space-6);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.section-header {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-overline {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--c-primary);
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.section-body {
+  padding: 0;
+}
+
+/* ---------- Stats bar ---------- */
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+}
+
+.stat-card {
+  padding: var(--space-4) var(--space-6);
+  border-left: 3px solid transparent;
+  position: relative;
+}
+
+.stat-card:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 1px;
+  background: var(--el-border-color-lighter);
+}
+
+.stat-card.danger { border-left-color: var(--c-danger); background: color-mix(in srgb, var(--c-danger) 6%, var(--el-bg-color)); }
+.stat-card.warning { border-left-color: var(--c-warning); background: color-mix(in srgb, var(--c-warning) 6%, var(--el-bg-color)); }
+.stat-card.primary { border-left-color: var(--c-primary); background: color-mix(in srgb, var(--c-primary) 6%, var(--el-bg-color)); }
+.stat-card.info { border-left-color: var(--c-info); background: color-mix(in srgb, var(--c-info) 6%, var(--el-bg-color)); }
+
+.stat-number {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+}
+
+/* ---------- Tables ---------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  padding: 10px var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+tbody td {
+  padding: 12px var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  vertical-align: middle;
+  color: var(--el-text-color-regular);
+}
+
+tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--el-fill-color) 50%, var(--el-bg-color));
+}
+
+/* ---------- Swatches ---------- */
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.swatch-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color-light);
+  flex-shrink: 0;
+}
+
+.swatch-sm {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color-light);
+  flex-shrink: 0;
+}
+
+.swatch-hex {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+/* ---------- Variable name ---------- */
+.var-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-primary);
+  background: var(--c-primary-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ---------- Arrow ---------- */
+.arrow {
+  color: var(--c-primary);
+  font-size: 16px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ---------- Context label ---------- */
+.context {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+/* ---------- File count badge ---------- */
+.file-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.file-count-num {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+/* ---------- Code example ---------- */
+code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 8%, var(--el-bg-color));
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* ---------- Gradient swatches ---------- */
+.gradient-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.gradient-row:nth-child(even) {
+  background: color-mix(in srgb, var(--el-fill-color) 50%, var(--el-bg-color));
+}
+
+.gradient-swatch {
+  width: 80px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color-light);
+  flex-shrink: 0;
+}
+
+.gradient-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gradient-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.gradient-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-danger);
+}
+
+.gradient-new-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-success);
+}
+
+/* ---------- Quick reference search ---------- */
+.search-bar {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.search-input {
+  width: 100%;
+  max-width: 360px;
+  padding: 8px 14px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  background: var(--el-fill-color);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-input::placeholder {
+  color: var(--el-text-color-placeholder);
+}
+
+.search-input:focus {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 15%, transparent);
+}
+
+/* ---------- Compact reference row ---------- */
+.ref-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 13px;
+}
+
+.ref-row:nth-child(even) {
+  background: color-mix(in srgb, var(--el-fill-color) 50%, var(--el-bg-color));
+}
+
+.ref-row .swatch-hex {
+  font-size: 12px;
+}
+
+.ref-row .var-name {
+  font-size: 12px;
+}
+
+.ref-row .arrow {
+  font-size: 14px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .page-header { flex-direction: column; gap: 12px; }
+  .stat-card:not(:last-child)::after { display: none; }
+}
+
+/* ---------- Icon gradient grid ---------- */
+.icon-gradient-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.icon-gradient-item {
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-right: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-gradient-item:nth-child(2n) {
+  border-right: none;
+}
+
+.icon-gradient-item:nth-child(n+3):nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.icon-gradient-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 2px;
+}
+
+.icon-gradient-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ======== HEADER ======== -->
+  <div class="page-header">
+    <div>
+      <h1>颜色迁移对照手册</h1>
+      <div class="subtitle">LegacyGraph 前端颜色替换参考 v1.0</div>
+    </div>
+    <label class="dark-toggle">
+      <input type="checkbox" id="darkToggle">
+      <span class="toggle-track"></span>
+      <span>深色模式</span>
+    </label>
+  </div>
+
+  <!-- ======== STATS BAR ======== -->
+  <div class="stats-bar" style="margin-bottom: var(--space-6); border: 1px solid var(--el-border-color-lighter); border-radius: var(--radius-md); overflow: hidden; background: var(--el-bg-color);">
+    <div class="stat-card danger">
+      <div class="stat-number">331</div>
+      <div class="stat-label">处旧色值</div>
+    </div>
+    <div class="stat-card warning">
+      <div class="stat-number">51</div>
+      <div class="stat-label">个涉及文件</div>
+    </div>
+    <div class="stat-card primary">
+      <div class="stat-number">7</div>
+      <div class="stat-label">处旧渐变</div>
+    </div>
+    <div class="stat-card info">
+      <div class="stat-number">48</div>
+      <div class="stat-label">处默认蓝</div>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 1: 文字颜色映射 ======== -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-overline">Text Colors</span>
+      <span class="section-title">文字颜色映射</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:160px">旧色值</th>
+            <th style="width:220px">新 CSS 变量</th>
+            <th>语义说明</th>
+            <th style="width:90px">影响文件数</th>
+            <th style="width:260px">使用示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#303133"></span>
+                <span class="swatch-hex">#303133</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-text-color-primary)</span></td>
+            <td class="context">主要文字</td>
+            <td><span class="file-count"><span class="file-count-num">~30</span> files</span></td>
+            <td><code>&lt;h3 style="color: #303133"&gt;</code></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#606266"></span>
+                <span class="swatch-hex">#606266</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-text-color-regular)</span></td>
+            <td class="context">常规文字</td>
+            <td><span class="file-count"><span class="file-count-num">~25</span> files</span></td>
+            <td><code>&lt;span style="color: #606266"&gt;</code></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#909399"></span>
+                <span class="swatch-hex">#909399</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-text-color-secondary)</span></td>
+            <td class="context">次要文字</td>
+            <td><span class="file-count"><span class="file-count-num">~30</span> files</span></td>
+            <td><code>&lt;p style="color: #909399"&gt;</code></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#c0c4cc"></span>
+                <span class="swatch-hex">#c0c4cc</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-text-color-placeholder)</span></td>
+            <td class="context">占位/禁用</td>
+            <td><span class="file-count"><span class="file-count-num">~15</span> files</span></td>
+            <td><code>.empty-text { color: #c0c4cc }</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 2: 背景颜色映射 ======== -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-overline">Background Colors</span>
+      <span class="section-title">背景颜色映射</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:160px">旧色值</th>
+            <th style="width:220px">新 CSS 变量</th>
+            <th>语义说明</th>
+            <th style="width:90px">影响文件数</th>
+            <th style="width:260px">使用示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#f5f7fa"></span>
+                <span class="swatch-hex">#f5f7fa</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-fill-color)</span></td>
+            <td class="context">填充背景</td>
+            <td><span class="file-count"><span class="file-count-num">~20</span> files</span></td>
+            <td><code>.search-area { background: #f5f7fa }</code></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#ffffff; border-color: var(--el-border-color-light)"></span>
+                <span class="swatch-hex">#ffffff</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-bg-color)</span></td>
+            <td class="context">卡片/面板背景</td>
+            <td><span class="file-count"><span class="file-count-num">~10</span> files</span></td>
+            <td><code>.card { background: #ffffff }</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 3: 边框颜色映射 ======== -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-overline">Border Colors</span>
+      <span class="section-title">边框颜色映射</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:160px">旧色值</th>
+            <th style="width:220px">新 CSS 变量</th>
+            <th>语义说明</th>
+            <th style="width:90px">影响文件数</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#e4e7ed"></span>
+                <span class="swatch-hex">#e4e7ed</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-border-color-light)</span></td>
+            <td class="context">浅边框</td>
+            <td><span class="file-count"><span class="file-count-num">~15</span> files</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#ebeef5"></span>
+                <span class="swatch-hex">#ebeef5</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-border-color-lighter)</span></td>
+            <td class="context">更浅边框</td>
+            <td><span class="file-count"><span class="file-count-num">~10</span> files</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#f0f0f0"></span>
+                <span class="swatch-hex">#f0f0f0</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-border-color-extra-light)</span></td>
+            <td class="context">最浅边框</td>
+            <td><span class="file-count"><span class="file-count-num">~5</span> files</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 4: 品牌色映射 ======== -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-overline">Brand Colors</span>
+      <span class="section-title">品牌色映射</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:160px">旧色值</th>
+            <th style="width:220px">新 CSS 变量</th>
+            <th>语义说明</th>
+            <th style="width:90px">影响文件数</th>
+            <th style="width:260px">使用示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="swatch">
+                <span class="swatch-circle" style="background:#409eff"></span>
+                <span class="swatch-hex">#409eff</span>
+              </div>
+            </td>
+            <td><span class="var-name">var(--el-color-primary)</span></td>
+            <td class="context">Element Plus 默认蓝</td>
+            <td><span class="file-count"><span class="file-count-num">48</span> files</span></td>
+            <td><code>&lt;el-button type="primary"&gt;</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Brand gradient -->
+      <div style="padding: var(--space-4) var(--space-6); border-top: 1px solid var(--el-border-color-lighter);">
+        <div style="font-size: 12px; font-weight: 600; color: var(--el-text-color-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px;">品牌渐变</div>
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="swatch-circle" style="background: linear-gradient(135deg, #667eea, #764ba2); width: 60px; height: 36px; border-radius: 6px; border: 1px solid var(--el-border-color-light);"></span>
+            <div>
+              <div style="font-size: 12px; color: var(--c-danger); font-family: var(--font-mono);">#667eea &rarr; #764ba2</div>
+              <div style="font-size: 11px; color: var(--el-text-color-placeholder);">旧渐变 (7 files)</div>
+            </div>
+          </div>
+          <span class="arrow">&rarr;</span>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="swatch-circle" style="background: var(--gradient-brand, linear-gradient(135deg, #6366F1, #818CF8)); width: 60px; height: 36px; border-radius: 6px; border: 1px solid var(--el-border-color-light);"></span>
+            <div>
+              <div style="font-size: 12px; color: var(--c-success); font-family: var(--font-mono);">var(--gradient-brand)</div>
+              <div style="font-size: 11px; color: var(--el-text-color-placeholder);">新品牌渐变</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 5: 渐变图标色映射 ======== -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-overline">Icon Gradients</span>
+      <span class="section-title">渐变图标色映射</span>
+    </div>
+    <div class="section-body">
+      <div style="padding: 10px var(--space-6); font-size: 12px; color: var(--el-text-color-placeholder); border-bottom: 1px solid var(--el-border-color-lighter);">
+        旧渐变统一使用 #667eea &rarr; #764ba2，迁移后按语义分配独立渐变色。
+      </div>
+      <div class="icon-gradient-grid">
+        <!-- Code icon -->
+        <div class="icon-gradient-item">
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #667eea, #764ba2); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <span class="arrow">&rarr;</span>
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #6366F1, #818CF8); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <div class="icon-gradient-pair">
+            <span class="icon-gradient-label">Code 图标</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--c-success);">linear-gradient(135deg, #6366F1, #818CF8)</span>
+          </div>
+        </div>
+        <!-- DB icon -->
+        <div class="icon-gradient-item">
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #667eea, #764ba2); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <span class="arrow">&rarr;</span>
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #14B8A6, #2DD4BF); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <div class="icon-gradient-pair">
+            <span class="icon-gradient-label">DB 图标</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--c-success);">linear-gradient(135deg, #14B8A6, #2DD4BF)</span>
+          </div>
+        </div>
+        <!-- Doc icon -->
+        <div class="icon-gradient-item">
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #667eea, #764ba2); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <span class="arrow">&rarr;</span>
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #F59E0B, #FBBF24); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <div class="icon-gradient-pair">
+            <span class="icon-gradient-label">Doc 图标</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--c-success);">linear-gradient(135deg, #F59E0B, #FBBF24)</span>
+          </div>
+        </div>
+        <!-- Graph icon -->
+        <div class="icon-gradient-item">
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #667eea, #764ba2); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <span class="arrow">&rarr;</span>
+          <span class="swatch-circle" style="background: linear-gradient(135deg, #8B5CF6, #A78BFA); width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;"></span>
+          <div class="icon-gradient-pair">
+            <span class="icon-gradient-label">Graph 图标</span>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--c-success);">linear-gradient(135deg, #8B5CF6, #A78BFA)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 6: 快速查找 ======== -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-overline">Quick Reference</span>
+      <span class="section-title">快速查找</span>
+    </div>
+    <div class="section-body">
+      <div class="search-bar">
+        <input class="search-input" type="text" placeholder="输入旧色值快速查找...">
+      </div>
+
+      <!-- Text colors -->
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#303133"></span>
+        <span class="swatch-hex">#303133</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-text-color-primary)</span>
+        <span class="context">主要文字</span>
+      </div>
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#606266"></span>
+        <span class="swatch-hex">#606266</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-text-color-regular)</span>
+        <span class="context">常规文字</span>
+      </div>
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#909399"></span>
+        <span class="swatch-hex">#909399</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-text-color-secondary)</span>
+        <span class="context">次要文字</span>
+      </div>
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#c0c4cc"></span>
+        <span class="swatch-hex">#c0c4cc</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-text-color-placeholder)</span>
+        <span class="context">占位/禁用</span>
+      </div>
+
+      <!-- Background colors -->
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#f5f7fa"></span>
+        <span class="swatch-hex">#f5f7fa</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-fill-color)</span>
+        <span class="context">填充背景</span>
+      </div>
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#ffffff; border-color: var(--el-border-color-light)"></span>
+        <span class="swatch-hex">#ffffff</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-bg-color)</span>
+        <span class="context">卡片/面板背景</span>
+      </div>
+
+      <!-- Border colors -->
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#e4e7ed"></span>
+        <span class="swatch-hex">#e4e7ed</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-border-color-light)</span>
+        <span class="context">浅边框</span>
+      </div>
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#ebeef5"></span>
+        <span class="swatch-hex">#ebeef5</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-border-color-lighter)</span>
+        <span class="context">更浅边框</span>
+      </div>
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#f0f0f0"></span>
+        <span class="swatch-hex">#f0f0f0</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-border-color-extra-light)</span>
+        <span class="context">最浅边框</span>
+      </div>
+
+      <!-- Brand colors -->
+      <div class="ref-row">
+        <span class="swatch-sm" style="background:#409eff"></span>
+        <span class="swatch-hex">#409eff</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--el-color-primary)</span>
+        <span class="context">Element Plus 默认蓝</span>
+      </div>
+      <div class="ref-row">
+        <span class="swatch-sm" style="background: linear-gradient(135deg, #667eea, #764ba2);"></span>
+        <span class="swatch-hex">#667eea &rarr; #764ba2</span>
+        <span class="arrow">&rarr;</span>
+        <span class="var-name">var(--gradient-brand)</span>
+        <span class="context">品牌渐变</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* Minimal JS only for dark mode toggle — no framework */
+document.getElementById('darkToggle').addEventListener('change', function() {
+  document.documentElement.classList.toggle('dark', this.checked);
+});
+</script>
+</body>
+</html>

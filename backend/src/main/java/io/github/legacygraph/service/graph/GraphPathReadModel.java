@@ -3,6 +3,7 @@ package io.github.legacygraph.service.graph;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.util.IdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -28,7 +29,7 @@ public class GraphPathReadModel {
     /** API 调用链 */
     public PathChain getApiCallChain(String projectId, String versionId, String apiKey) {
         // Neo4j 存储 versionId 无连字符，需规范化
-        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        String normalizedVersionId = IdUtil.normalizeId(versionId);
 
         PathChain chain = new PathChain();
         chain.nodes = new ArrayList<>();
@@ -69,7 +70,7 @@ public class GraphPathReadModel {
     /** 表影响范围 */
     public PathChain getTableImpact(String projectId, String versionId, String tableName) {
         // Neo4j 存储 versionId 无连字符，需规范化
-        String normalizedVersionId = versionId != null ? versionId.replace("-", "") : null;
+        String normalizedVersionId = IdUtil.normalizeId(versionId);
 
         PathChain chain = new PathChain();
         chain.nodes = new ArrayList<>();

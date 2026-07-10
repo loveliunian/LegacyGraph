@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>业务图谱 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --gradient-icon-code: linear-gradient(135deg, #6366F1, #818CF8);
+  --gradient-icon-db: linear-gradient(135deg, #14B8A6, #2DD4BF);
+  --gradient-icon-doc: linear-gradient(135deg, #F59E0B, #FBBF24);
+  --gradient-icon-graph: linear-gradient(135deg, #8B5CF6, #A78BFA);
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; font-family: var(--font-body); color: var(--el-text-color-primary); background: var(--el-bg-color-page); }
+.page-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--el-bg-color); border-bottom: 1px solid var(--el-border-color-light);
+  padding: 12px 24px; flex-shrink: 0;
+}
+.top-bar-left { display: flex; align-items: center; gap: 12px; }
+.breadcrumb { font-size: 12px; color: var(--el-text-color-placeholder); font-family: var(--font-mono); white-space: nowrap; }
+.breadcrumb span { color: var(--el-text-color-secondary); }
+.top-bar-title-group { display: flex; flex-direction: column; gap: 2px; }
+.top-bar-title { font-family: var(--font-display); font-size: 20px; font-weight: 400; color: var(--el-text-color-primary); line-height: 1.2; }
+.top-bar-subtitle { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1; }
+.top-bar-right { display: flex; align-items: center; gap: 8px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 6px 12px; font-size: 13px; font-family: var(--font-body); font-weight: 500;
+  border: 1px solid var(--el-border-color); border-radius: var(--radius-sm);
+  background: var(--el-bg-color); color: var(--el-text-color-regular);
+  cursor: pointer; transition: all 0.15s ease; white-space: nowrap; line-height: 1.4;
+}
+.btn:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn svg { width: 16px; height: 16px; }
+.version-select {
+  padding: 6px 28px 6px 10px; font-size: 13px; font-family: var(--font-mono); font-weight: 500;
+  border: 1px solid var(--el-border-color); border-radius: var(--radius-sm);
+  background: var(--el-bg-color); color: var(--el-text-color-regular);
+  cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236E6E73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+.stats-bar {
+  display: flex; align-items: center; gap: 40px;
+  background: var(--el-bg-color); border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 8px 24px; flex-shrink: 0;
+}
+.stat-item { display: flex; align-items: center; gap: 8px; }
+.stat-icon { width: 32px; height: 32px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.stat-icon svg { width: 16px; height: 16px; }
+.stat-icon.nodes { background: var(--c-primary-bg); color: var(--c-primary); }
+.stat-icon.edges { background: var(--c-success-bg); color: var(--c-success); }
+.stat-icon.modules { background: var(--c-warning-bg); color: var(--c-warning); }
+.stat-icon.rules { background: var(--c-info-bg); color: var(--c-info); }
+.stat-content { display: flex; flex-direction: column; gap: 1px; }
+.stat-number { font-size: 16px; font-weight: 600; color: var(--c-primary); line-height: 1.2; font-family: var(--font-mono); }
+.stat-label { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1; }
+.main-area { flex: 1; position: relative; overflow: hidden; }
+.graph-canvas { width: 100%; height: 100%; background: var(--el-fill-color-light); position: relative; overflow: hidden; }
+.graph-canvas svg { width: 100%; height: 100%; display: block; }
+.graph-svg-node circle { cursor: pointer; transition: filter 0.15s ease; }
+.graph-svg-node:hover circle { filter: brightness(1.1); }
+.graph-svg-node text { pointer-events: none; user-select: none; }
+.graph-toolbar {
+  position: absolute; bottom: 20px; left: 20px; display: flex; gap: 2px;
+  background: var(--el-bg-color); border: 1px solid var(--el-border-color-light);
+  border-radius: var(--radius-md); padding: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04); z-index: 20;
+}
+html.dark .graph-toolbar { box-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2); }
+.toolbar-btn {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius-sm); background: transparent;
+  color: var(--el-text-color-secondary); cursor: pointer; transition: all 0.15s ease;
+}
+.toolbar-btn:hover { background: var(--el-fill-color); color: var(--c-primary); }
+.toolbar-btn.active { background: var(--c-primary-bg); color: var(--c-primary); }
+.toolbar-btn svg { width: 16px; height: 16px; }
+.dark-toggle { position: fixed; top: 12px; right: 12px; z-index: 100; }
+</style>
+</head>
+<body>
+<div class="page-wrapper">
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <span class="breadcrumb">项目管理 <span>/</span> 电商平台重构 <span>/</span> 业务图谱</span>
+      <div class="top-bar-title-group">
+        <h2 class="top-bar-title">业务图谱</h2>
+        <span class="top-bar-subtitle">展示业务领域、业务流程和领域模型</span>
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <select class="version-select">
+        <option>v2.1.0</option><option>v2.0.3</option><option>v2.0.0</option>
+      </select>
+      <button class="btn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v4h-4"/></svg>
+        刷新
+      </button>
+      <button class="btn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8"/><path d="M4.5 7.5L8 11l3.5-3.5"/><path d="M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>
+        导出
+      </button>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-icon nodes"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><path d="M8 3v10M3 8h10"/></svg></div>
+      <div class="stat-content"><span class="stat-number">6</span><span class="stat-label">业务域</span></div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-icon edges"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 14L10 2"/><circle cx="2" cy="14" r="1.5" fill="currentColor"/><circle cx="10" cy="2" r="1.5" fill="currentColor"/></svg></div>
+      <div class="stat-content"><span class="stat-number">12</span><span class="stat-label">业务流程</span></div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-icon modules"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z"/><path d="M2 4.5L8 8L14 4.5M8 8V15"/></svg></div>
+      <div class="stat-content"><span class="stat-number">34</span><span class="stat-label">领域模型</span></div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-icon rules"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L10 6H15L11 9L12.5 14L8 11L3.5 14L5 9L1 6H6L8 1Z"/></svg></div>
+      <div class="stat-content"><span class="stat-number">8</span><span class="stat-label">规则</span></div>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <div class="graph-canvas">
+      <svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="var(--el-border-color)" opacity="0.5"/>
+          </marker>
+        </defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <circle cx="20" cy="20" r="0.8" fill="var(--el-border-color-lighter)" opacity="0.5"/>
+        </pattern>
+        <rect width="1200" height="700" fill="url(#grid)"/>
+
+        <!-- Business flow edges -->
+        <path d="M310 260 Q420 200 510 240" fill="none" stroke="#6366F1" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M310 300 Q350 400 380 450" fill="none" stroke="#6366F1" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M560 270 Q640 200 720 230" fill="none" stroke="#14B8A6" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M520 280 Q500 380 440 460" fill="none" stroke="#14B8A6" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M770 270 Q820 340 840 390" fill="none" stroke="#F59E0B" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M740 250 Q820 180 880 170" fill="none" stroke="#F59E0B" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M410 490 Q500 520 580 500" fill="none" stroke="#F59E0B" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M840 440 Q900 480 940 470" fill="none" stroke="#8B5CF6" stroke-width="2" opacity="0.25" marker-end="url(#arrowhead)"/>
+        <path d="M660 480 Q740 500 800 460" fill="none" stroke="#8B5CF6" stroke-width="2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M260 270 Q180 300 160 360" fill="none" stroke="#10B981" stroke-width="2" opacity="0.2" marker-end="url(#arrowhead)"/>
+
+        <!-- 订单域 -->
+        <g class="graph-svg-node">
+          <circle cx="280" cy="280" r="42" fill="#6366F1" opacity="0.9"/>
+          <text x="280" y="276" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">订单</text>
+          <text x="280" y="294" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">域</text>
+        </g>
+        <!-- 支付域 -->
+        <g class="graph-svg-node">
+          <circle cx="530" cy="250" r="42" fill="#14B8A6" opacity="0.9"/>
+          <text x="530" y="246" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">支付</text>
+          <text x="530" y="264" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">域</text>
+        </g>
+        <!-- 用户域 -->
+        <g class="graph-svg-node">
+          <circle cx="400" cy="470" r="42" fill="#F59E0B" opacity="0.9"/>
+          <text x="400" y="466" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">用户</text>
+          <text x="400" y="484" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">域</text>
+        </g>
+        <!-- 库存域 -->
+        <g class="graph-svg-node">
+          <circle cx="740" cy="240" r="42" fill="#8B5CF6" opacity="0.9"/>
+          <text x="740" y="236" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">库存</text>
+          <text x="740" y="254" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">域</text>
+        </g>
+        <!-- 商品域 -->
+        <g class="graph-svg-node">
+          <circle cx="900" cy="160" r="42" fill="#EC4899" opacity="0.9"/>
+          <text x="900" y="156" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">商品</text>
+          <text x="900" y="174" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">域</text>
+        </g>
+        <!-- 通知域 -->
+        <g class="graph-svg-node">
+          <circle cx="850" cy="420" r="42" fill="#10B981" opacity="0.9"/>
+          <text x="850" y="416" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">通知</text>
+          <text x="850" y="434" text-anchor="middle" fill="white" font-size="14" font-weight="600" font-family="var(--font-body)">域</text>
+        </g>
+
+        <!-- Sub-domain nodes -->
+        <g class="graph-svg-node"><circle cx="150" cy="380" r="24" fill="#F59E0B" opacity="0.4"/><text x="150" y="384" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="9" font-family="var(--font-mono)">认证</text></g>
+        <g class="graph-svg-node"><circle cx="620" cy="500" r="24" fill="#6366F1" opacity="0.4"/><text x="620" y="504" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="9" font-family="var(--font-mono)">退款</text></g>
+        <g class="graph-svg-node"><circle cx="970" cy="470" r="24" fill="#10B981" opacity="0.4"/><text x="970" y="474" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="9" font-family="var(--font-mono)">短信</text></g>
+        <g class="graph-svg-node"><circle cx="1060" cy="200" r="24" fill="#EC4899" opacity="0.35"/><text x="1060" y="204" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-family="var(--font-mono)">分类</text></g>
+        <g class="graph-svg-node"><circle cx="200" cy="160" r="20" fill="#6366F1" opacity="0.3"/><text x="200" y="164" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">物流</text></g>
+        <g class="graph-svg-node"><circle cx="1040" cy="350" r="20" fill="#8B5CF6" opacity="0.3"/><text x="1040" y="354" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">仓储</text></g>
+        <g class="graph-svg-node"><circle cx="550" cy="140" r="18" fill="#14B8A6" opacity="0.3"/><text x="550" y="144" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">对账</text></g>
+        <g class="graph-svg-node"><circle cx="300" cy="560" r="18" fill="#F59E0B" opacity="0.3"/><text x="300" y="564" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">会员</text></g>
+      </svg>
+    </div>
+
+    <div class="graph-toolbar">
+      <button class="toolbar-btn" title="放大"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/><path d="M7 5v4M5 7h4"/></svg></button>
+      <button class="toolbar-btn" title="缩小"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/><path d="M5 7h4"/></svg></button>
+      <button class="toolbar-btn" title="适应画布"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M8 2v12"/><path d="M5 5L2 8l3 3M11 5l3 3-3 3"/></svg></button>
+      <button class="toolbar-btn active" title="自动布局"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<script>
+const toggleBtn = document.createElement('button');
+toggleBtn.className = 'btn dark-toggle';
+toggleBtn.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3a5 5 0 1 0 0 10A5 5 0 0 0 8 3z"/><path d="M8 1v2M8 13v2M3 8H1M15 8h-2M4.2 4.2l1.4 1.4M10.4 10.4l1.4 1.4M4.2 11.8l1.4-1.4M10.4 5.6l1.4-1.4"/></svg>';
+toggleBtn.title = '切换暗色模式';
+document.body.appendChild(toggleBtn);
+toggleBtn.addEventListener('click', () => document.documentElement.classList.toggle('dark'));
+document.querySelectorAll('.toolbar-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.toolbar-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+document.querySelectorAll('.graph-svg-node').forEach(node => {
+  node.addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.querySelectorAll('.graph-svg-node circle').forEach(c => c.style.strokeWidth = '');
+    const circle = this.querySelector('circle');
+    if (circle) circle.style.strokeWidth = '3';
+  });
+});
+</script>
+</body>
+</html>

@@ -95,11 +95,13 @@ import {
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'
+import { usePluginStore } from '@/stores/plugin'
 import { dictLabel } from '@/utils/dict'
 
 const route = useRoute()
 const projectStore = useProjectStore()
 const taskStore = useTaskStore()
+const pluginStore = usePluginStore()
 
 const projectId = computed(() => route.params.projectId as string)
 
@@ -130,7 +132,7 @@ interface ProjectMenuSection {
 
 const menuSections = computed<ProjectMenuSection[]>(() => {
   const basePath = `/projects/${projectId.value}`
-  return [
+  const sections: ProjectMenuSection[] = [
     {
       index: 'ingest',
       label: '接入与扫描',
@@ -153,17 +155,6 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
         { label: '代码图谱', path: `${basePath}/graph/code` },
         { label: '数据血缘', path: `${basePath}/graph/lineage` },
         { label: '运行链路', path: `${basePath}/graph/runtime` }
-      ]
-    },
-    {
-      index: 'graphify',
-      label: 'Graphify 融合',
-      icon: markRaw(Connection),
-      items: [
-        { label: '作业中心', path: `${basePath}/graphify/jobs` },
-        { label: '版本差异', path: `${basePath}/graphify/diff` },
-        { label: '质量仪表盘', path: `${basePath}/graphify/quality` },
-        { label: '跨仓影响', path: `${basePath}/graphify/cross-repo-impact` }
       ]
     },
     {
@@ -200,6 +191,21 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
       ]
     }
   ]
+
+  // 合并可插拔视图插件菜单项到对应菜单组
+  Object.entries(pluginStore.menuItemsBySection).forEach(([section, items]) => {
+    const target = sections.find(s => s.index === section)
+    if (target) {
+      items.forEach(item => {
+        target.items.push({
+          label: item.menuLabel,
+          path: `${basePath}/${item.menuPath}`
+        })
+      })
+    }
+  })
+
+  return sections
 })
 
 const activeMenu = computed(() => {

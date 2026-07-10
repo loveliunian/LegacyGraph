@@ -1,49 +1,88 @@
 <template>
   <div class="business-graph">
+    <!-- 页面头部：标题 + 内联统计 + AI视图切换 -->
     <div class="page-header">
-      <h3>业务图谱</h3>
-      <el-button
-        type="primary"
-        size="small"
-        @click="toggleAiView">
-        <el-icon><View /></el-icon>
-        {{ showAiView ? '显示原始' : 'AI归纳视图' }}
-      </el-button>
+      <div class="header-left">
+        <div class="header-title-row">
+          <h3>业务图谱</h3>
+          <div
+            v-if="graphNodeCount > 0 || graphEdgeCount > 0"
+            class="inline-stats">
+            <span class="stat-item">
+              <span class="stat-num primary">{{ graphNodeCount }}</span>
+              <span class="stat-text">节点</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num info">{{ graphEdgeCount }}</span>
+              <span class="stat-text">关系</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num success">{{ graphStats.autoMergeRate }}%</span>
+              <span class="stat-text">自动合并</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num warning">{{ graphStats.pendingReview }}</span>
+              <span class="stat-text">待审核</span>
+            </span>
+            <span class="stat-sep">|</span>
+            <span class="stat-item">
+              <span class="stat-num primary">{{ (graphStats.avgConfidence * 100).toFixed(1) }}%</span>
+              <span class="stat-text">置信度</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <el-button
+          type="primary"
+          size="small"
+          @click="toggleAiView">
+          <el-icon><View /></el-icon>
+          {{ showAiView ? '显示原始' : 'AI归纳视图' }}
+        </el-button>
+      </div>
     </div>
 
     <el-row :gutter="16">
+      <!-- 左侧：业务领域树 -->
       <el-col :span="5">
-        <el-card class="domain-card">
-          <template #header>
-            <span>业务领域</span>
-          </template>
-          <el-tree
-            :data="domainTree"
-            :props="{ label: 'name', children: 'children' }"
-            node-key="id"
-            default-expand-all
-            @node-click="handleDomainClick"
-          >
-            <template #default="{ node, data }">
-              <span class="custom-tree-node">
-                <span>{{ node.label }}</span>
-                <el-tag
-                  v-if="data.confidence"
-                  size="small"
-                  :type="data.confidence >= 0.8 ? 'success' : data.confidence >= 0.6 ? 'warning' : 'danger'"
-                  style="margin-left: 8px;">
-                  {{ (data.confidence * 100).toFixed(0) }}%
-                </el-tag>
-              </span>
-            </template>
-          </el-tree>
-        </el-card>
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">业务领域</span>
+          </div>
+          <div class="panel-body">
+            <el-tree
+              :data="domainTree"
+              :props="{ label: 'name', children: 'children' }"
+              node-key="id"
+              default-expand-all
+              @node-click="handleDomainClick"
+            >
+              <template #default="{ node, data }">
+                <span class="custom-tree-node">
+                  <span>{{ node.label }}</span>
+                  <el-tag
+                    v-if="data.confidence"
+                    size="small"
+                    :type="data.confidence >= 0.8 ? 'success' : data.confidence >= 0.6 ? 'warning' : 'danger'"
+                    style="margin-left: 8px;">
+                    {{ (data.confidence * 100).toFixed(0) }}%
+                  </el-tag>
+                </span>
+              </template>
+            </el-tree>
+          </div>
+        </div>
       </el-col>
 
+      <!-- 中间：图谱区域 -->
       <el-col :span="14">
-        <el-card class="graph-card">
+        <div class="graph-area">
           <div class="graph-toolbar">
-            <span>当前视图: {{ showAiView ? 'AI归纳' : '原始数据' }}</span>
+            <span class="toolbar-view">当前视图: {{ showAiView ? 'AI归纳' : '原始数据' }}</span>
             <el-tag type="info">{{ graphNodeCount }} 节点 / {{ graphEdgeCount }} 关系</el-tag>
           </div>
           <GraphViewer
@@ -54,96 +93,73 @@
             :editable="false"
             @node-click="handleGraphNodeClick"
           />
-        </el-card>
+        </div>
       </el-col>
 
+      <!-- 右侧：节点详情 -->
       <el-col :span="5">
-        <el-card class="detail-card">
-          <template #header>
-            <span>节点详情</span>
-          </template>
-          <div
-            v-if="!selectedNode"
-            class="empty-state">
-            <el-empty description="点击节点查看详情" />
+        <div class="panel-section">
+          <div class="panel-header">
+            <span class="panel-title">节点详情</span>
           </div>
-          <div
-            v-else
-            class="node-detail">
-            <el-descriptions
-              :column="1"
-              border>
-              <el-descriptions-item label="节点ID">{{ selectedNode.id }}</el-descriptions-item>
-              <el-descriptions-item label="名称">{{ selectedNode.label }}</el-descriptions-item>
-              <el-descriptions-item label="类型">{{ selectedNode.type }}</el-descriptions-item>
-              <el-descriptions-item label="置信度">
-                <el-tag :type="selectedNode.confidence >= 0.85 ? 'success' : selectedNode.confidence >= 0.7 ? 'warning' : 'danger'">
-                  {{ (selectedNode.confidence * 100).toFixed(1) }}%
+          <div class="panel-body">
+            <div
+              v-if="!selectedNode"
+              class="empty-state">
+              <el-empty description="点击节点查看详情" />
+            </div>
+            <div
+              v-else
+              class="node-detail">
+              <div class="node-name">{{ selectedNode.label }}</div>
+              <div class="node-type-row">
+                <el-tag size="small">{{ selectedNode.type }}</el-tag>
+                <el-tag
+                  size="small"
+                  :type="selectedNode.confidence >= 0.85 ? 'success' : selectedNode.confidence >= 0.7 ? 'warning' : 'danger'">
+                  置信度 {{ (selectedNode.confidence * 100).toFixed(1) }}%
                 </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item
-                v-if="selectedNode.description"
-                label="描述">
-                {{ selectedNode.description }}
-              </el-descriptions-item>
-            </el-descriptions>
-            <div
-              v-if="selectedNode.evidence && selectedNode.evidence.length > 0"
-              class="evidence-list">
-              <div class="evidence-title">证据来源:</div>
-              <el-tag
-                v-for="ev in selectedNode.evidence"
-                :key="ev.sourceUri"
-                size="small"
-                class="evidence-tag">
-                {{ ev.sourceType }}: {{ ev.sourceUri.split('/').pop() }}
-              </el-tag>
-            </div>
-            <div
-              class="action-buttons"
-              style="margin-top: 16px;">
-              <el-button
-                type="primary"
-                size="small"
-                @click="generateTestCases">
-                生成测试用例
-              </el-button>
-              <el-button
-                size="small"
-                @click="goToReview">
-                进入审核
-              </el-button>
-            </div>
-          </div>
-        </el-card>
-
-        <el-card
-          class="ai-card"
-          style="margin-top: 16px;">
-          <template #header>
-            <div class="card-header">
-              <span><el-icon><MagicStick /></el-icon> AI 统计</span>
-            </div>
-          </template>
-          <div class="ai-stats">
-            <div class="stat-item">
-              <span class="stat-label">自动合并率</span>
-              <span class="stat-value">{{ graphStats.autoMergeRate }}%</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">待审核</span>
-              <span class="stat-value">{{ graphStats.pendingReview }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">平均置信度</span>
-              <span class="stat-value">{{ (graphStats.avgConfidence * 100).toFixed(1) }}%</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">测试通过率</span>
-              <span class="stat-value">{{ graphStats.testPassRate }}%</span>
+              </div>
+              <div class="node-properties">
+                <div class="property-item">
+                  <span class="property-label">节点ID</span>
+                  <span class="property-value">{{ selectedNode.id }}</span>
+                </div>
+                <div
+                  v-if="selectedNode.description"
+                  class="property-item">
+                  <span class="property-label">描述</span>
+                  <span class="property-value">{{ selectedNode.description }}</span>
+                </div>
+              </div>
+              <div
+                v-if="selectedNode.evidence && selectedNode.evidence.length > 0"
+                class="evidence-list">
+                <div class="evidence-title">证据来源:</div>
+                <el-tag
+                  v-for="ev in selectedNode.evidence"
+                  :key="ev.sourceUri"
+                  size="small"
+                  class="evidence-tag">
+                  {{ ev.sourceType }}: {{ ev.sourceUri.split('/').pop() }}
+                </el-tag>
+              </div>
+              <div class="action-buttons">
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="generateTestCases">
+                  生成测试用例
+                </el-button>
+                <el-button
+                  size="small"
+                  @click="goToReview">
+                  进入审核
+                </el-button>
+              </div>
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
     </el-row>
   </div>
@@ -153,7 +169,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { View, MagicStick } from '@element-plus/icons-vue'
+import { View } from '@element-plus/icons-vue'
 import type { Node as FlowNode, Edge as FlowEdge } from '@vue-flow/core'
 import GraphViewer from '@/components/graph/GraphViewerOptimized.vue'
 import { graphApi } from '@/api'
@@ -399,23 +415,109 @@ onMounted(async () => {
 
 <style scoped>
 .business-graph {
-  padding: 0;
+  padding: 16px;
 }
 
+/* ===== 页面头部 ===== */
 .page-header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.header-title-row {
+  display: flex;
   align-items: center;
-  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.page-header h3 {
+.header-left h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ===== 行内统计 ===== */
+.inline-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.inline-stats .stat-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.stat-num {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stat-num.primary {
+  color: var(--el-color-primary);
+}
+
+.stat-num.success {
+  color: var(--el-color-success);
+}
+
+.stat-num.warning {
+  color: var(--el-color-warning);
+}
+
+.stat-num.info {
+  color: var(--el-text-color-secondary);
+}
+
+.stat-text {
+  color: var(--el-text-color-secondary);
+}
+
+.stat-sep {
+  color: var(--el-border-color);
+}
+
+/* ===== 面板通用样式 ===== */
+.panel-section {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.panel-body {
+  padding: 12px 14px;
+}
+
+/* ===== 业务领域树 ===== */
 .custom-tree-node {
   display: flex;
   align-items: center;
@@ -423,28 +525,34 @@ onMounted(async () => {
   flex: 1;
 }
 
-.graph-card {
-  height: 100%;
+/* ===== 图谱区域 ===== */
+.graph-area {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .graph-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
+  font-size: 13px;
 }
 
-.graph-container {
-  min-height: 600px;
-  background: #fafafa;
-  border-radius: 4px;
+.toolbar-view {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
 }
 
-.graph-container > div {
-  border-radius: 4px;
-  overflow: hidden;
+.toolbar-stats {
+  color: var(--el-text-color-secondary);
 }
 
+/* ===== 节点详情 ===== */
 .empty-state {
   min-height: 200px;
   display: flex;
@@ -457,13 +565,55 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
+.node-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 10px;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.node-type-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.node-properties {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-top: 4px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.property-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.property-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.property-value {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  word-break: break-all;
+}
+
 .evidence-list {
   margin-top: 12px;
 }
 
 .evidence-title {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-bottom: 8px;
 }
 
@@ -475,51 +625,6 @@ onMounted(async () => {
 .action-buttons {
   display: flex;
   gap: 8px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ai-stats {
-  font-size: 13px;
-}
-
-.stat-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.stat-item:last-child {
-  border-bottom: none;
-}
-
-.stat-label {
-  color: #606266;
-}
-
-.stat-value {
-  font-weight: 600;
-  color: #409eff;
-}
-
-.ai-analysis {
-  font-size: 13px;
-  line-height: 1.8;
-  color: #606266;
-}
-
-.ai-analysis ol {
-  margin: 12px 0 0 0;
-  padding-left: 20px;
-}
-
-.ai-analysis li {
-  margin-bottom: 8px;
+  margin-top: 16px;
 }
 </style>

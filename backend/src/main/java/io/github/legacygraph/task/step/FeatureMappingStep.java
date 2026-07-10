@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -37,7 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class FeatureMappingStep implements AiScanStepExecutor {
 
     /** LLM 功能映射每批 Feature 数：一次性喂全量 Feature 会导致 LLM 输出截断返回 0 条，分批调用。 */
-    private static final int FEATURE_MAPPING_BATCH_SIZE = 80;
+    private static final int FEATURE_MAPPING_BATCH_SIZE = 40;
 
     private final AiScanStepSupport support;
     private final Neo4jGraphDao neo4jGraphDao;
@@ -107,6 +108,8 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             // 每批只放 FEATURE_MAPPING_BATCH_SIZE 个 Feature 作为映射锚点，Page/API 作为目标全量传入。
             String pageSummary = summarizeNodes(pages);
             String apiSummary = summarizeNodes(apis);
+            // 构建 Controller 代码上下文（从 API 节点提取 sourcePath/properties）
+            String controllerContext = buildControllerContext(apis);
             // 分批并发调 LLM（复用 docExtractExecutor，此时 doc/code 抽取已结束、池空闲），
             // 避免顺序 5 批把耗时拉长。结果用 AtomicInteger 累加。
             AtomicInteger totalMappings = new AtomicInteger(0);
@@ -121,7 +124,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                     request.setProjectId(projectId);
                     request.setVueCode(pageSummary);
                     request.setApiDefinitions(apiSummary);
-                    request.setControllerCode("");
+                    request.setControllerCode(controllerContext);
                     request.setPermissionInfo("");
                     String batchFeatureSummary = summarizeNodes(batch);
                     request.setProductDoc("已有功能点:\n" + batchFeatureSummary);
@@ -133,10 +136,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                         FeatureMappingAgent.MappingResult result = support.cachedExtract(
                                 "feature-mapping",
                                 cacheContent,
-                                () -> {
-                                    agentCallCounter.increment();
-                                    return featureMappingAgent.mapFeatures(request);
-                                },
+                                () -> mapFeaturesWithRetry(request, featureMappingAgent, agentCallCounter),
                                 FeatureMappingAgent.MappingResult.class,
                                 r -> r == null || r.getMappings() == null || r.getMappings().isEmpty());
                         int mappingCount = result != null && result.getMappings() != null
@@ -355,6 +355,35 @@ public class FeatureMappingStep implements AiScanStepExecutor {
         return sb.toString();
     }
 
+    /** 从 API 节点列表构建 Controller 上下文摘要 */
+    private String buildControllerContext(List<GraphNode> apiNodes) {
+        StringBuilder sb = new StringBuilder();
+        Map<String, List<GraphNode>> byController = new LinkedHashMap<>();
+        for (GraphNode api : apiNodes) {
+            // sourcePath 格式如 "src/main/java/.../OrderController.java"
+            String path = api.getSourcePath();
+            if (path == null) {
+                continue;
+            }
+            String controllerName = path.substring(path.lastIndexOf('/') + 1).replace(".java", "");
+            byController.computeIfAbsent(controllerName, k -> new ArrayList<>()).add(api);
+        }
+        for (var entry : byController.entrySet()) {
+            sb.append("### ").append(entry.getKey()).append("\n");
+            for (GraphNode api : entry.getValue()) {
+                sb.append("- ").append(api.getNodeName());
+                // 如果 properties 中有 params/requestBody/responseType，也输出
+                String props = api.getProperties();
+                if (props != null && !props.isBlank() && !props.equals("{}")) {
+                    sb.append(" | props: ").append(props);
+                }
+                sb.append("\n");
+            }
+            sb.append("\n");
+        }
+        return sb.length() > 0 ? sb.toString() : "(无 Controller 上下文)";
+    }
+
     private String mappingTargetId(FeatureMappingAgent.Mapping mapping) {
         return support.nonBlank(mapping.getPageKey(), "-") + "->" + support.nonBlank(mapping.getApiKey(), "-");
     }
@@ -364,5 +393,33 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             return 0.7;
         }
         return Math.min(1.0, Math.max(0.0, confidence));
+    }
+
+    /**
+     * 调用 LLM 功能映射，首次返回空映射时追加重试提示并重试一次。
+     *
+     * @param request            映射请求
+     * @param featureMappingAgent LLM 网关 agent
+     * @param agentCallCounter    调用计数器
+     * @return 映射结果（可能为空）
+     */
+    public static io.github.legacygraph.agent.FeatureMappingAgent.MappingResult mapFeaturesWithRetry(
+            io.github.legacygraph.agent.FeatureMappingAgent.MappingRequest request,
+            io.github.legacygraph.agent.FeatureMappingAgent featureMappingAgent,
+            Counter agentCallCounter) {
+        agentCallCounter.increment();
+        io.github.legacygraph.agent.FeatureMappingAgent.MappingResult result = featureMappingAgent.mapFeatures(request);
+        boolean empty = result == null
+                || result.getMappings() == null
+                || result.getMappings().isEmpty();
+        if (empty) {
+            // 追加重试提示后重试一次
+            String retryHint = "\n[重试提示] 首次映射结果为空，请重新分析并生成功能映射。";
+            request.setProductDoc(
+                    (request.getProductDoc() == null ? "" : request.getProductDoc()) + retryHint);
+            agentCallCounter.increment();
+            result = featureMappingAgent.mapFeatures(request);
+        }
+        return result;
     }
 }

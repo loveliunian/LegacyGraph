@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { usePluginStore } from '@/stores/plugin'
 import { loadAllDicts } from '@/utils/dict'
 
 /**
@@ -237,30 +238,6 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'menu.graphDiff' }
           },
           {
-            path: 'graphify/jobs',
-            name: 'GraphifyJobs',
-            component: () => import('@/views/graphify/GraphifyJobCenterView.vue'),
-            meta: { title: 'menu.graphifyJobs' }
-          },
-          {
-            path: 'graphify/diff',
-            name: 'GraphifyDiff',
-            component: () => import('@/views/graphify/GraphifyDiffView.vue'),
-            meta: { title: 'menu.graphifyDiff' }
-          },
-          {
-            path: 'graphify/quality',
-            name: 'GraphifyQuality',
-            component: () => import('@/views/graphify/GraphifyQualityDashboard.vue'),
-            meta: { title: 'menu.graphifyQuality' }
-          },
-          {
-            path: 'graphify/cross-repo-impact',
-            name: 'GraphifyCrossRepoImpact',
-            component: () => import('@/views/graphify/CrossRepositoryImpactView.vue'),
-            meta: { title: 'menu.crossRepoImpact' }
-          },
-          {
             path: 'knowledge',
             name: 'KnowledgeWorkbench',
             component: () => import('@/views/workbench/KnowledgeWorkbench.vue'),
@@ -366,6 +343,37 @@ const router = createRouter({
   }
 })
 
+/**
+ * 可插拔视图插件 routeName → 路由组件映射表。
+ * 新增插件时在此追加组件引用即可，路由和菜单由后端插件描述符驱动。
+ */
+const pluginRouteComponents: Record<string, () => Promise<any>> = {
+  GraphifyJobs: () => import('@/views/graphify/GraphifyJobCenterView.vue'),
+  GraphifyDiff: () => import('@/views/graphify/GraphifyDiffView.vue'),
+  GraphifyQuality: () => import('@/views/graphify/GraphifyQualityDashboard.vue'),
+  GraphifyCrossRepoImpact: () => import('@/views/graphify/CrossRepositoryImpactView.vue'),
+}
+
+/**
+ * 从后端拉取已启用的 GRAPH_VIEW 插件，动态注册路由到 ProjectDetail 下。
+ * 支持整体插件（子功能存于 metadata.menuItems）和单功能插件两种形态。
+ */
+async function registerPluginRoutes(): Promise<void> {
+  const pluginStore = usePluginStore()
+  await pluginStore.loadGraphViewPlugins()
+  pluginStore.pluginMenuItems.forEach(item => {
+    const component = pluginRouteComponents[item.routeName]
+    if (!component) return
+    if (router.hasRoute(item.routeName)) return
+    router.addRoute('ProjectDetail', {
+      path: item.menuPath,
+      name: item.routeName,
+      component,
+      meta: { title: item.menuLabel }
+    })
+  })
+}
+
 router.beforeEach(async (to, _from, next) => {
   const userStore = useUserStore()
   const requiresAuth = to.meta.requiresAuth !== false
@@ -398,6 +406,20 @@ router.beforeEach(async (to, _from, next) => {
     if (requiredRoles && requiredRoles.length > 0 && !userStore.hasAnyRole(requiredRoles)) {
       next('/403')
       return
+    }
+    // 动态加载可插拔视图插件路由（首次进入项目页面时）
+    const pluginStore = usePluginStore()
+    if (!pluginStore.loaded) {
+      try {
+        await registerPluginRoutes()
+        // 路由刚注册，如果当前目标未匹配则重新导航以命中新路由
+        if (to.matched.length === 0) {
+          next({ ...to, replace: true })
+          return
+        }
+      } catch (e) {
+        console.error('Failed to load plugin routes:', e)
+      }
     }
   }
 

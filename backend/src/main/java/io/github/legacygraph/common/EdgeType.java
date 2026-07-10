@@ -33,6 +33,10 @@ public enum EdgeType {
     BELONGS_TO("属于"),
     MAPS_TO("对应"),
     APPLIES_TO("应用于"),
+    GRANTS("授予"),        // Role --GRANTS--> Permission：角色被授予某权限
+    ASSIGNED_TO("分配给"),  // Role --ASSIGNED_TO--> User：角色被分配给某用户
+    DATA_FLOW("数据流"),
+    REQUIRES_DOCUMENT("需要文档"),
 
     // ========== 变更闭环关系（增强版2：ChangeTask 管道） ==========
     AFFECTS("影响"),

@@ -1,8 +1,10 @@
 package io.github.legacygraph.controller;
 
+import io.github.legacygraph.common.Result;
 import io.github.legacygraph.plugin.PluginRegistry;
 import io.github.legacygraph.plugin.PluginRegistry.PluginDescriptor;
 import io.github.legacygraph.plugin.PluginRegistry.PluginType;
+import io.github.legacygraph.plugin.PluginStatusService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,11 +24,14 @@ class PluginControllerTest {
     @Mock
     private PluginRegistry registry;
 
+    @Mock
+    private PluginStatusService statusService;
+
     private PluginController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new PluginController(registry);
+        controller = new PluginController(registry, statusService);
     }
 
     @Test
@@ -35,9 +40,11 @@ class PluginControllerTest {
         PluginDescriptor p2 = new PluginDescriptor("p2", "Agent1", "desc", PluginType.AGENT);
         when(registry.listAll()).thenReturn(Arrays.asList(p1, p2));
 
-        List<PluginDescriptor> result = controller.list(null);
+        Result<List<PluginDescriptor>> result = controller.list(null);
 
-        assertEquals(2, result.size());
+        assertNotNull(result);
+        assertEquals(0, result.getCode());
+        assertEquals(2, result.getData().size());
         verify(registry).listAll();
         verify(registry, never()).listByType(any());
     }
@@ -47,10 +54,12 @@ class PluginControllerTest {
         PluginDescriptor p1 = new PluginDescriptor("p1", "Scanner1", "desc", PluginType.SCANNER);
         when(registry.listByType(PluginType.SCANNER)).thenReturn(List.of(p1));
 
-        List<PluginDescriptor> result = controller.list(PluginType.SCANNER);
+        Result<List<PluginDescriptor>> result = controller.list(PluginType.SCANNER);
 
-        assertEquals(1, result.size());
-        assertEquals("p1", result.get(0).id());
+        assertNotNull(result);
+        assertEquals(0, result.getCode());
+        assertEquals(1, result.getData().size());
+        assertEquals("p1", result.getData().get(0).id());
         verify(registry).listByType(PluginType.SCANNER);
         verify(registry, never()).listAll();
     }
@@ -59,9 +68,11 @@ class PluginControllerTest {
     void list_emptyResult_returnsEmptyList() {
         when(registry.listByType(PluginType.TOOL)).thenReturn(List.of());
 
-        List<PluginDescriptor> result = controller.list(PluginType.TOOL);
+        Result<List<PluginDescriptor>> result = controller.list(PluginType.TOOL);
 
-        assertTrue(result.isEmpty());
+        assertNotNull(result);
+        assertEquals(0, result.getCode());
+        assertTrue(result.getData().isEmpty());
     }
 
     @Test
@@ -69,12 +80,14 @@ class PluginControllerTest {
         PluginDescriptor p = new PluginDescriptor("p1", "Scanner1", "Java Scanner", PluginType.SCANNER);
         when(registry.get("p1")).thenReturn(p);
 
-        PluginDescriptor result = controller.get("p1");
+        Result<PluginDescriptor> result = controller.get("p1");
 
         assertNotNull(result);
-        assertEquals("p1", result.id());
-        assertEquals("Scanner1", result.name());
-        assertEquals("Java Scanner", result.description());
+        assertEquals(0, result.getCode());
+        assertNotNull(result.getData());
+        assertEquals("p1", result.getData().id());
+        assertEquals("Scanner1", result.getData().name());
+        assertEquals("Java Scanner", result.getData().description());
         verify(registry).get("p1");
     }
 
@@ -82,9 +95,11 @@ class PluginControllerTest {
     void get_nonExistent_returnsNull() {
         when(registry.get("nonexistent")).thenReturn(null);
 
-        PluginDescriptor result = controller.get("nonexistent");
+        Result<PluginDescriptor> result = controller.get("nonexistent");
 
-        assertNull(result);
+        assertNotNull(result);
+        assertEquals(0, result.getCode());
+        assertNull(result.getData());
     }
 
     @Test
@@ -96,8 +111,10 @@ class PluginControllerTest {
                 new PluginDescriptor("g1", "GraphView", "desc", PluginType.GRAPH_VIEW)
         ));
 
-        List<PluginDescriptor> result = controller.list(null);
+        Result<List<PluginDescriptor>> result = controller.list(null);
 
-        assertEquals(4, result.size());
+        assertNotNull(result);
+        assertEquals(0, result.getCode());
+        assertEquals(4, result.getData().size());
     }
 }

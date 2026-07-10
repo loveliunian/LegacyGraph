@@ -98,7 +98,8 @@ public class Neo4jWriteRepository {
                     "n.verifiedScore = $verifiedScore, n.runtimeVerified = $runtimeVerified, " +
                     "n.lastSeenAt = $lastSeenAt, n.traceCount = $traceCount, " +
                     "n.createdAt = $createdAt, n.updatedAt = $updatedAt " +
-                    "ON MATCH SET n.updatedAt = $updatedAt, n.nodeType = $nodeType, n.scanType = $scanType, n.className = $className " +
+                    "ON MATCH SET n.updatedAt = $updatedAt, n.nodeType = $nodeType, n.scanType = $scanType, n.className = $className, " +
+                    "n.properties = CASE WHEN $properties IS NOT NULL AND $properties <> '{}' THEN $properties ELSE n.properties END " +
                     "RETURN n, (n.createdAt = $createdAt) AS created",
                     label);
             Map<String, Object> params = nodeToParams(node);

@@ -88,7 +88,13 @@ public class GraphBuilder {
             // 创建ApiEndpoint节点
             String apiNodeKey = normalizeApiKey(api.getHttpMethod(), api.getFullPath());
             String displayName = api.getHttpMethod() + " " + api.getFullPath();
-            GraphNode apiNode = findOrCreateNode(
+            Map<String, Object> apiProps = new LinkedHashMap<>();
+            putIfNotNull(apiProps, "params", api.getRequestParams());
+            putIfNotNull(apiProps, "requestBody", api.getRequestBody());
+            putIfNotNull(apiProps, "responseType", api.getResponseType());
+            putIfNotNull(apiProps, "summary", api.getSummary());
+            String apiPropertiesJson = toJsonProperties(apiProps, apiNodeKey);
+            GraphNode apiNode = findOrCreateNodeWithProperties(
                     projectId, versionId,
                     NodeType.ApiEndpoint.name(),
                     apiNodeKey,
@@ -100,7 +106,10 @@ public class GraphBuilder {
                     api.getStartLine(),
                     api.getEndLine(),
                     BigDecimal.ONE,
-                    NodeStatus.CONFIRMED
+                    NodeStatus.CONFIRMED,
+                    null,
+                    null,
+                    apiPropertiesJson
             );
             nodes.add(apiNode);
 
@@ -160,7 +169,7 @@ public class GraphBuilder {
                     GraphNode permNode = findOrCreateNode(
                             projectId, versionId,
                             NodeType.Permission.name(),
-                            perm,
+                            perm.toLowerCase(),
                             perm,
                             perm,
                             null,
@@ -418,9 +427,11 @@ public class GraphBuilder {
             // SQL 性能顾问（LLM）已移出扫描主链路，改由 LlmAgentController 独立入口按需触发，避免逐 SQL 同步调用拖慢扫描。
 
             // 建立读写关系
+            Map<String, GraphNode> readTableNodes = new LinkedHashMap<>();
             for (String readTable : tableResult.getReadTables()) {
                 String tableKey = readTable; // schema.table already
                 GraphNode tableNode = findOrCreateTableNode(projectId, versionId, readTable);
+                readTableNodes.put(readTable, tableNode);
                 createEdge(projectId, versionId,
                         sqlNode.getId(), tableNode.getId(),
                         EdgeType.READS.name(),
@@ -431,9 +442,11 @@ public class GraphBuilder {
                 );
             }
 
+            Map<String, GraphNode> writeTableNodes = new LinkedHashMap<>();
             for (String writeTable : tableResult.getWriteTables()) {
                 String tableKey = writeTable;
                 GraphNode tableNode = findOrCreateTableNode(projectId, versionId, writeTable);
+                writeTableNodes.put(writeTable, tableNode);
                 createEdge(projectId, versionId,
                         sqlNode.getId(), tableNode.getId(),
                         EdgeType.WRITES.name(),
@@ -442,6 +455,37 @@ public class GraphBuilder {
                         BigDecimal.valueOf(0.95),
                         NodeStatus.CONFIRMED
                 );
+            }
+
+            // 构建 DATA_FLOW 边：Table --DATA_FLOW--> Table（数据血缘正向追踪）
+            // 仅当 SQL 同时存在源表（READS）和目标表（WRITES）时构建，如 INSERT INTO b SELECT FROM a
+            // SqlStatement 中间节点链路 table_a --READS--> SqlStatement --WRITES--> table_b 已建好，
+            // 此处补 Table --DATA_FLOW--> Table 直接边，方便 QA 正向遍历
+            if (!readTableNodes.isEmpty() && !writeTableNodes.isEmpty()) {
+                for (Map.Entry<String, GraphNode> readEntry : readTableNodes.entrySet()) {
+                    String readTable = readEntry.getKey();
+                    GraphNode readNode = readEntry.getValue();
+                    for (Map.Entry<String, GraphNode> writeEntry : writeTableNodes.entrySet()) {
+                        String writeTable = writeEntry.getKey();
+                        GraphNode writeNode = writeEntry.getValue();
+                        if (readNode == null || writeNode == null) {
+                            log.warn("DATA_FLOW 边跳过：源表 {} 或目标表 {} 节点为空", readTable, writeTable);
+                            continue;
+                        }
+                        // 同表自引用（如 INSERT INTO a SELECT FROM a）跳过自环边
+                        if (readTable.equalsIgnoreCase(writeTable)) {
+                            continue;
+                        }
+                        createEdge(projectId, versionId,
+                                readNode.getId(), writeNode.getId(),
+                                EdgeType.DATA_FLOW.name(),
+                                readTable + "->data_flow->" + writeTable,
+                                SourceType.SQL_PARSE.name(),
+                                BigDecimal.valueOf(0.9),
+                                NodeStatus.CONFIRMED
+                        );
+                    }
+                }
             }
 
             for (String joinTable : tableResult.getJoinTables()) {
@@ -545,7 +589,7 @@ public class GraphBuilder {
 
             // 字段节点 + HAS_COLUMN 边
             for (var colMeta : tableMeta.getColumns()) {
-                String colKey = tableKey + "." + colMeta.getColumnName();
+                String colKey = tableMeta.getTableName().toLowerCase() + "." + colMeta.getColumnName().toLowerCase();
 
                 GraphNode colNode = writer.upsertNode(GraphNodeClaim.builder()
                         .projectId(projectId)
@@ -645,6 +689,9 @@ public class GraphBuilder {
         putIfNotNull(properties, "referencedTableName", colMeta.getReferencedTableName());
         putIfNotNull(properties, "referencedColumnName", colMeta.getReferencedColumnName());
         putIfNotNull(properties, "semanticType", colMeta.getSemanticType());
+        // 基于列名和 semanticType 推断敏感字段
+        boolean sensitive = isSensitiveColumn(colMeta.getColumnName(), colMeta.getSemanticType());
+        properties.put("sensitive", sensitive);
         if (properties.isEmpty()) {
             return "{}";
         }
@@ -656,9 +703,33 @@ public class GraphBuilder {
         }
     }
 
+    /** 基于列名和语义类型推断是否为敏感字段 */
+    private boolean isSensitiveColumn(String columnName, String semanticType) {
+        if (columnName == null) return false;
+        String lower = columnName.toLowerCase();
+        // 1. 语义类型标记为 PII 的
+        if ("pii".equalsIgnoreCase(semanticType) || "sensitive".equalsIgnoreCase(semanticType)) {
+            return true;
+        }
+        // 2. 列名匹配敏感字段模式
+        return lower.matches(".*(password|passwd|pwd|secret|token|credential|private_key|privatekey|身份证|手机号|phone|mobile|email|mail|id_card|idcard|bank_card|bankcard|salary|wages).*");
+    }
+
     private void putIfNotNull(Map<String, Object> properties, String key, Object value) {
         if (value != null) {
             properties.put(key, value);
+        }
+    }
+
+    private String toJsonProperties(Map<String, Object> properties, String context) {
+        if (properties == null || properties.isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(properties);
+        } catch (Exception e) {
+            log.debug("Failed to serialize properties for {}: {}", context, e.getMessage());
+            return null;
         }
     }
 
@@ -774,7 +845,7 @@ public class GraphBuilder {
                 if (idx.isUnique() && idx.getColumnNames() != null) {
                     for (String columnName : idx.getColumnNames()) {
                         if (columnName == null || columnName.isBlank()) continue;
-                        String columnKey = tableKey + "." + columnName;
+                        String columnKey = idx.getTableName().toLowerCase() + "." + columnName.toLowerCase();
                         GraphNode columnNode = findOrCreateNode(
                                 projectId, versionId,
                                 NodeType.Column.name(),
@@ -1085,7 +1156,7 @@ public class GraphBuilder {
                             for (var var : field.getVariables()) {
                                 String colName = extractColumnName(field, var);
                                 if (colName == null) continue;
-                                String colKey = tableName.toLowerCase() + "." + colName;
+                                String colKey = tableName.toLowerCase() + "." + colName.toLowerCase();
                                 // 创建或查找 Column 节点
                                 GraphNode colNode = findOrCreateNode(projectId, versionId,
                                         NodeType.Column.name(), colKey, colName, colName, null,
@@ -1186,7 +1257,7 @@ public class GraphBuilder {
                                 tableByName.put(tableName.toLowerCase(), tableNode);
                             }
 
-                            String colKey = tableName.toLowerCase() + "." + colName;
+                            String colKey = tableName.toLowerCase() + "." + colName.toLowerCase();
                             findOrCreateNode(projectId, versionId,
                                     NodeType.Column.name(), colKey, colName, colName, null,
                                     "MYBATIS_XML", repoRoot.relativize(xmlFile).toString(),
@@ -1248,7 +1319,7 @@ public class GraphBuilder {
                         String colName = m.group(1).toLowerCase();
                         // 无法从 JDBC 调用直接推断表名 → 标记为 unknown 表
                         String tableName = "unknown";
-                        String colKey = tableName + "." + colName;
+                        String colKey = tableName.toLowerCase() + "." + colName;
                         findOrCreateNode(projectId, versionId,
                                 NodeType.Column.name(), colKey, colName, colName, null,
                                 "JDBC_ROW_MAPPER", repoRoot.relativize(f).toString(),
@@ -1573,7 +1644,7 @@ public class GraphBuilder {
     private static String readFileSafely(Path file) {
         try {
             if (Files.size(file) > MAX_FILE_CHARS) return null;
-            return readFileSafely(file);
+            return Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
         } catch (Exception e) {
             return null;
         }
@@ -1774,7 +1845,6 @@ public class GraphBuilder {
     /**
      * 构建 Java 类/方法结构图谱。
      */
-    @Transactional
     public List<GraphNode> buildJavaStructureGraph(String projectId, String versionId,
             List<JavaStructureExtractor.JavaClassInfo> classes) {
         List<GraphNode> nodes = new ArrayList<>();
@@ -1882,7 +1952,6 @@ public class GraphBuilder {
      * 构建Service调用关系图谱
      * 根据抽取的调用关系创建 CALLS 边连接调用方和被调用方节点
      */
-    @Transactional
     public void buildServiceCallGraph(String projectId, String versionId, List<ServiceCallExtractor.CallRelation> calls) {
         for (ServiceCallExtractor.CallRelation call : calls) {
             // 查找或创建调用方节点
@@ -2144,7 +2213,6 @@ public class GraphBuilder {
      * 用 LLM 分析结果丰富数据库图谱节点。
      * 更新 Table 节点的描述信息，创建 BusinessDomain 节点和关系。
      */
-    @Transactional
     public void enrichDbGraphWithLLM(String projectId, String versionId,
                                       io.github.legacygraph.dto.DbSchemaAnalysis analysis) {
         if (analysis == null) {
@@ -2367,6 +2435,46 @@ public class GraphBuilder {
         return null;
     }
 
+    /**
+     * 为指定类构建 Method 节点查找表（methodName → GraphNode）。
+     * <p>查询图谱中 nodeKey 以 {@code classKey + "."} 开头的 Method 节点，
+     * 按 nodeName（方法名）建立索引。同一方法名可能对应多个重载，
+     * 取第一个（方法级 VERIFIED_BY 只需知道方法存在即可，不区分钟重载）。</p>
+     */
+    private Map<String, GraphNode> buildMethodLookupForClass(String projectId, String versionId, String classKey) {
+        Map<String, GraphNode> lookup = new HashMap<>();
+        try {
+            List<GraphNode> methods = neo4jGraphDao.queryNodes(
+                    projectId, versionId, NodeType.Method.name(),
+                    null, null, null, 500);
+            String prefix = classKey + ".";
+            for (GraphNode m : methods) {
+                String key = m.getNodeKey();
+                if (key != null && key.startsWith(prefix)) {
+                    String methodName = m.getNodeName();
+                    if (methodName != null && !methodName.isBlank()) {
+                        lookup.putIfAbsent(methodName, m);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to build method lookup for class {}: {}", classKey, e.getMessage());
+        }
+        return lookup;
+    }
+
+    /**
+     * 将测试内调用的被测方法匹配到图谱中的 Method 节点。
+     * <p>按方法名直接匹配（lookup 已按 testedClassKey 过滤，只含该类的方法）。</p>
+     */
+    private GraphNode matchMethodNode(Map<String, GraphNode> methodLookup,
+                                        io.github.legacygraph.extractors.TestCaseExtractor.InvokedMethodCall invokedCall) {
+        if (methodLookup == null || methodLookup.isEmpty()) return null;
+        String methodName = invokedCall.getMethodName();
+        if (methodName == null || methodName.isBlank()) return null;
+        return methodLookup.get(methodName);
+    }
+
     // ==================== 配置项图谱构建 ====================
 
     /**
@@ -2382,6 +2490,12 @@ public class GraphBuilder {
             String configKey = "config:" + item.getKey();
 
             // ConfigItem 节点
+            Map<String, Object> configProps = new LinkedHashMap<>();
+            putIfNotNull(configProps, "value", item.getValue());
+            putIfNotNull(configProps, "defaultValue", item.getDefaultValue());
+            putIfNotNull(configProps, "className", item.getClassName());
+            putIfNotNull(configProps, "fieldName", item.getFieldName());
+            String configPropertiesJson = toJsonProperties(configProps, configKey);
             GraphNode configNode = writer.upsertNode(GraphNodeClaim.builder()
                     .projectId(projectId)
                     .versionId(versionId)
@@ -2395,6 +2509,7 @@ public class GraphBuilder {
                     .confidence(BigDecimal.ONE)
                     .status(NodeStatus.CONFIRMED.name())
                     .scanType("CODE_SCAN")
+                    .properties(configPropertiesJson)
                     .build());
             nodeCount++;
 
@@ -2794,6 +2909,26 @@ public class GraphBuilder {
                         testedClassKey + "->verified_by->" + testKey,
                         SourceType.CODE_AST.name(),
                         BigDecimal.valueOf(0.6), NodeStatus.PENDING_CONFIRM));
+
+                // 方法级 VERIFIED_BY（增量）— 解析 TestCase 内对被测方法的调用，
+                // 建立 Method--VERIFIED_BY-->TestCase 边。confidence=0.8（高于类级 0.6，
+                // 因为是从实际代码调用中解析得出，而非仅靠类名推断）。
+                // 保留类级 VERIFIED_BY 作为回退（方法级匹配不到时仍可用类级关联）。
+                if (tc.getInvokedMethodCalls() != null && !tc.getInvokedMethodCalls().isEmpty()) {
+                    Map<String, GraphNode> methodLookup = buildMethodLookupForClass(
+                            projectId, versionId, testedClassKey);
+                    for (var invokedCall : tc.getInvokedMethodCalls()) {
+                        GraphNode methodNode = matchMethodNode(methodLookup, invokedCall);
+                        if (methodNode != null) {
+                            allEdges.add(buildEdge(projectId, versionId,
+                                    methodNode.getId(), testId,
+                                    EdgeType.VERIFIED_BY.name(),
+                                    methodNode.getNodeKey() + "->verified_by->" + testKey,
+                                    SourceType.CODE_AST.name(),
+                                    BigDecimal.valueOf(0.8), NodeStatus.CONFIRMED));
+                        }
+                    }
+                }
             }
         }
 
@@ -2841,7 +2976,7 @@ public class GraphBuilder {
 
             // Button -> Permission REQUIRES 边
             if (button.getPermission() != null && !button.getPermission().isBlank()) {
-                String permKey = "permission:" + button.getPermission();
+                String permKey = button.getPermission().toLowerCase();
 
                 GraphNode permNode = writer.upsertNode(GraphNodeClaim.builder()
                         .projectId(projectId)
@@ -2893,7 +3028,7 @@ public class GraphBuilder {
                         NodeType.Page.name(), pageKey);
 
                 if (pageNode != null) {
-                    String permKey = "permission:" + page.getPermission();
+                    String permKey = page.getPermission().toLowerCase();
 
                     GraphNode permNode = writer.upsertNode(GraphNodeClaim.builder()
                             .projectId(projectId)
@@ -3021,7 +3156,11 @@ public class GraphBuilder {
     // ==================== RBAC 角色图谱构建 ====================
 
     /**
-     * 构建 RBAC 角色图谱：Role 节点 + USES 边
+     * 构建 RBAC 角色图谱：Role/Permission 节点 + USES/GRANTS 边。
+     * <p>Permission 节点 nodeKey 统一小写化（{@code permissionValue.toLowerCase()}），
+     * 与前端 FrontendGraphBuilder 保持一致，确保前后端权限合并为同一节点。</p>
+     * <p>Role 节点从 {@code properties.permissions} 列表读取关联权限，
+     * 为每个 Permission 创建节点并建立 Role --GRANTS--> Permission 边。</p>
      */
     public void buildRbacRoleGraph(String projectId, String versionId,
             List<io.github.legacygraph.model.NodeExtractionResult> roles) {
@@ -3030,20 +3169,36 @@ public class GraphBuilder {
         List<GraphNode> allNodes = new ArrayList<>();
         List<GraphEdge> allEdges = new ArrayList<>();
 
-        for (var role : roles) {
-            String roleKey = role.getNodeKey();
+        for (var item : roles) {
+            // Permission 节点直接构建（nodeKey 已在 RbacRoleExtractor 中小写化）
+            if ("Permission".equals(item.getNodeType())) {
+                String permId = IdUtil.fastUUID();
+                GraphNode permNode = buildNode(projectId, versionId, permId,
+                        NodeType.Permission.name(), item.getNodeKey(),
+                        item.getDisplayName(), item.getDisplayName(),
+                        item.getDescription(),
+                        item.getSourceType(), item.getSourcePath(),
+                        BigDecimal.valueOf(item.getConfidence()), NodeStatus.CONFIRMED,
+                        "CODE_SCAN");
+                allNodes.add(permNode);
+                continue;
+            }
+
+            // Role 节点
+            String roleKey = item.getNodeKey();
             String roleId = IdUtil.fastUUID();
 
             GraphNode roleNode = buildNode(projectId, versionId, roleId,
-                    NodeType.Role.name(), roleKey, role.getDisplayName(),
-                    role.getDisplayName(), role.getDescription(),
-                    role.getSourceType(), role.getSourcePath(),
-                    BigDecimal.valueOf(role.getConfidence()), NodeStatus.CONFIRMED,
+                    NodeType.Role.name(), roleKey, item.getDisplayName(),
+                    item.getDisplayName(), item.getDescription(),
+                    item.getSourceType(), item.getSourcePath(),
+                    BigDecimal.valueOf(item.getConfidence()), NodeStatus.CONFIRMED,
                     "CODE_SCAN");
             allNodes.add(roleNode);
 
             // Role -> Service/Controller USES 边
-            String context = (String) role.getProperties().get("context");
+            String context = item.getProperties() != null
+                    ? (String) item.getProperties().get("context") : null;
             if (context != null) {
                 String className = context.contains(".") ? context.substring(0, context.indexOf(".")) : context;
                 GraphNode classNode = findExistingNode(projectId, versionId,
@@ -3057,8 +3212,39 @@ public class GraphBuilder {
                             roleId, classNode.getId(),
                             EdgeType.USES.name(),
                             roleKey + "->uses->" + className,
-                            role.getSourceType(),
-                            BigDecimal.valueOf(role.getConfidence()), NodeStatus.CONFIRMED));
+                            item.getSourceType(),
+                            BigDecimal.valueOf(item.getConfidence()), NodeStatus.CONFIRMED));
+                }
+            }
+
+            // Role --GRANTS--> Permission 边：从 properties.permissions 读取关联权限列表
+            Object permsObj = item.getProperties() != null
+                    ? item.getProperties().get("permissions") : null;
+            if (permsObj instanceof List<?> perms) {
+                for (Object perm : perms) {
+                    if (perm == null) continue;
+                    String permValue = perm.toString();
+                    // 统一小写化，确保前后端 Permission nodeKey 一致
+                    String permKey = permValue.toLowerCase();
+                    String permId = IdUtil.fastUUID();
+
+                    // Permission 节点
+                    GraphNode permNode = buildNode(projectId, versionId, permId,
+                            NodeType.Permission.name(), permKey,
+                            permValue, permValue,
+                            "RBAC 权限: " + permValue,
+                            item.getSourceType(), item.getSourcePath(),
+                            BigDecimal.valueOf(item.getConfidence()), NodeStatus.CONFIRMED,
+                            "CODE_SCAN");
+                    allNodes.add(permNode);
+
+                    // Role --GRANTS--> Permission 边
+                    allEdges.add(buildEdge(projectId, versionId,
+                            roleId, permId,
+                            EdgeType.GRANTS.name(),
+                            roleKey + "->grants->" + permKey,
+                            item.getSourceType(),
+                            BigDecimal.valueOf(item.getConfidence()), NodeStatus.CONFIRMED));
                 }
             }
         }
@@ -3066,6 +3252,79 @@ public class GraphBuilder {
         int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
         int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
         log.info("Built RBAC role graph: {} nodes, {} edges (projectId={}, versionId={})",
+                nodeCount, edgeCount, projectId, versionId);
+    }
+
+    /**
+     * 构建 RBAC 用户图谱：User 节点 + ASSIGNED_TO 边（Role --ASSIGNED_TO--> User）。
+     * <p>从 sys_user_role 关联表提取 Role→User 关联，为每个 User 创建节点并建立
+     * Role --ASSIGNED_TO--> User 边。User 节点不含密码 hash。</p>
+     *
+     * @param projectId 项目ID
+     * @param versionId 版本ID
+     * @param userRoles 用户-角色关联列表，每项包含 userName 和 roleName
+     */
+    public void buildRbacUserGraph(String projectId, String versionId,
+            List<io.github.legacygraph.model.UserRoleAssignment> userRoles) {
+        if (userRoles == null || userRoles.isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+        List<GraphEdge> allEdges = new ArrayList<>();
+
+        for (var assignment : userRoles) {
+            String userName = assignment.getUserName();
+            String roleName = assignment.getRoleName();
+            if (userName == null || userName.isBlank() || roleName == null || roleName.isBlank()) {
+                continue;
+            }
+            String sourceType = assignment.getSourceType() != null ? assignment.getSourceType() : "DB_SCAN";
+
+            // User 节点（不含密码 hash）
+            String userKey = "user:" + userName.toLowerCase();
+            String userId = IdUtil.fastUUID();
+            GraphNode userNode = buildNode(projectId, versionId, userId,
+                    NodeType.User.name(), userKey,
+                    userName, userName,
+                    "系统用户: " + userName,
+                    sourceType, assignment.getSourcePath(),
+                    BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED,
+                    sourceType);
+            allNodes.add(userNode);
+
+            // Role --ASSIGNED_TO--> User 边
+            String roleKey = "role:" + roleName.toLowerCase();
+            GraphNode roleNode = findExistingNode(projectId, versionId,
+                    NodeType.Role.name(), roleKey);
+            if (roleNode != null) {
+                allEdges.add(buildEdge(projectId, versionId,
+                        roleNode.getId(), userId,
+                        EdgeType.ASSIGNED_TO.name(),
+                        roleKey + "->assigned_to->" + userKey,
+                        sourceType,
+                        BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED));
+            } else {
+                // Role 节点不存在时也创建 Role 节点，确保边不会丢失
+                String roleId = IdUtil.fastUUID();
+                GraphNode newRoleNode = buildNode(projectId, versionId, roleId,
+                        NodeType.Role.name(), roleKey,
+                        roleName, roleName,
+                        "RBAC 角色: " + roleName,
+                        sourceType, assignment.getSourcePath(),
+                        BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED,
+                        sourceType);
+                allNodes.add(newRoleNode);
+                allEdges.add(buildEdge(projectId, versionId,
+                        roleId, userId,
+                        EdgeType.ASSIGNED_TO.name(),
+                        roleKey + "->assigned_to->" + userKey,
+                        sourceType,
+                        BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED));
+            }
+        }
+
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
+        log.info("Built RBAC user graph: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
     }
 
@@ -3235,5 +3494,143 @@ public class GraphBuilder {
         int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
         log.info("Built business process graph: {} nodes, {} edges (projectId={}, versionId={})",
                 nodeCount, edgeCount, projectId, versionId);
+    }
+
+    // ==================== Package 包图谱（架构依赖链路） ====================
+
+    /**
+     * 构建代码包图谱（架构依赖链路）— 旧入口，委托给 PackageExtractor + 新重载。
+     * <p>保留此方法以兼容现有调用方；新代码应直接使用 PackageExtractor + {@link #buildPackageGraph(String, String, io.github.legacygraph.extractors.PackageExtractor.PackageGraphFact)}。
+     *
+     * @param classes JavaStructureExtractor 抽取的类结构（含 packageName 与 imports）
+     */
+    public void buildPackageGraph(String projectId, String versionId,
+            List<JavaStructureExtractor.JavaClassInfo> classes) {
+        if (classes == null || classes.isEmpty()) {
+            return;
+        }
+        io.github.legacygraph.extractors.PackageExtractor extractor =
+                new io.github.legacygraph.extractors.PackageExtractor();
+        buildPackageGraph(projectId, versionId, extractor.extract(classes));
+    }
+
+    /**
+     * 构建代码包图谱（架构依赖链路）— 新入口，消费 PackageExtractor 输出。
+     * <p>创建 Package 节点，并建立：
+     * <ul>
+     *   <li>Class --BELONGS_TO--> Package（类归属包）</li>
+     *   <li>Package --DEPENDS_ON--> Package（import 引入的包依赖，排除框架包）</li>
+     * </ul>
+     *
+     * @param fact PackageExtractor 提取的包图事实
+     */
+    public void buildPackageGraph(String projectId, String versionId,
+            io.github.legacygraph.extractors.PackageExtractor.PackageGraphFact fact) {
+        if (fact == null || fact.getPackageNames().isEmpty()) {
+            return;
+        }
+        int edgeCount = 0;
+        // 包名 → Package 节点缓存（同一包只建一次节点）
+        Map<String, GraphNode> pkgCache = new HashMap<>();
+
+        // 创建所有 Package 节点
+        for (String pkgName : fact.getPackageNames()) {
+            pkgCache.put(pkgName, upsertPackageNode(projectId, versionId, pkgName));
+        }
+
+        // Class --BELONGS_TO--> Package
+        for (var claim : fact.getBelongsTo()) {
+            GraphNode pkgNode = pkgCache.get(claim.getPackageName());
+            if (pkgNode == null) {
+                pkgNode = upsertPackageNode(projectId, versionId, claim.getPackageName());
+                pkgCache.put(claim.getPackageName(), pkgNode);
+            }
+            GraphNode classNode = findExistingNode(projectId, versionId,
+                    inferNodeType(claim.getClassQualifiedName()).name(),
+                    claim.getClassQualifiedName());
+            if (classNode != null) {
+                String belongsKey = claim.getClassQualifiedName() + "->belongs_to->" + claim.getPackageName();
+                createEdge(projectId, versionId,
+                        classNode.getId(), pkgNode.getId(),
+                        EdgeType.BELONGS_TO.name(), belongsKey,
+                        SourceType.CODE_AST.name(),
+                        BigDecimal.ONE, NodeStatus.CONFIRMED);
+                edgeCount++;
+            }
+        }
+
+        // Package --DEPENDS_ON--> Package
+        for (var claim : fact.getDependsOn()) {
+            GraphNode srcPkgNode = pkgCache.get(claim.getSourcePackage());
+            if (srcPkgNode == null) {
+                srcPkgNode = upsertPackageNode(projectId, versionId, claim.getSourcePackage());
+                pkgCache.put(claim.getSourcePackage(), srcPkgNode);
+            }
+            GraphNode tgtPkgNode = pkgCache.get(claim.getTargetPackage());
+            if (tgtPkgNode == null) {
+                tgtPkgNode = upsertPackageNode(projectId, versionId, claim.getTargetPackage());
+                pkgCache.put(claim.getTargetPackage(), tgtPkgNode);
+            }
+            String depKey = claim.getSourcePackage() + "->depends_on->" + claim.getTargetPackage();
+            createEdge(projectId, versionId,
+                    srcPkgNode.getId(), tgtPkgNode.getId(),
+                    EdgeType.DEPENDS_ON.name(), depKey,
+                    SourceType.CODE_AST.name(),
+                    BigDecimal.ONE, NodeStatus.CONFIRMED);
+            edgeCount++;
+        }
+
+        log.info("Built package graph: {} packages, {} edges (projectId={}, versionId={})",
+                pkgCache.size(), edgeCount, projectId, versionId);
+    }
+
+    /**
+     * 创建或更新 Package 节点。
+     */
+    private GraphNode upsertPackageNode(String projectId, String versionId, String pkgName) {
+        return writer.upsertNode(GraphNodeClaim.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .nodeType(NodeType.Package.name())
+                .nodeKey(pkgName)
+                .nodeName(simpleName(pkgName))
+                .displayName(pkgName)
+                .description("代码包: " + pkgName)
+                .sourceType(SourceType.CODE_AST.name())
+                .confidence(BigDecimal.ONE)
+                .status(NodeStatus.CONFIRMED.name())
+                .scanType("CODE_SCAN")
+                .build());
+    }
+
+    /**
+     * 取全限定名的最后一段作为简单名。
+     */
+    private static String simpleName(String fqn) {
+        if (fqn == null || fqn.isBlank()) {
+            return "";
+        }
+        int idx = fqn.lastIndexOf('.');
+        return idx >= 0 ? fqn.substring(idx + 1) : fqn;
+    }
+
+    // ==================== 存根方法（预先存在的编译错误修复，待完整实现） ====================
+
+    /** 存根：并发图谱构建 */
+    public void buildConcurrencyGraph(String projectId, String versionId,
+            io.github.legacygraph.extractors.ConcurrencyExtractor.ConcurrencyScanResult result) {
+        log.debug("buildConcurrencyGraph stub: projectId={}, versionId={}", projectId, versionId);
+    }
+
+    /** 存根：异常图谱构建 */
+    public void buildExceptionGraph(String projectId, String versionId,
+            io.github.legacygraph.extractors.ExceptionExtractor.ExceptionScanResult result) {
+        log.debug("buildExceptionGraph stub: projectId={}, versionId={}", projectId, versionId);
+    }
+
+    /** 存根：安全图谱构建 */
+    public void buildSecurityGraph(String projectId, String versionId,
+            io.github.legacygraph.extractors.SecurityExtractor.SecurityScanResult result) {
+        log.debug("buildSecurityGraph stub: projectId={}, versionId={}", projectId, versionId);
     }
 }

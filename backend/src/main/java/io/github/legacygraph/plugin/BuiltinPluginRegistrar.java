@@ -52,5 +52,19 @@ public class BuiltinPluginRegistrar {
         // System Overview 插件（04 阶段2）
         registry.register(new PluginDescriptor("system-overview-scanner", "系统关系总览扫描器", "业务/功能/代码/数据四层关系投影", PluginType.SCANNER));
         registry.register(new PluginDescriptor("system-overview-view", "系统关系总览视图", "四层关系可视化与链路下钻", PluginType.GRAPH_VIEW));
+
+        // Graphify 整体作为一个可插拔插件，子功能存入 metadata.menuItems（JSON）
+        // 启用/禁用统一控制，4 个子功能一起注入到"图谱管理"菜单组
+        registry.register(new PluginDescriptor(
+                "graphify", "Graphify 融合", "图谱导入、版本差异、质量评估与跨仓影响分析",
+                PluginType.GRAPH_VIEW, "graph", true,
+                java.util.Map.of("menuItems", """
+                    [
+                        {"menuLabel":"Graphify 作业中心","menuPath":"graphify/jobs","routeName":"GraphifyJobs"},
+                        {"menuLabel":"Graphify 版本差异","menuPath":"graphify/diff","routeName":"GraphifyDiff"},
+                        {"menuLabel":"Graphify 质量仪表盘","menuPath":"graphify/quality","routeName":"GraphifyQuality"},
+                        {"menuLabel":"跨仓影响分析","menuPath":"graphify/cross-repo-impact","routeName":"GraphifyCrossRepoImpact"}
+                    ]
+                """)));
     }
 }

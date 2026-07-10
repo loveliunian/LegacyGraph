@@ -31,6 +31,7 @@ import io.github.legacygraph.service.graph.GapFinderService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import io.github.legacygraph.service.qa.VectorizationService;
 import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
+import io.github.legacygraph.util.IdUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -134,7 +135,7 @@ class AiScanOrchestratorTest {
         lenient().when(scanTaskRecorder.createTask(anyString(), anyString(), anyString(), anyString()))
                 .thenAnswer(inv -> {
                     ScanTask task = new ScanTask();
-                    task.setId(java.util.UUID.randomUUID().toString());
+                    task.setId(IdUtil.fastUUID());
                     task.setProjectId(inv.getArgument(0));
                     task.setVersionId(inv.getArgument(1));
                     task.setTaskType(inv.getArgument(2));

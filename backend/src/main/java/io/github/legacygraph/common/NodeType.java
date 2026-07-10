@@ -35,6 +35,10 @@ public enum NodeType {
     TestCase("测试用例"),
     Assertion("断言"),
     Evidence("证据"),
+    User("用户"),
+
+    // ========== 代码包（架构依赖链路） ==========
+    Package("代码包"),
 
     // ========== 变更闭环节点（增强版2：ChangeTask 管道） ==========
     ChangeTask("变更任务"),

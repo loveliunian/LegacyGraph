@@ -93,6 +93,31 @@ public class PluginRegistry {
     }
 
     /**
+     * 设置插件启用/禁用状态（仅内存）
+     */
+    public void setEnabled(String id, boolean enabled) {
+        PluginDescriptor p = plugins.get(id);
+        if (p != null) {
+            plugins.put(id, withEnabled(p, enabled));
+        }
+    }
+
+    /**
+     * 查询已启用的指定类型插件
+     */
+    public List<PluginDescriptor> listEnabledByType(PluginType type) {
+        return plugins.values().stream()
+                .filter(p -> p.type() == type && p.enabled())
+                .collect(Collectors.toList());
+    }
+
+    private static PluginDescriptor withEnabled(PluginDescriptor p, boolean enabled) {
+        return new PluginDescriptor(
+                p.id(), p.name(), p.description(), p.type(), p.version(), p.metadata(),
+                enabled, p.menuSection(), p.menuLabel(), p.menuPath(), p.routeName());
+    }
+
+    /**
      * 插件描述符
      */
     public record PluginDescriptor(
@@ -101,10 +126,34 @@ public class PluginRegistry {
             String description,
             PluginType type,
             String version,
-            Map<String, String> metadata
+            Map<String, String> metadata,
+            boolean enabled,
+            String menuSection,
+            String menuLabel,
+            String menuPath,
+            String routeName
     ) {
+        /** 便捷构造器（兼容现有注册代码，默认 enabled=true，无菜单元数据） */
         public PluginDescriptor(String id, String name, String description, PluginType type) {
-            this(id, name, description, type, "1.0.0", Map.of());
+            this(id, name, description, type, "1.0.0", Map.of(), true, null, null, null, null);
+        }
+
+        /** 便捷构造器（兼容 registerExternal） */
+        public PluginDescriptor(String id, String name, String description, PluginType type,
+                                String version, Map<String, String> metadata) {
+            this(id, name, description, type, version, metadata, true, null, null, null, null);
+        }
+
+        /** 带菜单元数据的便捷构造器（用于可插拔视图插件） */
+        public PluginDescriptor(String id, String name, String description, PluginType type,
+                                String menuSection, String menuLabel, String menuPath, String routeName) {
+            this(id, name, description, type, "1.0.0", Map.of(), true, menuSection, menuLabel, menuPath, routeName);
+        }
+
+        /** 带 menuSection + metadata 的便捷构造器（用于含子功能的整体插件） */
+        public PluginDescriptor(String id, String name, String description, PluginType type,
+                                String menuSection, boolean hasSubItems, Map<String, String> metadata) {
+            this(id, name, description, type, "1.0.0", metadata, true, menuSection, null, null, null);
         }
     }
 }

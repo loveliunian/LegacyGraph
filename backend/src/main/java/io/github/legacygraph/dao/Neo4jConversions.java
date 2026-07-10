@@ -3,6 +3,7 @@ package io.github.legacygraph.dao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.util.IdUtil;
 import org.neo4j.driver.types.Relationship;
 
 import java.math.BigDecimal;
@@ -19,13 +20,10 @@ final class Neo4jConversions {
 
     /**
      * 归一化 UUID 格式：去除横线。
-     * Neo4j 中 versionId 由 MyBatis-Plus ASSIGN_UUID 生成，存储为 32 位 hex（无横线），
-     * 但 PostgreSQL uuid 列读取时返回 36 位带横线格式，导致前端传入的 versionId 无法匹配。
-     * 统一归一化确保读写一致。
+     * 委托给 {@link IdUtil#normalizeId(String)} 统一管理。
      */
     static String normalizeId(String id) {
-        if (id == null) return null;
-        return id.replace("-", "");
+        return IdUtil.normalizeId(id);
     }
 
     static String nodeCacheKey(String nodeId) {

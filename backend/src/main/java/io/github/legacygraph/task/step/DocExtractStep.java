@@ -33,8 +33,12 @@ public class DocExtractStep implements AiScanStepExecutor {
 
     /** 文档 LLM 调用单次上限字符数；超过则分段并行抽取后合并 */
     private static final int DOC_CONTENT_LIMIT = 8000;
-    /** 大文档分段大小（字符）。太小导致 LLM 调用过多，44KB 切 22 段耗 11 分钟 */
-    private static final int DOC_CHUNK_SIZE = 4000;
+    /** 大文档(>50KB)分段大小，更小 chunk 避免 OOM */
+    private static final int LARGE_DOC_CHUNK_SIZE = 800;
+    /** 中文档(>20KB)分段大小 */
+    private static final int MEDIUM_DOC_CHUNK_SIZE = 1200;
+    /** 普通文档分段大小 */
+    private static final int NORMAL_DOC_CHUNK_SIZE = 2500;
     /** 分段重叠（字符），避免切割处跨句上下文丢失 */
     private static final int DOC_CHUNK_OVERLAP = 400;
     /** 超过此大小的文档才分段，中间大小直接截断（性价比：分段 LLM 耗时 vs 覆盖内容） */
@@ -231,13 +235,22 @@ public class DocExtractStep implements AiScanStepExecutor {
 
     /**
      * A3：大文档分段抽取后合并。
-     * 按 DOC_CHUNK_SIZE 分段（带重叠），每段独立调 LLM（复用 cachedExtract）。
+     * 按动态 chunkSize 分段（带重叠），每段独立调 LLM（复用 cachedExtract）。
      * <p><b>串行抽取</b>：避免多段 LLM 响应(BusinessFactExtraction，含大量长字符串)同时驻留
      * 导致内存峰值失控（OOM 根因之一）。段间内存占用 = 1 段输入 + 1 份响应，而非 N 份并发。</p>
      * <p>串行也避免与主文档任务争用 docExtractExecutor 的 Semaphore(2)，防止死锁。</p>
      */
     private DocUnderstandingAgent.BusinessFactExtraction extractFromChunks(String projectId, Document doc, String content) {
-        List<String> chunks = splitContent(content, DOC_CHUNK_SIZE, DOC_CHUNK_OVERLAP);
+        int chunkSize;
+        int contentLen = content.length();
+        if (contentLen > 50_000) {
+            chunkSize = LARGE_DOC_CHUNK_SIZE;
+        } else if (contentLen > 20_000) {
+            chunkSize = MEDIUM_DOC_CHUNK_SIZE;
+        } else {
+            chunkSize = NORMAL_DOC_CHUNK_SIZE;
+        }
+        List<String> chunks = splitContent(content, chunkSize, DOC_CHUNK_OVERLAP);
         if (chunks.size() <= 1) {
             // 单段 → 回退直接抽取
             return support.cachedExtract("doc", content, () -> {
@@ -300,6 +313,9 @@ public class DocExtractStep implements AiScanStepExecutor {
                 }
             }
             chunks.add(text.substring(start, end));
+            if (end >= text.length()) {
+                break;
+            }
             start = end - overlap;
             if (start >= text.length() || start < 0) {
                 break;
@@ -442,6 +458,10 @@ public class DocExtractStep implements AiScanStepExecutor {
             return;
         }
         try {
+            if (!support.isMemoryHealthy()) {
+                log.warn("Business graph build skipped (memory high) for doc {} ({})", doc.getId(), doc.getDocName());
+                return;
+            }
             int beforeNodes = countGraphNodes(projectId, versionId);
             int beforeEdges = countGraphEdges(projectId, versionId);
             businessGraphBuilder.buildBusinessGraph(projectId, versionId, extraction, doc.getFilePath());
@@ -449,6 +469,8 @@ public class DocExtractStep implements AiScanStepExecutor {
             int afterEdges = countGraphEdges(projectId, versionId);
             graphNodeCounter.increment(afterNodes - beforeNodes);
             graphEdgeCounter.increment(afterEdges - beforeEdges);
+        } catch (OutOfMemoryError oom) {
+            log.error("Business graph build OOM for doc {} ({}), skip and continue", doc.getId(), doc.getDocName());
         } catch (Exception e) {
             log.warn("Business graph build failed for doc {}: {}", doc.getId(), e.getMessage());
         }
@@ -465,7 +487,24 @@ public class DocExtractStep implements AiScanStepExecutor {
                 log.warn("readDocContent: file not found or not regular: {} (doc={})", doc.getFilePath(), doc.getId());
                 return null;
             }
-            return documentContentService.readText(doc.getFilePath());
+            String content = documentContentService.readText(doc.getFilePath());
+            // 大文档前置截断，防止 OOM（基于字节数判断，避免中文等多字节字符估算偏差）
+            if (content != null) {
+                int byteLen = content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                if (byteLen > 100 * 1024) {
+                    // 按 UTF-8 字节截断至 50KB，需在字符边界截断避免乱码
+                    int cutChars = 0;
+                    int cutBytes = 0;
+                    while (cutBytes < 50 * 1024 && cutChars < content.length()) {
+                        int cp = content.codePointAt(cutChars);
+                        cutChars += Character.charCount(cp);
+                        cutBytes += String.valueOf(Character.toChars(cp)).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                    }
+                    content = content.substring(0, cutChars);
+                    log.warn("文档内容超过 100KB ({} bytes)，前置截断至 50KB: {}", byteLen, doc.getFilePath());
+                }
+            }
+            return content;
         } catch (Exception e) {
             log.warn("readDocContent: failed to read {}: {}", doc.getFilePath(), e.getMessage());
             return null;

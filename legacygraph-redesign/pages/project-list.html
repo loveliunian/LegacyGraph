@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegacyGraph - 项目列表</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    :root {
+      --font-display: 'DM Serif Display', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px;
+      --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+      --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-lighter: #B1B3F8; --c-primary-lightest: #D0D1FE; --c-primary-bg: #EFF0FE; --c-primary-dark: #4F52C1;
+      --c-success: #14B8A6; --c-success-bg: #E8F8F6; --c-success-light: #5ACEC1;
+      --c-warning: #F59E0B; --c-warning-bg: #FCF5EA; --c-warning-light: #FABB52;
+      --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+      --c-info: #909399; --c-info-bg: #EFEFF1;
+      --gradient-brand: linear-gradient(135deg, #6366F1, #8B5CF6, #A78BFA);
+      --gradient-icon-code: linear-gradient(135deg, #6366F1, #818CF8);
+      --gradient-icon-db: linear-gradient(135deg, #14B8A6, #2DD4BF);
+      --gradient-icon-doc: linear-gradient(135deg, #F59E0B, #FBBF24);
+      --gradient-icon-graph: linear-gradient(135deg, #8B5CF6, #A78BFA);
+      --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+      --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+      --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+      --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+    }
+    html.dark {
+      --c-primary: #818CF8; --c-primary-light: #9293F4; --c-primary-lighter: #B1B3F8; --c-primary-lightest: #D0D1FE; --c-primary-bg: #0D0E19; --c-primary-dark: #6366F1;
+      --c-success: #2DD4BF; --c-success-bg: #051513; --c-success-light: #5ACEC1;
+      --c-warning: #FBBF24; --c-warning-bg: #2A2008; --c-warning-light: #FABB52;
+      --c-danger: #F87171; --c-danger-bg: #2A1010;
+      --c-info: #9CA3AF; --c-info-bg: #1A1A1E;
+      --gradient-brand: linear-gradient(135deg, #818CF8, #A78BFA, #C4B5FD);
+      --gradient-icon-code: linear-gradient(135deg, #818CF8, #A78BFA);
+      --gradient-icon-db: linear-gradient(135deg, #2DD4BF, #5EEAD4);
+      --gradient-icon-doc: linear-gradient(135deg, #FBBF24, #FCD34D);
+      --gradient-icon-graph: linear-gradient(135deg, #A78BFA, #C4B5FD);
+      --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+      --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+      --el-fill-color: #2C2C2E; --el-fill-color-light: #1C1C1E;
+      --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--font-body); color: var(--el-text-color-primary); background: var(--el-bg-color-page); min-height: 100vh; }
+
+    /* === Top Header === */
+    .top-header {
+      height: 56px;
+      background: var(--el-bg-color);
+      border-bottom: 1px solid var(--el-border-color-light);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-left .logo-mark {
+      display: flex;
+      align-items: center;
+    }
+    .header-left .brand-name {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--c-primary);
+    }
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .nav-tab {
+      position: relative;
+      padding: 0 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--el-text-color-secondary);
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+      user-select: none;
+    }
+    .nav-tab:hover {
+      color: var(--el-text-color-primary);
+      background: var(--el-fill-color-light);
+    }
+    .nav-tab.active { color: var(--c-primary); }
+    .nav-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 16px;
+      right: 16px;
+      height: 2px;
+      background: var(--c-primary);
+      border-radius: 1px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .icon-btn {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; background: transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--el-text-color-secondary);
+      transition: background 0.2s, color 0.2s;
+    }
+    .icon-btn:hover {
+      background: var(--el-fill-color);
+      color: var(--el-text-color-primary);
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+    .notification-wrapper { position: relative; }
+    .notification-dot {
+      position: absolute; top: 6px; right: 7px;
+      width: 7px; height: 7px;
+      background: var(--c-danger);
+      border-radius: 50%;
+      border: 1.5px solid var(--el-bg-color);
+    }
+    .user-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--gradient-brand);
+      color: #fff;
+      font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .user-section {
+      display: flex; align-items: center; gap: 6px;
+      cursor: pointer; padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.2s;
+    }
+    .user-section:hover { background: var(--el-fill-color); }
+    .dropdown-arrow { color: var(--el-text-color-placeholder); font-size: 10px; }
+
+    /* === Content Area === */
+    .content-area { padding: 24px; }
+
+    /* === Page Header === */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--el-text-color-primary);
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 20px;
+      background: var(--c-primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-primary:hover { background: var(--c-primary-dark); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary svg { width: 16px; height: 16px; }
+
+    /* === Search Form === */
+    .search-form {
+      background: var(--el-fill-color);
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .form-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-label {
+      font-size: 14px;
+      color: var(--el-text-color-regular);
+      white-space: nowrap;
+    }
+    .form-input {
+      padding: 7px 12px;
+      border: 1px solid var(--el-border-color);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-family: var(--font-body);
+      color: var(--el-text-color-primary);
+      background: var(--el-bg-color);
+      outline: none;
+      transition: border-color 0.2s;
+      min-width: 180px;
+    }
+    .form-input::placeholder {
+      color: var(--el-text-color-placeholder);
+    }
+    .form-input:focus {
+      border-color: var(--c-primary);
+    }
+    select.form-input {
+      appearance: none;
+      padding-right: 32px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A1A1A6' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      cursor: pointer;
+    }
+    .btn-search {
+      padding: 7px 20px;
+      background: var(--c-primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-search:hover { background: var(--c-primary-dark); }
+    .btn-reset {
+      padding: 7px 20px;
+      background: var(--el-bg-color);
+      color: var(--el-text-color-regular);
+      border: 1px solid var(--el-border-color);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--font-body);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-reset:hover {
+      border-color: var(--c-primary);
+      color: var(--c-primary);
+    }
+
+    /* === Data Card / Table === */
+    .data-card {
+      background: var(--el-bg-color);
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .data-table thead th {
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--el-text-color-regular);
+      background: var(--el-fill-color-light);
+      border-bottom: 1px solid var(--el-border-color-lighter);
+      white-space: nowrap;
+    }
+    .data-table tbody td {
+      padding: 14px 16px;
+      font-size: 14px;
+      color: var(--el-text-color-regular);
+      border-bottom: 1px solid var(--el-border-color-lighter);
+      vertical-align: middle;
+    }
+    .data-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .data-table tbody tr {
+      transition: background 0.15s;
+    }
+    .data-table tbody tr:hover {
+      background: var(--el-fill-color-light);
+    }
+
+    /* Project name link style */
+    .project-name-cell {
+      color: var(--c-primary);
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .project-name-cell:hover {
+      color: var(--c-primary-dark);
+    }
+
+    /* Description cell */
+    .desc-cell {
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--el-text-color-secondary);
+    }
+
+    /* Status tags */
+    .tag {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .tag-primary { color: var(--c-primary); background: var(--c-primary-bg); }
+    .tag-success { color: var(--c-success); background: var(--c-success-bg); }
+    .tag-warning { color: var(--c-warning); background: var(--c-warning-bg); }
+    .tag-danger { color: var(--c-danger); background: var(--c-danger-bg); }
+
+    /* Action buttons */
+    .action-cell {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--c-primary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      font-family: var(--font-body);
+      transition: color 0.2s;
+    }
+    .btn-text:hover {
+      color: var(--c-primary-dark);
+    }
+    .btn-text-edit {
+      color: var(--el-text-color-regular);
+    }
+    .btn-text-edit:hover {
+      color: var(--c-primary);
+    }
+    .btn-divider {
+      color: var(--el-border-color);
+      user-select: none;
+    }
+
+    /* Numeric cells */
+    .num-cell {
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    /* === Pagination === */
+    .pagination-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 14px 16px;
+      gap: 8px;
+    }
+    .pagination-total {
+      font-size: 13px;
+      color: var(--el-text-color-secondary);
+      margin-right: auto;
+    }
+    .pagination-info {
+      font-size: 13px;
+      color: var(--el-text-color-secondary);
+      margin-right: 8px;
+    }
+    .pagination-btn {
+      min-width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--el-border-color);
+      background: var(--el-bg-color);
+      color: var(--el-text-color-regular);
+      font-size: 13px;
+      font-family: var(--font-body);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      padding: 0 8px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .pagination-btn:hover {
+      border-color: var(--c-primary);
+      color: var(--c-primary);
+    }
+    .pagination-btn.active {
+      background: var(--c-primary);
+      border-color: var(--c-primary);
+      color: #fff;
+    }
+    .pagination-btn.disabled {
+      color: var(--el-text-color-placeholder);
+      border-color: var(--el-border-color-lighter);
+      cursor: not-allowed;
+    }
+    .pagination-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* === Responsive === */
+    @media (max-width: 900px) {
+      .search-form { flex-direction: column; align-items: stretch; }
+      .form-item { flex-wrap: wrap; }
+      .form-input { min-width: 0; width: 100%; }
+      .data-table-wrapper { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Header -->
+  <header class="top-header">
+    <div class="header-left">
+      <div class="logo-mark">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="14,1 25.5,7.5 25.5,20.5 14,27 2.5,20.5 2.5,7.5" fill="url(#hexGrad)" stroke="none"/>
+          <polygon points="14,5 21.5,9 21.5,19 14,23 6.5,19 6.5,9" fill="none" stroke="#fff" stroke-width="1.2"/>
+          <circle cx="14" cy="14" r="3" fill="#fff" opacity="0.9"/>
+          <defs>
+            <linearGradient id="hexGrad" x1="2.5" y1="1" x2="25.5" y2="27">
+              <stop offset="0%" stop-color="#6366F1"/>
+              <stop offset="100%" stop-color="#A78BFA"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span class="brand-name">LegacyGraph</span>
+    </div>
+
+    <nav class="header-center">
+      <div class="nav-tab">工作台</div>
+      <div class="nav-tab active">项目管理</div>
+      <div class="nav-tab">系统管理</div>
+    </nav>
+
+    <div class="header-right">
+      <button class="icon-btn" id="themeToggle" title="切换主题">
+        <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="display:none;">
+          <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+        <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <div class="notification-wrapper">
+        <button class="icon-btn" title="通知">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+        </button>
+        <span class="notification-dot"></span>
+      </div>
+      <div class="user-section">
+        <div class="user-avatar">张</div>
+        <svg class="dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <!-- Content Area -->
+  <main class="content-area">
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1>项目列表</h1>
+      <button class="btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        创建项目
+      </button>
+    </div>
+
+    <!-- Search Form -->
+    <div class="search-form">
+      <div class="form-item">
+        <label class="form-label">项目名称</label>
+        <input type="text" class="form-input" placeholder="请输入项目名称">
+      </div>
+      <div class="form-item">
+        <label class="form-label">状态</label>
+        <select class="form-input">
+          <option>全部</option>
+          <option>进行中</option>
+          <option>已完成</option>
+          <option>已暂停</option>
+        </select>
+      </div>
+      <div class="form-item">
+        <label class="form-label">创建时间</label>
+        <input type="date" class="form-input" style="min-width:150px;">
+        <span style="color:var(--el-text-color-placeholder);">-</span>
+        <input type="date" class="form-input" style="min-width:150px;">
+      </div>
+      <div class="form-item">
+        <button class="btn-search">搜索</button>
+        <button class="btn-reset">重置</button>
+      </div>
+    </div>
+
+    <!-- Data Card -->
+    <div class="data-card">
+      <div class="data-table-wrapper" style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>项目名称</th>
+              <th>描述</th>
+              <th>数据源数</th>
+              <th>节点数</th>
+              <th>状态</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="project-name-cell">电商平台重构</span></td>
+              <td><span class="desc-cell">微服务架构迁移</span></td>
+              <td class="num-cell">6</td>
+              <td class="num-cell">856</td>
+              <td><span class="tag tag-primary">进行中</span></td>
+              <td>2024-01-15</td>
+              <td>
+                <div class="action-cell">
+                  <button class="btn-text">查看</button>
+                  <span class="btn-divider">|</span>
+                  <button class="btn-text btn-text-edit">编辑</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="project-name-cell">支付系统升级</span></td>
+              <td><span class="desc-cell">支付核心模块重构</span></td>
+              <td class="num-cell">4</td>
+              <td class="num-cell">1,234</td>
+              <td><span class="tag tag-success">已完成</span></td>
+              <td>2024-01-10</td>
+              <td>
+                <div class="action-cell">
+                  <button class="btn-text">查看</button>
+                  <span class="btn-divider">|</span>
+                  <button class="btn-text btn-text-edit">编辑</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="project-name-cell">用户中心改版</span></td>
+              <td><span class="desc-cell">用户体系优化</span></td>
+              <td class="num-cell">3</td>
+              <td class="num-cell">567</td>
+              <td><span class="tag tag-warning">已暂停</span></td>
+              <td>2024-01-08</td>
+              <td>
+                <div class="action-cell">
+                  <button class="btn-text">查看</button>
+                  <span class="btn-divider">|</span>
+                  <button class="btn-text btn-text-edit">编辑</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="project-name-cell">订单系统重构</span></td>
+              <td><span class="desc-cell">订单流程优化</span></td>
+              <td class="num-cell">5</td>
+              <td class="num-cell">2,345</td>
+              <td><span class="tag tag-primary">进行中</span></td>
+              <td>2024-01-12</td>
+              <td>
+                <div class="action-cell">
+                  <button class="btn-text">查看</button>
+                  <span class="btn-divider">|</span>
+                  <button class="btn-text btn-text-edit">编辑</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="project-name-cell">库存管理系统</span></td>
+              <td><span class="desc-cell">仓储管理数字化</span></td>
+              <td class="num-cell">2</td>
+              <td class="num-cell">234</td>
+              <td><span class="tag tag-success">已完成</span></td>
+              <td>2024-01-05</td>
+              <td>
+                <div class="action-cell">
+                  <button class="btn-text">查看</button>
+                  <span class="btn-divider">|</span>
+                  <button class="btn-text btn-text-edit">编辑</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination-wrapper">
+        <span class="pagination-total">共 25 条记录</span>
+        <span class="pagination-info">每页 5 条</span>
+        <button class="pagination-btn disabled">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <button class="pagination-btn active">1</button>
+        <button class="pagination-btn">2</button>
+        <button class="pagination-btn">3</button>
+        <button class="pagination-btn">4</button>
+        <button class="pagination-btn">5</button>
+        <button class="pagination-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      const html = document.documentElement;
+      const sunIcon = document.getElementById('sunIcon');
+      const moonIcon = document.getElementById('moonIcon');
+      const toggle = document.getElementById('themeToggle');
+
+      const savedTheme = localStorage.getItem('lg-theme');
+      if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        html.classList.add('dark');
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+      }
+
+      toggle.addEventListener('click', function() {
+        const isDark = html.classList.toggle('dark');
+        sunIcon.style.display = isDark ? 'block' : 'none';
+        moonIcon.style.display = isDark ? 'none' : 'block';
+        localStorage.setItem('lg-theme', isDark ? 'dark' : 'light');
+      });
+    })();
+  </script>
+</body>
+</html>

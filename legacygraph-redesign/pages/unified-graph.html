@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>统一知识图谱 - LegacyGraph</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-warning: #FBBF24; --c-danger: #F87171; --c-info: #9CA3AF;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; font-family: var(--font-body); color: var(--el-text-color-primary); background: var(--el-bg-color-page); }
+
+/* Layout */
+.page-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Top Bar */
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
+  padding: 12px 24px;
+  flex-shrink: 0;
+}
+.top-bar-left { display: flex; align-items: center; gap: 12px; }
+.breadcrumb {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.breadcrumb span { color: var(--el-text-color-secondary); }
+.top-bar-title-group { display: flex; flex-direction: column; gap: 2px; }
+.top-bar-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--el-text-color-primary);
+  line-height: 1.2;
+}
+.top-bar-subtitle {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1;
+}
+.top-bar-right { display: flex; align-items: center; gap: 8px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.btn:hover { border-color: var(--c-primary); color: var(--c-primary); }
+.btn-primary {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--c-primary-light); border-color: var(--c-primary-light); }
+.btn svg { width: 16px; height: 16px; }
+
+.version-select {
+  padding: 6px 28px 6px 10px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236E6E73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.version-select:hover { border-color: var(--c-primary); }
+
+/* Stats Bar */
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 8px 24px;
+  flex-shrink: 0;
+}
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stat-icon svg { width: 16px; height: 16px; }
+.stat-icon.nodes { background: var(--c-primary-bg); color: var(--c-primary); }
+.stat-icon.edges { background: var(--c-success-bg); color: var(--c-success); }
+.stat-icon.layers { background: var(--c-warning-bg); color: var(--c-warning); }
+.stat-icon.confidence { background: var(--c-info-bg); color: var(--c-info); }
+.stat-content { display: flex; flex-direction: column; gap: 1px; }
+.stat-number {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-primary);
+  line-height: 1.2;
+  font-family: var(--font-mono);
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1;
+}
+
+/* Main Area */
+.main-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Graph Canvas */
+.graph-canvas {
+  width: 100%;
+  height: 100%;
+  background: var(--el-fill-color-light);
+  position: relative;
+  overflow: hidden;
+}
+.graph-canvas svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.graph-svg-node circle {
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.graph-svg-node:hover circle {
+  filter: brightness(1.1);
+}
+.graph-svg-node text {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Right Panel */
+.right-panel {
+  width: 320px;
+  background: var(--el-bg-color);
+  border-left: 1px solid var(--el-border-color-light);
+  padding: 16px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 10;
+}
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.node-detail-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+.node-detail-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+  margin-bottom: 12px;
+}
+.confidence-section { margin-bottom: 4px; }
+.confidence-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.confidence-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.confidence-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-primary);
+  font-family: var(--font-mono);
+}
+.confidence-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--el-fill-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.confidence-bar-fill {
+  height: 100%;
+  background: var(--c-primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.properties-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.property-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.property-key {
+  color: var(--el-text-color-secondary);
+}
+.property-value {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.linked-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.linked-node-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--el-fill-color-light);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.linked-node-item:hover { background: var(--el-fill-color); }
+.linked-node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.linked-node-name {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  font-weight: 500;
+}
+.linked-node-type {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  margin-left: auto;
+}
+
+/* Floating Toolbar */
+.graph-toolbar {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  gap: 2px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+  z-index: 20;
+}
+html.dark .graph-toolbar {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2);
+}
+.toolbar-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.toolbar-btn:hover {
+  background: var(--el-fill-color);
+  color: var(--c-primary);
+}
+.toolbar-btn.active {
+  background: var(--c-primary-bg);
+  color: var(--c-primary);
+}
+.toolbar-btn svg { width: 16px; height: 16px; }
+
+/* Dark mode toggle */
+.dark-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 100;
+}
+</style>
+</head>
+<body>
+<div class="page-wrapper">
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <span class="breadcrumb">项目管理 <span>/</span> 电商平台重构 <span>/</span> 统一图谱</span>
+      <div class="top-bar-title-group">
+        <h2 class="top-bar-title">统一知识图谱</h2>
+        <span class="top-bar-subtitle">可视化展示代码结构、业务关系和数据流向</span>
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <select class="version-select">
+        <option>v2.1.0</option>
+        <option>v2.0.3</option>
+        <option>v2.0.0</option>
+        <option>v1.9.2</option>
+      </select>
+      <button class="btn" title="刷新">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5v4h-4"/></svg>
+        刷新
+      </button>
+      <button class="btn" title="导出">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8"/><path d="M4.5 7.5L8 11l3.5-3.5"/><path d="M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>
+        导出
+      </button>
+      <button class="btn" title="全屏">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2h2M3 2v2M13 2h-2M13 2v2M3 14h2M3 14v-2M13 14h-2M13 14v-2"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-icon nodes">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/></svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-number">856</span>
+        <span class="stat-label">节点</span>
+      </div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-icon edges">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 14L10 2"/><circle cx="2" cy="14" r="1.5" fill="currentColor"/><circle cx="10" cy="2" r="1.5" fill="currentColor"/></svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-number">2,341</span>
+        <span class="stat-label">边</span>
+      </div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-icon layers">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z"/><path d="M2 4.5L8 8L14 4.5M8 8V15"/></svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-number">6</span>
+        <span class="stat-label">层深度</span>
+      </div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-icon confidence">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1L10 6H15L11 9L12.5 14L8 11L3.5 14L5 9L1 6H6L8 1Z"/></svg>
+      </div>
+      <div class="stat-content">
+        <span class="stat-number">87.5%</span>
+        <span class="stat-label">置信度</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Area -->
+  <div class="main-area">
+
+    <!-- Graph Canvas -->
+    <div class="graph-canvas">
+      <svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="var(--el-border-color)" opacity="0.4"/>
+          </marker>
+        </defs>
+
+        <!-- Grid pattern -->
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <circle cx="20" cy="20" r="0.8" fill="var(--el-border-color-lighter)" opacity="0.5"/>
+        </pattern>
+        <rect width="1200" height="700" fill="url(#grid)"/>
+
+        <!-- Edges (drawn first, behind nodes) -->
+        <!-- Main service connections -->
+        <path d="M340 220 Q430 170 520 240" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M340 260 Q400 340 440 380" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M560 280 Q620 350 660 390" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M320 300 Q350 420 380 470" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M500 440 Q560 480 600 510" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M580 260 Q650 200 730 220" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M770 260 Q830 320 850 380" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M700 430 Q780 500 830 530" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M660 430 Q720 480 760 510" fill="none" stroke="var(--el-border-color)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrowhead)"/>
+        <path d="M460 400 Q540 340 540 280" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M820 400 Q900 340 940 280" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M320 250 Q220 280 200 340" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M950 240 Q1000 300 1020 360" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M780 230 Q830 160 900 140" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M520 460 Q440 520 380 540" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M540 240 Q580 140 640 120" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M380 500 Q300 530 250 550" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M860 540 Q920 570 970 560" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M360 490 Q300 440 260 410" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+        <path d="M980 260 Q1040 220 1080 240" fill="none" stroke="var(--el-border-color)" stroke-width="1.2" opacity="0.2" marker-end="url(#arrowhead)"/>
+
+        <!-- Main service nodes (large circles 40px) -->
+        <!-- 订单服务 - Indigo -->
+        <g class="graph-svg-node">
+          <circle cx="300" cy="260" r="40" fill="#6366F1" opacity="0.9"/>
+          <circle cx="300" cy="260" r="40" fill="none" stroke="#6366F1" stroke-width="2" opacity="0.3"/>
+          <text x="300" y="256" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">订单</text>
+          <text x="300" y="272" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">服务</text>
+        </g>
+
+        <!-- 支付服务 - Teal -->
+        <g class="graph-svg-node">
+          <circle cx="540" cy="250" r="40" fill="#14B8A6" opacity="0.9"/>
+          <circle cx="540" cy="250" r="40" fill="none" stroke="#14B8A6" stroke-width="2" opacity="0.3"/>
+          <text x="540" y="246" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">支付</text>
+          <text x="540" y="262" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">服务</text>
+        </g>
+
+        <!-- 用户服务 - Amber -->
+        <g class="graph-svg-node">
+          <circle cx="460" cy="410" r="40" fill="#F59E0B" opacity="0.9"/>
+          <circle cx="460" cy="410" r="40" fill="none" stroke="#F59E0B" stroke-width="2" opacity="0.3"/>
+          <text x="460" y="406" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">用户</text>
+          <text x="460" y="422" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">服务</text>
+        </g>
+
+        <!-- 库存服务 - Violet -->
+        <g class="graph-svg-node">
+          <circle cx="670" cy="420" r="40" fill="#8B5CF6" opacity="0.9"/>
+          <circle cx="670" cy="420" r="40" fill="none" stroke="#8B5CF6" stroke-width="2" opacity="0.3"/>
+          <text x="670" y="416" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">库存</text>
+          <text x="670" y="432" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">服务</text>
+        </g>
+
+        <!-- 商品服务 - Pink -->
+        <g class="graph-svg-node">
+          <circle cx="770" cy="230" r="40" fill="#EC4899" opacity="0.9"/>
+          <circle cx="770" cy="230" r="40" fill="none" stroke="#EC4899" stroke-width="2" opacity="0.3"/>
+          <text x="770" y="226" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">商品</text>
+          <text x="770" y="242" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">服务</text>
+        </g>
+
+        <!-- 通知服务 - Emerald -->
+        <g class="graph-svg-node">
+          <circle cx="840" cy="400" r="40" fill="#10B981" opacity="0.9"/>
+          <circle cx="840" cy="400" r="40" fill="none" stroke="#10B981" stroke-width="2" opacity="0.3"/>
+          <text x="840" y="396" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">通知</text>
+          <text x="840" y="412" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--font-body)">服务</text>
+        </g>
+
+        <!-- Smaller nodes (24px) -->
+        <!-- OrderController -->
+        <g class="graph-svg-node">
+          <circle cx="180" cy="170" r="24" fill="#6366F1" opacity="0.5"/>
+          <circle cx="180" cy="170" r="24" fill="none" stroke="#6366F1" stroke-width="1.5" opacity="0.4"/>
+          <text x="180" y="174" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">OrderCtrl</text>
+        </g>
+
+        <!-- PaymentGateway -->
+        <g class="graph-svg-node">
+          <circle cx="400" cy="160" r="24" fill="#14B8A6" opacity="0.5"/>
+          <circle cx="400" cy="160" r="24" fill="none" stroke="#14B8A6" stroke-width="1.5" opacity="0.4"/>
+          <text x="400" y="164" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">PayGateway</text>
+        </g>
+
+        <!-- UserAuth -->
+        <g class="graph-svg-node">
+          <circle cx="200" cy="370" r="24" fill="#F59E0B" opacity="0.5"/>
+          <circle cx="200" cy="370" r="24" fill="none" stroke="#F59E0B" stroke-width="1.5" opacity="0.4"/>
+          <text x="200" y="374" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="9" font-weight="500" font-family="var(--font-mono)">UserAuth</text>
+        </g>
+
+        <!-- InventoryRepo -->
+        <g class="graph-svg-node">
+          <circle cx="360" cy="500" r="24" fill="#8B5CF6" opacity="0.5"/>
+          <circle cx="360" cy="500" r="24" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity="0.4"/>
+          <text x="360" y="504" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">InvRepo</text>
+        </g>
+
+        <!-- ProductCatalog -->
+        <g class="graph-svg-node">
+          <circle cx="920" cy="140" r="24" fill="#EC4899" opacity="0.5"/>
+          <circle cx="920" cy="140" r="24" fill="none" stroke="#EC4899" stroke-width="1.5" opacity="0.4"/>
+          <text x="920" y="144" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">ProdCatalog</text>
+        </g>
+
+        <!-- MessageQueue -->
+        <g class="graph-svg-node">
+          <circle cx="620" cy="530" r="24" fill="#10B981" opacity="0.5"/>
+          <circle cx="620" cy="530" r="24" fill="none" stroke="#10B981" stroke-width="1.5" opacity="0.4"/>
+          <text x="620" y="534" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">MQ</text>
+        </g>
+
+        <!-- CacheLayer -->
+        <g class="graph-svg-node">
+          <circle cx="940" cy="270" r="24" fill="#6366F1" opacity="0.4"/>
+          <circle cx="940" cy="270" r="24" fill="none" stroke="#6366F1" stroke-width="1.5" opacity="0.4"/>
+          <text x="940" y="274" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">Cache</text>
+        </g>
+
+        <!-- Database -->
+        <g class="graph-svg-node">
+          <circle cx="1040" cy="380" r="24" fill="#8B5CF6" opacity="0.4"/>
+          <circle cx="1040" cy="380" r="24" fill="none" stroke="#8B5CF6" stroke-width="1.5" opacity="0.4"/>
+          <text x="1040" y="384" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">DB</text>
+        </g>
+
+        <!-- EventBus -->
+        <g class="graph-svg-node">
+          <circle cx="1080" cy="240" r="24" fill="#F59E0B" opacity="0.4"/>
+          <circle cx="1080" cy="240" r="24" fill="none" stroke="#F59E0B" stroke-width="1.5" opacity="0.4"/>
+          <text x="1080" y="244" text-anchor="middle" fill="var(--el-text-color-primary)" font-size="8" font-weight="500" font-family="var(--font-mono)">EventBus</text>
+        </g>
+
+        <!-- Extra small nodes -->
+        <g class="graph-svg-node">
+          <circle cx="650" cy="130" r="16" fill="#EC4899" opacity="0.35"/>
+          <text x="650" y="134" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">SKU</text>
+        </g>
+        <g class="graph-svg-node">
+          <circle cx="240" cy="560" r="16" fill="#14B8A6" opacity="0.35"/>
+          <text x="240" y="564" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">Log</text>
+        </g>
+        <g class="graph-svg-node">
+          <circle cx="860" cy="550" r="16" fill="#10B981" opacity="0.35"/>
+          <text x="860" y="554" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">SMS</text>
+        </g>
+        <g class="graph-svg-node">
+          <circle cx="970" cy="560" r="16" fill="#6366F1" opacity="0.35"/>
+          <text x="970" y="564" text-anchor="middle" fill="var(--el-text-color-secondary)" font-size="7" font-family="var(--font-mono)">Redis</text>
+        </g>
+
+      </svg>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="right-panel">
+      <div class="panel-title">节点详情</div>
+
+      <div>
+        <div class="node-detail-name">订单服务</div>
+        <span class="node-detail-type">微服务</span>
+      </div>
+
+      <div class="confidence-section">
+        <div class="confidence-header">
+          <span class="confidence-label">置信度</span>
+          <span class="confidence-value">92%</span>
+        </div>
+        <div class="confidence-bar">
+          <div class="confidence-bar-fill" style="width: 92%"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">属性信息</div>
+        <div class="properties-list">
+          <div class="property-item">
+            <span class="property-key">端口</span>
+            <span class="property-value">8080</span>
+          </div>
+          <div class="property-item">
+            <span class="property-key">语言</span>
+            <span class="property-value">Java</span>
+          </div>
+          <div class="property-item">
+            <span class="property-key">框架</span>
+            <span class="property-value">Spring Boot</span>
+          </div>
+          <div class="property-item">
+            <span class="property-key">团队</span>
+            <span class="property-value">支付组</span>
+          </div>
+          <div class="property-item">
+            <span class="property-key">状态</span>
+            <span class="property-value" style="color: var(--c-success);">运行中</span>
+          </div>
+          <div class="property-item">
+            <span class="property-key">最后更新</span>
+            <span class="property-value">2024-01-15</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">关联节点</div>
+        <div class="linked-nodes">
+          <div class="linked-node-item">
+            <div class="linked-node-dot" style="background: #14B8A6;"></div>
+            <span class="linked-node-name">支付服务</span>
+            <span class="linked-node-type">调用</span>
+          </div>
+          <div class="linked-node-item">
+            <div class="linked-node-dot" style="background: #F59E0B;"></div>
+            <span class="linked-node-name">用户服务</span>
+            <span class="linked-node-type">依赖</span>
+          </div>
+          <div class="linked-node-item">
+            <div class="linked-node-dot" style="background: #8B5CF6;"></div>
+            <span class="linked-node-name">库存服务</span>
+            <span class="linked-node-type">调用</span>
+          </div>
+          <div class="linked-node-item">
+            <div class="linked-node-dot" style="background: #10B981;"></div>
+            <span class="linked-node-name">通知服务</span>
+            <span class="linked-node-type">事件</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Toolbar -->
+    <div class="graph-toolbar">
+      <button class="toolbar-btn" title="放大">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/><path d="M7 5v4M5 7h4"/></svg>
+      </button>
+      <button class="toolbar-btn" title="缩小">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/><path d="M5 7h4"/></svg>
+      </button>
+      <button class="toolbar-btn" title="适应画布">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M8 2v12"/><path d="M5 5L2 8l3 3M11 5l3 3-3 3"/></svg>
+      </button>
+      <button class="toolbar-btn active" title="自动布局">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+      </button>
+      <button class="toolbar-btn" title="筛选">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h14"/><path d="M3 3v10l5 3 5-3V3"/></svg>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Dark mode toggle
+const toggleBtn = document.createElement('button');
+toggleBtn.className = 'btn';
+toggleBtn.innerHTML = `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3a5 5 0 1 0 0 10A5 5 0 0 0 8 3z"/><path d="M8 1v2M8 13v2M3 8H1M15 8h-2M4.2 4.2l1.4 1.4M10.4 10.4l1.4 1.4M4.2 11.8l1.4-1.4M10.4 5.6l1.4-1.4"/></svg>`;
+toggleBtn.style.position = 'fixed';
+toggleBtn.style.top = '12px';
+toggleBtn.style.right = '12px';
+toggleBtn.style.zIndex = '100';
+toggleBtn.title = '切换暗色模式';
+document.body.appendChild(toggleBtn);
+
+toggleBtn.addEventListener('click', () => {
+  document.documentElement.classList.toggle('dark');
+});
+
+// Version select
+document.querySelector('.version-select').addEventListener('change', function() {
+  // Placeholder: version change logic
+});
+
+// Toolbar buttons
+document.querySelectorAll('.toolbar-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.toolbar-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// Node click interaction
+document.querySelectorAll('.graph-svg-node').forEach(node => {
+  node.addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.querySelectorAll('.graph-svg-node circle').forEach(c => {
+      c.style.strokeWidth = '';
+    });
+    const circle = this.querySelector('circle');
+    if (circle) {
+      circle.style.strokeWidth = '3';
+    }
+  });
+});
+</script>
+</body>
+</html>

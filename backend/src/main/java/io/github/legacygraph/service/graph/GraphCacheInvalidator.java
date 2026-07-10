@@ -1,6 +1,7 @@
 package io.github.legacygraph.service.graph;
 
 import io.github.legacygraph.service.system.CacheService;
+import io.github.legacygraph.util.IdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -34,10 +35,12 @@ public class GraphCacheInvalidator {
     public void invalidateVersion(String versionId) {
         List<String> patterns = new ArrayList<>();
         if (versionId != null) {
-            patterns.add("graph:" + versionId.replace("-", "") + ":*");
-            // 验证报告以传入 versionId 原样为键；写点可能传入带/不带横线两种格式，均失效
+            String normalized = IdUtil.normalizeId(versionId);
+            patterns.add("graph:" + normalized + ":*");
             patterns.add("validation-report::*" + versionId + "*");
-            patterns.add("validation-report::*" + versionId.replace("-", "") + "*");
+            if (!normalized.equals(versionId)) {
+                patterns.add("validation-report::*" + normalized + "*");
+            }
         } else {
             patterns.add("graph:*");
             patterns.add("validation-report*");

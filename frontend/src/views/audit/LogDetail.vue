@@ -258,7 +258,7 @@ onMounted(async () => {
 }
 
 .request-url {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: #606266;
   word-break: break-all;
@@ -282,7 +282,7 @@ onMounted(async () => {
   padding: 12px;
   background: #fef0f0;
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: #f56c6c;
   white-space: pre-wrap;

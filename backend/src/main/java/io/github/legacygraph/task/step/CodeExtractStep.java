@@ -138,7 +138,16 @@ public class CodeExtractStep implements AiScanStepExecutor {
                     // 向量化：support 内部已用专用有界线程池 + 内存水位背压，直接委托
                     support.vectorizeContent(projectId, versionId, "CODE", node.getSourcePath(), content);
                     try {
+                        // 内存保护：堆快满时跳过 LLM 调用，避免 OOM 中断扫描
+                        if (!AiScanStepSupport.isMemoryHealthy()) {
+                            log.warn("Skipping code extract for {} (low memory: {}MB free)",
+                                    node.getNodeKey(), Runtime.getRuntime().freeMemory() / 1024 / 1024);
+                            support.markExtractFailed(projectId, versionId, filePath, "CODE_EXTRACT", "low memory skipped");
+                            return;
+                        }
                         String codeContent = support.truncate(content, CODE_CONTENT_LIMIT);
+                        // content 在 LLM 路径已无用，显式释放引用（向量化队列可能仍持有）
+                        content = null;
                         FactExtractionResult result = support.cachedExtract("code", codeContent,
                                 () -> codeFactAgent.extractFacts(projectId, codeContent, node.getSourcePath()),
                                 FactExtractionResult.class,
@@ -151,6 +160,10 @@ public class CodeExtractStep implements AiScanStepExecutor {
                         if (done % 5 == 0 || done == totalNodes) {
                             support.updateTaskProgress(task, totalNodes, done, filePath);
                         }
+                    } catch (OutOfMemoryError oom) {
+                        log.error("Code extract OOM for node {} ({}), skip and continue",
+                                node.getNodeKey(), node.getSourcePath());
+                        support.markExtractFailed(projectId, versionId, filePath, "CODE_EXTRACT", "OOM: " + oom.getMessage());
                     } catch (Exception e) {
                         log.warn("Code fact extract failed for node {}: {}", node.getNodeKey(), e.getMessage());
                         support.markExtractFailed(projectId, versionId, filePath, "CODE_EXTRACT", e.getMessage());

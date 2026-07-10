@@ -14,6 +14,7 @@ import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Paths;
@@ -33,8 +34,12 @@ public class ScanScopeResolver {
     private final DocumentRepository documentRepository;
     private final ObjectMapper objectMapper;
 
-    private static final int DEFAULT_MAX_FILES = 500;
-    private static final int DEFAULT_MAX_DOCS = 50;
+    @Value("${legacygraph.scan.max-files:2000}")
+    private int maxFiles;
+
+    @Value("${legacygraph.scan.max-docs:200}")
+    private int maxDocs;
+
     private static final int DEFAULT_MAX_DB_TABLES = 200;
 
     public ScanScopeResolver(CodeRepoRepository codeRepoRepository,
@@ -63,8 +68,8 @@ public class ScanScopeResolver {
         List<String> scopeScanTypes = null;
         boolean aiEnabled = false;
         boolean incremental = false;
-        int maxFiles = DEFAULT_MAX_FILES;
-        int maxDocs = DEFAULT_MAX_DOCS;
+        int maxFiles = this.maxFiles;
+        int maxDocs = this.maxDocs;
         int maxDbTables = DEFAULT_MAX_DB_TABLES;
 
         if (scanScope != null && !scanScope.isBlank()) {

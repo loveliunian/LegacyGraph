@@ -102,7 +102,7 @@ watch(
 
 .line {
   padding: 2px 4px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
 }

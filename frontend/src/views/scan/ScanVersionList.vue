@@ -751,7 +751,7 @@ onUnmounted(() => {
 }
 
 .version-no {
-  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: #409eff;
   font-weight: 500;
@@ -891,7 +891,7 @@ onUnmounted(() => {
 }
 
 .duration-text {
-  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: #606266;
 }

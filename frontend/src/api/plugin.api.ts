@@ -1,4 +1,4 @@
-import { get } from '@/utils/request'
+import { get, post } from '@/utils/request'
 
 export interface PluginDescriptor {
   id: string
@@ -7,6 +7,11 @@ export interface PluginDescriptor {
   type: 'SCANNER' | 'AGENT' | 'TOOL' | 'GRAPH_VIEW'
   version: string
   metadata: Record<string, string>
+  enabled: boolean
+  menuSection?: string
+  menuLabel?: string
+  menuPath?: string
+  routeName?: string
 }
 
 export interface PluginQueryParams {
@@ -29,5 +34,19 @@ export const pluginApi = {
    */
   get(id: string): Promise<PluginDescriptor> {
     return get(`/lg/plugins/${encodeURIComponent(id)}`)
+  },
+
+  /**
+   * 启用插件
+   */
+  enable(id: string): Promise<PluginDescriptor> {
+    return post(`/lg/plugins/${encodeURIComponent(id)}/enable`, {})
+  },
+
+  /**
+   * 禁用插件
+   */
+  disable(id: string): Promise<PluginDescriptor> {
+    return post(`/lg/plugins/${encodeURIComponent(id)}/disable`, {})
   }
 }

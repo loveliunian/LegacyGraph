@@ -522,7 +522,7 @@ watch([
 .zoom-level {
   font-size: 13px;
   color: #606266;
-  font-family: 'Consolas', monospace;
+  font-family: var(--font-mono);
 }
 
 .search-input {
