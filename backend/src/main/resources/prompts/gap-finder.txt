@@ -12,8 +12,11 @@
 {evidence}
 
 ## 输出要求
-1. explanation 用中文说明为什么这是缺口。
+1. explanation 用中文说明为什么这是缺口（缺少什么类型的证据/关联）。
 2. priorityScore 为 0~1，越高表示越应该优先补证。
+   - 0.8-1.0：核心功能缺少关键证据（如 API 无 Controller 关联）。
+   - 0.5-0.8：支撑功能缺少部分证据。
+   - 0.0-0.5：边缘功能或已有部分证据。
 3. suggestedActions 必须是可执行动作，例如补扫代码、上传文档、生成测试、人工确认。
 4. requiredEvidenceTypes 只能从 code、db、doc、runtime、test、human_review 中选择。
 5. 不得编造输入中不存在的接口、表、方法或业务对象。

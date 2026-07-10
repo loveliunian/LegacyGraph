@@ -32,6 +32,7 @@ public enum EdgeType {
     REFERENCES("外键引用"),
     BELONGS_TO("属于"),
     MAPS_TO("对应"),
+    POSSIBLE_SAME_AS("疑似同义"),
     APPLIES_TO("应用于"),
     GRANTS("授予"),        // Role --GRANTS--> Permission：角色被授予某权限
     ASSIGNED_TO("分配给"),  // Role --ASSIGNED_TO--> User：角色被分配给某用户
@@ -42,7 +43,17 @@ public enum EdgeType {
     AFFECTS("影响"),
     FIXED_BY("由...修复"),
     MIGRATES_TO("迁移到"),
-    DEPENDS_ON("依赖于");
+    DEPENDS_ON("依赖于"),
+
+    // ========== 需求结构化关系（Task 6） ==========
+    HAS_ITEM("拥有条目"),                              // Requirement → RequirementItem
+    HAS_ACCEPTANCE_CRITERION("拥有验收条件"),          // RequirementItem → AcceptanceCriterion
+    HAS_CONSTRAINT("拥有约束"),                        // RequirementItem → Constraint
+    HAS_ASSUMPTION("拥有假设"),                        // RequirementItem → Assumption
+    RAISES_QUESTION("提出问题"),                      // RequirementItem → OpenQuestion
+    SATISFIES("满足"),                                 // Solution → Requirement（Solution 在 Task 10 定义）
+    DERIVED_FROM("派生自"),                            // ImplementationStep → Requirement
+    VERIFIES("验证");                                  // VerificationStep → AcceptanceCriterion
 
     private final String description;
 

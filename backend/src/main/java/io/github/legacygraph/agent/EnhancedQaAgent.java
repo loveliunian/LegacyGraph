@@ -314,11 +314,7 @@ public class EnhancedQaAgent {
                 @Override
                 public void onToken(String token) {
                     fullAnswer.append(token);
-                    try {
-                        sendEvent(emitter, "token", Map.of("text", token));
-                    } catch (Exception e) {
-                        log.error("Failed to send token", e);
-                    }
+                    sendEvent(emitter, "token", Map.of("text", token));
                 }
 
                 @Override
@@ -409,22 +405,22 @@ public class EnhancedQaAgent {
                 @Override
                 public void onError(Throwable error) {
                     log.error("LLM stream error", error);
+                    sendEvent(emitter, "error", Map.of("message", error.getMessage() != null ? error.getMessage() : "未知错误"));
                     try {
-                        sendEvent(emitter, "error", Map.of("message", error.getMessage() != null ? error.getMessage() : "未知错误"));
                         emitter.completeWithError(error instanceof Exception ? (Exception) error : new RuntimeException(error));
                     } catch (Exception e) {
-                        log.error("Failed to send error", e);
+                        log.debug("Failed to complete emitter with error", e);
                     }
                 }
             });
 
         } catch (Exception e) {
             log.error("QA stream error", e);
+            sendEvent(emitter, "error", Map.of("message", e.getMessage()));
             try {
-                sendEvent(emitter, "error", Map.of("message", e.getMessage()));
                 emitter.completeWithError(e);
             } catch (Exception ex) {
-                log.error("Failed to send error event", ex);
+                log.debug("Failed to complete emitter with error", ex);
             }
         }
     }
@@ -866,10 +862,16 @@ public class EnhancedQaAgent {
         return ctx.toString();
     }
 
-    private void sendEvent(SseEmitter emitter, String eventName, Object data) throws IOException {
-        emitter.send(SseEmitter.event()
-            .name(eventName)
-            .data(objectMapper.writeValueAsString(data)));
+    private void sendEvent(SseEmitter emitter, String eventName, Object data) {
+        try {
+            emitter.send(SseEmitter.event()
+                .name(eventName)
+                .data(objectMapper.writeValueAsString(data)));
+        } catch (org.springframework.web.context.request.async.AsyncRequestNotUsableException e) {
+            log.debug("SSE connection already closed by client, event={}", eventName);
+        } catch (IOException e) {
+            log.debug("Failed to send SSE event, connection may be closed, event={}", eventName);
+        }
     }
 
     /**

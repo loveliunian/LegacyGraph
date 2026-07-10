@@ -3,6 +3,7 @@ package io.github.legacygraph.task.step;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.FeatureMappingAgent;
+import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.builder.EvidenceGraphWriter;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
@@ -39,6 +40,8 @@ public class FeatureMappingStep implements AiScanStepExecutor {
 
     /** LLM 功能映射每批 Feature 数：一次性喂全量 Feature 会导致 LLM 输出截断返回 0 条，分批调用。 */
     private static final int FEATURE_MAPPING_BATCH_SIZE = 40;
+    /** 每批 LLM 请求的目标字符上限（与 DOC_CONTENT_LIMIT 一致） */
+    private static final int MAPPING_REQUEST_CHAR_LIMIT = 8000;
 
     private final AiScanStepSupport support;
     private final Neo4jGraphDao neo4jGraphDao;
@@ -47,6 +50,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
     private final ReviewRecordRepository reviewRecordRepository;
     private final ObjectMapper objectMapper;
     private final Counter agentCallCounter;
+    private final BusinessGraphBuilder businessGraphBuilder;
 
     public FeatureMappingStep(AiScanStepSupport support,
                               Neo4jGraphDao neo4jGraphDao,
@@ -54,7 +58,8 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                               EvidenceGraphWriter evidenceGraphWriter,
                               ReviewRecordRepository reviewRecordRepository,
                               ObjectMapper objectMapper,
-                              @Qualifier("agentCallCounter") Counter agentCallCounter) {
+                              @Qualifier("agentCallCounter") Counter agentCallCounter,
+                              BusinessGraphBuilder businessGraphBuilder) {
         this.support = support;
         this.neo4jGraphDao = neo4jGraphDao;
         this.featureMappingAgent = featureMappingAgent;
@@ -62,6 +67,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
         this.reviewRecordRepository = reviewRecordRepository;
         this.objectMapper = objectMapper;
         this.agentCallCounter = agentCallCounter;
+        this.businessGraphBuilder = businessGraphBuilder;
     }
 
     @Override
@@ -85,13 +91,35 @@ public class FeatureMappingStep implements AiScanStepExecutor {
         String versionId = ctx.getVersionId();
         ScanTask task = support.createTask(projectId, versionId, "AI_FEATURE_MAPPING", "功能映射对齐");
         try {
-            // 收集全部 Feature / Page / ApiEndpoint 节点（limit=0 表示不限）
-            List<GraphNode> features = neo4jGraphDao.queryNodes(projectId, versionId,
-                    NodeType.Feature.name(), null, null, null, 0);
-            List<GraphNode> pages = neo4jGraphDao.queryNodes(projectId, versionId,
-                    NodeType.Page.name(), null, null, null, 0);
-            List<GraphNode> apis = neo4jGraphDao.queryNodes(projectId, versionId,
-                    NodeType.ApiEndpoint.name(), null, null, null, 0);
+            List<GraphNode> features;
+            List<GraphNode> pages;
+            List<GraphNode> apis;
+            if (ctx.isIncremental()) {
+                // 增量模式：仅查询 affected=true 的节点，跳过未变更节点（保留其已有边，不删除）
+                features = neo4jGraphDao.queryAffectedNodes(projectId, versionId,
+                        NodeType.Feature.name());
+                pages = neo4jGraphDao.queryAffectedNodes(projectId, versionId,
+                        NodeType.Page.name());
+                apis = neo4jGraphDao.queryAffectedNodes(projectId, versionId,
+                        NodeType.ApiEndpoint.name());
+                int totalAffected = features.size() + pages.size() + apis.size();
+                if (totalAffected == 0) {
+                    // 增量模式下无 affected 节点（没有变更），直接返回成功，不做映射
+                    log.info("增量映射：无 affected 节点，跳过 AI_FEATURE_MAPPING（保留未变更节点的已有边）");
+                    support.completeTask(task, "增量模式：无 affected 节点，跳过映射", null);
+                    return StepExecutionResult.builder().success(true)
+                            .message("增量模式：无 affected 节点，跳过映射").build();
+                }
+                log.info("增量映射：处理 {} 个 affected 节点（跳过未变更节点）", totalAffected);
+            } else {
+                // 全量模式：查询全部 Feature / Page / ApiEndpoint 节点（limit=0 表示不限）
+                features = neo4jGraphDao.queryNodes(projectId, versionId,
+                        NodeType.Feature.name(), null, null, null, 0);
+                pages = neo4jGraphDao.queryNodes(projectId, versionId,
+                        NodeType.Page.name(), null, null, null, 0);
+                apis = neo4jGraphDao.queryNodes(projectId, versionId,
+                        NodeType.ApiEndpoint.name(), null, null, null, 0);
+            }
 
             if (pages.isEmpty() && apis.isEmpty()) {
                 support.completeTask(task, "无可映射的页面/接口节点，跳过", null);
@@ -105,20 +133,27 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             Map<String, GraphNode> apiMap = buildNodeIndex(apis);
 
             // 分批调 LLM：一次性喂全量 Feature 会导致 LLM 输出截断（实测 347 个一次喂返回 0 条）。
-            // 每批只放 FEATURE_MAPPING_BATCH_SIZE 个 Feature 作为映射锚点，Page/API 作为目标全量传入。
+            // 每批只放部分 Feature 作为映射锚点，Page/API 作为目标全量传入。
             String pageSummary = summarizeNodes(pages);
             String apiSummary = summarizeNodes(apis);
             // 构建 Controller 代码上下文（从 API 节点提取 sourcePath/properties）
             String controllerContext = buildControllerContext(apis);
+            // 动态计算批次大小：根据目标摘要长度反算每批能容纳的 Feature 数，避免超出 LLM 上下文
+            int targetContextLen = pageSummary.length() + apiSummary.length() + controllerContext.length();
+            int availableChars = MAPPING_REQUEST_CHAR_LIMIT - targetContextLen - 2000; // 预留 2000 字符给 prompt 模板
+            int dynamicBatchSize = calculateDynamicBatchSize(features, availableChars);
+            log.info("Feature mapping batch size: dynamic={} (targetContextLen={}, availableChars={})",
+                    dynamicBatchSize, targetContextLen, availableChars);
+
             // 分批并发调 LLM（复用 docExtractExecutor，此时 doc/code 抽取已结束、池空闲），
-            // 避免顺序 5 批把耗时拉长。结果用 AtomicInteger 累加。
+            // 避免顺序批把耗时拉长。结果用 AtomicInteger 累加。
             AtomicInteger totalMappings = new AtomicInteger(0);
             AtomicInteger totalPersisted = new AtomicInteger(0);
             AtomicInteger batches = new AtomicInteger(0);
             List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
-            for (int i = 0; i < features.size(); i += FEATURE_MAPPING_BATCH_SIZE) {
+            for (int i = 0; i < features.size(); i += dynamicBatchSize) {
                 List<GraphNode> batch = features.subList(i,
-                        Math.min(i + FEATURE_MAPPING_BATCH_SIZE, features.size()));
+                        Math.min(i + dynamicBatchSize, features.size()));
                 batchFutures.add(CompletableFuture.runAsync(() -> {
                     FeatureMappingAgent.MappingRequest request = new FeatureMappingAgent.MappingRequest();
                     request.setProjectId(projectId);
@@ -154,8 +189,31 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                 }, support.getDocExtractExecutor()));
             }
             CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0])).join();
+
+            // 规则映射补充：LLM 映射完成后，用规则匹配补充遗漏的映射
+            int ruleFeatureMappings = 0;
+            int ruleObjectMappings = 0;
+            int ruleDomainMappings = 0;
+            int ruleFeatureCandidates = 0;
+            if (businessGraphBuilder != null) {
+                try {
+                    ruleFeatureMappings = businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
+                    ruleObjectMappings = businessGraphBuilder.mapBusinessObjectsToTables(projectId, versionId);
+                    ruleDomainMappings = businessGraphBuilder.mapBusinessDomainsToCode(projectId, versionId);
+                    ruleFeatureCandidates = businessGraphBuilder.mergeCrossLanguageFeatures(projectId, versionId);
+                } catch (Exception e) {
+                    log.warn("Rule-based mapping failed as supplement: {}", e.getMessage());
+                } finally {
+                    businessGraphBuilder.clearEmbeddingCache(versionId);
+                }
+            }
+
             String summary = "AI 生成功能映射 " + totalMappings.get() + " 条（" + batches.get()
-                    + " 批），落地 Feature→Page/API 边 " + totalPersisted.get() + " 条";
+                    + " 批），落地 Feature→Page/API 边 " + totalPersisted.get() + " 条；"
+                    + "规则映射补充：Feature→Page/API " + ruleFeatureMappings + " 条，"
+                    + "业务对象技术映射 " + ruleObjectMappings + " 条，"
+                    + "业务域技术映射 " + ruleDomainMappings + " 条，"
+                    + "跨语言 Feature 待确认候选 " + ruleFeatureCandidates + " 组";
             support.completeTask(task, summary, null);
             return StepExecutionResult.builder().success(true).message(summary)
                     .processedCount(totalPersisted.get()).build();
@@ -421,5 +479,34 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             result = featureMappingAgent.mapFeatures(request);
         }
         return result;
+    }
+
+    /**
+     * 根据目标上下文长度动态计算每批 Feature 数量，确保不超出 LLM 上下文限制。
+     *
+     * @param features       全部 Feature 节点列表
+     * @param availableChars 可用字符数（扣除 Page/API/Controller 摘要后）
+     * @return 动态计算的批次大小，最小值为 1，最大值为 FEATURE_MAPPING_BATCH_SIZE
+     */
+    private int calculateDynamicBatchSize(List<GraphNode> features, int availableChars) {
+        if (features == null || features.isEmpty() || availableChars <= 0) {
+            return FEATURE_MAPPING_BATCH_SIZE;
+        }
+
+        int avgFeatureLen = 0;
+        int sampleSize = Math.min(features.size(), 20);
+        for (int i = 0; i < sampleSize; i++) {
+            GraphNode f = features.get(i);
+            String name = f.getNodeName();
+            String key = f.getNodeKey();
+            avgFeatureLen += (name != null ? name.length() : 0) + (key != null ? key.length() : 0) + 30; // 30 为格式开销
+        }
+        avgFeatureLen = sampleSize > 0 ? avgFeatureLen / sampleSize : 80; // 默认平均每条 80 字符
+
+        int estimatedBatchSize = availableChars / avgFeatureLen;
+        estimatedBatchSize = Math.max(1, estimatedBatchSize);
+        estimatedBatchSize = Math.min(FEATURE_MAPPING_BATCH_SIZE, estimatedBatchSize);
+
+        return estimatedBatchSize;
     }
 }

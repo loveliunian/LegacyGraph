@@ -25,9 +25,15 @@
 - 类型不同但指代同一实体可合并。
 - 不确定时偏向 REVIEW（进入人工审核），证据明显冲突则 REJECT。
 
-## 决策取值
-- decision 必须是以下之一：AUTO_MERGE（高置信自动合并）、REVIEW（人工审核）、REJECT（不合并）。
-- score 为最终合并置信度（0~1）。
+## 决策取值与门槛
+- **AUTO_MERGE**：score ≥ 0.85，且名称+语义相似度均高，无证据冲突。
+- **REVIEW**：0.5 ≤ score < 0.85，或存在部分匹配但有歧义。
+- **REJECT**：score < 0.5，或证据明显冲突，或类型层级不同。
+- score 为最终合并置信度（0~1），综合五个相似度评分得出。
+
+## 判断依据
+- reasons 中必须列出至少 2 条理由，引用具体的相似度评分或节点信息。
+- positiveEvidenceIds / negativeEvidenceIds 列出支持/反对合并的证据 ID（无则空数组）。
 
 ## 输出格式
 请以严格 JSON 格式输出，结构如下：

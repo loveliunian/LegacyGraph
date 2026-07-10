@@ -553,6 +553,31 @@ public class Neo4jQueryRepository {
     }
 
     /**
+     * 查询指定版本中 affected=true 的指定类型节点（用于 Blast Radius 影响分析结果查询）。
+     * <p>affected 标记由 {@code BlastRadiusAnalyzer.markAffectedNodes} 通过
+     * {@code setNodeProperty(nodeId, "affected", true)} 写入 Neo4j 节点顶层属性。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 版本 ID
+     * @param nodeType  节点类型（匹配 nodeType 属性）
+     * @return 受影响节点列表
+     */
+    public List<GraphNode> queryAffectedNodes(String projectId, String versionId, String nodeType) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                "AND n.nodeType = $nodeType AND n.affected = true RETURN n";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId),
+                    "nodeType", nodeType));
+            List<GraphNode> nodes = new ArrayList<>();
+            while (result.hasNext()) nodes.add(recordToNode(result.next().get("n").asNode()));
+            return nodes;
+        }
+    }
+
+    /**
      * 通过测试覆盖的边计数（连接已覆盖节点的边数）。
      * 用于计算边覆盖率，避免全量边加载。
      */

@@ -81,7 +81,7 @@ export const understandingApi = {
    */
   createReport: (projectId: string, request: CodeUnderstandingRequest) => {
     return post<CreateUnderstandingReportResponse>(
-      `/lg/projects/${projectId}/understanding/reports`,
+      `/lg/projects/${encodeURIComponent(projectId)}/understanding/reports`,
       request
     )
   },
@@ -91,7 +91,7 @@ export const understandingApi = {
    */
   getReport: (projectId: string, taskId: string) => {
     return get<CodeUnderstandingTaskResult>(
-      `/lg/projects/${projectId}/understanding/reports/${taskId}`
+      `/lg/projects/${encodeURIComponent(projectId)}/understanding/reports/${encodeURIComponent(taskId)}`
     )
   },
 
@@ -100,8 +100,9 @@ export const understandingApi = {
    */
   downloadReport: (projectId: string, taskId: string) => {
     return get<Blob>(
-      `/lg/projects/${projectId}/understanding/reports/${taskId}/download`,
-      { params: { format: 'MD' }, responseType: 'blob' }
+      `/lg/projects/${encodeURIComponent(projectId)}/understanding/reports/${encodeURIComponent(taskId)}/download`,
+      { format: 'MD' },
+      { responseType: 'blob' }
     )
   }
 }

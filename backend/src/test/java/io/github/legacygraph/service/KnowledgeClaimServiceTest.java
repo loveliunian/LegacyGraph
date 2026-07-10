@@ -1,8 +1,11 @@
 package io.github.legacygraph.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
+import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.KnowledgeClaim;
+import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.KnowledgeClaimRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,11 +28,14 @@ class KnowledgeClaimServiceTest {
     @Mock
     private KnowledgeClaimRepository repository;
 
+    @Mock
+    private EvidenceRepository evidenceRepository;
+
     private KnowledgeClaimService service;
 
     @BeforeEach
     void setUp() {
-        service = new KnowledgeClaimService(repository, new ObjectMapper());
+        service = new KnowledgeClaimService(repository, new ObjectMapper(), evidenceRepository);
     }
 
     @Test
@@ -109,6 +115,36 @@ class KnowledgeClaimServiceTest {
         assertTrue(claim.getEvidenceIds().contains("ev-code"));
         assertTrue(claim.getEvidenceIds().contains("ev-doc"));
         verify(repository).updateById(existing);
+    }
+
+    @Test
+    void upsertDraft_rejectsEvidenceReferenceOutsideTheClaimDocument() {
+        when(repository.selectList(any())).thenReturn(List.of());
+        when(evidenceRepository.insertOrIgnore(any(Evidence.class))).thenReturn(1);
+
+        DocUnderstandingAgent.EvidenceRef foreignRef = new DocUnderstandingAgent.EvidenceRef();
+        foreignRef.setSourceUri("/other-project/secret.md");
+        foreignRef.setExcerpt("不应被接受的跨文档引用");
+        DocUnderstandingAgent.EvidenceRef chunkRef = new DocUnderstandingAgent.EvidenceRef();
+        chunkRef.setSourceUri("/project/docs/order.md#chunk2:start100:end500");
+        chunkRef.setExcerpt("订单创建需要校验库存");
+
+        service.upsertDraft(KnowledgeClaimDraft.builder()
+                .projectId("project-1")
+                .versionId("v1")
+                .subjectType("Feature")
+                .subjectKey("feature:create-order")
+                .predicate("DESCRIBED_BY")
+                .objectType("Evidence")
+                .objectKey("/project/docs/order.md")
+                .sourceType("DOC_AI")
+                .confidence(BigDecimal.valueOf(0.8))
+                .transientEvidenceRefs(List.of(foreignRef, chunkRef))
+                .build());
+
+        ArgumentCaptor<Evidence> evidenceCaptor = ArgumentCaptor.forClass(Evidence.class);
+        verify(evidenceRepository, times(1)).insertOrIgnore(evidenceCaptor.capture());
+        assertEquals("/project/docs/order.md#chunk2:start100:end500", evidenceCaptor.getValue().getSourcePath());
     }
 
     @Test

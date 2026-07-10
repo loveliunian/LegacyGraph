@@ -16,7 +16,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 扫描产物发布服务 — 把扫描产生的总结性文档统一发布到项目根目录 /docs/legacygraph/，
@@ -35,7 +37,7 @@ import java.util.List;
  * <ul>
  *   <li>对被扫描项目源码目录只追加 /docs/legacygraph/ 子目录，不动 .gitignore</li>
  *   <li>发布失败只 warn，不阻塞扫描主流程</li>
- *   <li>每次发布覆盖旧文件，向量化前先按 sourceUri 删除旧向量</li>
+ *   <li>每次发布覆盖旧文件，向量化支持全量（按 sourceUri+versionId 删除旧向量）与 chunk 级增量两种模式</li>
  * </ul>
  */
 @Slf4j
@@ -83,11 +85,78 @@ public class ScanArtifactPublisher {
     }
 
     /**
+     * 发布全部扫描产物到 {projectRoot}/docs/legacygraph/ 并向量化（全量模式）。
+     *
+     * <p>等价于 {@link #publish(String, String, boolean) publish(projectId, versionId, false)}。
+     * 保留以兼容现有 {@code ProjectScanner} / {@code AiScanJobWorker} 调用点。</p>
+     */
+    public void publish(String projectId, String versionId) {
+        publish(projectId, versionId, false);
+    }
+
+    /**
      * 发布全部扫描产物到 {projectRoot}/docs/legacygraph/ 并向量化。
      *
      * <p>扫描完成（基础扫描或 AI 编排）后调用。每个产物独立 try/catch，单文件失败不影响其他产物。</p>
+     *
+     * @param incremental true 时走 chunk 级增量向量化（{@link VectorizationService#embedDocumentIncremental}），
+     *                   仅对内容变化的 chunk 重新嵌入；false 时全量重写（先按 sourceUri+versionId 删除旧向量，再 embedDocument）。
+     *                   <p>注意：此重载不携带增量上下文（affectedNodeIds / affectedModuleNames），
+     *                   system-overview 与 code-understanding-report 将退化为全量章节生成 + 增量向量化。
+     *                   如需章节级增量生成，请使用
+     *                   {@link #publish(String, String, Set, Set)}。</p>
      */
-    public void publish(String projectId, String versionId) {
+    public void publish(String projectId, String versionId, boolean incremental) {
+        publishInternal(projectId, versionId, incremental, null, null);
+    }
+
+    /**
+     * 发布全部扫描产物 — 支持章节级增量文档生成。
+     *
+     * <p>当 {@code changedFilePaths} 非空时判定为增量模式：
+     * <ol>
+     *   <li>从 {@code affectedNodeIds} 经 {@link SystemOverviewDocumentService#extractModuleNames}
+     *       提取受影响模块名</li>
+     *   <li>system-overview.md：读取旧文件内容，调用
+     *       {@link SystemOverviewDocumentService#generateIncrementalMarkdown(String, String, Set, String)}
+     *       仅重写受影响章节</li>
+     *   <li>code-understanding-report.md：读取旧文件内容，调用
+     *       {@link CodeUnderstandingReportService#generateIncrementalAggregatedMarkdown(String, String, Set, String)}
+     *       仅重写受影响功能点章节</li>
+     *   <li>向量化走 chunk 级增量（{@link VectorizationService#embedDocumentIncremental}）</li>
+     * </ol>
+     *
+     * <p>当 {@code changedFilePaths} 为 null/空时退化为全量模式，等价于
+     * {@link #publish(String, String, boolean) publish(projectId, versionId, false)}。</p>
+     *
+     * @param projectId         项目 ID
+     * @param versionId         版本 ID
+     * @param changedFilePaths  本次扫描变更文件路径集合；null/空 → 全量模式
+     * @param affectedNodeIds   受影响图谱节点 ID 集合（用于章节级增量生成）；null/空时增量生成退化为全量
+     */
+    public void publish(String projectId, String versionId,
+                        Set<String> changedFilePaths, Set<String> affectedNodeIds) {
+        boolean incremental = changedFilePaths != null && !changedFilePaths.isEmpty();
+        if (!incremental) {
+            publish(projectId, versionId, false);
+            return;
+        }
+        // 增量模式：从受影响节点 ID 提取模块名（用于 system-overview 章节匹配）
+        Set<String> affectedModuleNames = (affectedNodeIds == null || affectedNodeIds.isEmpty())
+                ? Collections.emptySet()
+                : systemOverviewDocumentService.extractModuleNames(projectId, versionId, affectedNodeIds);
+        publishInternal(projectId, versionId, true, affectedNodeIds, affectedModuleNames);
+    }
+
+    /**
+     * 内部统一发布流程 — 由 {@link #publish(String, String, boolean)} 与
+     * {@link #publish(String, String, Set, Set)} 共用。
+     *
+     * <p>当 {@code affectedModuleNames}/{@code affectedNodeIds} 非空且 incremental=true 时，
+     * system-overview 与 code-understanding-report 走章节级增量生成；否则走全量生成。</p>
+     */
+    private void publishInternal(String projectId, String versionId, boolean incremental,
+                                  Set<String> affectedNodeIds, Set<String> affectedModuleNames) {
         Path docsDir = resolveDocsDir(projectId);
         if (docsDir == null) {
             log.warn("ScanArtifactPublisher: cannot resolve docs dir for projectId={}, skip publishing", projectId);
@@ -99,18 +168,20 @@ public class ScanArtifactPublisher {
             log.warn("ScanArtifactPublisher: failed to create docs dir {}: {}", docsDir, e.getMessage());
             return;
         }
-        log.info("ScanArtifactPublisher: publishing artifacts to {} for projectId={}, versionId={}",
-                docsDir, projectId, versionId);
+        log.info("ScanArtifactPublisher: publishing artifacts to {} for projectId={}, versionId={}, incremental={}",
+                docsDir, projectId, versionId, incremental);
 
-        publishSystemOverview(projectId, versionId, docsDir);
-        publishScanPerformanceReport(projectId, versionId, docsDir);
-        publishCodeUnderstandingReport(projectId, versionId, docsDir);
-        publishExternalToolEvidence(projectId, versionId, docsDir);
-        publishGraphQualityReport(projectId, versionId);
-        // 质量评估之后执行边补全（传递闭包 + 规则校验），单独 try/catch，失败不阻塞
+        // 1. 图谱定稿：边补全（传递闭包 + 规则校验），单独 try/catch，失败不阻塞
         completeEdges(projectId, versionId);
-        // 边补全之后执行社区检测，将结果写入 Package 节点 properties.community
+        // 2. 社区检测，将结果写入 Package 节点 properties.community
         detectCommunities(projectId);
+        // 3. 质量评估（在图谱定稿后，反映最终图谱质量）
+        publishGraphQualityReport(projectId, versionId);
+        // 4. 分层总结及各产物发布（基于定稿图谱 + 质量报告）
+        publishSystemOverview(projectId, versionId, docsDir, incremental, affectedModuleNames);
+        publishScanPerformanceReport(projectId, versionId, docsDir, incremental);
+        publishCodeUnderstandingReport(projectId, versionId, docsDir, incremental, affectedNodeIds);
+        publishExternalToolEvidence(projectId, versionId, docsDir, incremental);
     }
 
     /**
@@ -160,24 +231,38 @@ public class ScanArtifactPublisher {
 
     // ──────────── 各产物发布 ────────────
 
-    private void publishSystemOverview(String projectId, String versionId, Path docsDir) {
+    private void publishSystemOverview(String projectId, String versionId, Path docsDir,
+                                        boolean incremental, Set<String> affectedModuleNames) {
         try {
-            // generateAfterScan 内部会写到自己的 reportRoot，这里我们再复制一份到 docs/legacygraph
-            // 为避免双写，直接调用 generateMarkdown 并手动落盘 + 向量化
-            String markdown = systemOverviewDocumentService.generateMarkdownContent(projectId, versionId);
+            // 在图谱定稿（边补全、社区检测、质量评估）后刷新 Report 表登记的正式副本，
+            // 避免 reportRoot 与 docs/legacygraph 分别基于定稿前/后的图谱而不一致。
+            systemOverviewDocumentService.generateAfterScan(projectId, versionId);
+
+            // docs/legacygraph 是可检索发布副本，使用同一时点重新生成的 Markdown 落盘并向量化。
+            Path file = docsDir.resolve("system-overview.md");
+            String markdown;
+            if (incremental && affectedModuleNames != null && !affectedModuleNames.isEmpty()) {
+                // 章节级增量：读取旧文档，仅重写受影响模块章节
+                String oldMarkdown = readExistingFile(file);
+                markdown = systemOverviewDocumentService.generateIncrementalMarkdown(
+                        projectId, versionId, affectedModuleNames, oldMarkdown);
+                log.info("ScanArtifactPublisher: system-overview incremental generation, affectedModules={}",
+                        affectedModuleNames);
+            } else {
+                markdown = systemOverviewDocumentService.generateMarkdownContent(projectId, versionId);
+            }
             if (markdown == null || markdown.isBlank()) {
                 return;
             }
-            Path file = docsDir.resolve("system-overview.md");
             Files.writeString(file, markdown, StandardCharsets.UTF_8);
-            vectorize(projectId, versionId, "system-overview.md", markdown);
+            vectorize(projectId, versionId, "system-overview.md", markdown, incremental);
             log.info("Published system-overview.md to {}", file);
         } catch (Exception e) {
             log.warn("Failed to publish system-overview.md: {}", e.getMessage());
         }
     }
 
-    private void publishScanPerformanceReport(String projectId, String versionId, Path docsDir) {
+    private void publishScanPerformanceReport(String projectId, String versionId, Path docsDir, boolean incremental) {
         try {
             String markdown = scanPerformanceReportService.generateMarkdown(projectId, versionId);
             if (markdown == null || markdown.isBlank()) {
@@ -185,29 +270,40 @@ public class ScanArtifactPublisher {
             }
             Path file = docsDir.resolve("scan-performance-report.md");
             Files.writeString(file, markdown, StandardCharsets.UTF_8);
-            vectorize(projectId, versionId, "scan-performance-report.md", markdown);
+            vectorize(projectId, versionId, "scan-performance-report.md", markdown, incremental);
             log.info("Published scan-performance-report.md to {}", file);
         } catch (Exception e) {
             log.warn("Failed to publish scan-performance-report.md: {}", e.getMessage());
         }
     }
 
-    private void publishCodeUnderstandingReport(String projectId, String versionId, Path docsDir) {
+    private void publishCodeUnderstandingReport(String projectId, String versionId, Path docsDir,
+                                                  boolean incremental, Set<String> affectedNodeIds) {
         try {
-            String markdown = codeUnderstandingReportService.generateAggregatedMarkdown(projectId, versionId);
+            Path file = docsDir.resolve("code-understanding-report.md");
+            String markdown;
+            if (incremental && affectedNodeIds != null && !affectedNodeIds.isEmpty()) {
+                // 章节级增量：读取旧报告，仅重写受影响功能点章节
+                String oldMarkdown = readExistingFile(file);
+                markdown = codeUnderstandingReportService.generateIncrementalAggregatedMarkdown(
+                        projectId, versionId, affectedNodeIds, oldMarkdown);
+                log.info("ScanArtifactPublisher: code-understanding-report incremental generation, affectedNodes={}",
+                        affectedNodeIds.size());
+            } else {
+                markdown = codeUnderstandingReportService.generateAggregatedMarkdown(projectId, versionId);
+            }
             if (markdown == null || markdown.isBlank()) {
                 return;
             }
-            Path file = docsDir.resolve("code-understanding-report.md");
             Files.writeString(file, markdown, StandardCharsets.UTF_8);
-            vectorize(projectId, versionId, "code-understanding-report.md", markdown);
+            vectorize(projectId, versionId, "code-understanding-report.md", markdown, incremental);
             log.info("Published code-understanding-report.md to {}", file);
         } catch (Exception e) {
             log.warn("Failed to publish code-understanding-report.md: {}", e.getMessage());
         }
     }
 
-    private void publishExternalToolEvidence(String projectId, String versionId, Path docsDir) {
+    private void publishExternalToolEvidence(String projectId, String versionId, Path docsDir, boolean incremental) {
         try {
             String markdown = externalToolEvidenceExporter.exportMarkdown(projectId, versionId);
             if (markdown == null || markdown.isBlank()) {
@@ -215,7 +311,7 @@ public class ScanArtifactPublisher {
             }
             Path file = docsDir.resolve("external-tool-evidence.md");
             Files.writeString(file, markdown, StandardCharsets.UTF_8);
-            vectorize(projectId, versionId, "external-tool-evidence.md", markdown);
+            vectorize(projectId, versionId, "external-tool-evidence.md", markdown, incremental);
             log.info("Published external-tool-evidence.md to {}", file);
         } catch (Exception e) {
             log.warn("Failed to publish external-tool-evidence.md: {}", e.getMessage());
@@ -225,21 +321,55 @@ public class ScanArtifactPublisher {
     // ──────────── 向量化 ────────────
 
     /**
-     * 把文档切片向量化到 pgvector，sourceUri 用相对 docs/legacygraph/{filename} 便于溯源。
-     * 重新发布时先删旧向量（embedDocument 内部按 contentSha256 去重，但旧版本内容 hash 变化时残留）。
+     * 读取已存在的文档文件内容（用于章节级增量生成时传入旧文档）。
+     *
+     * <p>文件不存在或读取失败时返回 null，{@code generateIncrementalMarkdown} /
+     * {@code generateIncrementalAggregatedMarkdown} 内部会退化为全量生成。</p>
      */
-    private void vectorize(String projectId, String versionId, String fileName, String content) {
+    private String readExistingFile(Path file) {
+        if (file == null) {
+            return null;
+        }
+        try {
+            if (Files.exists(file)) {
+                return Files.readString(file, StandardCharsets.UTF_8);
+            }
+        } catch (IOException e) {
+            log.warn("Failed to read existing file {}: {}", file, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 把文档切片向量化到 pgvector，sourceUri 用相对 docs/legacygraph/{filename} 便于溯源。
+     *
+     * <p>两种模式：
+     * <ul>
+     *   <li>全量（incremental=false）：先按 sourceUri+versionId 精确删除旧向量，再 {@link VectorizationService#embedDocument} 全量嵌入。
+     *       用 deleteBySourceUriAndVersion 取代旧 deleteBySourceUri，避免误删其他扫描版本的向量。</li>
+     *   <li>增量（incremental=true）：调用 {@link VectorizationService#embedDocumentIncremental}，按 chunk 的 contentSha256
+     *       跳过未变化 chunk，不预先删除旧向量。</li>
+     * </ul>
+     */
+    private void vectorize(String projectId, String versionId, String fileName, String content, boolean incremental) {
         if (!vectorizationService.isAvailable()) {
             log.debug("VectorizationService not available, skip vectorizing {}", fileName);
             return;
         }
         String sourceUri = DOCS_SUBDIR + "/" + fileName;
         try {
-            vectorizationService.deleteBySourceUri(sourceUri);
-            int stored = vectorizationService.embedDocument(
-                    projectId, versionId, CHUNK_TYPE, sourceUri,
-                    content, CHUNK_MAX_CHARS, CHUNK_OVERLAP, "bge-m3");
-            log.info("Vectorized {}: {} chunks", fileName, stored);
+            int stored;
+            if (incremental) {
+                stored = vectorizationService.embedDocumentIncremental(
+                        projectId, versionId, CHUNK_TYPE, sourceUri,
+                        content, CHUNK_MAX_CHARS, CHUNK_OVERLAP, "bge-m3");
+            } else {
+                vectorizationService.deleteBySourceUriAndVersion(sourceUri, versionId);
+                stored = vectorizationService.embedDocument(
+                        projectId, versionId, CHUNK_TYPE, sourceUri,
+                        content, CHUNK_MAX_CHARS, CHUNK_OVERLAP, "bge-m3");
+            }
+            log.info("Vectorized {} ({}): {} chunks", fileName, incremental ? "incremental" : "full", stored);
         } catch (Exception e) {
             log.warn("Failed to vectorize {}: {}", fileName, e.getMessage());
         }

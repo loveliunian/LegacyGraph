@@ -136,6 +136,29 @@ public class Neo4jWriteRepository {
     }
 
     /**
+     * 清除指定版本中所有节点的 affected 和 affectedReason 标记。
+     * <p>与 {@link #setNodeProperty} 配对：markAffectedNodes 写入 affected/affectedReason，
+     * 本方法在增量重扫前清除上一轮标记。仅清除 affected=true 的节点。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 版本 ID
+     * @return 清除标记的节点数
+     */
+    public int clearAffectedMarkers(String projectId, String versionId) {
+        try (Session session = neo4jDriver.session()) {
+            String cypher = "MATCH (n) WHERE n.projectId = $projectId AND n.versionId = $versionId " +
+                    "AND n.affected = true REMOVE n.affected, n.affectedReason RETURN count(n) AS cnt";
+            Result result = session.run(cypher, Map.of(
+                    "projectId", projectId,
+                    "versionId", normalizeId(versionId)));
+            if (result.hasNext()) {
+                return (int) result.next().get("cnt").asLong();
+            }
+            return 0;
+        }
+    }
+
+    /**
      * 批量 MERGE 节点（单次 UNWIND 替代逐条 MERGE，大幅减少网络往返）。
      */
     public void mergeNodesBatch(String projectId, String versionId, List<BatchNodeUpsert> nodes) {

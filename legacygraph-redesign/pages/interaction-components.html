@@ -1,0 +1,1978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交互组件规范 - LegacyGraph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ========== RESET ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+  --c-primary: #6366F1; --c-primary-light: #9293F4; --c-primary-lighter: #B1B3F8; --c-primary-lightest: #D0D1FE; --c-primary-bg: #EFF0FE;
+  --c-success: #14B8A6; --c-success-bg: #E8F8F6;
+  --c-warning: #F59E0B; --c-warning-bg: #FCF5EA;
+  --c-danger: #EF4444; --c-danger-bg: #FCE1E1;
+  --c-info: #909399; --c-info-bg: #EFEFF1;
+  --el-text-color-primary: #1D1D1F; --el-text-color-regular: #424245; --el-text-color-secondary: #6E6E73; --el-text-color-placeholder: #A1A1A6;
+  --el-border-color: #D1D1D6; --el-border-color-light: #E5E5EA; --el-border-color-lighter: #EDEDF0;
+  --el-fill-color: #F5F5F7; --el-fill-color-light: #FAFAFA;
+  --el-bg-color: #ffffff; --el-bg-color-page: #F5F5F7; --el-bg-color-overlay: #ffffff;
+}
+html.dark {
+  --c-primary: #818CF8; --c-primary-bg: #0D0E19;
+  --c-success: #2DD4BF; --c-success-bg: #0D2D2B;
+  --c-warning: #FBBF24; --c-warning-bg: #2D2200;
+  --c-danger: #F87171; --c-danger-bg: #2D1212;
+  --c-info: #9CA3AF; --c-info-bg: #1F1F23;
+  --el-text-color-primary: #F5F5F7; --el-text-color-regular: #D1D1D6; --el-text-color-secondary: #8E8E93; --el-text-color-placeholder: #636366;
+  --el-border-color: #48484A; --el-border-color-light: #38383A; --el-border-color-lighter: #2C2C2E;
+  --el-fill-color: #2C2C2E; --el-fill-color-light: #1C1C1E;
+  --el-bg-color: #1C1C1E; --el-bg-color-page: #000000; --el-bg-color-overlay: #2C2C2E;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding: 0;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* ========== PAGE CONTAINER ========== */
+.page-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  position: relative;
+}
+
+/* ========== DARK MODE TOGGLE ========== */
+.dark-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9999;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: all 0.2s;
+}
+.dark-toggle:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.dark-toggle svg { width: 20px; height: 20px; color: var(--el-text-color-primary); }
+html.dark .dark-toggle .icon-sun { display: block; }
+html.dark .dark-toggle .icon-moon { display: none; }
+html:not(.dark) .dark-toggle .icon-sun { display: none; }
+html:not(.dark) .dark-toggle .icon-moon { display: block; }
+
+/* ========== TYPOGRAPHY ========== */
+.page-title {
+  font-family: var(--font-body);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+.page-subtitle {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: var(--space-10);
+}
+.section-overline {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--c-primary);
+  margin-bottom: var(--space-5);
+}
+
+/* ========== SECTIONS ========== */
+.section {
+  margin-bottom: var(--space-10);
+}
+.section:last-child { margin-bottom: 0; }
+
+/* ========== CARDS / CONTAINERS ========== */
+.card {
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--el-border-color-lighter);
+  padding: var(--space-6);
+}
+.card-flat {
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+/* ========== BUTTONS ========== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--el-fill-color); }
+.btn-primary {
+  background: var(--c-primary);
+  color: #fff;
+  border-color: var(--c-primary);
+}
+.btn-primary:hover { opacity: 0.9; }
+.btn-danger {
+  background: var(--c-danger);
+  color: #fff;
+  border-color: var(--c-danger);
+}
+.btn-danger:hover { opacity: 0.9; }
+.btn-success {
+  background: var(--c-success);
+  color: #fff;
+  border-color: var(--c-success);
+}
+.btn-success:hover { opacity: 0.9; }
+.btn-warning {
+  background: var(--c-warning);
+  color: #fff;
+  border-color: var(--c-warning);
+}
+.btn-warning:hover { opacity: 0.9; }
+.btn-text {
+  border: none;
+  background: none;
+  color: var(--c-primary);
+  padding: 0 4px;
+  height: auto;
+}
+.btn-text:hover { opacity: 0.8; }
+.btn-sm {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+/* ========== INPUTS ========== */
+.input {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input:focus { border-color: var(--c-primary); }
+.input-readonly {
+  background: var(--el-fill-color);
+  cursor: not-allowed;
+}
+.textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+  outline: none;
+  resize: vertical;
+}
+.textarea:focus { border-color: var(--c-primary); }
+.select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236E6E73' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.number-input { -moz-appearance: textfield; }
+.number-input::-webkit-inner-spin-button,
+.number-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  margin-bottom: 6px;
+}
+.form-group { margin-bottom: var(--space-5); }
+
+/* ========== TOGGLE SWITCH ========== */
+.toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.toggle-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--el-border-color);
+  position: relative;
+  transition: background 0.2s;
+}
+.toggle-track.active { background: var(--c-primary); }
+.toggle-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.toggle-track.active .toggle-thumb { transform: translateX(16px); }
+.toggle-label {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+/* ========== SLIDER ========== */
+.slider-wrap { position: relative; padding: 4px 0; }
+.slider-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--el-border-color-lighter);
+  position: relative;
+}
+.slider-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--c-primary);
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.slider-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+}
+
+/* ========== SECTION 1: MESSAGE ========== */
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.message-bar {
+  max-width: 380px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--el-bg-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+.message-bar.success { border-left: 3px solid var(--c-success); }
+.message-bar.warning { border-left: 3px solid var(--c-warning); }
+.message-bar.error { border-left: 3px solid var(--c-danger); }
+.message-bar.info { border-left: 3px solid var(--c-info); }
+.message-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.message-icon.success { background: var(--c-success-bg); color: var(--c-success); }
+.message-icon.warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.message-icon.error { background: var(--c-danger-bg); color: var(--c-danger); }
+.message-icon.info { background: var(--c-info-bg); color: var(--c-info); }
+.message-icon svg { width: 12px; height: 12px; }
+
+/* ========== SECTION 2: MESSAGE BOX ========== */
+.dialog-overlay {
+  background: var(--el-bg-color-page);
+  opacity: 0.6;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.dialog-box {
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+  max-width: 480px;
+  width: 100%;
+  overflow: hidden;
+}
+.dialog-box.sm { max-width: 420px; }
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-6) var(--space-6) 0;
+}
+.dialog-header-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dialog-header-icon svg { width: 14px; height: 14px; }
+.dialog-header-icon.warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.dialog-header-icon.danger { background: var(--c-danger-bg); color: var(--c-danger); }
+.dialog-header-icon.success { background: var(--c-success-bg); color: var(--c-success); }
+.dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.dialog-body {
+  padding: var(--space-5) var(--space-6);
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  line-height: 1.6;
+}
+.dialog-footer {
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.warning-box {
+  background: var(--c-danger-bg);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: var(--space-5);
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  line-height: 1.6;
+}
+
+/* ========== SECTION 3: DIALOG FORM ========== */
+.form-dialog {
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+  max-width: 520px;
+  width: 100%;
+  overflow: hidden;
+}
+.form-dialog.lg { max-width: 600px; }
+.form-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.form-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.form-dialog-close {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-placeholder);
+  transition: all 0.15s;
+}
+.form-dialog-close:hover { background: var(--el-fill-color); color: var(--el-text-color-primary); }
+.form-dialog-close svg { width: 16px; height: 16px; }
+.form-dialog-body { padding: var(--space-6); }
+.form-dialog-footer {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ========== SECTION 4: DRAWER ========== */
+.drawer-row {
+  display: flex;
+  gap: var(--space-8);
+  min-height: 400px;
+}
+.drawer-left-panel,
+.drawer-right-panel {
+  position: relative;
+  flex: 1;
+  background: var(--el-fill-color-light);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--el-border-color-lighter);
+  overflow: hidden;
+  min-height: 380px;
+}
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  background: var(--el-bg-color);
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+}
+.drawer-panel.right {
+  right: 0;
+  width: 360px;
+  height: 100%;
+  border-left: 1px solid var(--el-border-color-light);
+}
+.drawer-panel.left {
+  left: 0;
+  width: 320px;
+  height: 100%;
+  border-right: 1px solid var(--el-border-color-light);
+}
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.drawer-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.drawer-body {
+  flex: 1;
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+.drawer-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Radio group */
+.radio-group { display: flex; flex-direction: column; gap: 8px; }
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+}
+.radio-circle {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--el-border-color);
+  position: relative;
+  flex-shrink: 0;
+}
+.radio-circle.active {
+  border-color: var(--c-primary);
+}
+.radio-circle.active::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.radio-inline { flex-direction: row; flex-wrap: wrap; }
+.radio-inline .radio-label { margin-right: 16px; }
+
+/* Checkbox group */
+.checkbox-group { display: flex; flex-direction: column; gap: 8px; }
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+}
+.checkbox-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1.5px solid var(--el-border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.checkbox-box.active {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+}
+.checkbox-box.active svg { display: block; }
+.checkbox-box svg { display: none; width: 10px; height: 10px; color: #fff; }
+
+/* Chips */
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-size: 13px;
+  border: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.chip.active {
+  background: var(--c-primary-bg);
+  border-color: var(--c-primary);
+  color: var(--c-primary);
+}
+html.dark .chip.active {
+  background: var(--c-primary-bg);
+}
+
+.preview-area {
+  background: var(--el-fill-color);
+  border: 1px dashed var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--el-text-color-placeholder);
+}
+
+/* Dual slider */
+.dual-slider {
+  position: relative;
+  height: 6px;
+  background: var(--el-border-color-lighter);
+  border-radius: 3px;
+  margin: 8px 0;
+}
+.dual-slider-fill {
+  position: absolute;
+  height: 100%;
+  background: var(--c-primary);
+  border-radius: 3px;
+  left: 25%;
+  width: 50%;
+}
+.dual-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Date inputs */
+.date-range {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.date-range .input { font-size: 13px; height: 32px; }
+.date-range span { color: var(--el-text-color-placeholder); font-size: 13px; }
+
+.drawer-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 8px;
+  margin-top: var(--space-5);
+}
+.drawer-section-label:first-child { margin-top: 0; }
+
+/* ========== SECTION 5: TOOLTIP ========== */
+.tooltip-demo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  align-items: flex-end;
+}
+.tooltip-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+}
+.tooltip-target {
+  position: relative;
+}
+.tooltip-popup {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  background: var(--el-text-color-primary);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+}
+.tooltip-popup::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--el-text-color-primary);
+}
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--el-border-color-light);
+  background: var(--el-bg-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--el-text-color-secondary);
+}
+.icon-btn svg { width: 16px; height: 16px; }
+.text-trigger {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+}
+.tag-sm {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--c-warning-bg);
+  color: var(--c-warning);
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-success);
+}
+.truncated-text {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========== SECTION 6: POPOVER ========== */
+.popover-demo {
+  display: flex;
+  gap: var(--space-10);
+  flex-wrap: wrap;
+}
+.popover-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.popover-trigger {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.avatar-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--c-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+.avatar-arrow svg { width: 12px; height: 12px; color: var(--el-text-color-secondary); }
+.bell-trigger {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--el-fill-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.bell-trigger svg { width: 18px; height: 18px; color: var(--el-text-color-secondary); }
+.bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--c-danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+.popover-panel {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+.popover-panel.user { width: 280px; }
+.popover-panel.notif { width: 360px; }
+.popover-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-5);
+}
+.popover-user-info .avatar-circle { width: 40px; height: 40px; font-size: 16px; }
+.popover-user-name { font-size: 14px; font-weight: 600; color: var(--el-text-color-primary); }
+.popover-user-email { font-size: 12px; color: var(--el-text-color-secondary); }
+.popover-divider {
+  height: 1px;
+  background: var(--el-border-color-lighter);
+  margin: 0;
+}
+.popover-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--space-5);
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.popover-menu-item:hover { background: var(--el-fill-color); }
+.popover-menu-item svg { width: 16px; height: 16px; color: var(--el-text-color-secondary); }
+.popover-menu-item.danger { color: var(--c-danger); }
+.popover-menu-item.danger svg { color: var(--c-danger); }
+.popover-notif-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px var(--space-5);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.popover-notif-title { font-size: 14px; font-weight: 600; color: var(--el-text-color-primary); }
+.popover-notif-readall { font-size: 12px; color: var(--c-primary); cursor: pointer; }
+.popover-notif-list { max-height: 320px; overflow-y: auto; }
+.notif-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px var(--space-5);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--el-fill-color); }
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.notif-dot.unread { background: var(--c-primary); }
+.notif-dot.read { background: var(--el-border-color); }
+.notif-content { flex: 1; min-width: 0; }
+.notif-title-text { font-size: 13px; font-weight: 500; color: var(--el-text-color-primary); margin-bottom: 2px; }
+.notif-desc { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif-time { font-size: 11px; color: var(--el-text-color-placeholder); margin-top: 2px; }
+.popover-notif-footer {
+  padding: 10px;
+  text-align: center;
+  border-top: 1px solid var(--el-border-color-lighter);
+  font-size: 13px;
+  color: var(--c-primary);
+  cursor: pointer;
+}
+
+/* ========== SECTION 7: NOTIFICATION CENTER ========== */
+.notif-center {
+  max-width: 600px;
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--el-border-color-lighter);
+  overflow: hidden;
+}
+.notif-center-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.notif-center-title { font-size: 16px; font-weight: 600; color: var(--el-text-color-primary); }
+.notif-center-actions { display: flex; align-items: center; gap: 12px; }
+.notif-unread-count {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.notif-center-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 0 var(--space-6);
+  overflow-x: auto;
+}
+.notif-tab {
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.notif-tab.active {
+  color: var(--c-primary);
+  border-bottom-color: var(--c-primary);
+  font-weight: 500;
+}
+.notif-tab:hover { color: var(--el-text-color-primary); }
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--c-danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+  padding: 0 5px;
+}
+.notif-center-list {}
+.notif-center-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.notif-center-item:hover { background: var(--el-fill-color-light); }
+.notif-center-item.unread { background: var(--c-primary-bg); }
+html.dark .notif-center-item.unread { background: var(--c-primary-bg); }
+.notif-center-item:last-child { border-bottom: none; }
+.nc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+.nc-dot.blue { background: var(--c-primary); }
+.nc-dot.amber { background: var(--c-warning); }
+.nc-dot.red { background: var(--c-danger); }
+.nc-dot.green { background: var(--c-success); }
+.nc-dot.gray { background: var(--el-border-color); }
+.nc-body { flex: 1; min-width: 0; }
+.nc-title { font-size: 14px; font-weight: 500; color: var(--el-text-color-primary); margin-bottom: 2px; }
+.nc-desc { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: 4px; }
+.nc-meta { display: flex; align-items: center; gap: 12px; }
+.nc-time { font-size: 12px; color: var(--el-text-color-placeholder); }
+.nc-action { font-size: 12px; color: var(--c-primary); cursor: pointer; }
+.nc-action:hover { text-decoration: underline; }
+
+/* ========== SECTION 8: UPLOAD ========== */
+.upload-area {
+  border: 2px dashed var(--el-border-color-lighter);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  text-align: center;
+  transition: border-color 0.2s;
+  background: var(--el-bg-color);
+}
+.upload-area:hover { border-color: var(--c-primary-light); }
+.upload-icon { margin-bottom: 12px; color: var(--c-info); }
+.upload-icon svg { width: 48px; height: 48px; }
+.upload-text { font-size: 14px; color: var(--el-text-color-secondary); margin-bottom: 4px; }
+.upload-link { color: var(--c-primary); cursor: pointer; font-size: 14px; }
+.upload-hint { font-size: 12px; color: var(--el-text-color-placeholder); margin-top: 8px; }
+
+.upload-progress-list,
+.upload-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upload-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px var(--space-5);
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-md);
+}
+.upload-file-icon { color: var(--el-text-color-secondary); flex-shrink: 0; }
+.upload-file-icon svg { width: 20px; height: 20px; }
+.upload-file-name { font-size: 14px; color: var(--el-text-color-primary); }
+.upload-file-size { font-size: 12px; color: var(--el-text-color-placeholder); }
+.upload-file-info { flex: 1; min-width: 0; }
+.upload-progress-bar {
+  flex: 1;
+  max-width: 200px;
+  height: 6px;
+  background: var(--el-fill-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.upload-progress-fill {
+  height: 100%;
+  background: var(--c-primary);
+  border-radius: 3px;
+}
+.upload-status-text { font-size: 12px; white-space: nowrap; }
+.upload-status-text.success { color: var(--c-success); }
+.upload-status-text.uploading { color: var(--c-primary); }
+.upload-cancel {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-placeholder);
+}
+.upload-cancel:hover { background: var(--el-fill-color); color: var(--el-text-color-primary); }
+.upload-cancel svg { width: 14px; height: 14px; }
+.upload-delete { font-size: 12px; color: var(--el-text-color-secondary); cursor: pointer; }
+.upload-delete:hover { color: var(--c-danger); }
+.upload-check { color: var(--c-success); flex-shrink: 0; }
+.upload-check svg { width: 20px; height: 20px; }
+
+/* ========== SECTION 9: LOADING ========== */
+.loading-fullscreen {
+  position: relative;
+  background: var(--el-bg-color-page);
+  border-radius: var(--radius-lg);
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.loading-overlay-bg {
+  position: absolute;
+  inset: 0;
+  background: var(--el-bg-color-page);
+  opacity: 0.7;
+}
+.loading-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--el-border-color-lighter);
+  border-top-color: var(--c-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner-sm { width: 16px; height: 16px; border-width: 2px; }
+.loading-text { font-size: 14px; color: var(--el-text-color-secondary); }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton */
+.skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--space-5);
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--el-border-color-lighter);
+}
+.skeleton-table-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.skeleton-bar {
+  height: 14px;
+  border-radius: 6px;
+  background: var(--el-fill-color);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { background: var(--el-fill-color); }
+  50% { background: var(--el-fill-color-light); }
+}
+
+.skeleton-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-5);
+}
+.skeleton-card {
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--el-border-color-lighter);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skeleton-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--el-fill-color);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.inline-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+/* ========== SECTION 10: RESULT ========== */
+.result-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-8) var(--space-6);
+  background: var(--el-bg-color);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--el-border-color-lighter);
+}
+.result-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-5);
+}
+.result-icon.success { background: var(--c-success-bg); color: var(--c-success); }
+.result-icon.error { background: var(--c-danger-bg); color: var(--c-danger); }
+.result-icon.warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.result-icon svg { width: 24px; height: 24px; }
+.result-title { font-size: 16px; font-weight: 600; color: var(--el-text-color-primary); margin-bottom: 6px; }
+.result-desc { font-size: 14px; color: var(--el-text-color-secondary); margin-bottom: var(--space-5); max-width: 320px; }
+.result-error-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--c-danger);
+  background: var(--c-danger-bg);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-5);
+}
+.result-actions { display: flex; gap: 8px; }
+
+/* ========== MULTI-COLUMN GRID FOR SECTIONS ========== */
+.demo-row {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+.demo-row > * { flex: 1; min-width: 280px; }
+.demo-row-3 > * { flex: 1; min-width: 240px; }
+
+/* ========== Utility ========== */
+.mt-4 { margin-top: var(--space-4); }
+.mt-5 { margin-top: var(--space-5); }
+.mb-3 { margin-bottom: 12px; }
+.gap-3 { gap: 12px; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.text-sm { font-size: 13px; }
+.text-muted { color: var(--el-text-color-secondary); }
+.w-full { width: 100%; }
+</style>
+</head>
+<body>
+
+<!-- Dark mode toggle -->
+<button class="dark-toggle" onclick="document.documentElement.classList.toggle('dark')" aria-label="Toggle dark mode">
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+</button>
+
+<div class="page-wrap">
+
+  <!-- Page Title -->
+  <h1 class="page-title">交互组件规范</h1>
+  <p class="page-subtitle">弹窗、提示、通知等交互细节设计参考</p>
+
+  <!-- ======== SECTION 1: Message ======== -->
+  <div class="section">
+    <div class="section-overline">Section 01 &mdash; Message 消息提示 (ElMessage)</div>
+    <div class="message-list">
+      <!-- Success -->
+      <div class="message-bar success">
+        <span class="message-icon success">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </span>
+        <span>操作成功</span>
+      </div>
+      <!-- Warning -->
+      <div class="message-bar warning">
+        <span class="message-icon warning">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </span>
+        <span>请注意，此操作不可撤销</span>
+      </div>
+      <!-- Error -->
+      <div class="message-bar error">
+        <span class="message-icon error">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </span>
+        <span>操作失败，请稍后重试</span>
+      </div>
+      <!-- Info -->
+      <div class="message-bar info">
+        <span class="message-icon info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </span>
+        <span>已复制到剪贴板</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 2: MessageBox ======== -->
+  <div class="section">
+    <div class="section-overline">Section 02 &mdash; MessageBox 确认对话框 (ElMessageBox.confirm)</div>
+    <div class="demo-row demo-row-3">
+
+      <!-- 2a: Simple Confirm -->
+      <div class="dialog-overlay">
+        <div class="dialog-box">
+          <div class="dialog-header">
+            <span class="dialog-header-icon warning">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </span>
+            <span class="dialog-title">提示</span>
+          </div>
+          <div class="dialog-body">确定删除用户「张三」吗？删除后将无法恢复。</div>
+          <div class="dialog-footer">
+            <button class="btn">取消</button>
+            <button class="btn btn-danger">确定</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2b: Danger Confirm -->
+      <div class="dialog-overlay">
+        <div class="dialog-box">
+          <div class="dialog-header">
+            <span class="dialog-header-icon danger">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            </span>
+            <span class="dialog-title">删除项目</span>
+          </div>
+          <div class="dialog-body">
+            <div class="warning-box">此操作将删除项目及其所有关联数据，包括扫描版本、图谱、文档等，且无法恢复。</div>
+            <div class="form-group" style="margin-bottom:0">
+              <input class="input" placeholder="请输入「确认删除」以继续" readonly>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <button class="btn">取消</button>
+            <button class="btn btn-danger">确认删除</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2c: Success Confirm -->
+      <div class="dialog-overlay">
+        <div class="dialog-box sm">
+          <div class="dialog-header">
+            <span class="dialog-header-icon success">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </span>
+            <span class="dialog-title">确认审核</span>
+          </div>
+          <div class="dialog-body">确定通过证据「订单服务使用 Redis 缓存」的审核吗？</div>
+          <div class="dialog-footer">
+            <button class="btn">取消</button>
+            <button class="btn btn-success">通过</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======== SECTION 3: Dialog Form ======== -->
+  <div class="section">
+    <div class="section-overline">Section 03 &mdash; Dialog 表单对话框 (el-dialog)</div>
+    <div class="demo-row">
+
+      <!-- 3a: Create/Edit Form -->
+      <div class="form-dialog">
+        <div class="form-dialog-header">
+          <span class="form-dialog-title">添加用户</span>
+          <button class="form-dialog-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="form-dialog-body">
+          <div class="form-group">
+            <label class="form-label">用户名</label>
+            <input class="input" placeholder="请输入用户名">
+          </div>
+          <div class="form-group">
+            <label class="form-label">邮箱</label>
+            <input class="input" placeholder="请输入邮箱地址">
+          </div>
+          <div class="form-group">
+            <label class="form-label">角色</label>
+            <select class="input select">
+              <option>管理员</option>
+              <option>普通用户</option>
+              <option>审计员</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">状态</label>
+            <label class="toggle-wrap">
+              <span class="toggle-track active">
+                <span class="toggle-thumb"></span>
+              </span>
+              <span class="toggle-label">启用</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-dialog-footer">
+          <button class="btn">取消</button>
+          <button class="btn btn-primary">确定</button>
+        </div>
+      </div>
+
+      <!-- 3b: Large Config Dialog -->
+      <div class="form-dialog lg">
+        <div class="form-dialog-header">
+          <span class="form-dialog-title">配置模型参数</span>
+          <button class="form-dialog-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="form-dialog-body">
+          <div class="form-group">
+            <label class="form-label">提供商</label>
+            <input class="input input-readonly" value="OpenAI" readonly>
+          </div>
+          <div class="form-group">
+            <label class="form-label">模型名称</label>
+            <input class="input" value="gpt-4">
+          </div>
+          <div class="form-group">
+            <label class="form-label">API Key</label>
+            <input class="input" type="password" value="sk-1234567890abcdefghijklmnopqrst" style="letter-spacing:2px; color:var(--el-text-color-placeholder)">
+          </div>
+          <div class="form-group">
+            <label class="form-label">温度 (Temperature)</label>
+            <div class="slider-wrap">
+              <div class="slider-track">
+                <div class="slider-fill" style="width:70%"></div>
+                <div class="slider-thumb" style="left:70%"></div>
+              </div>
+              <div class="slider-labels">
+                <span>0</span>
+                <span style="font-weight:600;color:var(--el-text-color-primary)">0.7</span>
+                <span>2</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">最大 Token 数</label>
+            <input class="input number-input" type="number" value="4096" style="max-width:200px">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">系统提示词</label>
+            <textarea class="textarea" rows="4" placeholder="请输入系统提示词...">你是一个专业的代码分析助手，请帮助用户分析代码结构和依赖关系。</textarea>
+          </div>
+        </div>
+        <div class="form-dialog-footer">
+          <button class="btn">取消</button>
+          <button class="btn">测试连接</button>
+          <button class="btn btn-primary">保存</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======== SECTION 4: Drawer ======== -->
+  <div class="section">
+    <div class="section-overline">Section 04 &mdash; Drawer 抽屉 (el-drawer)</div>
+    <div class="demo-row">
+
+      <!-- 4a: Right Drawer (Export) -->
+      <div class="drawer-right-panel">
+        <div class="drawer-panel right">
+          <div class="drawer-header">
+            <span class="drawer-title">导出图谱</span>
+            <button class="form-dialog-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="drawer-body">
+            <div class="drawer-section-label">导出格式</div>
+            <div class="radio-group radio-inline">
+              <label class="radio-label">
+                <span class="radio-circle active"></span> PNG
+              </label>
+              <label class="radio-label">
+                <span class="radio-circle"></span> SVG
+              </label>
+              <label class="radio-label">
+                <span class="radio-circle"></span> JSON
+              </label>
+              <label class="radio-label">
+                <span class="radio-circle"></span> GraphML
+              </label>
+            </div>
+
+            <div class="drawer-section-label">包含数据</div>
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <span class="checkbox-box active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span> 节点属性
+              </label>
+              <label class="checkbox-label">
+                <span class="checkbox-box active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span> 边关系
+              </label>
+              <label class="checkbox-label">
+                <span class="checkbox-box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span> 样式信息
+              </label>
+            </div>
+
+            <div class="drawer-section-label">分辨率 (PNG)</div>
+            <div class="radio-group radio-inline">
+              <label class="radio-label">
+                <span class="radio-circle"></span> 1x
+              </label>
+              <label class="radio-label">
+                <span class="radio-circle active"></span> 2x
+              </label>
+              <label class="radio-label">
+                <span class="radio-circle"></span> 4x
+              </label>
+            </div>
+
+            <div class="drawer-section-label">预览</div>
+            <div class="preview-area">预览区域</div>
+          </div>
+          <div class="drawer-footer">
+            <button class="btn">取消</button>
+            <button class="btn btn-primary">导出</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4b: Left Drawer (Filter) -->
+      <div class="drawer-left-panel">
+        <div class="drawer-panel left">
+          <div class="drawer-header">
+            <span class="drawer-title">筛选条件</span>
+            <button class="form-dialog-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="drawer-body">
+            <div class="drawer-section-label">节点类型</div>
+            <div class="chip-group mb-3">
+              <span class="chip active">类</span>
+              <span class="chip active">方法</span>
+              <span class="chip">变量</span>
+              <span class="chip active">模块</span>
+            </div>
+
+            <div class="drawer-section-label">置信度范围</div>
+            <div class="dual-slider">
+              <div class="dual-slider-fill"></div>
+              <div class="dual-slider-thumb" style="left:25%"></div>
+              <div class="dual-slider-thumb" style="left:75%"></div>
+            </div>
+            <div class="slider-labels" style="margin-bottom:4px">
+              <span>0.0</span>
+              <span style="font-weight:500;color:var(--el-text-color-regular)">0.5 - 1.0</span>
+              <span>1.0</span>
+            </div>
+
+            <div class="drawer-section-label">数据源</div>
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <span class="checkbox-box active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span> main-app
+              </label>
+              <label class="checkbox-label">
+                <span class="checkbox-box active">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span> payment-svc
+              </label>
+              <label class="checkbox-label">
+                <span class="checkbox-box">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span> user-svc
+              </label>
+            </div>
+
+            <div class="drawer-section-label">时间范围</div>
+            <div class="date-range">
+              <input class="input" value="2024-01-01" readonly style="font-size:13px;height:32px">
+              <span>至</span>
+              <input class="input" value="2024-12-31" readonly style="font-size:13px;height:32px">
+            </div>
+          </div>
+          <div class="drawer-footer">
+            <button class="btn-text" style="margin-right:auto">重置筛选</button>
+            <button class="btn btn-primary">应用</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======== SECTION 5: Tooltip ======== -->
+  <div class="section">
+    <div class="section-overline">Section 05 &mdash; Tooltip 文字提示 (el-tooltip)</div>
+    <div class="tooltip-demo">
+
+      <!-- 1: Icon button -->
+      <div class="tooltip-item">
+        <div class="tooltip-target">
+          <div class="tooltip-popup">放大</div>
+          <button class="icon-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2: Text button -->
+      <div class="tooltip-item">
+        <div class="tooltip-target">
+          <div class="tooltip-popup">导出为 PNG 格式</div>
+          <span class="text-trigger">导出</span>
+        </div>
+      </div>
+
+      <!-- 3: Tag -->
+      <div class="tooltip-item">
+        <div class="tooltip-target">
+          <div class="tooltip-popup">任务开始于 2024-01-15 14:30，预计 30 分钟完成</div>
+          <span class="tag-sm">进行中</span>
+        </div>
+      </div>
+
+      <!-- 4: Status dot -->
+      <div class="tooltip-item">
+        <div class="tooltip-target">
+          <div class="tooltip-popup">已连接</div>
+          <span class="status-dot"></span>
+        </div>
+      </div>
+
+      <!-- 5: Truncated text -->
+      <div class="tooltip-item">
+        <div class="tooltip-target">
+          <div class="tooltip-popup">OrderService.createOrder(OrderRequest request): OrderResponse</div>
+          <span class="truncated-text">OrderService.createOrder(...</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======== SECTION 6: Popover ======== -->
+  <div class="section">
+    <div class="section-overline">Section 06 &mdash; Popover 弹出框 (el-popover)</div>
+    <div class="popover-demo">
+
+      <!-- 6a: User Dropdown -->
+      <div class="popover-item">
+        <div class="popover-trigger">
+          <span class="avatar-circle">张</span>
+          <span class="avatar-arrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
+        </div>
+        <div class="popover-panel user">
+          <div class="popover-user-info">
+            <span class="avatar-circle">张</span>
+            <div>
+              <div class="popover-user-name">张三</div>
+              <div class="popover-user-email">zhangsan@company.com</div>
+            </div>
+          </div>
+          <div class="popover-divider"></div>
+          <div class="popover-menu-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>个人设置</span>
+          </div>
+          <div class="popover-menu-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <span>系统管理</span>
+          </div>
+          <div class="popover-menu-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span>操作日志</span>
+          </div>
+          <div class="popover-divider"></div>
+          <div class="popover-menu-item danger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span>退出登录</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6b: Notification Popover -->
+      <div class="popover-item">
+        <div class="bell-trigger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          <span class="bell-badge">5</span>
+        </div>
+        <div class="popover-panel notif">
+          <div class="popover-notif-header">
+            <span class="popover-notif-title">通知</span>
+            <span class="popover-notif-readall">全部已读</span>
+          </div>
+          <div class="popover-notif-list">
+            <div class="notif-item">
+              <span class="notif-dot unread"></span>
+              <div class="notif-content">
+                <div class="notif-title-text">扫描任务完成</div>
+                <div class="notif-desc">电商平台重构的全量扫描已完成，发现 856 个节点</div>
+                <div class="notif-time">5分钟前</div>
+              </div>
+            </div>
+            <div class="notif-item">
+              <span class="notif-dot unread"></span>
+              <div class="notif-content">
+                <div class="notif-title-text">审核请求</div>
+                <div class="notif-desc">张三提交了 3 条证据待审核</div>
+                <div class="notif-time">10分钟前</div>
+              </div>
+            </div>
+            <div class="notif-item">
+              <span class="notif-dot unread"></span>
+              <div class="notif-content">
+                <div class="notif-title-text">风险警告</div>
+                <div class="notif-desc">发现 2 个高风险变更任务</div>
+                <div class="notif-time">30分钟前</div>
+              </div>
+            </div>
+            <div class="notif-item">
+              <span class="notif-dot read"></span>
+              <div class="notif-content">
+                <div class="notif-title-text">AI 分析完成</div>
+                <div class="notif-desc">代码分析 Agent 已完成分析报告</div>
+                <div class="notif-time">1小时前</div>
+              </div>
+            </div>
+            <div class="notif-item">
+              <span class="notif-dot read"></span>
+              <div class="notif-content">
+                <div class="notif-title-text">测试报告</div>
+                <div class="notif-desc">回归测试通过率 95.2%</div>
+                <div class="notif-time">2小时前</div>
+              </div>
+            </div>
+          </div>
+          <div class="popover-notif-footer">查看全部通知</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======== SECTION 7: Notification Center ======== -->
+  <div class="section">
+    <div class="section-overline">Section 07 &mdash; Notification 站内通知</div>
+    <div class="notif-center">
+      <div class="notif-center-header">
+        <span class="notif-center-title">通知中心</span>
+        <div class="notif-center-actions">
+          <button class="btn-text">全部标记已读</button>
+          <span class="notif-unread-count">5 条未读</span>
+        </div>
+      </div>
+      <div class="notif-center-tabs">
+        <span class="notif-tab active">全部</span>
+        <span class="notif-tab">未读<span class="tab-badge">5</span></span>
+        <span class="notif-tab">系统通知</span>
+        <span class="notif-tab">任务通知</span>
+        <span class="notif-tab">审核通知</span>
+      </div>
+      <div class="notif-center-list">
+        <!-- Item 1 -->
+        <div class="notif-center-item unread">
+          <span class="nc-dot blue"></span>
+          <div class="nc-body">
+            <div class="nc-title">扫描任务「电商平台重构-v2.1」已完成</div>
+            <div class="nc-desc">共发现 856 个节点，2,341 条边</div>
+            <div class="nc-meta">
+              <span class="nc-time">5分钟前</span>
+              <span class="nc-action">查看</span>
+            </div>
+          </div>
+        </div>
+        <!-- Item 2 -->
+        <div class="notif-center-item unread">
+          <span class="nc-dot amber"></span>
+          <div class="nc-body">
+            <div class="nc-title">证据审核提醒</div>
+            <div class="nc-desc">您有 3 条证据待审核</div>
+            <div class="nc-meta">
+              <span class="nc-time">10分钟前</span>
+              <span class="nc-action">去审核</span>
+            </div>
+          </div>
+        </div>
+        <!-- Item 3 -->
+        <div class="notif-center-item unread">
+          <span class="nc-dot red"></span>
+          <div class="nc-body">
+            <div class="nc-title">高风险变更警告</div>
+            <div class="nc-desc">PR #123 可能影响支付流程</div>
+            <div class="nc-meta">
+              <span class="nc-time">30分钟前</span>
+              <span class="nc-action">查看详情</span>
+            </div>
+          </div>
+        </div>
+        <!-- Item 4 -->
+        <div class="notif-center-item">
+          <span class="nc-dot green"></span>
+          <div class="nc-body">
+            <div class="nc-title">AI 分析报告生成完成</div>
+            <div class="nc-desc">代码结构分析报告已生成</div>
+            <div class="nc-meta">
+              <span class="nc-time">1小时前</span>
+            </div>
+          </div>
+        </div>
+        <!-- Item 5 -->
+        <div class="notif-center-item">
+          <span class="nc-dot gray"></span>
+          <div class="nc-body">
+            <div class="nc-title">系统更新</div>
+            <div class="nc-desc">平台已升级至 v2.1.0</div>
+            <div class="nc-meta">
+              <span class="nc-time">3小时前</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 8: Upload ======== -->
+  <div class="section">
+    <div class="section-overline">Section 08 &mdash; Upload 上传组件</div>
+
+    <!-- 8a: Drag Upload -->
+    <div class="upload-area mb-3">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="upload-text">将文件拖拽到此处，或 <span class="upload-link">点击上传</span></div>
+      <div class="upload-hint">支持 .java, .py, .go, .ts 文件，单个文件不超过 50MB</div>
+    </div>
+
+    <!-- 8b: Upload Progress -->
+    <div class="upload-progress-list mb-3">
+      <div class="upload-file-item">
+        <span class="upload-file-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </span>
+        <div class="upload-file-info">
+          <div class="upload-file-name">payment-service.zip</div>
+          <div class="upload-file-size">12.5MB</div>
+        </div>
+        <div class="upload-progress-bar">
+          <div class="upload-progress-fill" style="width:65%"></div>
+        </div>
+        <span class="upload-status-text uploading">上传中 65%</span>
+        <button class="upload-cancel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 8c: Uploaded File List -->
+    <div class="upload-file-list">
+      <div class="upload-file-item">
+        <span class="upload-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </span>
+        <div class="upload-file-info">
+          <div class="upload-file-name">main-app-source.zip</div>
+          <div class="upload-file-size">45.2MB</div>
+        </div>
+        <span class="upload-status-text success">上传成功</span>
+        <span class="upload-delete">删除</span>
+      </div>
+      <div class="upload-file-item">
+        <span class="upload-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </span>
+        <div class="upload-file-info">
+          <div class="upload-file-name">api-docs.pdf</div>
+          <div class="upload-file-size">2.1MB</div>
+        </div>
+        <span class="upload-status-text success">上传成功</span>
+        <span class="upload-delete">删除</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== SECTION 9: Loading ======== -->
+  <div class="section">
+    <div class="section-overline">Section 09 &mdash; Loading 加载状态</div>
+    <div class="demo-row">
+
+      <!-- 9a: Full-screen Loading -->
+      <div class="loading-fullscreen">
+        <div class="loading-overlay-bg"></div>
+        <div class="loading-content">
+          <div class="spinner"></div>
+          <span class="loading-text">加载中...</span>
+        </div>
+      </div>
+
+      <!-- 9b+c+d: Skeletons & Inline -->
+      <div style="display:flex;flex-direction:column;gap:var(--space-5)">
+        <!-- 9b: Table Skeleton -->
+        <div class="skeleton-row">
+          <div class="skeleton-table-row">
+            <div class="skeleton-bar" style="width:100%"></div>
+          </div>
+          <div class="skeleton-table-row">
+            <div class="skeleton-bar" style="width:80%"></div>
+          </div>
+          <div class="skeleton-table-row">
+            <div class="skeleton-bar" style="width:60%"></div>
+          </div>
+        </div>
+
+        <!-- 9c: Card Skeleton -->
+        <div class="skeleton-card-grid">
+          <div class="skeleton-card">
+            <div class="skeleton-bar" style="width:40%;height:10px"></div>
+            <div class="skeleton-bar" style="width:100%"></div>
+            <div class="skeleton-bar" style="width:80%"></div>
+            <div class="skeleton-bar" style="width:60%"></div>
+            <div class="skeleton-circle" style="align-self:flex-end"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-bar" style="width:40%;height:10px"></div>
+            <div class="skeleton-bar" style="width:100%"></div>
+            <div class="skeleton-bar" style="width:80%"></div>
+            <div class="skeleton-bar" style="width:60%"></div>
+            <div class="skeleton-circle" style="align-self:flex-end"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-bar" style="width:40%;height:10px"></div>
+            <div class="skeleton-bar" style="width:100%"></div>
+            <div class="skeleton-bar" style="width:80%"></div>
+            <div class="skeleton-bar" style="width:60%"></div>
+            <div class="skeleton-circle" style="align-self:flex-end"></div>
+          </div>
+        </div>
+
+        <!-- 9d: Inline Loading -->
+        <div class="inline-loading">
+          <div class="spinner spinner-sm"></div>
+          <span>正在加载数据...</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ======== SECTION 10: Result ======== -->
+  <div class="section">
+    <div class="section-overline">Section 10 &mdash; Result 结果反馈</div>
+    <div class="demo-row demo-row-3">
+
+      <!-- 10a: Success -->
+      <div class="result-box">
+        <div class="result-icon success">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <div class="result-title">操作成功</div>
+        <div class="result-desc">项目创建成功，正在跳转到项目详情页</div>
+        <div class="result-actions">
+          <button class="btn btn-primary">查看项目</button>
+        </div>
+      </div>
+
+      <!-- 10b: Error -->
+      <div class="result-box">
+        <div class="result-icon error">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <div class="result-title">操作失败</div>
+        <div class="result-desc">扫描任务启动失败：数据库连接超时</div>
+        <div class="result-error-code">ErrorCode: DB_CONNECTION_TIMEOUT</div>
+        <div class="result-actions">
+          <button class="btn btn-primary">重试</button>
+          <button class="btn">返回</button>
+        </div>
+      </div>
+
+      <!-- 10c: Warning -->
+      <div class="result-box">
+        <div class="result-icon warning">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="result-title">注意事项</div>
+        <div class="result-desc">当前项目已有进行中的扫描任务，新建扫描将排队等待</div>
+        <div class="result-actions">
+          <button class="btn btn-warning">继续创建</button>
+          <button class="btn">取消</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Minimal JS: dark mode toggle only -->
+<script>
+(function() {
+  // Restore dark mode preference
+  const saved = localStorage.getItem('lg-dark');
+  if (saved === 'true') document.documentElement.classList.add('dark');
+
+  // Save on toggle
+  const btn = document.querySelector('.dark-toggle');
+  if (btn) {
+    btn.addEventListener('click', function() {
+      localStorage.setItem('lg-dark', document.documentElement.classList.contains('dark'));
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

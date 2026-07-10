@@ -25,6 +25,12 @@ public class AiScanJob {
     /** 序列化的 AiScanConfig JSON */
     private String configJson;
 
+    /** 变更文件路径集合 JSON（增量扫描上下文，AI 编排阶段用于缩小处理范围） */
+    private String changedFilePathsJson;
+
+    /** 受影响节点 ID 集合 JSON（增量扫描上下文，由 BlastRadius 分析产生） */
+    private String affectedNodeIdsJson;
+
     private String errorMessage;
 
     /** 当前执行步骤（状态机） */

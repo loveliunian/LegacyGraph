@@ -216,6 +216,20 @@ public class Neo4jGraphDao {
         return queryRepo.queryDisconnectedNodes(projectId, versionId, limit);
     }
 
+    /**
+     * 查询指定版本中 affected=true 的指定类型节点（用于 Blast Radius 影响分析结果查询）。
+     * <p>affected 标记由 BlastRadiusAnalyzer.markAffectedNodes 写入 Neo4j 节点顶层属性。
+     * 详见 {@link Neo4jQueryRepository#queryAffectedNodes}。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 版本 ID
+     * @param nodeType  节点类型
+     * @return 受影响节点列表
+     */
+    public List<GraphNode> queryAffectedNodes(String projectId, String versionId, String nodeType) {
+        return queryRepo.queryAffectedNodes(projectId, versionId, nodeType);
+    }
+
     public long countEdgesConnectedToNodes(String projectId, String versionId, List<String> nodeIds) {
         return queryRepo.countEdgesConnectedToNodes(projectId, versionId, nodeIds);
     }
@@ -246,6 +260,20 @@ public class Neo4jGraphDao {
 
     public void setEdgeProperty(String edgeId, String property, Object value) {
         writeRepo.setEdgeProperty(edgeId, property, value);
+    }
+
+    /**
+     * 清除指定版本中所有节点的 affected 和 affectedReason 标记。
+     * <p>与 {@link #setNodeProperty} 配对：markAffectedNodes 写入 affected/affectedReason，
+     * 本方法在增量重扫前清除上一轮标记。仅清除 affected=true 的节点。
+     * 详见 {@link Neo4jWriteRepository#clearAffectedMarkers}。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 版本 ID
+     * @return 清除标记的节点数
+     */
+    public int clearAffectedMarkers(String projectId, String versionId) {
+        return writeRepo.clearAffectedMarkers(projectId, versionId);
     }
 
     /**
@@ -409,6 +437,50 @@ public class Neo4jGraphDao {
                 "RETURN n.nodeId as fromNodeId, n.nodeType as fromNodeType, " +
                 "m.nodeId as toNodeId, m.nodeType as toNodeType, type(r) as edgeType LIMIT $limit";
         Map<String, Object> params = Map.of("projectId", projectId, "versionId", versionId, "limit", sampleSize);
+        return projectionRepo.executeReadQuery(cypher, params);
+    }
+
+    /**
+     * 统计悬空边数 — 端点节点 id 为空的关系数。
+     * <p>Neo4j 关系模型中关系两端节点由图结构保证存在，此查询为防御性检查
+     * （端点节点 id 属性缺失视为悬空）。真实环境通常返回 0。</p>
+     */
+    public long countDanglingEdges(String projectId, String versionId) {
+        String cypher = "MATCH (n)-[r]->(m) WHERE r.projectId=$projectId AND r.versionId=$versionId " +
+                "AND (n.id IS NULL OR n.id = '' OR m.id IS NULL OR m.id = '') " +
+                "RETURN count(r) AS cnt";
+        Map<String, Object> params = Map.of("projectId", projectId, "versionId", normalizeId(versionId));
+        List<Map<String, Object>> rows = projectionRepo.executeReadQuery(cypher, params);
+        if (rows.isEmpty()) return 0L;
+        Object v = rows.get(0).get("cnt");
+        return v instanceof Number n ? n.longValue() : 0L;
+    }
+
+    /**
+     * 统计重复节点数 — 按 (projectId, versionId, nodeType, nodeKey) 分组，计数大于 1 的节点总数。
+     */
+    public long countDuplicateNodes(String projectId, String versionId) {
+        String cypher = "MATCH (n) WHERE n.projectId=$projectId AND n.versionId=$versionId " +
+                "WITH n.nodeType AS nodeType, n.nodeKey AS nodeKey, count(n) AS cnt " +
+                "WHERE cnt > 1 RETURN sum(cnt) AS total";
+        Map<String, Object> params = Map.of("projectId", projectId, "versionId", normalizeId(versionId));
+        List<Map<String, Object>> rows = projectionRepo.executeReadQuery(cypher, params);
+        if (rows.isEmpty()) return 0L;
+        Object v = rows.get(0).get("total");
+        return v instanceof Number n ? n.longValue() : 0L;
+    }
+
+    /**
+     * 抽样边用于三元组准确率评估 — 返回指定数量的边，每条边包含 edgeId 及端点信息。
+     * <p>与 {@link #sampleEdgesForAccuracy} 的区别：额外返回 {@code r.id} 作为 edgeId，
+     * 供调用方批量查询 EdgeEvidence 关联记录以判定是否有证据支撑。</p>
+     */
+    public List<Map<String, Object>> sampleEdgesWithEvidence(String projectId, String versionId, int sampleSize) {
+        String cypher = "MATCH (n)-[r]->(m) WHERE r.projectId=$projectId AND r.versionId=$versionId " +
+                "RETURN r.id AS edgeId, n.id AS fromNodeId, n.nodeType AS fromNodeType, " +
+                "m.id AS toNodeId, m.nodeType AS toNodeType, type(r) AS edgeType LIMIT $limit";
+        Map<String, Object> params = Map.of("projectId", projectId, "versionId", normalizeId(versionId),
+                "limit", sampleSize);
         return projectionRepo.executeReadQuery(cypher, params);
     }
 

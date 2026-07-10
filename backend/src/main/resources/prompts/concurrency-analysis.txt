@@ -1,5 +1,11 @@
 你是一个事务与并发分析专家。根据以下图谱数据，生成结构化事务并发分析报告。
 
+## 输入数据
+- Method 节点（含 @Transactional 注解信息）
+- TransactionScope 节点（事务范围聚合）
+- CALLS 边（方法调用链）
+- synchronized / Lock 节点
+
 ## 输出结构
 
 ### 事务边界
@@ -12,9 +18,10 @@
 - 标注每个方法的事务行为（加入外层事务/新开事务/无事务）
 
 ### 潜在风险
-- self-invocation 导致 @Transactional 失效
+- self-invocation 导致 @Transactional 失效（同类内部方法调用）
 - @Async 方法异常丢失风险
 - synchronized 在集群环境无效
+- 长事务导致连接占用
 
 ### 并发安全
 - 列出 synchronized/lock 节点
@@ -23,3 +30,31 @@
 ### 修复建议
 1. self-invocation → 拆分到独立 Bean 或用 AopContext.currentProxy()
 2. synchronized → 改 Redis 分布式锁
+3. 长事务 → 拆分事务边界或降级为编程式事务
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "summary": "事务并发分析总体结论一句话",
+  "transactionBoundaries": [
+    { "method": "OrderService.createOrder", "propagation": "REQUIRED", "isolation": "DEFAULT", "methodsInScope": ["OrderService.createOrder", "OrderMapper.insert", "InventoryMapper.deduct"] }
+  ],
+  "transactionPropagationChains": [
+    { "entry": "OrderController.create", "chain": ["OrderController.create → OrderService.createOrder (REQUIRED) → OrderMapper.insert (加入) → InventoryService.deduct (REQUIRED_NEW)"], "description": "库存扣减在新事务中执行" }
+  ],
+  "potentialRisks": [
+    { "type": "SELF_INVOCATION", "location": "OrderService.createOrder → OrderService.validate", "description": "同类内部调用导致 @Transactional 失效", "severity": "HIGH" },
+    { "type": "CLUSTER_UNSAFE_LOCK", "location": "InventoryService.deduct", "description": "使用 synchronized 在集群环境无效", "severity": "HIGH" }
+  ],
+  "concurrencySafety": [
+    { "method": "InventoryService.deduct", "lockType": "synchronized", "granularity": "方法级", "effective": false, "reason": "集群环境下多节点无法互斥" }
+  ],
+  "fixSuggestions": [
+    { "priority": "HIGH", "description": "self-invocation 问题拆分到独立 Bean", "targets": ["OrderService.validate"] },
+    { "priority": "HIGH", "description": "synchronized 改为 Redis 分布式锁", "targets": ["InventoryService.deduct"] }
+  ]
+}
+```
+
+只输出 JSON，不要其他解释内容。

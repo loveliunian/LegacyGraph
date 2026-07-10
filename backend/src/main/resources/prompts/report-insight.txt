@@ -12,12 +12,14 @@
 请输出按优先级排序的行动项（actions），每项必须：
 - 关联具体的图谱节点、证据或报告指标来源（source）。
 - 指明动作类型 actionType：补证据(ADD_EVIDENCE)、生成测试(GENERATE_TEST)、迁移风险处置(MIGRATION_RISK)、批量确认(BATCH_CONFIRM)、人工细看(MANUAL_REVIEW)。
-- 给出优先级 priority：HIGH、MEDIUM、LOW。
+- 给出优先级 priority：HIGH（阻断迁移/核心功能）、MEDIUM（质量提升）、LOW（锦上添花）。
 - 给出简明理由 rationale 与预期收益 expectedBenefit。
 
 ## 重要约束
 - 不得编造不在指标中的节点或数据。
 - 建议要具体、可执行，而非泛泛而谈。
+- 如果指标已达标（如 pendingRatio < 0.1），不要硬凑行动项，summary 说明"指标健康"。
+- HIGH 优先级行动项不超过 3 个，避免行动项过多无法聚焦。
 
 ## 输出格式
 请以严格 JSON 格式输出：

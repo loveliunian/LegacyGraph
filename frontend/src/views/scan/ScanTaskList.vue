@@ -261,10 +261,11 @@ const formatTime = (time: string) => {
 }
 
 const formatDuration = (seconds: number) => {
-  // 规整浮点尾数：1065.115 % 60 会得到 45.11500000000001，统一取毫秒(3 位)消除尾数
-  const s = Math.round(seconds * 1000) / 1000
+  if (!seconds || seconds <= 0) return '-'
+  if (seconds < 1) return '<1s'
+  const s = Math.round(seconds * 10) / 10
   if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${Math.round((s % 60) * 1000) / 1000}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${Math.round((s % 60) * 10) / 10}s`
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
 }
 

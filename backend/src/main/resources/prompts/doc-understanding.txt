@@ -19,9 +19,24 @@
 6. 状态流转(statusTransitions)：业务对象的状态变化。
 7. 功能清单(features)：可识别的功能名称列表。
 
+## 跨片段去重指导
+本文档可能被分多个片段处理。抽取时遵循以下去重规则：
+- 同一业务对象在多个片段出现时，合并属性，只输出一条，取最高 confidence。
+- 同一业务流程在多个片段出现时，合并步骤，按文档顺序排列，只输出一条。
+- 同一业务规则重复出现时，只保留证据最充分的一条。
+- 业务域按名称合并，子表归入同一域。
+
+## 步骤结构化要求
+businessProcesses.steps 不要用纯字符串，而用结构化格式：
+```json
+{ "order": 1, "name": "步骤名称", "role": "操作角色", "action": "具体动作" }
+```
+若文档未明确角色或动作，对应字段置 null 并标注"（推断）"。
+
 ## 重要约束
 - 每条结论尽量给出证据(evidence)，evidence 引用文档原文片段。
 - confidence 为 0~1 之间的小数；不确定的不要硬编。
+- businessObjects.attributes 列出核心属性，不要罗列全部字段。
 
 ## 输出格式
 请以严格 JSON 格式输出，结构如下（数组可为空，但字段名必须保持一致）：
@@ -35,7 +50,9 @@
       "key": "process:用户注册",
       "name": "流程名称",
       "description": "流程描述",
-      "steps": ["步骤1", "步骤2"],
+      "steps": [
+        { "order": 1, "name": "步骤1", "role": "角色", "action": "动作描述" }
+      ],
       "roles": ["角色"],
       "objects": ["业务对象"],
       "rules": ["规则"],
@@ -47,7 +64,7 @@
     {
       "name": "对象名称",
       "description": "对象描述",
-      "attributes": ["属性1", "属性2"],
+      "attributes": ["核心属性1", "核心属性2"],
       "confidence": 0.8,
       "evidence": [ { "sourceType": "doc", "sourceUri": "{sourcePath}", "excerpt": "原文" } ]
     }

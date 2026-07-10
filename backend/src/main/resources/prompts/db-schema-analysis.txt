@@ -27,6 +27,11 @@
 - 关注状态字段引用的字典/枚举表
 - 每个关系给出 fromTable、toTable、relationType（ONE_TO_MANY / MANY_TO_MANY / REFERENCE）、description
 
+## 约束
+- 不要编造 schemaInfo 中不存在的表或字段。
+- businessDescription 要基于表名/字段名/注释合理推断，标注"（推断）"如果不确定。
+- importance 判断标准：CORE = 核心业务主表，SUPPORT = 关联/日志/配置表，LOOKUP = 字典/枚举表。
+
 ## 输出格式
 请以严格 JSON 格式输出：
 

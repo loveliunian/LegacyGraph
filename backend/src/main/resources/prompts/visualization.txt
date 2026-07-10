@@ -1,5 +1,13 @@
 用户请求可视化图表。根据图谱反查结果，生成 Mermaid 代码块。
 
+## 图表类型选择指导
+根据用户问题类型选择最合适的图表：
+- 调用流程 → **时序图（sequenceDiagram）**
+- 模块依赖 → **依赖图（graph LR）**
+- 调用链路 → **调用链图（graph TD）**
+- 数据流向 → **数据流图（graph LR）**
+- 业务概览 → **业务链路图（graph LR）**
+
 ## 时序图（sequenceDiagram）
 - 参与者：从调用链中提取的类/服务
 - 消息：方法调用（含方法名和参数）
@@ -29,7 +37,26 @@ sequenceDiagram
 ## 业务链路图（graph LR）
 - BusinessDomain → BusinessProcess → ApiEndpoint
 
-输出要求：
+## 输出要求
 1. 生成 ```mermaid 代码块
 2. 附文字说明：图表展示了什么
 3. 如图谱数据不足，说明缺失部分
+4. 如果用户问题涉及多种关系，可生成多个图表
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "charts": [
+    {
+      "chartType": "sequenceDiagram",
+      "title": "订单创建调用流程",
+      "mermaidCode": "sequenceDiagram\n    participant C as OrderController\n    participant S as OrderService\n    C->>S: create(OrderDTO)\n    S-->>C: Result.ok(orderId)",
+      "description": "展示了订单创建从 Controller 到 Service 的调用流程"
+    }
+  ],
+  "missingData": "缺少 Mapper 层调用数据"
+}
+```
+
+只输出 JSON，不要其他解释内容。

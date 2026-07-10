@@ -290,7 +290,8 @@
               </template>
             </span>
           </div>
-          <div class="phase-list">
+          <div class="phase-list" v-loading="detailLoading && !detailProgress">
+            <template v-if="detailProgress">
             <div
               v-for="(phase, idx) in allPhases"
               :key="phase.taskType"
@@ -341,12 +342,12 @@
                   v-if="phase.totalItems && phase.totalItems > 0 && (phase.status === 'RUNNING' || phase.status === 'SUCCESS' || phase.status === 'WARNING')"
                   class="phase-progress-row">
                   <el-progress
-                    :percentage="phase.totalItems > 0 ? Math.round((phase.processedItems || 0) * 100 / phase.totalItems) : 0"
+                    :percentage="Math.min(100, phase.totalItems > 0 ? Math.round((Math.min(phase.processedItems || 0, phase.totalItems)) * 100 / phase.totalItems) : 0)"
                     :stroke-width="6"
                     :status="phase.status === 'FAILED' ? 'exception' : undefined"
                     :color="phase.status === 'SUCCESS' ? '#67c23a' : '#409eff'"
                   />
-                  <span class="phase-counts">{{ phase.processedItems || 0 }} / {{ phase.totalItems }} 项</span>
+                  <span class="phase-counts">{{ Math.min(phase.processedItems || 0, phase.totalItems) }} / {{ phase.totalItems }} 项</span>
                 </div>
                 <!-- 当前处理项名称 -->
                 <div
@@ -368,7 +369,64 @@
                   class="phase-eta">
                   预计剩余 {{ formatDuration(phase.estimatedSecondsRemaining) }}
                 </div>
+                <!-- AI 子环节展开 -->
+                <div
+                  v-if="phase.taskType === 'AI_ORCHESTRATION' && phase.subPhases && phase.subPhases.length"
+                  class="sub-phase-list">
+                  <div
+                    v-for="(sub, subIdx) in phase.subPhases"
+                    :key="sub.taskType"
+                    class="sub-phase-item"
+                    :class="{
+                      'sub-phase-running': sub.status === 'RUNNING',
+                      'sub-phase-success': sub.status === 'SUCCESS',
+                      'sub-phase-warning': sub.status === 'WARNING',
+                      'sub-phase-failed': sub.status === 'FAILED',
+                      'sub-phase-pending': sub.status === 'PENDING',
+                      'sub-phase-skipped': sub.status === 'SKIPPED'
+                    }"
+                  >
+                    <div class="sub-phase-icon">
+                      <el-icon v-if="sub.status === 'SUCCESS'" class="icon-success"><CircleCheckFilled /></el-icon>
+                      <el-icon v-else-if="sub.status === 'WARNING'" class="icon-warning"><WarningFilled /></el-icon>
+                      <el-icon v-else-if="sub.status === 'FAILED'" class="icon-fail"><CircleCloseFilled /></el-icon>
+                      <el-icon v-else-if="sub.status === 'RUNNING'" class="icon-running"><Loading /></el-icon>
+                      <span v-else class="sub-phase-num">{{ subIdx + 1 }}</span>
+                    </div>
+                    <div class="sub-phase-body">
+                      <div class="sub-phase-top">
+                        <span class="sub-phase-name">{{ sub.phaseName || sub.taskType }}</span>
+                        <span class="sub-phase-status-text">{{ dictLabel('scan_status', sub.status) }}</span>
+                      </div>
+                      <div
+                        v-if="sub.totalItems && sub.totalItems > 0 && (sub.status === 'RUNNING' || sub.status === 'SUCCESS' || sub.status === 'WARNING')"
+                        class="sub-phase-progress-row">
+                        <el-progress
+                          :percentage="Math.min(100, sub.totalItems > 0 ? Math.round((Math.min(sub.processedItems || 0, sub.totalItems)) * 100 / sub.totalItems) : 0)"
+                          :stroke-width="4"
+                          :status="sub.status === 'FAILED' ? 'exception' : undefined"
+                          :color="sub.status === 'SUCCESS' ? '#67c23a' : '#409eff'"
+                        />
+                        <span class="sub-phase-counts">{{ Math.min(sub.processedItems || 0, sub.totalItems) }} / {{ sub.totalItems }} 项</span>
+                      </div>
+                      <div
+                        v-if="sub.startedAt || sub.finishedAt"
+                        class="sub-phase-time-row">
+                        <span>耗时 {{ formatPhaseDuration(sub.startedAt, sub.finishedAt) }}</span>
+                      </div>
+                      <div
+                        v-if="sub.estimatedSecondsRemaining && sub.estimatedSecondsRemaining > 0 && sub.status === 'RUNNING'"
+                        class="sub-phase-eta">
+                        预计剩余 {{ formatDuration(sub.estimatedSecondsRemaining) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
+            </div>
+            </template>
+            <div v-else-if="!detailLoading" class="phase-empty">
+              暂无进度数据
             </div>
           </div>
         </div>
@@ -386,7 +444,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, shallowRef, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Loading, CircleCheckFilled, CircleCloseFilled, WarningFilled, Document } from '@element-plus/icons-vue'
@@ -409,9 +467,11 @@ const total = ref(0)
 const detailDialogVisible = ref(false)
 const createDialogVisible = ref(false)
 const currentVersion = ref<any>(null)
-const detailProgress = ref<any>(null)
+const detailProgress = shallowRef<any>(null)
+const detailLoading = ref(false)
 const DETAIL_POLL_INTERVAL = 10000 // 详情轮询 10 秒
-let detailPollTimer: ReturnType<typeof setInterval> | null = null
+let detailPollTimer: ReturnType<typeof setTimeout> | null = null
+let detailInFlight = false // 防止请求堆积：前一次未返回时跳过下一次
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 const POLL_INTERVAL = 20000 // 列表轮询 20 秒（仅运行中）
@@ -455,10 +515,9 @@ const formatTime = (time: string) => {
 const formatDuration = (seconds: number) => {
   if (!seconds || seconds <= 0) return '-'
   if (seconds < 1) return '<1s'
-  // 规整浮点尾数：1065.115 % 60 会得到 45.11500000000001，统一取毫秒(3 位)消除尾数
-  const s = Math.round(seconds * 1000) / 1000
+  const s = Math.round(seconds * 10) / 10
   if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${Math.round((s % 60) * 1000) / 1000}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${Math.round((s % 60) * 10) / 10}s`
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
 }
 
@@ -525,12 +584,32 @@ const resetCreateForm = () => {
 }
 
 const fetchDetailProgress = async () => {
-  if (!currentVersion.value) return
+  if (!currentVersion.value || detailInFlight) return
+  detailInFlight = true
   try {
     const result = await scanApi.progress(projectId, currentVersion.value.id) as any
-    detailProgress.value = result
+    // 浅 diff：关键字段未变时跳过赋值，避免不必要重渲染
+    const old = detailProgress.value
+    if (old && old.progress === result.progress && old.status === result.status
+        && old.estimatedSecondsRemaining === result.estimatedSecondsRemaining
+        && JSON.stringify(old.tasks) === JSON.stringify(result.tasks)) {
+      // 数据未变，跳过赋值
+    } else {
+      detailProgress.value = result
+    }
+    // 终态版本停止轮询
+    if (result.status === 'SUCCESS' || result.status === 'FAILED' || result.status === 'CANCELLED') {
+      stopDetailPolling(false)
+      return
+    }
   } catch (err) {
     console.error('获取扫描进度失败:', err)
+  } finally {
+    detailInFlight = false
+  }
+  // 递归调度下一次（请求完成后才排下一次，避免堆积）
+  if (detailDialogVisible.value) {
+    detailPollTimer = setTimeout(fetchDetailProgress, DETAIL_POLL_INTERVAL)
   }
 }
 
@@ -538,19 +617,19 @@ const viewDetail = (row: any) => {
   currentVersion.value = row
   detailDialogVisible.value = true
   detailProgress.value = null
+  detailLoading.value = true
   // 立即获取一次进度
-  fetchDetailProgress()
-  // 启动轮询
-  if (detailPollTimer) clearInterval(detailPollTimer)
-  detailPollTimer = setInterval(fetchDetailProgress, DETAIL_POLL_INTERVAL)
+  fetchDetailProgress().finally(() => { detailLoading.value = false })
 }
 
-const stopDetailPolling = () => {
+const stopDetailPolling = (clearProgress = true) => {
   if (detailPollTimer) {
-    clearInterval(detailPollTimer)
+    clearTimeout(detailPollTimer)
     detailPollTimer = null
   }
-  detailProgress.value = null
+  if (clearProgress) {
+    detailProgress.value = null
+  }
 }
 
 const compareWithPrevious = (row: any) => {
@@ -716,6 +795,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopPolling()
+  stopDetailPolling()
 })
 </script>
 
@@ -1137,5 +1217,129 @@ onUnmounted(() => {
   font-size: 11px;
   color: #e6a23c;
   margin-top: 3px;
+}
+
+/* AI 子环节展开样式 */
+.sub-phase-list {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid #dcdfe6;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sub-phase-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 3px;
+}
+
+.sub-phase-item.sub-phase-running {
+  background: rgba(64, 158, 255, 0.06);
+}
+
+.sub-phase-item.sub-phase-failed {
+  background: rgba(245, 108, 108, 0.06);
+}
+
+.sub-phase-item.sub-phase-skipped,
+.sub-phase-item.sub-phase-pending {
+  opacity: 0.55;
+}
+
+.sub-phase-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sub-phase-icon .el-icon {
+  font-size: 14px;
+}
+
+.sub-phase-num {
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 10px;
+  color: #909399;
+  background: #e4e7ed;
+}
+
+.sub-phase-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sub-phase-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sub-phase-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #606266;
+}
+
+.sub-phase-item.sub-phase-running .sub-phase-name {
+  color: #409eff;
+}
+
+.sub-phase-item.sub-phase-failed .sub-phase-name {
+  color: #f56c6c;
+}
+
+.sub-phase-status-text {
+  font-size: 11px;
+  color: #909399;
+}
+
+.sub-phase-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.sub-phase-progress-row .el-progress {
+  flex: 1;
+}
+
+.sub-phase-counts {
+  font-size: 10px;
+  color: #909399;
+  white-space: nowrap;
+  min-width: 40px;
+  text-align: right;
+}
+
+.sub-phase-time-row {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #909399;
+}
+
+.sub-phase-eta {
+  font-size: 10px;
+  color: #e6a23c;
+  margin-top: 2px;
+}
+
+.phase-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--el-text-color-placeholder, #909399);
+  font-size: 13px;
 }
 </style>

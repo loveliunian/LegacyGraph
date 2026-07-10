@@ -14,14 +14,23 @@
 ## 生成要求
 1. 正常路径(NORMAL)：合法输入 → 期望成功，断言关键响应字段。
 2. 异常路径(EXCEPTION)：非法/缺失输入 → 期望错误码与错误信息。
-3. 边界条件(BOUNDARY)：边界值、空值、极值。
+3. 边界条件(BOUNDARY)：边界值、空值、极值、特殊字符。
 4. 若涉及数据库，补充 SQL 断言（基于相关数据表）。
 5. 请求参数尽量根据 requestSchema 填充真实示例值；无法确定的放入 needHumanInput。
+
+## 异常用例模式指导
+- 必填字段缺失：逐个 omission 每个必填字段。
+- 类型不匹配：字符串传数字、数字传超长字符串。
+- 权限边界：无权限访问、跨租户访问。
+- 并发冲突：重复提交、乐观锁冲突。
+- 数据不存在：查询不存在的 ID（404）。
+- 业务规则违反：违反 {businessRules} 中的约束。
 
 ## 字段约束
 - caseType 取值：API、E2E、DB、HYBRID。
 - assertions[].type 取值：HTTP、JSON_PATH、SQL、STATE、UI。
 - assertions[].expression 为可执行断言表达式，例如 `status == 200`、`$.data.id != null`、`SELECT COUNT(*) FROM t_user WHERE ... = 1`。
+- preconditions 描述测试前置条件（如"数据库中存在 ID=1 的用户"）。
 
 ## 输出格式
 请以严格 JSON 格式输出，结构如下：

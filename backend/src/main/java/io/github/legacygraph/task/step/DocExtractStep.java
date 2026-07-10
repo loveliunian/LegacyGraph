@@ -12,17 +12,23 @@ import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.service.scan.DocumentContentService;
 import io.micrometer.core.instrument.Counter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * AI_DOC_EXTRACT — 文档业务事实抽取（写入 lg_fact，PENDING_CONFIRM）。
@@ -33,16 +39,18 @@ public class DocExtractStep implements AiScanStepExecutor {
 
     /** 文档 LLM 调用单次上限字符数；超过则分段并行抽取后合并 */
     private static final int DOC_CONTENT_LIMIT = 8000;
-    /** 大文档(>50KB)分段大小，更小 chunk 避免 OOM */
-    private static final int LARGE_DOC_CHUNK_SIZE = 800;
-    /** 中文档(>20KB)分段大小 */
-    private static final int MEDIUM_DOC_CHUNK_SIZE = 1200;
-    /** 普通文档分段大小 */
-    private static final int NORMAL_DOC_CHUNK_SIZE = 2500;
+    /** 大文档(>50KB)分段大小（#21 调优：800→2500，减少 chunk 数量，OOM 由 isMemoryHealthy 兜底） */
+    private static final int LARGE_DOC_CHUNK_SIZE = 2500;
+    /** 中文档(>20KB)分段大小（#21 调优：1200→1800） */
+    private static final int MEDIUM_DOC_CHUNK_SIZE = 1800;
+    /** 普通文档分段大小（#21 调优：2500→4000，减少 LLM 调用次数） */
+    private static final int NORMAL_DOC_CHUNK_SIZE = 4000;
     /** 分段重叠（字符），避免切割处跨句上下文丢失 */
     private static final int DOC_CHUNK_OVERLAP = 400;
     /** 超过此大小的文档才分段，中间大小直接截断（性价比：分段 LLM 耗时 vs 覆盖内容） */
     private static final int DOC_CHUNK_THRESHOLD = 16000;
+    /** 扫描产物目录（docs/legacygraph/），其中的文档是扫描自身产出，不应再次进入 AI_DOC_EXTRACT */
+    private static final String SCAN_ARTIFACT_DIR = "docs/legacygraph/";
 
     private final AiScanStepSupport support;
     private final DocumentRepository documentRepository;
@@ -53,6 +61,10 @@ public class DocExtractStep implements AiScanStepExecutor {
     private final Counter agentCallCounter;
     private final Counter graphNodeCounter;
     private final Counter graphEdgeCounter;
+
+    /** 向量语义去重可用模型（bge-m3 @ Ollama）；未配置时降级为精确+子串去重，永不劣化 */
+    @Autowired(required = false)
+    private EmbeddingModel embeddingModel;
 
     public DocExtractStep(AiScanStepSupport support,
                           DocumentRepository documentRepository,
@@ -94,10 +106,29 @@ public class DocExtractStep implements AiScanStepExecutor {
         io.github.legacygraph.entity.ScanTask task =
                 support.createTask(projectId, versionId, "AI_DOC_EXTRACT", "文档业务事实抽取");
         try {
-            List<Document> docs = documentRepository.selectList(
+            List<Document> allDocs = documentRepository.selectList(
                     new LambdaQueryWrapper<Document>()
                             .eq(Document::getProjectId, projectId)
                             .eq(Document::getVersionId, versionId));
+            // 增量模式：仅处理 changedFilePaths 命中的文档。注意 changedFilePaths 存相对路径
+            // （来自 FileChangeDetector/IncrementalScanService），而 Document.filePath 为绝对路径，
+            // SQL .in() 无法直接匹配，故在内存中按 endsWith/contains 过滤（与
+            // IncrementalScanService.matchesAnyChanged 语义一致）。
+            List<Document> docs = filterDocsForExtract(allDocs, ctx.isIncremental(), ctx.getChangedFilePaths());
+            // #22 P0：排除扫描产物文档（docs/legacygraph/ 下的文档是扫描自身产出，不应再次抽取）
+            long artifactCount = docs.stream()
+                    .filter(d -> d.getFilePath() != null && d.getFilePath().contains(SCAN_ARTIFACT_DIR))
+                    .count();
+            if (artifactCount > 0) {
+                docs = docs.stream()
+                        .filter(d -> d.getFilePath() == null || !d.getFilePath().contains(SCAN_ARTIFACT_DIR))
+                        .collect(Collectors.toList());
+                log.info("AI_DOC_EXTRACT filtered {} scan artifact docs (under {})", artifactCount, SCAN_ARTIFACT_DIR);
+            }
+            if (ctx.isIncremental() && ctx.getChangedFilePaths() != null && !ctx.getChangedFilePaths().isEmpty()) {
+                log.info("增量抽取：处理 {} 篇文档（跳过 {} 篇未变更）",
+                        docs.size(), allDocs.size() - docs.size());
+            }
             if (docs.isEmpty()) {
                 support.completeTask(task, buildDocExtractSummary(0, 0), null);
                 return StepExecutionResult.builder().success(true)
@@ -121,6 +152,7 @@ public class DocExtractStep implements AiScanStepExecutor {
 
             AtomicInteger factCount = new AtomicInteger(0);
             AtomicInteger processedCount = new AtomicInteger(0);
+            AtomicInteger partialDocumentCount = new AtomicInteger(0);
             List<CompletableFuture<Void>> futures = new ArrayList<>();
 
             for (Document doc : docs) {
@@ -160,6 +192,7 @@ public class DocExtractStep implements AiScanStepExecutor {
                         // A3：大文档分段并行抽取再合并，既全覆盖又并发提速。
                         // 小文档（≤ DOC_CONTENT_LIMIT）保持原路径——单次 LLM 调用。
                         DocUnderstandingAgent.BusinessFactExtraction extraction;
+                        ChunkExtractionResult chunkExtraction = null;
                         if (content.length() <= DOC_CHUNK_THRESHOLD) {
                             extraction = support.cachedExtract("doc",
                                     support.truncate(content, DOC_CONTENT_LIMIT), () -> {
@@ -170,21 +203,38 @@ public class DocExtractStep implements AiScanStepExecutor {
                                     e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
                                     e.getFeatures(), e.getStatusTransitions()));
                         } else {
-                            extraction = extractFromChunks(projectId, doc, content);
+                            chunkExtraction = extractFromChunksWithCoverage(projectId, doc, content);
+                            extraction = chunkExtraction.extraction();
+                        }
+                        // 小文档也做语义去重（embeddingModel 不可用时降级为原结果）
+                        if (embeddingModel != null && extraction != null
+                                && extraction.getFeatures() != null && extraction.getFeatures().size() > 10) {
+                            extraction.setFeatures(semanticDeduplicateFeatures(extraction.getFeatures()));
                         }
                         int count = persistBusinessFacts(projectId, versionId, doc, extraction);
                         factCount.addAndGet(count);
                         buildBusinessGraph(projectId, versionId, doc, extraction);
                         support.upsertClaimDrafts(projectId, versionId,
                                 docUnderstandingAgent.toClaimDrafts(projectId, versionId, extraction, doc.getFilePath()));
-                        // P2 修复：抽取成功后更新状态为 PARSED
-                        doc.setParseStatus("PARSED");
+                        boolean completeExtraction = chunkExtraction == null || chunkExtraction.isComplete();
+                        // 仅全部 chunk 成功时标记 PARSED；部分结果仍可追溯，但不可伪装为完整覆盖。
+                        doc.setParseStatus(completeExtraction ? "PARSED" : "PARTIAL");
                         doc.setFactCount(count);
                         doc.setParsedAt(java.time.LocalDateTime.now());
+                        if (completeExtraction) {
+                            doc.setErrorMessage(null);
+                        } else {
+                            doc.setErrorMessage("文档分块抽取不完整：成功 "
+                                    + chunkExtraction.successfulChunkCount() + "/" + chunkExtraction.totalChunkCount());
+                            partialDocumentCount.incrementAndGet();
+                        }
                         doc.setUpdatedAt(java.time.LocalDateTime.now());
                         documentRepository.updateById(doc);
-                        support.markExtractDone(projectId, versionId, filePath, "DOC_EXTRACT",
-                                "facts=" + count);
+                        if (completeExtraction) {
+                            support.markExtractDone(projectId, versionId, filePath, "DOC_EXTRACT", "facts=" + count);
+                        } else {
+                            support.markExtractFailed(projectId, versionId, filePath, "DOC_EXTRACT", doc.getErrorMessage());
+                        }
                         // #20 修复：大文档延迟向量化——LLM 抽取完成后内存释放，再提交向量化
                         if (deferVectorize) {
                             support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
@@ -222,7 +272,7 @@ public class DocExtractStep implements AiScanStepExecutor {
             int totalFacts = factCount.get();
             log.info("AI_DOC_EXTRACT completed: versionId={}, factCount={}, docCount={}",
                     versionId, totalFacts, docs.size());
-            String summary = buildDocExtractSummary(totalFacts, docs.size());
+            String summary = buildDocExtractSummary(totalFacts, docs.size(), partialDocumentCount.get());
             support.completeTask(task, summary, null);
             return StepExecutionResult.builder().success(true).message(summary)
                     .processedCount(totalFacts).build();
@@ -236,11 +286,20 @@ public class DocExtractStep implements AiScanStepExecutor {
     /**
      * A3：大文档分段抽取后合并。
      * 按动态 chunkSize 分段（带重叠），每段独立调 LLM（复用 cachedExtract）。
-     * <p><b>串行抽取</b>：避免多段 LLM 响应(BusinessFactExtraction，含大量长字符串)同时驻留
-     * 导致内存峰值失控（OOM 根因之一）。段间内存占用 = 1 段输入 + 1 份响应，而非 N 份并发。</p>
-     * <p>串行也避免与主文档任务争用 docExtractExecutor 的 Semaphore(2)，防止死锁。</p>
+     * <p><b>2 路受限并行</b>（#21 Task 6）：段间用 Semaphore(2) 限制并发，避免全并行导致
+     * 多段 LLM 响应(BusinessFactExtraction，含大量长字符串)同时驻留引发 OOM，但比串行快约 2x。
+     * 内存保护：每个 chunk future 内部提交前 + 获取信号量后双重检查 isMemoryHealthy，
+     * OOM/内存不足时返回 null，join 阶段过滤掉，保留已抽到的段。</p>
      */
     private DocUnderstandingAgent.BusinessFactExtraction extractFromChunks(String projectId, Document doc, String content) {
+        return extractFromChunksWithCoverage(projectId, doc, content).extraction();
+    }
+
+    /**
+     * 分块抽取并返回覆盖度。任一块未完成时，调用方必须把文档标为 PARTIAL，
+     * 防止局部抽取结果被当成整篇文档的完整结论。
+     */
+    private ChunkExtractionResult extractFromChunksWithCoverage(String projectId, Document doc, String content) {
         int chunkSize;
         int contentLen = content.length();
         if (contentLen > 50_000) {
@@ -250,10 +309,15 @@ public class DocExtractStep implements AiScanStepExecutor {
         } else {
             chunkSize = NORMAL_DOC_CHUNK_SIZE;
         }
-        List<String> chunks = splitContent(content, chunkSize, DOC_CHUNK_OVERLAP);
+        List<DocChunk> chunks = splitContent(content, chunkSize, DOC_CHUNK_OVERLAP);
+        // P0-2：分块数上限告警——超大文档可能产生数百块，记录以便后续治理（不影响流程）
+        if (chunks.size() > 200) {
+            log.warn("AI_DOC_EXTRACT chunk count {} exceeds 200 for doc {} (contentLen={}, chunkSize={})",
+                    chunks.size(), doc.getDocName(), content.length(), chunkSize);
+        }
         if (chunks.size() <= 1) {
             // 单段 → 回退直接抽取
-            return support.cachedExtract("doc", content, () -> {
+            DocUnderstandingAgent.BusinessFactExtraction extraction = support.cachedExtract("doc", content, () -> {
                 agentCallCounter.increment();
                 return docUnderstandingAgent.extractBusinessFacts(projectId,
                         support.truncate(content, DOC_CONTENT_LIMIT), doc.getFilePath());
@@ -261,48 +325,107 @@ public class DocExtractStep implements AiScanStepExecutor {
             e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
                     e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
                     e.getFeatures(), e.getStatusTransitions()));
+            return new ChunkExtractionResult(extraction, 1, 1);
         }
 
         log.info("AI_DOC_EXTRACT chunking: doc={}, contentLen={}, chunks={}", doc.getDocName(), content.length(), chunks.size());
-        // 串行抽取各段：逐段调 LLM，逐段释放，内存峰值 = 单段而非 N 段
-        List<DocUnderstandingAgent.BusinessFactExtraction> chunkResults = new ArrayList<>(chunks.size());
+        // #22 P0：chunk 并行度从 2 提升到 3（OOM 由 isMemoryHealthy 兜底，总并发 4+3=7 < DeepSeek 8 路限流）
+        final int chunkParallelism = Math.min(3, chunks.size());
+        final java.util.concurrent.Semaphore chunkSem = new java.util.concurrent.Semaphore(chunkParallelism);
+        List<CompletableFuture<DocUnderstandingAgent.BusinessFactExtraction>> chunkFutures = new ArrayList<>();
+
         for (int i = 0; i < chunks.size(); i++) {
-            final int idx = i;
-            final String chunk = chunks.get(i);
-            // 内存保护：分段过程中堆变紧张则提前终止，已抽到的段照样合并
-            if (!AiScanStepSupport.isMemoryHealthy()) {
-                log.warn("Doc chunk extract aborted early (low memory) for doc {} at chunk {}/{}",
-                        doc.getId(), idx, chunks.size());
-                break;
-            }
-            try {
-                DocUnderstandingAgent.BusinessFactExtraction r = support.cachedExtract("doc-chunk", chunk, () -> {
-                    agentCallCounter.increment();
-                    return docUnderstandingAgent.extractBusinessFacts(projectId, chunk, doc.getFilePath() + "#chunk" + idx);
-                }, DocUnderstandingAgent.BusinessFactExtraction.class,
-                e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
-                        e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
-                        e.getFeatures(), e.getStatusTransitions()));
-                if (r != null) {
-                    chunkResults.add(r);
+            final DocChunk chunk = chunks.get(i);
+            final String chunkText = chunk.content();
+            // P0-2：将 chunkIndex/charStart/charEnd 附加到 sourcePath，供 LLM evidence 定位
+            final String sourcePath = doc.getFilePath() + "#chunk" + chunk.chunkIndex()
+                    + ":start" + chunk.charStart() + ":end" + chunk.charEnd();
+
+            chunkFutures.add(CompletableFuture.supplyAsync(() -> {
+                // 内存保护：提交前检查
+                if (!AiScanStepSupport.isMemoryHealthy()) {
+                    log.warn("Doc chunk extract skipped (low memory) for doc {} at chunk {}/{}",
+                            doc.getId(), chunk.chunkIndex(), chunks.size());
+                    return null;
                 }
-            } catch (OutOfMemoryError oom) {
-                log.warn("Doc chunk extract OOM at chunk {}/{} for doc {}, aborting chunking", idx, chunks.size(), doc.getId());
-                break;
-            } catch (Exception e) {
-                log.warn("Doc chunk extract failed at chunk {} for doc {}: {}", idx, doc.getId(), e.getMessage());
+                try {
+                    chunkSem.acquire();
+                    try {
+                        // 二次内存检查（获取信号量后内存可能已变紧张）
+                        if (!AiScanStepSupport.isMemoryHealthy()) {
+                            log.warn("Doc chunk extract skipped after sem acquire (low memory) for doc {} at chunk {}/{}",
+                                    doc.getId(), chunk.chunkIndex(), chunks.size());
+                            return null;
+                        }
+                        return support.cachedExtract("doc-chunk", chunkText, () -> {
+                            agentCallCounter.increment();
+                            return docUnderstandingAgent.extractBusinessFacts(projectId, chunkText, sourcePath);
+                        }, DocUnderstandingAgent.BusinessFactExtraction.class,
+                        e -> e == null || AiScanStepSupport.allEmpty(e.getBusinessDomains(), e.getBusinessProcesses(),
+                                e.getBusinessObjects(), e.getBusinessRules(), e.getRoles(),
+                                e.getFeatures(), e.getStatusTransitions()));
+                    } finally {
+                        chunkSem.release();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                } catch (OutOfMemoryError oom) {
+                    log.warn("Doc chunk extract OOM at chunk {}/{} for doc {}, aborting", chunk.chunkIndex(), chunks.size(), doc.getId());
+                    return null;
+                } catch (Exception e) {
+                    log.warn("Doc chunk extract failed at chunk {} for doc {}: {}", chunk.chunkIndex(), doc.getId(), e.getMessage());
+                    return null;
+                }
+            }, support.getDocExtractExecutor()));
+        }
+
+        // 等待全部完成，过滤 null，合并
+        CompletableFuture.allOf(chunkFutures.toArray(new CompletableFuture[0])).join();
+        List<DocUnderstandingAgent.BusinessFactExtraction> chunkResults = new ArrayList<>();
+        for (var f : chunkFutures) {
+            DocUnderstandingAgent.BusinessFactExtraction r = f.join();
+            if (r != null) {
+                chunkResults.add(r);
             }
         }
-        return mergeExtractions(chunkResults);
+        DocUnderstandingAgent.BusinessFactExtraction merged = mergeExtractions(chunkResults);
+        // 向量语义去重：cosine > 0.90 的 Feature 合并（embeddingModel 不可用时降级为精确+子串去重结果）
+        if (embeddingModel != null && merged.getFeatures() != null && merged.getFeatures().size() > 10) {
+            merged.setFeatures(semanticDeduplicateFeatures(merged.getFeatures()));
+        }
+        return new ChunkExtractionResult(merged, chunks.size(), chunkResults.size());
     }
 
-    /** 将文本按 size 分段，段间 overlap 个字符重叠，尽量在换行处切割。 */
-    static List<String> splitContent(String text, int size, int overlap) {
-        List<String> chunks = new ArrayList<>();
+    /**
+     * 带元数据的文档分块。
+     * <ul>
+     *   <li>{@code chunkIndex}：从 0 递增的分块序号</li>
+     *   <li>{@code charStart}/{@code charEnd}：该块在原文中的字符区间 [start, end)</li>
+     *   <li>{@code sectionTitle}：段落标题（暂为 null，待 Docling 集成时填充）</li>
+     *   <li>{@code pageNumber}：页码（暂为 null，待 Docling 集成时填充）</li>
+     * </ul>
+     */
+    public static record DocChunk(String content, int chunkIndex, int charStart, int charEnd,
+                                  String sectionTitle, Integer pageNumber) {
+    }
+
+    /** 分块抽取的事实与覆盖度；isComplete 是写入 PARSED 状态的唯一判据。 */
+    static record ChunkExtractionResult(DocUnderstandingAgent.BusinessFactExtraction extraction,
+                                        int totalChunkCount, int successfulChunkCount) {
+        boolean isComplete() {
+            return totalChunkCount > 0 && successfulChunkCount == totalChunkCount;
+        }
+    }
+
+    /** 将文本按 size 分段，段间 overlap 个字符重叠，尽量在换行处切割。返回带元数据的 DocChunk 列表。 */
+    static List<DocChunk> splitContent(String text, int size, int overlap) {
+        List<DocChunk> chunks = new ArrayList<>();
         if (text == null || text.isEmpty() || size <= 0) {
             return chunks;
         }
         int start = 0;
+        int chunkIndex = 0;
         while (start < text.length()) {
             int end = Math.min(start + size, text.length());
             // 尽量在换行处切割
@@ -312,12 +435,16 @@ public class DocExtractStep implements AiScanStepExecutor {
                     end = nl + 1;
                 }
             }
-            chunks.add(text.substring(start, end));
+            chunks.add(new DocChunk(text.substring(start, end), chunkIndex, start, end, null, null));
+            chunkIndex++;
             if (end >= text.length()) {
                 break;
             }
-            start = end - overlap;
-            if (start >= text.length() || start < 0) {
+            // overlap 必须小于 chunkSize 才能保证游标前进；越界参数降为无重叠，
+            // 既不能死循环或退化为逐字符切片，也不能静默丢弃文档尾部。
+            int effectiveOverlap = overlap >= size ? 0 : Math.max(0, overlap);
+            start = end - effectiveOverlap;
+            if (start >= text.length()) {
                 break;
             }
         }
@@ -340,15 +467,109 @@ public class DocExtractStep implements AiScanStepExecutor {
         merged.setBusinessRules(mergeByKey(results, r -> r.getBusinessRules(), r2 -> r2.getName()));
         merged.setRoles(new ArrayList<>(new java.util.LinkedHashSet<>(
                 results.stream().flatMap(r -> safe(r.getRoles()).stream()).toList())));
-        merged.setFeatures(new ArrayList<>(new java.util.LinkedHashSet<>(
-                results.stream().flatMap(r -> safe(r.getFeatures()).stream()).toList())));
+        merged.setFeatures(deduplicateFeatures(
+                results.stream().flatMap(r -> safe(r.getFeatures()).stream()).toList()));
         merged.setStatusTransitions(mergeByKey(results, r -> r.getStatusTransitions(),
                 t -> (t.getBusinessObject() + ":" + t.getFromStatus() + "->" + t.getToStatus())));
         return merged;
     }
 
+    /**
+     * Feature 去重（#21 P0-3）：chunk 间 Feature 归一化去重 + 子串去重。
+     * <ul>
+     *   <li>归一化：去空格/标点/转小写后相同的 Feature 视为重复</li>
+     *   <li>子串去重：短名称是长名称的子串时保留长名称（更具体）</li>
+     * </ul>
+     */
+    static List<String> deduplicateFeatures(List<String> rawFeatures) {
+        if (rawFeatures == null || rawFeatures.isEmpty()) {
+            return new ArrayList<>();
+        }
+        // 1) 精确 + 归一化去重
+        Map<String, String> normalizedToOriginal = new LinkedHashMap<>();
+        for (String f : rawFeatures) {
+            if (f == null || f.isBlank()) continue;
+            String norm = f.trim().toLowerCase().replaceAll("[\\s\\p{Punct}]", "");
+            if (norm.isEmpty()) continue;
+            normalizedToOriginal.putIfAbsent(norm, f.trim());
+        }
+        // 2) 子串去重：若 A 是 B 的子串（归一化后），保留 B（更具体）
+        List<String> candidates = new ArrayList<>(normalizedToOriginal.values());
+        List<String> kept = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            String normI = candidates.get(i).toLowerCase().replaceAll("[\\s\\p{Punct}]", "");
+            boolean subsumed = false;
+            for (int j = 0; j < candidates.size(); j++) {
+                if (i == j) continue;
+                String normJ = candidates.get(j).toLowerCase().replaceAll("[\\s\\p{Punct}]", "");
+                // normI 是 normJ 的真子串，且长度差 >= 2（避免单字差异误删）
+                if (normJ.contains(normI) && normJ.length() - normI.length() >= 2) {
+                    subsumed = true;
+                    break;
+                }
+            }
+            if (!subsumed) {
+                kept.add(candidates.get(i));
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * 向量语义去重（#21 Task 4）：对 Feature 列表做 cosine > 0.90 的合并。
+     * <p>在 {@link #deduplicateFeatures} 精确+子串去重之后执行，捕获"入金查询"与"查询入金"这类
+     * 归一化不同但语义相同的 Feature。embeddingModel 不可用时直接返回原列表（降级）。</p>
+     * <p>bge-m3 输出已归一化，cosine 相似度即点积。</p>
+     */
+    List<String> semanticDeduplicateFeatures(List<String> features) {
+        if (features == null || features.size() <= 1) {
+            return features;
+        }
+        try {
+            // 精确去重先，减少 embedding 调用量
+            List<String> unique = new ArrayList<>(new LinkedHashSet<>(features));
+            List<float[]> vectors = embeddingModel.embed(unique);
+            if (vectors == null || vectors.size() != unique.size()) {
+                log.debug("Semantic dedup: embedding count mismatch ({} vs {}), fallback", vectors == null ? 0 : vectors.size(), unique.size());
+                return features;
+            }
+            List<String> kept = new ArrayList<>();
+            Set<Integer> removed = new HashSet<>();
+            for (int i = 0; i < unique.size(); i++) {
+                if (removed.contains(i)) {
+                    continue;
+                }
+                kept.add(unique.get(i));
+                for (int j = i + 1; j < unique.size(); j++) {
+                    if (removed.contains(j)) {
+                        continue;
+                    }
+                    if (cosineSimilarity(vectors.get(i), vectors.get(j)) > 0.85) {
+                        removed.add(j);
+                    }
+                }
+            }
+            return kept;
+        } catch (Exception e) {
+            log.debug("Semantic dedup failed, fallback to original: {}", e.getMessage());
+            return features;
+        }
+    }
+
+    /** 余弦相似度（bge-m3 输出已归一化，直接点积） */
+    static double cosineSimilarity(float[] a, float[] b) {
+        if (a == null || b == null || a.length != b.length) {
+            return 0.0;
+        }
+        double dot = 0.0;
+        for (int i = 0; i < a.length; i++) {
+            dot += (double) a[i] * b[i];
+        }
+        return dot;
+    }
+
     @SuppressWarnings("unchecked")
-    private static <T> List<T> mergeByKey(List<DocUnderstandingAgent.BusinessFactExtraction> results,
+    static <T> List<T> mergeByKey(List<DocUnderstandingAgent.BusinessFactExtraction> results,
                                           java.util.function.Function<DocUnderstandingAgent.BusinessFactExtraction, List<T>> getter,
                                           java.util.function.Function<T, String> keyFn) {
         Map<String, T> seen = new LinkedHashMap<>();
@@ -358,11 +579,71 @@ public class DocExtractStep implements AiScanStepExecutor {
                 T existing = seen.get(key);
                 if (existing == null) {
                     seen.put(key, item);
+                } else {
+                    // P0-2：同名项取较高置信度（通过反射读取 confidence 字段），
+                    // 并合并 evidence 列表（如果存在 getEvidence/setEvidence 方法）。
+                    seen.put(key, pickHigherConfidence(existing, item));
                 }
-                // 同名取较高置信度（通过反射尝试，失败则保留首个）
             }
         }
         return new ArrayList<>(seen.values());
+    }
+
+    /**
+     * 比较两个同名项的 confidence（通过反射读取 double 字段），保留较高者；
+     * 同时把较低者的 evidence 列表合并到 winner（若存在 getEvidence/setEvidence 方法）。
+     */
+    private static <T> T pickHigherConfidence(T existing, T incoming) {
+        double c1 = readConfidence(existing);
+        double c2 = readConfidence(incoming);
+        T winner = c2 > c1 ? incoming : existing;
+        T loser = c2 > c1 ? existing : incoming;
+        mergeEvidence(winner, loser);
+        return winner;
+    }
+
+    /** 通过反射读取 confidence 字段（double 类型），读取失败返回 0（保持原有"保留首个"行为）。 */
+    private static double readConfidence(Object item) {
+        if (item == null) {
+            return 0;
+        }
+        try {
+            java.lang.reflect.Field f = item.getClass().getDeclaredField("confidence");
+            f.setAccessible(true);
+            return f.getDouble(item);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 通过反射合并 evidence 列表：将 loser 的 evidence 追加到 winner 的 evidence 列表。
+     * 仅当 winner 同时具备 getEvidence() 和 setEvidence(List) 方法时生效
+     * （如 BusinessObject/BusinessProcess/BusinessRule/StatusTransition）；
+     * 没有 evidence 字段的类型（如 BusinessDomain）静默跳过。
+     */
+    @SuppressWarnings("unchecked")
+    private static void mergeEvidence(Object winner, Object loser) {
+        try {
+            java.lang.reflect.Method getter = winner.getClass().getMethod("getEvidence");
+            java.lang.reflect.Method setter = winner.getClass().getMethod("setEvidence", List.class);
+            Object winnerEv = getter.invoke(winner);
+            Object loserEv = getter.invoke(loser);
+            if (!(winnerEv instanceof List) || !(loserEv instanceof List)) {
+                return;
+            }
+            List<Object> merged = new ArrayList<>((List<Object>) winnerEv);
+            for (Object e : (List<Object>) loserEv) {
+                if (!merged.contains(e)) {
+                    merged.add(e);
+                }
+            }
+            setter.invoke(winner, merged);
+        } catch (NoSuchMethodException e) {
+            // 该类型无 evidence 字段（如 BusinessDomain），静默跳过
+        } catch (Exception e) {
+            // 反射调用失败，忽略以保持合并主流程不中断
+        }
     }
 
     private static <T> List<T> safe(List<T> list) {
@@ -370,17 +651,58 @@ public class DocExtractStep implements AiScanStepExecutor {
     }
 
     /**
+     * 增量模式文档筛选：从全量文档中筛出需处理的文档。
+     * <p>非增量模式（incremental=false）或 changedFilePaths 为空/null 时返回全量列表；
+     * 增量模式且 changedFilePaths 非空时，仅保留 filePath 命中变更路径的文档。</p>
+     * <p><b>路径适配</b>：changedFilePaths 存相对路径（来自 FileChangeDetector /
+     * IncrementalScanService），Document.filePath 为绝对路径，SQL .in() 无法直接匹配，
+     * 故在内存中按 endsWith/contains 过滤（与 IncrementalScanService.matchesAnyChanged 一致）。</p>
+     */
+    static List<Document> filterDocsForExtract(List<Document> allDocs, boolean incremental,
+                                               Set<String> changedFilePaths) {
+        if (!incremental || changedFilePaths == null || changedFilePaths.isEmpty()) {
+            return allDocs;
+        }
+        return allDocs.stream()
+                .filter(d -> d.getFilePath() != null && matchesAnyChangedPath(d.getFilePath(), changedFilePaths))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 判断绝对路径是否命中任一变更相对路径（endsWith 或 contains）。
+     * 与 {@link io.github.legacygraph.service.IncrementalScanService} 的 matchesAnyChanged 语义一致：
+     * sourcePath 通常是绝对路径，变更列表是相对路径，因此用 endsWith / contains 匹配。
+     */
+    static boolean matchesAnyChangedPath(String absolutePath, Set<String> changedRelativePaths) {
+        for (String rel : changedRelativePaths) {
+            if (rel == null || rel.isBlank()) {
+                continue;
+            }
+            if (absolutePath.endsWith(rel) || absolutePath.contains(rel)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * P1-B：区分"没扫到"与"没开扫"。文档数或事实数为 0 时给出显式提示，
      * 便于在扫描任务列表中定位业务图谱为空的原因（呼应"不静默截断"原则）。
      */
     private String buildDocExtractSummary(int factCount, int docCount) {
+        return buildDocExtractSummary(factCount, docCount, 0);
+    }
+
+    private String buildDocExtractSummary(int factCount, int docCount, int partialDocumentCount) {
         if (docCount == 0) {
             return "⚠ 未发现任何文档 —— 业务事实 0 条。请确认 scanScope 含 DOC_PARSE 且项目已配置产品/需求文档";
         }
+        String partialWarning = partialDocumentCount > 0
+                ? "；⚠ " + partialDocumentCount + " 个文档分块不完整，已标记 PARTIAL，待重试" : "";
         if (factCount == 0) {
-            return "⚠ 扫描文档 " + docCount + " 个，但未抽取到业务事实 —— 可能文档无业务语义或 LLM 未返回内容";
+            return "⚠ 扫描文档 " + docCount + " 个，但未抽取到业务事实 —— 可能文档无业务语义或 LLM 未返回内容" + partialWarning;
         }
-        return "AI 抽取业务事实 " + factCount + " 条，扫描文档 " + docCount + " 个";
+        return "AI 抽取业务事实 " + factCount + " 条，扫描文档 " + docCount + " 个" + partialWarning;
     }
 
     private int persistBusinessFacts(String projectId, String versionId, Document doc,
@@ -487,24 +809,9 @@ public class DocExtractStep implements AiScanStepExecutor {
                 log.warn("readDocContent: file not found or not regular: {} (doc={})", doc.getFilePath(), doc.getId());
                 return null;
             }
-            String content = documentContentService.readText(doc.getFilePath());
-            // 大文档前置截断，防止 OOM（基于字节数判断，避免中文等多字节字符估算偏差）
-            if (content != null) {
-                int byteLen = content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
-                if (byteLen > 100 * 1024) {
-                    // 按 UTF-8 字节截断至 50KB，需在字符边界截断避免乱码
-                    int cutChars = 0;
-                    int cutBytes = 0;
-                    while (cutBytes < 50 * 1024 && cutChars < content.length()) {
-                        int cp = content.codePointAt(cutChars);
-                        cutChars += Character.charCount(cp);
-                        cutBytes += String.valueOf(Character.toChars(cp)).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
-                    }
-                    content = content.substring(0, cutChars);
-                    log.warn("文档内容超过 100KB ({} bytes)，前置截断至 50KB: {}", byteLen, doc.getFilePath());
-                }
-            }
-            return content;
+            // P0-2：不再前置截断大文档——返回完整内容，由 extractFromChunks() 全量分块处理，
+            // 避免文档后半部分永远不进入图谱。分块大小由 chunkSize 控制，OOM 由 isMemoryHealthy() 兜底。
+            return documentContentService.readText(doc.getFilePath());
         } catch (Exception e) {
             log.warn("readDocContent: failed to read {}: {}", doc.getFilePath(), e.getMessage());
             return null;

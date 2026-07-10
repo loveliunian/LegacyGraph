@@ -139,7 +139,8 @@ public class DocUnderstandingAgent {
                     continue;
                 }
                 drafts.add(draft(projectId, versionId, "BusinessDomain", "domain:" + domain.getName(),
-                        "MENTIONED_IN", sourcePath, domain.getConfidence()));
+                        "MENTIONED_IN", sourcePath, domain.getConfidence(),
+                        null, domain.getEvidenceText()));
             }
         }
         if (extraction.getBusinessProcesses() != null) {
@@ -149,7 +150,8 @@ public class DocUnderstandingAgent {
                 }
                 String key = hasText(process.getKey()) ? process.getKey() : "process:" + process.getName();
                 drafts.add(draft(projectId, versionId, "BusinessProcess", key,
-                        "MENTIONED_IN", sourcePath, process.getConfidence()));
+                        "MENTIONED_IN", sourcePath, process.getConfidence(),
+                        process.getEvidence(), null));
             }
         }
         if (extraction.getFeatures() != null) {
@@ -158,7 +160,8 @@ public class DocUnderstandingAgent {
                     continue;
                 }
                 drafts.add(draft(projectId, versionId, "Feature", "feature:" + feature,
-                        "DESCRIBED_BY", sourcePath, 0.7));
+                        "DESCRIBED_BY", sourcePath, 0.7,
+                        null, null));
             }
         }
         if (extraction.getBusinessObjects() != null) {
@@ -167,7 +170,8 @@ public class DocUnderstandingAgent {
                     continue;
                 }
                 drafts.add(draft(projectId, versionId, "BusinessObject", "object:" + object.getName(),
-                        "MENTIONED_IN", sourcePath, object.getConfidence()));
+                        "MENTIONED_IN", sourcePath, object.getConfidence(),
+                        object.getEvidence(), null));
             }
         }
         if (extraction.getBusinessRules() != null) {
@@ -176,7 +180,8 @@ public class DocUnderstandingAgent {
                     continue;
                 }
                 drafts.add(draft(projectId, versionId, "BusinessRule", "rule:" + rule.getName(),
-                        "MENTIONED_IN", sourcePath, rule.getConfidence()));
+                        "MENTIONED_IN", sourcePath, rule.getConfidence(),
+                        rule.getEvidence(), null));
             }
         }
         if (extraction.getStatusTransitions() != null) {
@@ -189,7 +194,8 @@ public class DocUnderstandingAgent {
                         + "->" + valueOrUnknown(transition.getToStatus())
                         + ":" + valueOrUnknown(transition.getTrigger());
                 drafts.add(draft(projectId, versionId, "StateTransition", key,
-                        "MENTIONED_IN", sourcePath, transition.getConfidence()));
+                        "MENTIONED_IN", sourcePath, transition.getConfidence(),
+                        transition.getEvidence(), null));
             }
         }
         if (extraction.getRoles() != null) {
@@ -198,7 +204,8 @@ public class DocUnderstandingAgent {
                     continue;
                 }
                 drafts.add(draft(projectId, versionId, "Role", "role:" + role,
-                        "MENTIONED_IN", sourcePath, 0.7));
+                        "MENTIONED_IN", sourcePath, 0.7,
+                        null, null));
             }
         }
         return drafts;
@@ -238,7 +245,8 @@ public class DocUnderstandingAgent {
 
     private KnowledgeClaimDraft draft(String projectId, String versionId, String subjectType,
                                       String subjectKey, String predicate, String sourcePath,
-                                      double confidence) {
+                                      double confidence,
+                                      List<EvidenceRef> evidenceRefs, String contentExcerpt) {
         return KnowledgeClaimDraft.builder()
                 .projectId(projectId)
                 .versionId(versionId)
@@ -250,7 +258,11 @@ public class DocUnderstandingAgent {
                 .sourceType("DOC_AI")
                 .extractor("DocUnderstandingAgent")
                 .confidence(BigDecimal.valueOf(confidence > 0 ? confidence : 0.7))
-                .evidenceIds(hasText(sourcePath) ? List.of(sourcePath) : List.of())
+                // 不再把 sourcePath 当作 evidenceIds —— 真实 Evidence UUID 由
+                // KnowledgeClaimService.upsertDrafts() 读取 transientEvidenceRefs 后创建并填充
+                .evidenceIds(List.of())
+                .transientEvidenceRefs(evidenceRefs)
+                .transientContentExcerpt(contentExcerpt)
                 .build();
     }
 

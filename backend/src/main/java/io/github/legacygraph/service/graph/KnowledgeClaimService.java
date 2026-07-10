@@ -3,9 +3,12 @@ package io.github.legacygraph.service.graph;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
+import io.github.legacygraph.entity.Evidence;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.KnowledgeClaim;
+import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.KnowledgeClaimRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -36,6 +42,7 @@ public class KnowledgeClaimService {
 
     private final KnowledgeClaimRepository claimRepository;
     private final ObjectMapper objectMapper;
+    private final EvidenceRepository evidenceRepository;
 
     /**
      * 幂等写入单条 Claim draft。
@@ -43,6 +50,7 @@ public class KnowledgeClaimService {
      */
     @Transactional
     public KnowledgeClaim upsertDraft(KnowledgeClaimDraft draft) {
+        materializeEvidence(draft);
         KnowledgeClaim existing = findByClaimKey(
                 draft.getProjectId(), draft.getVersionId(),
                 draft.getSubjectType(), draft.getSubjectKey(),
@@ -79,6 +87,7 @@ public class KnowledgeClaimService {
         List<KnowledgeClaim> toUpdate = new ArrayList<>();
         List<KnowledgeClaim> result = new ArrayList<>(drafts.size());
         for (KnowledgeClaimDraft draft : drafts) {
+            materializeEvidence(draft);
             KnowledgeClaim existing = existingByKey.get(claimKey(draft));
             if (existing == null) {
                 KnowledgeClaim claim = buildClaimFromDraft(draft);
@@ -272,6 +281,30 @@ public class KnowledgeClaimService {
     }
 
     /**
+     * 按来源类型 + 状态统计 Claim 数量 — 用于置信度校准分桶。
+     *
+     * @param projectId  项目 ID
+     * @param versionId  扫描版本 ID
+     * @param sourceType 来源类型（CODE / DOC_AI / AI_INFERENCE / RUNTIME 等），null 忽略
+     * @param status     状态（CONFIRMED / PENDING_CONFIRM / REJECTED 等），null 忽略
+     * @return 符合条件的 Claim 数量
+     */
+    public long countByStatus(String projectId, String versionId, String sourceType, String status) {
+        LambdaQueryWrapper<KnowledgeClaim> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(KnowledgeClaim::getProjectId, projectId);
+        if (versionId != null && !versionId.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getVersionId, versionId);
+        }
+        if (sourceType != null && !sourceType.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getSourceType, sourceType);
+        }
+        if (status != null && !status.isEmpty()) {
+            wrapper.eq(KnowledgeClaim::getStatus, status);
+        }
+        return claimRepository.selectCount(wrapper);
+    }
+
+    /**
      * 统计 AI-only Claim 数量（sourceType 包含 AI）。
      */
     public long countAiOnlyClaims(String projectId, String versionId) {
@@ -298,6 +331,142 @@ public class KnowledgeClaimService {
     }
 
     // ──────────── Private helpers ────────────
+
+    /**
+     * 为 draft 的 transientEvidenceRefs 创建真实 Evidence 记录，用真实 UUID 填充 evidenceIds。
+     * <p>
+     * DocUnderstandingAgent 不直接注入 Repository（避免跨层依赖），而是在 draft 的
+     * transientEvidenceRefs 字段中传递 LLM 返回的 EvidenceRef，由本方法在 Service 层
+     * 创建 Evidence 并收集 UUID。BusinessDomain 等无 EvidenceRef 但有 evidenceText 的场景，
+     * 使用 transientContentExcerpt 作为 contentExcerpt 回退创建一条证据。
+     * </p>
+     */
+    private void materializeEvidence(KnowledgeClaimDraft draft) {
+        List<DocUnderstandingAgent.EvidenceRef> refs = draft.getTransientEvidenceRefs();
+        String fallbackExcerpt = draft.getTransientContentExcerpt();
+        boolean hasRefs = refs != null && !refs.isEmpty();
+        boolean hasFallback = hasText(fallbackExcerpt);
+        if (!hasRefs && !hasFallback) {
+            return;
+        }
+        List<String> evidenceIds = new ArrayList<>(
+                draft.getEvidenceIds() != null ? draft.getEvidenceIds() : List.of());
+        String defaultSourcePath = draft.getObjectKey();
+
+        if (hasRefs) {
+            for (DocUnderstandingAgent.EvidenceRef ref : refs) {
+                if (ref == null) continue;
+                String sourcePath = hasText(ref.getSourceUri()) ? ref.getSourceUri() : defaultSourcePath;
+                if (!isClaimDocumentSource(defaultSourcePath, sourcePath)) {
+                    log.warn("Discarding DOC_AI evidence outside claim document: claimSource={}, evidenceSource={}",
+                            defaultSourcePath, sourcePath);
+                    continue;
+                }
+                if (!hasValidLineRange(ref.getLineStart(), ref.getLineEnd())) {
+                    log.warn("Discarding DOC_AI evidence with invalid line range: source={}, start={}, end={}",
+                            sourcePath, ref.getLineStart(), ref.getLineEnd());
+                    continue;
+                }
+                String excerpt = hasText(ref.getExcerpt()) ? ref.getExcerpt() : fallbackExcerpt;
+                String evidenceId = createDocEvidence(draft, sourcePath,
+                        ref.getLineStart(), ref.getLineEnd(), excerpt);
+                if (evidenceId != null) {
+                    evidenceIds.add(evidenceId);
+                }
+            }
+        } else {
+            // 无 EvidenceRef 但有 evidenceText（BusinessDomain 场景）
+            String evidenceId = createDocEvidence(draft, defaultSourcePath, null, null, fallbackExcerpt);
+            if (evidenceId != null) {
+                evidenceIds.add(evidenceId);
+            }
+        }
+        draft.setEvidenceIds(evidenceIds);
+    }
+
+    /**
+     * LLM 证据只能指向该 Claim 的原始文档或该文档生成的 chunk 片段，
+     * 防止模型凭空引用其他文件来提高断言的表面可信度。
+     */
+    private boolean isClaimDocumentSource(String claimDocumentPath, String evidenceSourcePath) {
+        if (!hasText(claimDocumentPath) || !hasText(evidenceSourcePath)) {
+            return false;
+        }
+        String sourceDocumentPath = evidenceSourcePath.split("#", 2)[0];
+        return claimDocumentPath.equals(sourceDocumentPath);
+    }
+
+    private boolean hasValidLineRange(Integer lineStart, Integer lineEnd) {
+        if (lineStart == null && lineEnd == null) {
+            return true;
+        }
+        if (lineStart == null || lineEnd == null) {
+            return false;
+        }
+        return lineStart >= 0 && lineEnd >= lineStart;
+    }
+
+    /**
+     * 创建一条 DOC_AI 类型证据，通过 contentHash 去重落库，返回证据 UUID。
+     */
+    private String createDocEvidence(KnowledgeClaimDraft draft, String sourcePath,
+                                     Integer startLine, Integer endLine, String excerpt) {
+        Evidence ev = new Evidence();
+        ev.setId(IdUtil.fastUUID());
+        ev.setProjectId(draft.getProjectId());
+        ev.setVersionId(draft.getVersionId());
+        ev.setEvidenceType("doc");
+        ev.setSourcePath(sourcePath);
+        ev.setSourceName(draft.getSubjectKey());
+        ev.setStartLine(startLine);
+        ev.setEndLine(endLine);
+        ev.setContentExcerpt(excerpt);
+        ev.setContentHash(sha256(sourcePath, excerpt));
+        ev.setMetadata(buildDocEvidenceMetadata());
+        ev.setPrivacyLevel("INTERNAL");
+        ev.setRedactionPolicy("none");
+        ev.setDeleted(0);
+        ev.setCreatedAt(LocalDateTime.now());
+
+        int rows = evidenceRepository.insertOrIgnore(ev);
+        if (rows > 0) {
+            return ev.getId();
+        }
+        // 冲突：已有相同 contentHash 的证据，复用已有记录
+        Evidence existing = evidenceRepository.findByContentHash(ev.getContentHash());
+        return existing != null ? existing.getId() : null;
+    }
+
+    private String buildDocEvidenceMetadata() {
+        try {
+            Map<String, String> meta = new LinkedHashMap<>();
+            meta.put("extractor", "DocUnderstandingAgent");
+            meta.put("chunkId", "");
+            meta.put("sourceType", "DOC_AI");
+            return objectMapper.writeValueAsString(meta);
+        } catch (JsonProcessingException e) {
+            return "{\"extractor\":\"DocUnderstandingAgent\",\"chunkId\":\"\",\"sourceType\":\"DOC_AI\"}";
+        }
+    }
+
+    /**
+     * 基于 sourcePath + excerpt 生成 SHA-256 哈希，用于证据去重。
+     */
+    private static String sha256(String sourcePath, String excerpt) {
+        String input = (sourcePath == null ? "" : sourcePath)
+                + "|" + (excerpt == null ? "" : excerpt);
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
 
     private KnowledgeClaim findByClaimKey(String projectId, String versionId,
                                           String subjectType, String subjectKey,
@@ -354,7 +523,8 @@ public class KnowledgeClaimService {
         claim.setSourceType(draft.getSourceType());
         claim.setExtractor(draft.getExtractor());
         claim.setConfidence(draft.getConfidence() != null ? draft.getConfidence() : BigDecimal.valueOf(0.5));
-        claim.setLineage("[]");
+        String lineage = draft.getLineage();
+        claim.setLineage(lineage != null && !lineage.isBlank() ? lineage : "[]");
 
         // 状态计算
         claim.setStatus(computeStatus(draft.getSourceType(), draft.getConfidence()));

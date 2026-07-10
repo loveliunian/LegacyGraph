@@ -957,14 +957,19 @@ public class SourceController {
      * @return 分页后的文档列表，按上传时间倒序排列
      */
     @GetMapping("/documents")
-    @Operation(summary = "分页查询文档列表", description = "查询指定项目下的所有上传文档，支持分页")
+    @Operation(summary = "分页查询文档列表", description = "查询指定项目下的所有上传文档，支持分页和按名称搜索")
     public Result<PageResult<Document>> listDocuments(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
             PageQuery query) {
         LambdaQueryWrapper<Document> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Document::getProjectId, projectId)
-                .orderByDesc(Document::getCreatedAt);
+        wrapper.eq(Document::getProjectId, projectId);
+
+        if (query.getKeyword() != null && !query.getKeyword().isBlank()) {
+            wrapper.like(Document::getDocName, query.getKeyword());
+        }
+
+        wrapper.orderByDesc(Document::getCreatedAt);
 
         Page<Document> page = documentRepository.selectPage(
                 new Page<>(query.getPageNum(), query.getPageSize()),

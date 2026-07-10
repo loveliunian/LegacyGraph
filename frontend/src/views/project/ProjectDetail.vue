@@ -164,6 +164,7 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
       items: [
         { label: '证据工作台', path: `${basePath}/workbench` },
         { label: '知识工作台', path: `${basePath}/knowledge` },
+        { label: '向量检索', path: `${basePath}/vector-search` },
         { label: '事实列表', path: `${basePath}/facts` },
         { label: '证据检索', path: `${basePath}/evidence` },
         { label: '审核队列', path: `${basePath}/reviews` },

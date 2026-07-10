@@ -20,7 +20,7 @@ import java.util.Set;
  * <h3>分析流程</h3>
  * <ol>
  *   <li>{@link #analyzeBlastRadius} — 对每个变更文件，通过 sourcePath 找到文件中的所有节点，
- *       再反向遍历边类型白名单（CALLS/READS/WRITES/BELONGS_TO/DEPENDS_ON/IMPLEMENTS/EXTENDS）
+ *       再反向遍历边类型白名单（CALLS/READS/WRITES/BELONGS_TO/DEPENDS_ON/IMPLEMENTS/EXTENDS/IMPLEMENTED_BY/EXPOSED_BY）
  *       找到所有指向这些节点的入边源节点，即受变更影响的依赖者。</li>
  *   <li>{@link #markAffectedNodes} — 将受影响节点的 affected 标记为 true，并写入 affectedReason。</li>
  *   <li>{@link #getAffectedSubgraph} — 返回受影响节点及其直接邻居构成的子图，用于增量重扫。</li>
@@ -33,6 +33,8 @@ import java.util.Set;
  *   <li>BELONGS_TO — 哪些类属于变更的 Package</li>
  *   <li>DEPENDS_ON — 哪些 Package 依赖了变更的 Package</li>
  *   <li>IMPLEMENTS/EXTENDS — 谁继承/实现了变更的类</li>
+ *   <li>IMPLEMENTED_BY — FeatureMapping 产出的边，ApiEndpoint 文件变更时反向传播到 Feature 节点</li>
+ *   <li>EXPOSED_BY — FeatureMapping 产出的边，ApiEndpoint 文件变更时反向传播到 Feature 节点</li>
  * </ul>
  */
 @Slf4j
@@ -47,7 +49,9 @@ public class BlastRadiusAnalyzer {
             EdgeType.BELONGS_TO.name(),
             EdgeType.DEPENDS_ON.name(),
             EdgeType.IMPLEMENTS.name(),
-            EdgeType.EXTENDS.name());
+            EdgeType.EXTENDS.name(),
+            EdgeType.IMPLEMENTED_BY.name(),
+            EdgeType.EXPOSED_BY.name());
 
     /** 子图查询时每个受影响节点最多采集的邻居数 */
     private static final int SUBGRAPH_NEIGHBOR_LIMIT = 100;
@@ -156,6 +160,23 @@ public class BlastRadiusAnalyzer {
             }
         }
         log.info("BlastRadiusAnalyzer: marked {} affected nodes for projectId={}", marked, projectId);
+    }
+
+    /**
+     * 清除指定版本中所有节点的 affected 和 affectedReason 标记。
+     *
+     * <p>委托 {@link Neo4jGraphDao#clearAffectedMarkers} 执行实际清除，
+     * 用于增量重扫前清除上一轮 Blast Radius 标记。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 版本 ID
+     * @return 清除标记的节点数
+     */
+    public int clearAffectedMarkers(String projectId, String versionId) {
+        int cleared = graphDao.clearAffectedMarkers(projectId, versionId);
+        log.info("BlastRadiusAnalyzer: cleared {} affected markers for projectId={}, versionId={}",
+                cleared, projectId, versionId);
+        return cleared;
     }
 
     // ==================== SubTask 11.2: 受影响子图 ====================

@@ -61,6 +61,7 @@ export interface PageResult<T> {
 export interface PageQuery {
   pageNum: number
   pageSize: number
+  keyword?: string
 }
 
 // 节点选项

@@ -10,7 +10,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.embedding.EmbeddingModel;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -213,5 +216,172 @@ class VectorizationServiceTest {
         assertEquals(1, stored);
         verify(vectorDocumentRepository).countBySourceUriAndVersionId(sourceUri, "v2");
         verify(vectorDocumentRepository, never()).countBySourceUri(sourceUri);
+    }
+
+    // ===== Task 12: chunk 级 diff 增量向量化测试 =====
+
+    @Test
+    void embedDocumentIncremental_noOldChunks_insertsAll() {
+        // 旧 chunk 为空 → 所有新 chunk 都插入
+        String content = "fresh content";
+        when(vectorDocumentRepository.findBySourceUriAndVersionId("/a.md", "v1"))
+                .thenReturn(Collections.emptyList());
+        when(embeddingModel.embed(content)).thenReturn(new float[]{0.1f, 0.2f});
+        when(vectorDocumentRepository.insert(any(VectorDocument.class))).thenAnswer(inv -> {
+            inv.getArgument(0, VectorDocument.class).setId(10L);
+            return 1;
+        });
+
+        int stored = vectorizationService.embedDocumentIncremental(
+                "1001", "v1", "DOC", "/a.md", content, 1000, 100, "model");
+
+        assertEquals(1, stored);
+        verify(vectorDocumentRepository, never()).deleteById(anyLong());
+        verify(vectorDocumentRepository, times(1)).insert(any(VectorDocument.class));
+    }
+
+    @Test
+    void embedDocumentIncremental_allUnchanged_retainsOldChunks() {
+        // 旧 chunk 的 contentSha256 与新内容一致 → 不删除、不插入
+        String content = "unchanged content";
+        String sha = sha256Hex(content);
+        VectorDocument oldDoc = new VectorDocument();
+        oldDoc.setId(1L);
+        oldDoc.setContentSha256(sha);
+
+        when(vectorDocumentRepository.findBySourceUriAndVersionId("/a.md", "v1"))
+                .thenReturn(Collections.singletonList(oldDoc));
+
+        int stored = vectorizationService.embedDocumentIncremental(
+                "1001", "v1", "DOC", "/a.md", content, 1000, 100, "model");
+
+        assertEquals(0, stored);
+        verify(vectorDocumentRepository, never()).deleteById(anyLong());
+        verify(vectorDocumentRepository, never()).insert(any(VectorDocument.class));
+        verify(embeddingModel, never()).embed(anyString());
+    }
+
+    @Test
+    void embedDocumentIncremental_changedChunk_deletesOldAndInsertsNew() {
+        // 旧 chunk 内容变更 → 删除旧 chunk + 插入新 chunk
+        String newContent = "new content";
+        String oldSha = sha256Hex("old content");
+        VectorDocument oldDoc = new VectorDocument();
+        oldDoc.setId(7L);
+        oldDoc.setContentSha256(oldSha);
+
+        when(vectorDocumentRepository.findBySourceUriAndVersionId("/a.md", "v1"))
+                .thenReturn(Collections.singletonList(oldDoc));
+        when(embeddingModel.embed(newContent)).thenReturn(new float[]{0.3f, 0.4f});
+        when(vectorDocumentRepository.insert(any(VectorDocument.class))).thenAnswer(inv -> {
+            inv.getArgument(0, VectorDocument.class).setId(20L);
+            return 1;
+        });
+
+        int stored = vectorizationService.embedDocumentIncremental(
+                "1001", "v1", "DOC", "/a.md", newContent, 1000, 100, "model");
+
+        assertEquals(1, stored);
+        verify(vectorDocumentRepository).deleteById(7L);
+        verify(vectorDocumentRepository, times(1)).insert(any(VectorDocument.class));
+    }
+
+    @Test
+    void embedDocumentIncremental_partialUnchange_keepsSomeDeletesSome() {
+        // 构造可切分为多片的内容：第一片与某个旧 chunk 相同（保留），另有 stale 旧 chunk（删除），其余新片（插入）
+        String content = "part0_content\npart1_new_content";
+        int maxChars = 15;
+        int overlap = 2;
+        // 用与生产代码相同的分片逻辑拿到真实 chunk，用于构造「未变更」旧 chunk 的 contentSha256
+        List<String> realChunks = vectorizationService.chunkDocument(content, maxChars, overlap);
+        assertTrue(realChunks.size() >= 2, "前提：内容应被切分为至少 2 个 chunk");
+
+        String sha0 = sha256Hex(realChunks.get(0));
+        VectorDocument oldMatching = new VectorDocument();
+        oldMatching.setId(1L);
+        oldMatching.setContentSha256(sha0);
+        VectorDocument oldStale = new VectorDocument();
+        oldStale.setId(2L);
+        oldStale.setContentSha256(sha256Hex("stale_content"));
+
+        when(vectorDocumentRepository.findBySourceUriAndVersionId("/a.md", "v1"))
+                .thenReturn(Arrays.asList(oldMatching, oldStale));
+        when(embeddingModel.embed(anyString())).thenReturn(new float[]{0.5f});
+        when(vectorDocumentRepository.insert(any(VectorDocument.class))).thenAnswer(inv -> {
+            inv.getArgument(0, VectorDocument.class).setId(30L);
+            return 1;
+        });
+
+        int stored = vectorizationService.embedDocumentIncremental(
+                "1001", "v1", "DOC", "/a.md", content, maxChars, overlap, "model");
+
+        assertTrue(stored >= 1, "应至少插入一个新 chunk");
+        verify(vectorDocumentRepository).deleteById(2L);          // stale 被删除
+        verify(vectorDocumentRepository, never()).deleteById(1L); // matching 保留
+    }
+
+    @Test
+    void embedDocumentIncremental_emptyContent_returnsZero() {
+        int stored = vectorizationService.embedDocumentIncremental(
+                "1001", "v1", "DOC", "/a.md", "", 1000, 100, "model");
+
+        assertEquals(0, stored);
+        verify(vectorDocumentRepository, never()).findBySourceUriAndVersionId(anyString(), anyString());
+        verify(vectorDocumentRepository, never()).insert(any(VectorDocument.class));
+    }
+
+    @Test
+    void deleteBySourceUriAndVersion_delegatesToRepo() {
+        when(vectorDocumentRepository.deleteBySourceUriAndVersion("/a.md", "v1")).thenReturn(3);
+
+        int deleted = vectorizationService.deleteBySourceUriAndVersion("/a.md", "v1");
+
+        assertEquals(3, deleted);
+        verify(vectorDocumentRepository).deleteBySourceUriAndVersion("/a.md", "v1");
+        // 不应调用跨版本的 deleteBySourceUri
+        verify(vectorDocumentRepository, never()).deleteBySourceUri(anyString());
+    }
+
+    @Test
+    void deleteBySourceUriAndVersion_blankInput_returnsZero() {
+        int deleted = vectorizationService.deleteBySourceUriAndVersion("", "v1");
+        assertEquals(0, deleted);
+        verify(vectorDocumentRepository, never()).deleteBySourceUriAndVersion(anyString(), anyString());
+    }
+
+    @Test
+    void findBySourceUriAndVersionId_delegatesToRepo() {
+        VectorDocument doc = new VectorDocument();
+        doc.setId(1L);
+        doc.setContentSha256("abc");
+        List<VectorDocument> expected = Collections.singletonList(doc);
+        when(vectorDocumentRepository.findBySourceUriAndVersionId("/a.md", "v1")).thenReturn(expected);
+
+        List<VectorDocument> result = vectorizationService.findBySourceUriAndVersionId("/a.md", "v1");
+
+        assertSame(expected, result);
+        verify(vectorDocumentRepository).findBySourceUriAndVersionId("/a.md", "v1");
+    }
+
+    @Test
+    void findBySourceUriAndVersionId_blankInput_returnsEmpty() {
+        List<VectorDocument> result = vectorizationService.findBySourceUriAndVersionId("", "v1");
+        assertTrue(result.isEmpty());
+        verify(vectorDocumentRepository, never()).findBySourceUriAndVersionId(anyString(), anyString());
+    }
+
+    /** 与 VectorizationService.sha256Hex 相同算法的测试辅助方法 */
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

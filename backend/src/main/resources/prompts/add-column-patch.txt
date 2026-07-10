@@ -14,8 +14,16 @@
 2. impactedFiles: 仅列影响子图内的文件，每项附 reason
 3. validationGates: ["STATIC","UNIT","DB","MIGRATION"]
 4. newTests: DB 断言（字段存在 + 默认值）+ 实体字段单测
-5. riskLevel: 评估（BREAKING → HIGH，新增可空字段 → LOW）
+5. riskLevel 评估标准：
+   - HIGH：NOT NULL 无默认值 / 涉及唯一索引 / 涉及外键
+   - MEDIUM：NOT NULL 有默认值 / 涉及业务逻辑改动
+   - LOW：可空字段 / 纯扩展
 6. manualReviewNeeded: 含 NOT NULL 无默认值 / 涉及唯一索引时 true
+
+## 约束
+- patchText 必须是可执行的 unified diff 格式。
+- evidenceIds 引用影响子图中的证据 ID，无证据的文件不要出现在 patches 中。
+- 如果 {impactedFiles} 为空，说明影响子图未建立，riskLevel=HIGH 并在 manualReviewNeeded=true。
 
 ## 输出格式
 ```json

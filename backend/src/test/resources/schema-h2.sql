@@ -187,6 +187,8 @@ CREATE TABLE lg_ai_scan_job (
     version_id      VARCHAR(36) NOT NULL,
     status          VARCHAR(32) NOT NULL DEFAULT 'PENDING',
     config_json     TEXT,
+    changed_file_paths_json TEXT,
+    affected_node_ids_json TEXT,
     error_message   TEXT,
     current_step    VARCHAR(64),
     started_at      TIMESTAMP,

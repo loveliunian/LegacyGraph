@@ -56,5 +56,7 @@ public class ScanProgressResponse {
         private LocalDateTime finishedAt;
         /** 本阶段预估剩余时间（秒），-1 表示无法预估 */
         private Long estimatedSecondsRemaining;
+        /** 子阶段列表（仅 AI_ORCHESTRATION 使用，展开显示 AI 内部各子环节） */
+        private List<TaskProgress> subPhases;
     }
 }

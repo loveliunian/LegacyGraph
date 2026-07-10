@@ -8,11 +8,21 @@
 - 图谱依赖节点: {dependencies}
 
 ## 分析要求
-1. 判断修改类型 changeType：BUGFIX、FEATURE、BREAKING_CHANGE、REFACTOR。
-2. 评估业务影响严重程度 severity：HIGH、MEDIUM、LOW。
+1. 判断修改类型 changeType：BUGFIX（缺陷修复）、FEATURE（新功能）、BREAKING_CHANGE（破坏性变更）、REFACTOR（重构）。
+2. 评估业务影响严重程度 severity：HIGH（核心功能受影响/破坏性变更）、MEDIUM（局部功能受影响）、LOW（仅内部实现调整，无外部影响）。
 3. 预测需要重跑的测试范围 affectedTests。
 4. 建议重点回归范围 regressionScope。
 5. 列出受影响的关键节点 impactedNodes（来自依赖节点，勿编造）。
+
+## 分层输出指导
+- **直接影响**：变更目标自身的改动。
+- **间接影响**：沿调用链/依赖链向上追溯的受影响方。
+- **数据影响**：如果涉及表结构/字段变更，列出受影响的 Mapper/Service/DTO。
+
+## 证据约束
+- impactedNodes 只能来自输入的 {dependencies}，不得编造。
+- 如果依赖节点为空或不足以判断，severity 降为 LOW 并在 summary 中说明依据不足。
+- affectedTests 和 regressionScope 基于 impactedNodes 推断，给出推断依据。
 
 ## 输出格式
 请以严格 JSON 格式输出：

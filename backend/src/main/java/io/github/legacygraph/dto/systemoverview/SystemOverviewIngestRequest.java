@@ -68,6 +68,12 @@ public class SystemOverviewIngestRequest {
          */
         private String codeModuleType;
 
+        /**
+         * 数据表原始访问方向（READS / WRITES / JOINS）。
+         * 为空表示只有表集合、没有可核验的访问方向，服务层不得据此臆造 READS 或 WRITES。
+         */
+        private String tableAccessType;
+
         /** 数据表（逗号分隔，如 "lg_project,lg_code_repo"） */
         private String dataTables;
 

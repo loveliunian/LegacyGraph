@@ -42,6 +42,8 @@ class SystemOverviewServiceTest {
         service = new SystemOverviewService(knowledgeClaimService, graphDao);
         lenient().when(knowledgeClaimService.listClaims(anyString(), anyString(), any(), any(), any(), any(), anyInt()))
                 .thenReturn(List.of());
+        lenient().when(knowledgeClaimService.countClaimsByStatus(anyString(), anyString()))
+                .thenReturn(Map.of());
         // 图谱查询默认返回空，让现有测试回退到 Claim/内置映射
         lenient().when(graphDao.businessDomainContains(anyString(), anyString())).thenReturn(List.of());
         lenient().when(graphDao.apiImplementationRelations(anyString(), anyString())).thenReturn(List.of());
@@ -95,7 +97,12 @@ class SystemOverviewServiceTest {
 
     @Test
     void generateMarkdown_includesDetailedGraphRelationsAndImpactViews() {
-        when(knowledgeClaimService.listClaims(eq("p2"), eq("v2"), any(), any(), isNull(), any(), anyInt()))
+        // generateMarkdown 按 status 分区加载 Claim，需分别 stub CONFIRMED / PENDING_CONFIRM / INFERRED
+        when(knowledgeClaimService.listClaims(eq("p2"), eq("v2"), any(), any(), eq("CONFIRMED"), any(), anyInt()))
+                .thenReturn(List.of());
+        when(knowledgeClaimService.listClaims(eq("p2"), eq("v2"), any(), any(), eq("INFERRED"), any(), anyInt()))
+                .thenReturn(List.of());
+        when(knowledgeClaimService.listClaims(eq("p2"), eq("v2"), any(), any(), eq("PENDING_CONFIRM"), any(), anyInt()))
                 .thenReturn(List.of(
                         claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "POST /orders", "DOC", "PENDING_CONFIRM"),
                         claim("BusinessDomain", "订单域", "CONTAINS", "Feature", "POST /orders/refund", "DOC", "PENDING_CONFIRM"),
@@ -116,13 +123,87 @@ class SystemOverviewServiceTest {
         assertTrue(md.contains("| BusinessDomain | 订单域 | CONTAINS | Feature | POST /orders | DOC | PENDING_CONFIRM | 0.6000 |"));
         assertTrue(md.contains("| Feature | POST /orders/refund | USES | Service | RefundService | DOC | PENDING_CONFIRM | 0.6000 |"));
         assertTrue(md.contains("## 5. 按业务域拆解"));
-        assertTrue(md.contains("- API：`POST /orders`"));
-        assertTrue(md.contains("- Controller：`RefundController`"));
+        assertFalse(md.contains("- API：`POST /orders`"), "待确认关系不得进入正文按域拆解");
         assertTrue(md.contains("## 6. 数据表影响面"));
-        assertTrue(md.contains("| lg_refund_order | 订单域 | POST /orders/refund | RefundController | RefundService |"));
+        assertFalse(md.contains("| lg_refund_order | 订单域 | POST /orders/refund | RefundController | RefundService |"),
+                "待确认关系不得进入正文数据表影响面");
         assertTrue(md.contains("## 7. Mermaid 关系图"));
         assertTrue(md.contains("\"订单域\" -->|CONTAINS| \"POST /orders\""));
         assertTrue(md.contains("## 11. QA 文档基础"));
+    }
+
+    // ==================== P0-4: 统一报告真值口径 ====================
+
+    @Test
+    void generateMarkdown_partitionsBodyAndAppendixByTruthPolicy() {
+        // 正文：CONFIRMED Claim
+        when(knowledgeClaimService.listClaims(eq("p5"), eq("v5"), any(), any(), eq("CONFIRMED"), any(), anyInt()))
+                .thenReturn(List.of(
+                        claim("Service", "OrderService", "READS", "Table", "lg_order", "CODE", "CONFIRMED")
+                ));
+        when(knowledgeClaimService.listClaims(eq("p5"), eq("v5"), any(), any(), eq("INFERRED"), any(), anyInt()))
+                .thenReturn(List.of());
+        // 附录：PENDING_CONFIRM Claim
+        when(knowledgeClaimService.listClaims(eq("p5"), eq("v5"), any(), any(), eq("PENDING_CONFIRM"), any(), anyInt()))
+                .thenReturn(List.of(
+                        claim("Feature", "下单", "USES", "Service", "OrderService", "DOC", "PENDING_CONFIRM")
+                ));
+
+        String md = service.generateMarkdown("p5", "v5");
+
+        // 正文（已确认结论）仅含 CONFIRMED
+        assertTrue(md.contains("### 正文（已确认结论）"));
+        assertTrue(md.contains("| Service | OrderService | READS | Table | lg_order | CODE | CONFIRMED |"));
+        // 附录（待确认/推断）含 PENDING_CONFIRM 并明确标识
+        assertTrue(md.contains("### 附录（待确认/推断）"));
+        assertTrue(md.contains("> 以下关系尚未经确认，仅供参考"));
+        assertTrue(md.contains("| Feature | 下单 | USES | Service | OrderService | DOC | PENDING_CONFIRM |"));
+    }
+
+    @Test
+    void generateMarkdown_primaryMappingsExcludePendingClaims() {
+        List<KnowledgeClaim> confirmed = List.of(
+                claim("BusinessDomain", "确认域", "CONTAINS", "Feature", "确认能力", "CODE", "CONFIRMED"),
+                claim("Feature", "确认能力", "IMPLEMENTED_BY", "Controller", "ConfirmedController", "CODE", "CONFIRMED"),
+                claim("Feature", "确认能力", "USES", "Service", "ConfirmedService", "CODE", "CONFIRMED"),
+                claim("Service", "ConfirmedService", "READS", "Table", "lg_confirmed", "SQL_PARSE", "CONFIRMED")
+        );
+        List<KnowledgeClaim> pending = List.of(
+                claim("BusinessDomain", "待确认域", "CONTAINS", "Feature", "待确认能力", "DOC_AI", "PENDING_CONFIRM"),
+                claim("Feature", "待确认能力", "IMPLEMENTED_BY", "Controller", "PendingController", "DOC_AI", "PENDING_CONFIRM")
+        );
+        when(knowledgeClaimService.listClaims(eq("truth-p1"), eq("v1"), any(), any(), eq("CONFIRMED"), any(), anyInt()))
+                .thenReturn(confirmed);
+        when(knowledgeClaimService.listClaims(eq("truth-p1"), eq("v1"), any(), any(), eq("PENDING_CONFIRM"), any(), anyInt()))
+                .thenReturn(pending);
+        when(knowledgeClaimService.listClaims(eq("truth-p1"), eq("v1"), any(), any(), eq("INFERRED"), any(), anyInt()))
+                .thenReturn(List.of());
+
+        String markdown = service.generateMarkdown("truth-p1", "v1");
+        String primaryMappings = markdown.substring(0, markdown.indexOf("## 3. 图谱关系统计"));
+
+        assertTrue(primaryMappings.contains("确认域"));
+        assertFalse(primaryMappings.contains("待确认域"));
+        assertTrue(markdown.contains("待确认域"), "待确认事实应仅在附录明细中保留");
+    }
+
+    @Test
+    void generateMarkdown_showsCoverageHintWhenTruncated() {
+        // 正文：仅 1 条 CONFIRMED，但总数 10 → 触发覆盖率提示
+        when(knowledgeClaimService.listClaims(eq("p6"), eq("v6"), any(), any(), eq("CONFIRMED"), any(), anyInt()))
+                .thenReturn(List.of(
+                        claim("Service", "OrderService", "READS", "Table", "lg_order", "CODE", "CONFIRMED")
+                ));
+        when(knowledgeClaimService.listClaims(eq("p6"), eq("v6"), any(), any(), eq("INFERRED"), any(), anyInt()))
+                .thenReturn(List.of());
+        when(knowledgeClaimService.listClaims(eq("p6"), eq("v6"), any(), any(), eq("PENDING_CONFIRM"), any(), anyInt()))
+                .thenReturn(List.of());
+        when(knowledgeClaimService.countClaimsByStatus(eq("p6"), eq("v6")))
+                .thenReturn(Map.of("CONFIRMED", 10L, "PENDING_CONFIRM", 0L));
+
+        String md = service.generateMarkdown("p6", "v6");
+
+        assertTrue(md.contains("⚠ 覆盖 1/10，尚有 9 条未展示"));
     }
 
     @Test

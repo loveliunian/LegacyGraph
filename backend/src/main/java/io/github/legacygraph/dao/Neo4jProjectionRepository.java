@@ -344,17 +344,21 @@ public class Neo4jProjectionRepository {
      * 但 Mapper→SqlStatement→Table 这条链通常是通的。本查询直接以 Mapper 为锚补全数据表访问关系，
      * 让「哪些数据库表」这类列举题在向量化后有结构化内容可召回。
      * </p>
-     * <p>返回字段：mapperKey / mapperName / tables（List&lt;String&gt;，去重）。</p>
+     * <p>每行返回一条精确访问关系：mapperKey / mapperName / tableName / accessType /
+     * accessSourceType / accessConfidence。不能聚合成 tables，否则 READS 与 WRITES 的方向会丢失。</p>
      */
     public List<Map<String, Object>> tableAccessRelations(String projectId, String versionId) {
         try (Session session = neo4jDriver.session()) {
             String cypher =
                 "MATCH (mp:Mapper {projectId: $projectId, versionId: $versionId}) " +
-                "MATCH (mp)-[:EXECUTES]->(:SqlStatement)-[:READS|WRITES|JOINS]->(t:Table) " +
+                "MATCH (mp)-[:EXECUTES]->(:SqlStatement)-[access:READS|WRITES|JOINS]->(t:Table) " +
                 "RETURN mp.nodeKey AS mapperKey, " +
                 "       coalesce(nullIf(mp.displayName, ''), nullIf(mp.nodeName, ''), mp.nodeKey) AS mapperName, " +
-                "       [x IN collect(DISTINCT coalesce(nullIf(t.nodeName, ''), t.nodeKey)) WHERE x IS NOT NULL] AS tables " +
-                "ORDER BY mapperName";
+                "       coalesce(nullIf(t.nodeName, ''), t.nodeKey) AS tableName, " +
+                "       type(access) AS accessType, " +
+                "       access.sourceType AS accessSourceType, " +
+                "       access.confidence AS accessConfidence " +
+                "ORDER BY mapperName, accessType, tableName";
             Result result = session.run(cypher, Map.of(
                     "projectId", projectId,
                     "versionId", normalizeId(versionId)));

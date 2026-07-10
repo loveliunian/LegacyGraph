@@ -49,4 +49,10 @@ public class SourceAsset {
 
     /** 是否已删除（用于 tombstone） */
     private boolean deleted;
+
+    /** 文件内容缓存：adapter 执行前预读一次，避免 supports()/extract() 重复读文件 */
+    private transient String cachedContent;
+
+    public String getCachedContent() { return cachedContent; }
+    public void setCachedContent(String cachedContent) { this.cachedContent = cachedContent; }
 }

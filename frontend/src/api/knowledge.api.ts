@@ -76,15 +76,15 @@ export interface PageResult<T> {
 
 export const knowledgeApi = {
   listClaims(projectId: string, params?: KnowledgeClaimQuery) {
-    return get<KnowledgeClaim[]>(`/lg/projects/${projectId}/knowledge/claims`, params)
+    return get<KnowledgeClaim[]>(`/lg/projects/${encodeURIComponent(projectId)}/knowledge/claims`, params)
   },
   getClaim(projectId: string, id: string) {
-    return get<KnowledgeClaim>(`/lg/projects/${projectId}/knowledge/claims/${id}`)
+    return get<KnowledgeClaim>(`/lg/projects/${encodeURIComponent(projectId)}/knowledge/claims/${encodeURIComponent(id)}`)
   },
   listGaps(projectId: string, params?: GapTaskQuery) {
-    return get<GapTaskView[]>(`/lg/projects/${projectId}/knowledge/gaps`, params)
+    return get<GapTaskView[]>(`/lg/projects/${encodeURIComponent(projectId)}/knowledge/gaps`, params)
   },
   resolveGap(projectId: string, id: string) {
-    return post(`/lg/projects/${projectId}/knowledge/gaps/${id}/resolve`, {})
+    return post(`/lg/projects/${encodeURIComponent(projectId)}/knowledge/gaps/${encodeURIComponent(id)}/resolve`, {})
   },
 }

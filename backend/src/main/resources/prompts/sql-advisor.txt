@@ -19,11 +19,14 @@
 4. LIKE 前缀模糊匹配（'%xxx' 导致索引失效）
 5. 隐式类型转换、函数包裹列导致索引失效
 6. 不合理的 JOIN / 笛卡尔积 / 大结果集未分页
+7. 子查询可优化为 JOIN
+8. OR 条件导致索引失效
 
 ## 字段约束
-- severity 取值：HIGH、MEDIUM、LOW。
+- severity 取值：HIGH（可能导致慢查询/锁表）、MEDIUM（性能下降风险）、LOW（优化建议）。
 - 每个问题给出 issueType、说明 description、优化建议 suggestion。
 - 如能给出优化后的 SQL，填入 optimizedSql；否则置空字符串。
+- overallRisk 取最高 severity 的问题等级。
 
 ## 输出格式
 请以严格 JSON 格式输出：

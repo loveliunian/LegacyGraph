@@ -1,6 +1,7 @@
 package io.github.legacygraph.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.common.ScanStep;
 import io.github.legacygraph.dto.AiScanConfig;
@@ -17,8 +18,11 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -66,6 +70,23 @@ public class AiScanOrchestrator {
      * 基础扫描完成后，由 AiScanJobWorker 定期拉取 PENDING job 异步执行。
      */
     public void enqueue(String projectId, String versionId, AiScanConfig config) {
+        enqueue(projectId, versionId, config, Collections.emptySet(), Collections.emptySet());
+    }
+
+    /**
+     * 将 AI 增强任务排入异步队列，携带增量上下文（变更文件路径和受影响节点 ID）。
+     *
+     * <p>增量上下文存储在 AiScanJob 的 changedFilePathsJson / affectedNodeIdsJson 字段中，
+     * orchestrate 阶段通过 jobId 读取并填入 StepExecutionContext，使 AI 步骤能缩小处理范围。</p>
+     *
+     * @param projectId        项目 ID
+     * @param versionId        扫描版本 ID
+     * @param config           AI 编排配置
+     * @param changedFilePaths 变更文件路径集合（首次扫描传空集合）
+     * @param affectedNodeIds  受影响节点 ID 集合（BlastRadius 分析产生，无则传空集合）
+     */
+    public void enqueue(String projectId, String versionId, AiScanConfig config,
+                        Set<String> changedFilePaths, Set<String> affectedNodeIds) {
         AiScanJob job = new AiScanJob();
         job.setProjectId(projectId);
         job.setVersionId(versionId);
@@ -75,10 +96,24 @@ public class AiScanOrchestrator {
         } catch (Exception e) {
             log.warn("Failed to serialize AI config for job: {}", e.getMessage());
         }
+        // 序列化增量上下文到 AiScanJob
+        try {
+            if (changedFilePaths != null && !changedFilePaths.isEmpty()) {
+                job.setChangedFilePathsJson(objectMapper.writeValueAsString(changedFilePaths));
+            }
+            if (affectedNodeIds != null && !affectedNodeIds.isEmpty()) {
+                job.setAffectedNodeIdsJson(objectMapper.writeValueAsString(affectedNodeIds));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to serialize incremental context for job: {}", e.getMessage());
+        }
         job.setCreatedAt(LocalDateTime.now());
         job.setUpdatedAt(LocalDateTime.now());
         aiScanJobRepository.insert(job);
-        log.info("AI scan job enqueued: projectId={}, versionId={}, jobId={}", projectId, versionId, job.getId());
+        log.info("AI scan job enqueued: projectId={}, versionId={}, jobId={}, changedFiles={}, affectedNodes={}",
+                projectId, versionId, job.getId(),
+                changedFilePaths != null ? changedFilePaths.size() : 0,
+                affectedNodeIds != null ? affectedNodeIds.size() : 0);
 
         // 创建 AI_ORCHESTRATION 类型的 ScanTask（状态为 QUEUED）
         // 让前端进度 API 能实时看到该阶段，避免显示为"已跳过"
@@ -140,20 +175,89 @@ public class AiScanOrchestrator {
         // enqueue 时创建了 AI_ORCHESTRATION 任务（QUEUED），这里标记 RUNNING
         markAiOrchestrationRunning(projectId, versionId);
 
+        // 从 AiScanJob 读取增量上下文（enqueue 时存储），填入 StepExecutionContext
+        Set<String> changedFilePaths = Collections.emptySet();
+        Set<String> affectedNodeIds = Collections.emptySet();
+        boolean incremental = false;
+        if (jobId != null) {
+            try {
+                AiScanJob job = aiScanJobRepository.selectById(jobId);
+                if (job != null) {
+                    changedFilePaths = deserializeStringSet(job.getChangedFilePathsJson());
+                    affectedNodeIds = deserializeStringSet(job.getAffectedNodeIdsJson());
+                    incremental = !changedFilePaths.isEmpty();
+                }
+            } catch (Exception e) {
+                log.warn("Failed to read incremental context from AiScanJob: jobId={}, error={}",
+                        jobId, e.getMessage());
+            }
+        }
+
         StepExecutionContext ctx = StepExecutionContext.builder()
                 .projectId(projectId)
                 .versionId(versionId)
                 .config(config)
                 .cancellationChecker(isCancelled)
+                .changedFilePaths(changedFilePaths)
+                .affectedNodeIds(affectedNodeIds)
+                .incremental(incremental)
                 .build();
 
         boolean succeeded = false;
         try {
-            // 按 order 遍历各步骤执行器：先门控判断（shouldExecute），再检查取消，
-            // 再推进状态机步骤（updateStep），最后 execute。
-            // DOC_EXTRACT/CODE_EXTRACT 顺序执行（共享抽取线程池 4 路 LLM）。
+            // 按 order 分组：order<=2 的步骤（DOC_EXTRACT/CODE_EXTRACT）无数据依赖、
+            // 使用独立线程池与独立数据源，可并行执行；order>=3 的步骤串行执行。
             // AI_GAP_FINDING 与 AI_CODE_UNDERSTANDING 同为 ENHANCE 步骤，各自 updateStep(ENHANCE)（幂等，可接受）。
+            List<AiScanStepExecutor> parallelGroup = new ArrayList<>();
+            List<AiScanStepExecutor> serialGroup = new ArrayList<>();
             for (AiScanStepExecutor executor : stepExecutors) {
+                if (executor.getOrder() <= 2) {
+                    parallelGroup.add(executor);
+                } else {
+                    serialGroup.add(executor);
+                }
+            }
+
+            // 并行执行 order<=2：不用 commonPool（避免与其他任务竞争），直接起线程
+            // （编排器本身已在 AiScanJobWorker 异步线程中运行）。
+            // 并行组内任一步骤异常不中断另一步骤（try-catch 在每个线程内）。
+            if (!parallelGroup.isEmpty()) {
+                if (isCancelled != null && isCancelled.getAsBoolean()) {
+                    log.info("AI orchestration cancelled before parallel steps: versionId={}", versionId);
+                    updateStep(jobId, ScanStep.FAILED);
+                    return;
+                }
+                List<Thread> threads = new ArrayList<>();
+                for (AiScanStepExecutor executor : parallelGroup) {
+                    if (!executor.shouldExecute(ctx)) {
+                        continue;
+                    }
+                    Thread t = new Thread(() -> {
+                        try {
+                            updateStep(jobId, executor.getScanStep());
+                            executor.execute(ctx);
+                        } catch (Exception e) {
+                            // 异常隔离：一个并行步骤失败不中断另一个
+                            log.error("Parallel step {} failed: {}", executor.getStepName(), e.getMessage(), e);
+                        }
+                    }, "ai-step-" + executor.getStepName());
+                    t.setDaemon(true);
+                    threads.add(t);
+                    t.start();
+                }
+                for (Thread t : threads) {
+                    try {
+                        t.join();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Interrupted while waiting for parallel step: {}", e.getMessage());
+                    }
+                }
+            }
+
+            // 串行执行 order>=3：先门控判断（shouldExecute），再检查取消，
+            // 再推进状态机步骤（updateStep），最后 execute。
+            for (AiScanStepExecutor executor : serialGroup) {
                 if (!executor.shouldExecute(ctx)) {
                     continue;
                 }
@@ -304,5 +408,19 @@ public class AiScanOrchestrator {
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);
+    }
+
+    /** 将 JSON 字符串反序列化为 String 集合，null 或空返回空集合 */
+    private Set<String> deserializeStringSet(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptySet();
+        }
+        try {
+            Set<String> result = objectMapper.readValue(json, new TypeReference<Set<String>>() {});
+            return result != null ? new LinkedHashSet<>(result) : Collections.emptySet();
+        } catch (Exception e) {
+            log.warn("Failed to deserialize string set from JSON: {}", e.getMessage());
+            return Collections.emptySet();
+        }
     }
 }

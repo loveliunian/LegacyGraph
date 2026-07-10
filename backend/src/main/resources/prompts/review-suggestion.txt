@@ -20,9 +20,16 @@
 4. 给出推荐动作 recommendation，取值必须是：APPROVE（通过）、REJECT（拒绝）、NEED_MORE_INFO（需补充信息）。
 5. 给出推荐理由（reasoning）。
 
+## 判断指导
+- 当前置信度 {currentConfidence} ≥ 0.85 且无冲突证据 → 倾向 APPROVE。
+- 有冲突证据但可解释 → NEED_MORE_INFO，列出需补充的信息。
+- 冲突证据与支持证据直接矛盾 → REJECT。
+- 不要因证据不足就 APPROVE；不确定时选 NEED_MORE_INFO。
+
 ## 重要约束
 - 证据明显不足或互相矛盾时，倾向 NEED_MORE_INFO，不要硬下结论。
 - 不要编造证据中不存在的事实。
+- supportingPoints 和 conflictingPoints 要引用具体证据内容。
 
 ## 输出格式
 请以严格 JSON 格式输出，结构如下：

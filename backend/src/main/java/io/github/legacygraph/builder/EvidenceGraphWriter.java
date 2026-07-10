@@ -15,8 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
@@ -140,8 +144,10 @@ public class EvidenceGraphWriter {
             Neo4jGraphDao.NodeUpsert upsert = neo4jGraphDao.mergeNode(node);
             GraphNode merged = upsert.node();
 
-            // 仅新建节点时创建证据（命中已存在节点则跳过，避免重复 evidence）
-            if (upsert.created() && (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType()))) {
+            // 移除 created() 限制：已存在节点也创建证据记录，使同一节点的多来源证据不丢失。
+            // createEvidenceForNode() 内部通过 locationHash 生成 contentHash，EvidenceRepository.insertOrIgnore()
+            // 按 contentHash 去重；NodeEvidence 的 (nodeId, evidenceId) 由 insertOrIgnore 防重复。
+            if (hasText(claim.getSourcePath()) || isAiSource(claim.getSourceType())) {
                 try {
                     pgEvidenceTxExecutor.execute(() -> createEvidenceForNode(merged, claim.getSourceType(), claim.getSourcePath(),
                             claim.getStartLine(), claim.getEndLine()));
@@ -203,16 +209,14 @@ public class EvidenceGraphWriter {
         }
         GraphEdge merged = upsert.edge();
 
-        // 仅新建边时继承源节点证据（命中已存在边则跳过，避免重复继承）
-        if (upsert.created()) {
-            try {
-                pgEvidenceTxExecutor.execute(() -> inheritEvidenceForEdge(merged, claim.getFromNodeId()));
-            } catch (Exception pgEx) {
-                // 跨存储补偿：Neo4j 已写入但 PG 证据继承失败 → 标记边 INCOMPLETE
-                log.error("PG evidence inherit failed for Neo4j edge {} (idempotencyKey={}): {} — marking INCOMPLETE",
-                        merged.getId(), claim.getIdempotencyKey(), pgEx.getMessage());
-                markEdgeIncomplete(merged.getId(), pgEx.getMessage());
-            }
+        // 每次 upsert 都同步源节点证据：节点可在边创建后新增证据；关联表以唯一键幂等去重。
+        try {
+            pgEvidenceTxExecutor.execute(() -> inheritEvidenceForEdge(merged, claim.getFromNodeId()));
+        } catch (Exception pgEx) {
+            // 跨存储补偿：Neo4j 已写入但 PG 证据继承失败 → 标记边 INCOMPLETE
+            log.error("PG evidence inherit failed for Neo4j edge {} (idempotencyKey={}): {} — marking INCOMPLETE",
+                    merged.getId(), claim.getIdempotencyKey(), pgEx.getMessage());
+            markEdgeIncomplete(merged.getId(), pgEx.getMessage());
         }
 
         return merged;
@@ -290,7 +294,7 @@ public class EvidenceGraphWriter {
             ee.setEvidenceId(persisted.getId());
             ee.setRelationType(role.name());
             ee.setCreatedAt(LocalDateTime.now());
-            edgeEvidenceRepository.insert(ee);
+            edgeEvidenceRepository.insertOrIgnore(ee);
         }
     }
 
@@ -352,14 +356,19 @@ public class EvidenceGraphWriter {
         evidence.setSourceName(node.getDisplayName());
         evidence.setStartLine(startLine);
         evidence.setEndLine(endLine);
-        // 基于位置签名生成 contentHash，使 DB 层唯一索引也能拦截重复
+        
+        String content = readSourceContent(sourcePath, startLine, endLine);
+        if (content != null && !content.isBlank()) {
+            evidence.setContent(content);
+        }
+        
         evidence.setContentHash(locationHash(node.getProjectId(), node.getVersionId(),
                 evidence.getEvidenceType(), sourcePath, node.getDisplayName(),
                 startLine, endLine));
-        // 构造可读摘要
+        
         evidence.setSummary(sourceType + " 证据: " + (node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName())
                 + (sourcePath != null ? " (" + sourcePath + ")" : ""));
-        // 无内容证据默认 INTERNAL（节点指针型证据不含源码正文）
+        
         if (evidence.getPrivacyLevel() == null) {
             evidence.setPrivacyLevel(PrivacyLevel.INTERNAL.name());
         }
@@ -388,7 +397,8 @@ public class EvidenceGraphWriter {
         nodeEvidence.setEvidenceId(persisted.getId());
         nodeEvidence.setRelationType(EvidenceRole.PRIMARY_SOURCE.name());
         nodeEvidence.setCreatedAt(LocalDateTime.now());
-        nodeEvidenceRepository.insert(nodeEvidence);
+        // 已存在节点重复创建证据时，(nodeId, evidenceId) 可能冲突 → insertOrIgnore 忽略重复
+        nodeEvidenceRepository.insertOrIgnore(nodeEvidence);
     }
 
     /**
@@ -411,7 +421,7 @@ public class EvidenceGraphWriter {
             batch.add(ee);
         }
         for (EdgeEvidence ee : batch) {
-            edgeEvidenceRepository.insert(ee);
+            edgeEvidenceRepository.insertOrIgnore(ee);
         }
     }
 
@@ -466,16 +476,13 @@ public class EvidenceGraphWriter {
      * 将源码类型映射为证据类型。
      */
     private String mapSourceTypeToEvidenceType(String sourceType) {
-        if (sourceType == null) return "unknown";
+        if (sourceType == null) return "FILE_LINE";
         return switch (sourceType) {
-            case "CODE_AST" -> "code";
-            case "MYBATIS_XML", "SQL_PARSE" -> "sql";
-            case "FRONTEND_AST" -> "ui";
-            case "DB_METADATA" -> "db";
-            case "DOCUMENT" -> "doc";
-            case "AI_INFERENCE", "DOC_AI" -> "ai";
-            case "RUNTIME_TRACE" -> "runtime";
-            default -> sourceType.toLowerCase();
+            case "CODE_AST", "FRONTEND_AST", "AI_INFERENCE", "RUNTIME_TRACE" -> "FILE_LINE";
+            case "MYBATIS_XML", "SQL_PARSE" -> "SQL_STATEMENT";
+            case "DB_METADATA" -> "DB_SCHEMA";
+            case "DOCUMENT", "DOC_AI" -> "DOC_PARAGRAPH";
+            default -> "FILE_LINE";
         };
     }
 
@@ -580,6 +587,41 @@ public class EvidenceGraphWriter {
 
     /** 写入结果摘要 */
     public record GraphWriteResult(int nodeCount, int edgeCount, int evidenceCount) {}
+
+    /**
+     * 读取源代码文件内容，并提取指定行范围的代码片段。
+     */
+    private String readSourceContent(String sourcePath, Integer startLine, Integer endLine) {
+        if (sourcePath == null || sourcePath.isBlank()) {
+            return null;
+        }
+        try {
+            Path path = Paths.get(sourcePath);
+            if (!Files.exists(path)) {
+                return null;
+            }
+            long size = Files.size(path);
+            if (size > 1024 * 1024) {
+                return null;
+            }
+            String content = Files.readString(path, StandardCharsets.UTF_8);
+            if (content == null || content.isBlank()) {
+                return null;
+            }
+            if (startLine != null && endLine != null) {
+                String[] lines = content.split("\n");
+                int startIdx = Math.max(0, startLine - 1);
+                int endIdx = Math.min(lines.length, endLine);
+                if (startIdx < endIdx) {
+                    return String.join("\n", java.util.Arrays.copyOfRange(lines, startIdx, endIdx));
+                }
+            }
+            int maxLength = 4000;
+            return content.length() > maxLength ? content.substring(0, maxLength) + "..." : content;
+        } catch (IOException e) {
+            return null;
+        }
+    }
 
     /**
      * 基于位置签名生成 SHA-256 哈希，用于节点指针型证据的去重。

@@ -259,6 +259,7 @@ const streamingContent = ref('')
 const streamingEvidences = ref<EvidenceItem[]>([])
 const streamingImpact = ref<any>(null)
 const chatContainer = ref<HTMLElement>()
+const currentStreamController = ref<AbortController | null>(null)
 
 const exampleQuestions = [
   '这个项目用了哪些数据库表？',
@@ -339,9 +340,9 @@ const handleSend = async () => {
   const question = inputText.value.trim()
   if (!question || thinking.value) return
 
-  // 确保在一个对话中（自动复用最近对话，无对话时创建新的）
   await ensureConversation()
 
+  const streamConvId = currentConversationId.value
   messages.value.push({ role: 'user', content: question })
   inputText.value = ''
   thinking.value = true
@@ -350,29 +351,32 @@ const handleSend = async () => {
   await scrollToBottom()
 
   try {
-    qaApi.askStreamFetch(
+    currentStreamController.value = qaApi.askStreamFetch(
       {
         question,
         projectId,
-        conversationId: currentConversationId.value || undefined,
+        conversationId: streamConvId || undefined,
       },
       {
         onToken: (token) => {
+          if (currentConversationId.value !== streamConvId) return
           streamingContent.value += token
           scrollToBottom()
         },
         onEvidence: (evidences) => {
+          if (currentConversationId.value !== streamConvId) return
           streamingEvidences.value = evidences
         },
         onImpact: (data) => {
+          if (currentConversationId.value !== streamConvId) return
           streamingImpact.value = data
         },
         onComplete: (data) => {
+          if (currentConversationId.value !== streamConvId) return
           if (data.conversationId) {
             currentConversationId.value = data.conversationId
           }
 
-          // 优先使用后端提取的 answer（纯文本），避免显示原始 JSON
           const finalContent = data.answer || streamingContent.value
           const evidences = data.evidences || streamingEvidences.value || []
           const confidence = data.confidence
@@ -392,10 +396,12 @@ const handleSend = async () => {
           streamingEvidences.value = []
           streamingImpact.value = null
           thinking.value = false
+          currentStreamController.value = null
           scrollToBottom()
           refreshConversations()
         },
         onError: (err) => {
+          if (currentConversationId.value !== streamConvId) return
           console.error('Stream error:', err)
           messages.value.push({
             role: 'assistant',
@@ -404,6 +410,7 @@ const handleSend = async () => {
           streamingContent.value = ''
           streamingEvidences.value = []
           thinking.value = false
+          currentStreamController.value = null
           scrollToBottom()
         },
       }
@@ -427,10 +434,18 @@ const clearChat = () => {
 
 const createNewConversation = async () => {
   try {
+    if (currentStreamController.value) {
+      currentStreamController.value.abort()
+      currentStreamController.value = null
+    }
+    thinking.value = false
     const conv = await qaApi.createConversation(projectId)
     if (conv?.id) {
       currentConversationId.value = conv.id
       messages.value = []
+      streamingContent.value = ''
+      streamingEvidences.value = []
+      streamingImpact.value = null
       await refreshConversations()
     }
   } catch (err) {
@@ -443,13 +458,21 @@ const switchConversation = async (convId: string) => {
   try {
     if (currentConversationId.value === convId) return
 
+    if (currentStreamController.value) {
+      currentStreamController.value.abort()
+      currentStreamController.value = null
+    }
+    thinking.value = false
     currentConversationId.value = convId
+    streamingContent.value = ''
+    streamingEvidences.value = []
+    streamingImpact.value = null
     await loadConversationMessages(convId)
   } catch (error) {
     console.error('switchConversation error:', error)
     ElMessage.error('操作失败')
   }
-  }
+}
 
 const loadConversationMessages = async (convId: string) => {
   try {

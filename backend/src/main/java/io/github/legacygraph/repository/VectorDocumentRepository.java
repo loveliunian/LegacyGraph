@@ -42,10 +42,22 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
     int countBySourceUriAndVersionId(@Param("sourceUri") String sourceUri, @Param("versionId") String versionId);
 
     /**
+     * 查询某个 sourceUri 在指定 versionId 下的所有 chunk（用于 chunk 级 diff 对比）
+     */
+    @Select("SELECT * FROM lg_vector_document WHERE source_uri = #{sourceUri} AND version_id = #{versionId}")
+    List<VectorDocument> findBySourceUriAndVersionId(@Param("sourceUri") String sourceUri, @Param("versionId") String versionId);
+
+    /**
      * 删除某个 sourceUri 的所有向量化记录
      */
     @org.apache.ibatis.annotations.Delete("DELETE FROM lg_vector_document WHERE source_uri = #{sourceUri}")
     int deleteBySourceUri(String sourceUri);
+
+    /**
+     * 按 sourceUri + versionId 精确删除向量记录（修复 deleteBySourceUri 跨版本删除风险）
+     */
+    @org.apache.ibatis.annotations.Delete("DELETE FROM lg_vector_document WHERE source_uri = #{sourceUri} AND version_id = #{versionId}")
+    int deleteBySourceUriAndVersion(@Param("sourceUri") String sourceUri, @Param("versionId") String versionId);
 
     /**
      * 使用 pgvector 余弦相似度查找相似文档（带类型过滤）

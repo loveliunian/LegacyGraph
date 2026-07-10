@@ -109,8 +109,21 @@ public class SystemOverviewService {
      * 生成系统关系总览 Markdown 报告（对齐 02 结构）。
      */
     public String generateMarkdown(String projectId, String versionId) {
-        List<KnowledgeClaim> claims = loadUsableOverviewClaims(projectId, versionId);
-        List<LayerMappingDTO> mappings = buildDynamicMappings(projectId, versionId);
+        // P0-4 统一真值口径：正文仅 CONFIRMED，附录 PENDING_CONFIRM/INFERRED，REJECTED/STALE/CONFLICTED 不进入结论
+        List<KnowledgeClaim> confirmedClaims = loadConfirmedClaims(projectId, versionId);
+        List<KnowledgeClaim> pendingClaims = loadPendingClaims(projectId, versionId);
+        // 向后兼容：统计与 Mermaid 仍使用合并后的可用 Claim（CONFIRMED + PENDING_CONFIRM/INFERRED）
+        List<KnowledgeClaim> claims = new ArrayList<>();
+        claims.addAll(confirmedClaims);
+        claims.addAll(pendingClaims);
+        claims.sort(claimComparator());
+        Map<String, Long> statusCounts = safeCountClaimsByStatus(projectId, versionId);
+        long totalConfirmed = statusCounts.getOrDefault("CONFIRMED", 0L);
+        long totalPending = statusCounts.getOrDefault("PENDING_CONFIRM", 0L)
+                + statusCounts.getOrDefault("INFERRED", 0L);
+        // 结论区的映射只能来自 CONFIRMED Claim；图谱直查与待确认 Claim 仅用于交互视图和附录，
+        // 不能绕过 ReportTruthPolicy 混入业务域映射、贯穿链路和数据表影响面。
+        List<LayerMappingDTO> mappings = buildConfirmedMappings(projectId, confirmedClaims);
         StringBuilder sb = new StringBuilder();
 
         sb.append("# 系统关系总览报告 — 业务/功能/代码/数据\n\n");
@@ -135,7 +148,7 @@ public class SystemOverviewService {
         }
 
         appendGraphStatistics(sb, claims);
-        appendGraphRelationDetails(sb, claims);
+        appendGraphRelationDetails(sb, confirmedClaims, pendingClaims, totalConfirmed, totalPending);
         appendDomainBreakdown(sb, mappings);
         appendTableImpact(sb, mappings);
         appendMermaidGraph(sb, claims);
@@ -293,6 +306,35 @@ public class SystemOverviewService {
                 return fallbackMappings(projectId);
             }
 
+            List<LayerMappingDTO> mappings = buildClaimMappings(claims);
+            if (mappings.isEmpty()) {
+                log.debug("Dynamic projection yielded no mappings, falling back to builtin");
+                return fallbackMappings(projectId);
+            }
+
+            log.info("Dynamic projection: {} mappings from {} claims", mappings.size(), claims.size());
+            return mappings;
+
+        } catch (Exception e) {
+            log.warn("Failed to build dynamic mappings, falling back to builtin: {}", e.getMessage());
+            return fallbackMappings(projectId);
+        }
+    }
+
+    /**
+     * 报告正文只从已确认 Claim 构建映射，禁止图谱直查与 PENDING_CONFIRM 回退绕过真值策略。
+     */
+    private List<LayerMappingDTO> buildConfirmedMappings(String projectId, List<KnowledgeClaim> confirmedClaims) {
+        List<LayerMappingDTO> mappings = buildClaimMappings(confirmedClaims);
+        return mappings.isEmpty() ? fallbackMappings(projectId) : mappings;
+    }
+
+    /** 从给定 Claim 集合投影四层映射；调用方负责先决定真值范围。 */
+    private List<LayerMappingDTO> buildClaimMappings(List<KnowledgeClaim> claims) {
+        if (claims == null || claims.isEmpty()) {
+            return Collections.emptyList();
+        }
+
             // 按 subjectKey 聚合
             Map<String, List<KnowledgeClaim>> bySubject = claims.stream()
                     .filter(c -> c.getSubjectKey() != null)
@@ -381,18 +423,7 @@ public class SystemOverviewService {
                         codeModule, tables.isEmpty() ? null : tables, "DYNAMIC"));
             }
 
-            if (mappings.isEmpty()) {
-                log.debug("Dynamic projection yielded no mappings, falling back to builtin");
-                return fallbackMappings(projectId);
-            }
-
-            log.info("Dynamic projection: {} mappings from {} claims", mappings.size(), claims.size());
             return mappings;
-
-        } catch (Exception e) {
-            log.warn("Failed to build dynamic mappings, falling back to builtin: {}", e.getMessage());
-            return fallbackMappings(projectId);
-        }
     }
 
     // ──────────── 内置映射（对齐 02 §0.1，确定性，CODE 来源）────────────
@@ -514,6 +545,60 @@ public class SystemOverviewService {
         }
     }
 
+    /**
+     * 加载正文用 Claim — 仅 CONFIRMED（P0-4 真值口径）。
+     */
+    private List<KnowledgeClaim> loadConfirmedClaims(String projectId, String versionId) {
+        try {
+            List<KnowledgeClaim> claims = knowledgeClaimService.listClaims(
+                    projectId, versionId, null, null, "CONFIRMED", null, 500);
+            if (claims == null || claims.isEmpty()) {
+                return Collections.emptyList();
+            }
+            return claims.stream()
+                    .filter(ReportTruthPolicy.forBody())
+                    .sorted(claimComparator())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Failed to load confirmed claims: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 加载附录用 Claim — PENDING_CONFIRM / INFERRED（P0-4 真值口径）。
+     * <p>listClaims 的 status 为单值过滤，故分两次查询后合并。</p>
+     */
+    private List<KnowledgeClaim> loadPendingClaims(String projectId, String versionId) {
+        try {
+            List<KnowledgeClaim> pending = knowledgeClaimService.listClaims(
+                    projectId, versionId, null, null, "PENDING_CONFIRM", null, 500);
+            List<KnowledgeClaim> inferred = knowledgeClaimService.listClaims(
+                    projectId, versionId, null, null, "INFERRED", null, 500);
+            List<KnowledgeClaim> result = new ArrayList<>();
+            if (pending != null) result.addAll(pending);
+            if (inferred != null) result.addAll(inferred);
+            return result.stream()
+                    .filter(ReportTruthPolicy.forAppendix())
+                    .sorted(claimComparator())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Failed to load pending/inferred claims: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /** 按状态统计 Claim 数量，用于截断覆盖率提示；异常或空时返回空 Map。 */
+    private Map<String, Long> safeCountClaimsByStatus(String projectId, String versionId) {
+        try {
+            Map<String, Long> counts = knowledgeClaimService.countClaimsByStatus(projectId, versionId);
+            return counts != null ? counts : Collections.emptyMap();
+        } catch (Exception e) {
+            log.warn("Failed to count claims by status: {}", e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+
     private void appendGraphStatistics(StringBuilder sb, List<KnowledgeClaim> claims) {
         sb.append("\n## 3. 图谱关系统计\n\n");
         if (claims.isEmpty()) {
@@ -543,13 +628,39 @@ public class SystemOverviewService {
         }
     }
 
-    private void appendGraphRelationDetails(StringBuilder sb, List<KnowledgeClaim> claims) {
+    /**
+     * 图谱关系明细 — 按 P0-4 真值口径分区生成。
+     * <p>
+     * 正文（已确认结论）仅展示 CONFIRMED Claim；附录展示 PENDING_CONFIRM/INFERRED Claim 并明确标识。
+     * 截断时追加覆盖率提示。
+     * </p>
+     */
+    private void appendGraphRelationDetails(StringBuilder sb, List<KnowledgeClaim> confirmedClaims,
+                                            List<KnowledgeClaim> pendingClaims,
+                                            long totalConfirmed, long totalPending) {
         sb.append("\n## 4. 图谱关系明细\n\n");
-        if (claims.isEmpty()) {
-            sb.append("暂无可展开的 Claim 明细。\n");
-            return;
+
+        // 正文（已确认结论）
+        sb.append("### 正文（已确认结论）\n\n");
+        if (confirmedClaims.isEmpty()) {
+            sb.append("暂无已确认的 Claim 明细。\n");
+        } else {
+            appendClaimTable(sb, confirmedClaims);
+            appendCoverageHint(sb, confirmedClaims.size(), totalConfirmed);
         }
 
+        // 附录（待确认/推断）
+        sb.append("\n### 附录（待确认/推断）\n\n");
+        sb.append("> 以下关系尚未经确认，仅供参考\n\n");
+        if (pendingClaims.isEmpty()) {
+            sb.append("暂无待确认/推断的 Claim。\n");
+        } else {
+            appendClaimTable(sb, pendingClaims);
+            appendCoverageHint(sb, pendingClaims.size(), totalPending);
+        }
+    }
+
+    private void appendClaimTable(StringBuilder sb, List<KnowledgeClaim> claims) {
         sb.append("| 起点类型 | 起点 | 关系 | 终点类型 | 终点 | 来源 | 状态 | 置信度 |\n");
         sb.append("|---|---|---|---|---|---|---|---:|\n");
         for (KnowledgeClaim claim : claims) {
@@ -557,6 +668,13 @@ public class SystemOverviewService {
                     n(claim.getSubjectType()), n(claim.getSubjectKey()), n(claim.getPredicate()),
                     n(claim.getObjectType()), n(claim.getObjectKey()), n(claim.getSourceType()),
                     n(claim.getStatus()), formatConfidence(claim.getConfidence())));
+        }
+    }
+
+    /** 截断覆盖率提示：当展示数小于总数时追加。 */
+    private void appendCoverageHint(StringBuilder sb, int shown, long total) {
+        if (total > 0 && shown < total) {
+            sb.append(String.format("\n> ⚠ 覆盖 %d/%d，尚有 %d 条未展示\n", shown, total, total - shown));
         }
     }
 
@@ -622,6 +740,9 @@ public class SystemOverviewService {
             sb.append("  \"更多关系\" -.-> \"请查看上方图谱关系明细\"\n");
         }
         sb.append("```\n");
+        if (claims.size() > 80) {
+            sb.append(String.format("\n> ⚠ 覆盖 80/%d，尚有 %d 条未展示\n", claims.size(), claims.size() - 80));
+        }
     }
 
     // ──────────── SubTask 15.4: 核心贯穿链路（图谱直查）────────────
@@ -783,6 +904,13 @@ public class SystemOverviewService {
             sb.append("```\n");
             sb.append(String.format("\n（共 %d 个 Package，%d 条 DEPENDS_ON 依赖）\n",
                     packages.size(), edgeCount));
+            // P0-4: 截断提示 — Package 上限 200、依赖边上限 500，命中上限时提示可能截断
+            if (packages.size() >= 200) {
+                sb.append("\n> ⚠ Package 列表已达展示上限（200），可能存在截断\n");
+            }
+            if (edges != null && edges.size() >= 500) {
+                sb.append("\n> ⚠ 依赖边列表已达展示上限（500），可能存在截断\n");
+            }
         } catch (Exception e) {
             log.warn("Failed to append module dependency mermaid: {}", e.getMessage());
             sb.append("模块依赖图生成失败。\n");

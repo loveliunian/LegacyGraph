@@ -11,10 +11,16 @@
 ```
 
 ## 生成要求
-1. commitMessage 遵循 Conventional Commits（feat/fix/refactor/docs/chore 等）。
-2. prTitle 简明扼要。
-3. prBody 概括变更目的、影响范围、测试要点。
-4. 若提供了 issue，在 prBody 末尾关联。
+1. commitMessage 遵循 Conventional Commits（feat/fix/refactor/docs/chore/breaking 等）。
+   - 格式：`type(scope): 简述`，如 `feat(order): 支持订单批量取消`。
+   - breaking change 在 type 后加 `!`，如 `feat(order)!: 重构取消逻辑`。
+2. prTitle 简明扼要，不超过 50 字。
+3. prBody 用 Markdown 格式，包含以下章节：
+   - **变更目的**：为什么做这个改动。
+   - **影响范围**：涉及哪些模块/接口/表。
+   - **测试要点**：如何验证此变更。
+4. 若提供了 issue，在 prBody 末尾关联（如 `Closes #123`）。
+5. changeType 与 commitMessage 的 type 保持一致。
 
 ## 输出格式
 请以严格 JSON 格式输出：
@@ -22,7 +28,7 @@
 {
   "commitMessage": "feat(order): 支持订单批量取消",
   "prTitle": "订单批量取消功能",
-  "prBody": "## 变更目的\n...\n## 影响范围\n...\n## 测试\n...",
+  "prBody": "## 变更目的\n...\n## 影响范围\n...\n## 测试\n...\n\nCloses #123",
   "changeType": "feat"
 }
 ```

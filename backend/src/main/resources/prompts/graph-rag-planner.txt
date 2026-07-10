@@ -5,16 +5,30 @@
 ## 用户问题
 {question}
 
+## 当前查询意图
+{intent}
+
 ## 相关 Claim（知识断言）
 {claims}
 
 ## 规划要求
 
-1. **拆分子问题**：将用户问题拆分为 2-5 个可独立查询的子问题（subQuestions），按优先级排列。
+1. **按意图调整查询策略**：
+   - `FACT_LOOKUP`：1 跳路径即可，优先 Claim 查询，pathDepth=1。
+   - `STRUCTURAL`：2 跳路径，先查模块依赖再查内部结构，pathDepth=2。
+   - `RELATIONAL`：3 跳路径，追踪完整调用/数据流链路，pathDepth=3。
+   - `COMPARATIVE`：2 跳路径，并行查询两个对比实体的子图。
+   - `TEMPORAL`：1 跳即可，重点查节点版本属性。
+   - `EXPLANATION`：2 跳路径，先查结构再查关联规则。
+
+2. **拆分子问题**：将用户问题拆分为 2-5 个可独立查询的子问题（subQuestions），按优先级排列。
    - 每个 subQuestion 包含：targetType（如 Feature / ApiEndpoint / Table / BusinessRule）、具体的 query 描述、priority（HIGH/MEDIUM/LOW）
-2. **Claim 过滤**：设计 ClaimQuery 列表，每条指定 subjectType、predicate、sourceType、minConfidence 等过滤条件，从 Claim 库检索相关断言。
-3. **路径查询**：设计 PathQuery 列表，每条指定 startNodeType（起始节点类型，如 Feature/ApiEndpoint/Table）、relationshipPattern（边类型序列，如 CALLS|HANDLED_BY|READS）、endNodeType（目标节点类型）、pathDepth（最大跳数 1-5）。
-4. **证据类型**：列出回答问题所需的证据类型，只能从以下选择：CLAIM（知识断言）、CODE_AST（代码 AST）、TABLE_SCHEMA（表结构）、API_DOC（接口文档）、TRACE（运行时链路）、TEST_RESULT（测试结果）、MANUAL_REVIEW（人工审核）。
+
+3. **Claim 过滤**：设计 ClaimQuery 列表，每条指定 subjectType、predicate、sourceType、minConfidence 等过滤条件，从 Claim 库检索相关断言。
+
+4. **路径查询**：设计 PathQuery 列表，每条指定 startNodeType（起始节点类型，如 Feature/ApiEndpoint/Table）、relationshipPattern（边类型序列，如 CALLS|HANDLED_BY|READS）、endNodeType（目标节点类型）、pathDepth（最大跳数 1-5）。
+
+5. **证据类型**：列出回答问题所需的证据类型，只能从以下选择：CLAIM（知识断言）、CODE_AST（代码 AST）、TABLE_SCHEMA（表结构）、API_DOC（接口文档）、TRACE（运行时链路）、TEST_RESULT（测试结果）、MANUAL_REVIEW（人工审核）。
 
 ## 输出格式
 {
@@ -38,4 +52,5 @@
 1. 不得编造 Claim 或系统中不存在的接口、表、方法、业务对象。
 2. 如果输入中的 Claim 不足以回答用户问题，设为 needsHumanReview=true 并说明原因。
 3. 优先级排序：先查 Feature 入口（EXPOSED_BY）→ 再查 API 实现（HANDLED_BY/CALLS）→ 再查数据路径（READS/WRITES）→ 最后查规则/权限。
-4. 使用中文输出 reasoning 和所有描述性字段。
+4. pathDepth 不超过当前意图推荐深度（见上方策略表）。
+5. 使用中文输出 reasoning 和所有描述性字段。

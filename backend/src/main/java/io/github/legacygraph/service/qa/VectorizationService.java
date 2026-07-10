@@ -15,7 +15,9 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 向量化服务 - 使用 Spring AI 实现文本向量化
@@ -283,6 +285,134 @@ public class VectorizationService {
         int deleted = vectorDocumentRepository.deleteBySourceUri(sourceUri);
         if (deleted > 0) {
             log.info("Deleted {} vector records for source: {}", deleted, sourceUri);
+        }
+        return deleted;
+    }
+
+    /**
+     * 查询某个 sourceUri 在指定 versionId 下的所有 chunk（用于 chunk 级 diff 对比）
+     *
+     * @param sourceUri 来源文件路径
+     * @param versionId 扫描版本ID
+     * @return 旧 chunk 列表（包含 contentSha256 等字段）
+     */
+    public List<VectorDocument> findBySourceUriAndVersionId(String sourceUri, String versionId) {
+        if (sourceUri == null || sourceUri.isBlank() || versionId == null || versionId.isBlank()) {
+            return Collections.emptyList();
+        }
+        return vectorDocumentRepository.findBySourceUriAndVersionId(sourceUri, versionId);
+    }
+
+    /**
+     * 增量向量化：chunk 级 diff，仅删除变更的旧 chunk + 插入新 chunk，未变更的保留不动。
+     *
+     * <p>流程：
+     * <ol>
+     *   <li>分新 chunk（复用 chunkDocument 分片逻辑）</li>
+     *   <li>计算每个新 chunk 的 contentSha256</li>
+     *   <li>查询旧 chunk 列表</li>
+     *   <li>对比 contentSha256：旧 chunk 的 hash 不在新集合中 → 删除；新 chunk 的 hash 不在旧集合中 → 插入</li>
+     *   <li>hash 在两侧都存在的 chunk 保留不动</li>
+     * </ol>
+     * </p>
+     *
+     * <p>注意：与 {@link #embedDocument} 不同，本方法不做 countBySourceUriAndVersionId &gt; 0 的前置去重跳过检查。</p>
+     *
+     * @param projectId          项目ID
+     * @param versionId          扫描版本ID
+     * @param chunkType          分片类型
+     * @param sourceUri           来源文件路径
+     * @param content             完整文本内容
+     * @param maxChars            每片最大字符数
+     * @param overlapChars        重叠字符数
+     * @param embeddingModelName embedding 模型名
+     * @return 本次新插入的 chunk 数
+     */
+    public int embedDocumentIncremental(String projectId, String versionId, String chunkType, String sourceUri,
+                                       String content, int maxChars, int overlapChars, String embeddingModelName) {
+        if (embeddingModel == null) {
+            log.debug("EmbeddingModel not available, skip incremental vectorization for {}", sourceUri);
+            return 0;
+        }
+        if (content == null || content.isBlank()) {
+            return 0;
+        }
+
+        // 1. 分新 chunk（复用 chunkDocument 分片逻辑）
+        List<String> newChunks = chunkDocument(content, maxChars, overlapChars);
+        if (newChunks.isEmpty()) {
+            return 0;
+        }
+
+        // 2. 计算每个新 chunk 的 contentSha256
+        List<String> newSha256List = new ArrayList<>(newChunks.size());
+        Set<String> newSha256Set = new HashSet<>(newChunks.size() * 2);
+        for (String chunk : newChunks) {
+            String sha = sha256Hex(chunk);
+            newSha256List.add(sha);
+            newSha256Set.add(sha);
+        }
+
+        // 3. 查询旧 chunk 列表
+        List<VectorDocument> oldDocs = vectorDocumentRepository.findBySourceUriAndVersionId(sourceUri, versionId);
+        Set<String> oldSha256Set = new HashSet<>(oldDocs.size() * 2);
+
+        // 4. 删除变更的旧 chunk（contentSha256 不在新 chunk 集合中）
+        int deletedCount = 0;
+        for (VectorDocument oldDoc : oldDocs) {
+            String oldSha = oldDoc.getContentSha256();
+            if (oldSha != null) {
+                oldSha256Set.add(oldSha);
+            }
+            if (oldSha == null || !newSha256Set.contains(oldSha)) {
+                // 该旧 chunk 内容已变更或不存在于新版本中，删除
+                vectorDocumentRepository.deleteById(oldDoc.getId());
+                deletedCount++;
+            }
+        }
+
+        // 5. 插入新 chunk（contentSha256 不在旧 chunk 集合中），未变更的保留不动
+        int stored = 0;
+        for (int i = 0; i < newChunks.size(); i++) {
+            String chunk = newChunks.get(i);
+            String sha = newSha256List.get(i);
+            if (oldSha256Set.contains(sha)) {
+                // 未变更，保留不动
+                continue;
+            }
+            try {
+                Long id = embedAndStore(projectId, versionId, chunkType, sourceUri, i, chunk, embeddingModelName);
+                if (id != null) {
+                    stored++;
+                }
+            } catch (Exception e) {
+                if (e.getMessage() != null && e.getMessage().contains("duplicate key")) {
+                    log.debug("Incremental chunk {} already exists (concurrent write), skip: {}", i, sourceUri);
+                } else {
+                    log.warn("Failed to embed incremental chunk {} for {}: {}", i, sourceUri, e.getMessage());
+                }
+            }
+        }
+
+        log.info("Incremental vectorized {}: {} new chunks, {} deleted, {} unchanged",
+                sourceUri, stored, deletedCount, newChunks.size() - stored);
+        return stored;
+    }
+
+    /**
+     * 按 sourceUri + versionId 精确删除向量记录（修复 deleteBySourceUri 跨版本删除风险）
+     *
+     * @param sourceUri 来源文件路径
+     * @param versionId 扫描版本ID
+     * @return 删除的记录数
+     */
+    public int deleteBySourceUriAndVersion(String sourceUri, String versionId) {
+        if (sourceUri == null || sourceUri.isBlank() || versionId == null || versionId.isBlank()) {
+            return 0;
+        }
+        int deleted = vectorDocumentRepository.deleteBySourceUriAndVersion(sourceUri, versionId);
+        if (deleted > 0) {
+            log.info("Deleted {} vector records for source/version: {}/{}", deleted, sourceUri, versionId);
         }
         return deleted;
     }

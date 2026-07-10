@@ -23,4 +23,6 @@ public class ScanPhase {
     private String phaseName;
     /** 阶段序号（0-based） */
     private int order;
+    /** 阶段权重（用于进度计算），默认1 */
+    private int weight;
 }

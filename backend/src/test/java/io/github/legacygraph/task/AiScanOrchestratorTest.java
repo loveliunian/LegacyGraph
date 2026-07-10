@@ -7,6 +7,7 @@ import io.github.legacygraph.agent.TestCaseAgent;
 import io.github.legacygraph.agent.CodeFactAgent;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.common.ScanStep;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.builder.EvidenceGraphWriter;
 import io.github.legacygraph.dao.Neo4jGraphDao;
@@ -15,6 +16,7 @@ import io.github.legacygraph.dto.FactExtractionResult;
 import io.github.legacygraph.dto.GeneratedTestCase;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
+import io.github.legacygraph.entity.AiScanJob;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
@@ -30,6 +32,9 @@ import io.github.legacygraph.repository.TestCaseRepository;
 import io.github.legacygraph.service.graph.GapFinderService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import io.github.legacygraph.service.qa.VectorizationService;
+import io.github.legacygraph.task.step.AiScanStepExecutor;
+import io.github.legacygraph.task.step.StepExecutionResult;
+import io.github.legacygraph.task.step.StepExecutionContext;
 import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
 import io.github.legacygraph.util.IdUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +50,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -629,6 +639,111 @@ class AiScanOrchestratorTest {
                 "Auto orchestration should include AI_FEATURE_MAPPING task");
     }
 
+    // ==================== Task 2: 增量上下文传递测试 ====================
+
+    @Test
+    void testEnqueue_StoresIncrementalContext() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+
+        Set<String> changedPaths = Set.of("src/main/java/Foo.java", "src/main/java/Bar.java");
+        Set<String> affectedNodes = Set.of("node-1", "node-2", "node-3");
+
+        orchestrator.enqueue("proj-inc", "v-inc", config, changedPaths, affectedNodes);
+
+        ArgumentCaptor<AiScanJob> jobCaptor = ArgumentCaptor.forClass(AiScanJob.class);
+        verify(aiScanJobRepository).insert(jobCaptor.capture());
+        AiScanJob job = jobCaptor.getValue();
+
+        assertEquals("proj-inc", job.getProjectId());
+        assertEquals("v-inc", job.getVersionId());
+        assertEquals("PENDING", job.getStatus());
+        assertNotNull(job.getChangedFilePathsJson(), "changedFilePathsJson should be populated");
+        assertNotNull(job.getAffectedNodeIdsJson(), "affectedNodeIdsJson should be populated");
+        assertTrue(job.getChangedFilePathsJson().contains("Foo.java"));
+        assertTrue(job.getChangedFilePathsJson().contains("Bar.java"));
+        assertTrue(job.getAffectedNodeIdsJson().contains("node-1"));
+        assertTrue(job.getAffectedNodeIdsJson().contains("node-2"));
+        assertTrue(job.getAffectedNodeIdsJson().contains("node-3"));
+    }
+
+    @Test
+    void testEnqueue_BackwardCompat_NoIncrementalContext() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+
+        // 旧 3 参数 enqueue（向后兼容），不应携带增量上下文
+        orchestrator.enqueue("proj-bc", "v-bc", config);
+
+        ArgumentCaptor<AiScanJob> jobCaptor = ArgumentCaptor.forClass(AiScanJob.class);
+        verify(aiScanJobRepository).insert(jobCaptor.capture());
+        AiScanJob job = jobCaptor.getValue();
+
+        assertNull(job.getChangedFilePathsJson(), "3-arg enqueue should not set changedFilePathsJson");
+        assertNull(job.getAffectedNodeIdsJson(), "3-arg enqueue should not set affectedNodeIdsJson");
+    }
+
+    @Test
+    void testEnqueue_EmptySets_NotStored() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+
+        // 空集合不应序列化到 AiScanJob（首次扫描场景）
+        orchestrator.enqueue("proj-empty", "v-empty", config, Set.of(), Set.of());
+
+        ArgumentCaptor<AiScanJob> jobCaptor = ArgumentCaptor.forClass(AiScanJob.class);
+        verify(aiScanJobRepository).insert(jobCaptor.capture());
+        AiScanJob job = jobCaptor.getValue();
+
+        assertNull(job.getChangedFilePathsJson(), "empty changedFilePaths should not be stored");
+        assertNull(job.getAffectedNodeIdsJson(), "empty affectedNodeIds should not be stored");
+    }
+
+    @Test
+    void testOrchestrate_ReadsIncrementalContextFromJob() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+        config.setAutoGenerateTestCase(false);
+        config.setMinConfidence(0.6);
+
+        // 模拟 AiScanJob 携带增量上下文
+        AiScanJob job = new AiScanJob();
+        job.setId("job-inc");
+        job.setProjectId("proj-1");
+        job.setVersionId("v1");
+        job.setChangedFilePathsJson("[\"src/Foo.java\",\"src/Bar.java\"]");
+        job.setAffectedNodeIdsJson("[\"node-a\",\"node-b\"]");
+        when(aiScanJobRepository.selectById("job-inc")).thenReturn(job);
+
+        when(documentRepository.selectList(any())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
+        lenient().when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
+
+        orchestrator.orchestrate("proj-1", "v1", config, null, "job-inc");
+
+        // 验证 orchestrate 通过 jobId 读取了 AiScanJob 以获取增量上下文
+        verify(aiScanJobRepository).selectById("job-inc");
+    }
+
+    @Test
+    void testOrchestrate_NullJobId_DoesNotReadJob() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+        config.setAutoGenerateTestCase(false);
+        config.setMinConfidence(0.6);
+
+        when(documentRepository.selectList(any())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
+        lenient().when(reviewRecordRepository.selectCount(any())).thenReturn(0L);
+
+        // jobId=null（向后兼容调用），不应查询 AiScanJob
+        orchestrator.orchestrate("proj-1", "v1", config, null, null);
+
+        verify(aiScanJobRepository, never()).selectById(any());
+    }
+
     private boolean containsDraft(List<KnowledgeClaimDraft> drafts, String subjectType, String subjectKey,
                                   String predicate, String objectType, String objectKey) {
         return drafts != null && drafts.stream().anyMatch(d ->
@@ -637,5 +752,158 @@ class AiScanOrchestratorTest {
                         && predicate.equals(d.getPredicate())
                         && objectType.equals(d.getObjectType())
                         && objectKey.equals(d.getObjectKey()));
+    }
+
+    // ==================== Task 5: 并行编排测试 ====================
+
+    /** 可控的测试步骤执行器：记录执行时间、支持自定义行为（sleep / 抛异常等）。 */
+    private static class TestStepExecutor implements AiScanStepExecutor {
+        private final int order;
+        private final String name;
+        private final ScanStep scanStep;
+        private final java.util.function.Consumer<TestStepExecutor> action;
+
+        volatile long startNanos;
+        volatile long endNanos;
+        volatile boolean executed;
+
+        TestStepExecutor(int order, String name, ScanStep scanStep,
+                         java.util.function.Consumer<TestStepExecutor> action) {
+            this.order = order;
+            this.name = name;
+            this.scanStep = scanStep;
+            this.action = action;
+        }
+
+        @Override
+        public StepExecutionResult execute(StepExecutionContext ctx) {
+            startNanos = System.nanoTime();
+            try {
+                action.accept(this);
+            } finally {
+                endNanos = System.nanoTime();
+                executed = true;
+            }
+            return null;
+        }
+
+        @Override
+        public String getStepName() { return name; }
+
+        @Override
+        public int getOrder() { return order; }
+
+        @Override
+        public ScanStep getScanStep() { return scanStep; }
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * 验证 order<=2 的两个步骤并行执行（执行时间有重叠）。
+     * 使用 CyclicBarrier(2)：只有两个步骤同时运行才能通过，串行执行会超时。
+     */
+    @Test
+    void testParallelSteps_OverlapInExecution() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+        AtomicBoolean bothReached = new AtomicBoolean(false);
+
+        TestStepExecutor step1 = new TestStepExecutor(1, "AI_STEP_1", ScanStep.EXTRACT_FACTS, s -> {
+            try {
+                barrier.await(2, TimeUnit.SECONDS);
+                bothReached.set(true);
+            } catch (Exception e) {
+                // 超时说明不是并行
+            }
+        });
+        TestStepExecutor step2 = new TestStepExecutor(2, "AI_STEP_2", ScanStep.BUILD_GRAPH, s -> {
+            try {
+                barrier.await(2, TimeUnit.SECONDS);
+                bothReached.set(true);
+            } catch (Exception e) {
+                // 超时说明不是并行
+            }
+        });
+        TestStepExecutor step3 = new TestStepExecutor(3, "AI_STEP_3", ScanStep.MERGE_ENTITIES, s -> {});
+
+        AiScanOrchestrator testOrchestrator = new AiScanOrchestrator(
+                scanTaskRepository, scanTaskRecorder, aiScanJobRepository, new ObjectMapper(),
+                List.of(step1, step2, step3), gapFinderService);
+
+        testOrchestrator.orchestrate("proj-1", "v1", config, null);
+
+        assertTrue(step1.executed, "step1 应已执行");
+        assertTrue(step2.executed, "step2 应已执行");
+        assertTrue(step3.executed, "step3 应已执行");
+        assertTrue(bothReached.get(), "step1 和 step2 应并行执行（同时到达 barrier）");
+    }
+
+    /**
+     * 验证并行组内一个步骤抛异常时，另一个步骤仍正常完成（异常隔离）。
+     */
+    @Test
+    void testParallelStep_ExceptionDoesNotBlockOther() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+
+        TestStepExecutor step1 = new TestStepExecutor(1, "AI_STEP_1", ScanStep.EXTRACT_FACTS, s -> {
+            throw new RuntimeException("step1 模拟失败");
+        });
+        AtomicBoolean step2Completed = new AtomicBoolean(false);
+        TestStepExecutor step2 = new TestStepExecutor(2, "AI_STEP_2", ScanStep.BUILD_GRAPH, s -> {
+            step2Completed.set(true);
+        });
+        TestStepExecutor step3 = new TestStepExecutor(3, "AI_STEP_3", ScanStep.MERGE_ENTITIES, s -> {});
+
+        AiScanOrchestrator testOrchestrator = new AiScanOrchestrator(
+                scanTaskRepository, scanTaskRecorder, aiScanJobRepository, new ObjectMapper(),
+                List.of(step1, step2, step3), gapFinderService);
+
+        testOrchestrator.orchestrate("proj-1", "v1", config, null);
+
+        // step2 仍完成（异常隔离）
+        assertTrue(step2Completed.get(), "step2 应在 step1 抛异常后仍正常完成");
+        // step3 也执行了（编排继续到串行组）
+        assertTrue(step3.executed, "step3 应在并行组完成后执行");
+    }
+
+    /**
+     * 验证 order>=3 的步骤在并行组全部完成后才开始执行。
+     */
+    @Test
+    void testSerialSteps_RunAfterParallelGroupCompletes() {
+        AiScanConfig config = new AiScanConfig();
+        config.setEnableAi(true);
+
+        TestStepExecutor step1 = new TestStepExecutor(1, "AI_STEP_1", ScanStep.EXTRACT_FACTS,
+                s -> sleepQuietly(50));
+        TestStepExecutor step2 = new TestStepExecutor(2, "AI_STEP_2", ScanStep.BUILD_GRAPH,
+                s -> sleepQuietly(50));
+        AtomicLong serialStartNanos = new AtomicLong(0);
+        TestStepExecutor step3 = new TestStepExecutor(3, "AI_STEP_3", ScanStep.MERGE_ENTITIES, s -> {
+            serialStartNanos.set(System.nanoTime());
+        });
+
+        AiScanOrchestrator testOrchestrator = new AiScanOrchestrator(
+                scanTaskRepository, scanTaskRecorder, aiScanJobRepository, new ObjectMapper(),
+                List.of(step1, step2, step3), gapFinderService);
+
+        testOrchestrator.orchestrate("proj-1", "v1", config, null);
+
+        assertTrue(step3.executed, "step3 应已执行");
+        // step3 的开始时间应 >= 并行组最晚结束时间
+        long parallelEndMax = Math.max(step1.endNanos, step2.endNanos);
+        assertTrue(serialStartNanos.get() >= parallelEndMax,
+                "step3 应在并行组全部完成后才开始，实际 step3 开始于 " + serialStartNanos.get()
+                        + "，并行组最晚结束于 " + parallelEndMax);
     }
 }

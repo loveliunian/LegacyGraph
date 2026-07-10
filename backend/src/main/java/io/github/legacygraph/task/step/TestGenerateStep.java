@@ -67,7 +67,14 @@ public class TestGenerateStep implements AiScanStepExecutor {
 
     @Override
     public boolean shouldExecute(StepExecutionContext ctx) {
-        return ctx.getConfig() != null && ctx.getConfig().isAutoGenerateTestCase();
+        boolean shouldExecute = ctx.getConfig() != null && ctx.getConfig().isAutoGenerateTestCase();
+        if (ctx.getConfig() != null) {
+            log.info("AI_TEST_GENERATE shouldExecute: {} (autoGenerateTestCase={})", 
+                    shouldExecute, ctx.getConfig().isAutoGenerateTestCase());
+        } else {
+            log.info("AI_TEST_GENERATE shouldExecute: false (config is null)");
+        }
+        return shouldExecute;
     }
 
     @Override

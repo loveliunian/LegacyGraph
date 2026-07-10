@@ -1,7 +1,21 @@
 <template>
   <div class="document-list">
     <div class="page-header">
-      <h3>文档资料</h3>
+      <div class="header-left">
+        <h3>文档资料</h3>
+        <el-input
+          v-model="searchKeyword"
+          placeholder="按名称搜索"
+          clearable
+          size="small"
+          class="search-input"
+          @keyup.enter="handleSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
       <el-upload
         :action="uploadUrl"
         :headers="uploadHeaders"
@@ -191,7 +205,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Document, Guide, Files, Reading } from '@element-plus/icons-vue'
+import { Upload, Document, Guide, Files, Reading, Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { sourceApi } from '@/api/source.api'
 import { Marked } from 'marked'
@@ -210,6 +224,7 @@ const docList = ref<any[]>([])
 const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const searchKeyword = ref('')
 
 const uploadUrl = computed(() => `${apiBaseUrl}/lg/projects/${encodeURIComponent(projectId)}/sources/documents/upload`)
 const uploadHeaders = computed(() => {
@@ -451,7 +466,11 @@ const loadDocList = async (page?: number) => {
   if (page) pageNum.value = page
   loading.value = true
   try {
-    const result = await sourceApi.listDocuments(projectId, { pageNum: pageNum.value, pageSize: pageSize.value })
+    const result = await sourceApi.listDocuments(projectId, { 
+      pageNum: pageNum.value, 
+      pageSize: pageSize.value,
+      keyword: searchKeyword.value 
+    })
     docList.value = result.list
     total.value = result.total
   } catch {
@@ -463,6 +482,11 @@ const loadDocList = async (page?: number) => {
 
 const handlePageChange = (page: number) => {
   loadDocList(page)
+}
+
+const handleSearch = () => {
+  pageNum.value = 1
+  loadDocList(1)
 }
 
 onMounted(async () => {
@@ -483,11 +507,21 @@ onMounted(async () => {
   margin-bottom: 20px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .page-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
   color: #303133;
+}
+
+.search-input {
+  width: 240px;
 }
 
 .doc-name {

@@ -20,11 +20,17 @@
 {failingTests}
 
 ## 硬约束
-1. 只能改动“允许改动的文件”列表内的文件，越界文件不得出现在 patches 中。
+1. 只能改动"允许改动的文件"列表内的文件，越界文件不得出现在 patches 中。
 2. 每个 patch 必须是 unified diff（含 `---`/`+++`/`@@` 标记），能干净应用。
 3. 每个 patch 至少引用一个 evidenceId。
 4. 无法确认修复点时，降低 riskLevel 并在 manualReviewNeeded=true。
 5. 只输出 JSON，不要其他解释内容。
+
+## 补丁质量要求
+- patches 应针对根因修复，不要只处理症状。
+- 每个 patch 的 changeType 取值：MODIFY（修改）、CREATE（新建）、DELETE（删除）。
+- newTests 必须覆盖修复点，防止回归。
+- validationGates 至少包含 STATIC 和 UNIT。
 
 ## 输出格式
 请以严格 JSON 格式输出：

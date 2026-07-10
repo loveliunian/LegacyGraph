@@ -45,8 +45,8 @@ import java.util.function.Supplier;
 @Component
 public class AiScanStepSupport {
 
-    /** LLM 并发上限（4GB 堆实测 DOC+CODE 各 2 路不 OOM；DeepSeek 8 路限流，2+2=4 安全） */
-    public static final int DOC_EXTRACT_PARALLELISM = 2;
+    /** LLM 并发上限（#21 调优：2→4，ZGC + 内存水位兜底，DOC+CODE 各 4 路，峰值 8 路 LLM） */
+    public static final int DOC_EXTRACT_PARALLELISM = 4;
     /** 向量化并发上限：embedding 调用 CPU/内存较重，独立于 LLM 并发控制，避免无界堆积打爆堆 */
     public static final int VECTOR_PARALLELISM = 2;
     /** 向量化任务队列上限：超出即拒绝（背压），防止内容文本在队列里无限堆积导致 OOM */
@@ -54,12 +54,12 @@ public class AiScanStepSupport {
     /** 内存水位线：堆使用率超过此值时拒绝新的向量化任务（背压，而非事后跳过） */
     private static final double MEMORY_HIGH_WATERMARK = 0.60;
 
-    /** 向量化分片参数（#20 调优：2000→1200，减少单次 embedding 内存峰值） */
-    private static final int VECTOR_CHUNK_SIZE = 1200;
-    private static final int VECTOR_OVERLAP = 120;
+    /** 向量化分片参数（#21 调优：2000→1200 减少 OOM，现恢复到 2000，bge-m3 对 2000 字符处理无精度损失） */
+    private static final int VECTOR_CHUNK_SIZE = 2000;      // 1200→2000
+    private static final int VECTOR_OVERLAP = 200;          // 120→200
     /** 大文档阈值（字符），超过此值动态使用更小的 chunk */
     private static final int LARGE_DOC_THRESHOLD = 20000;
-    private static final int LARGE_DOC_CHUNK_SIZE = 800;
+    private static final int LARGE_DOC_CHUNK_SIZE = 1500;   // 800→1500
     /** 当前使用的 embedding 模型名 */
     private static final String EMBEDDING_MODEL_NAME = "bge-m3";
 

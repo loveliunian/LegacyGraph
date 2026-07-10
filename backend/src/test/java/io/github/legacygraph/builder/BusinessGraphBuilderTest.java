@@ -10,15 +10,19 @@ import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.repository.*;
+import io.github.legacygraph.terminology.TerminologyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -61,6 +65,34 @@ class BusinessGraphBuilderTest {
     @Test
     void testConstruction() {
         assertNotNull(businessGraphBuilder);
+    }
+
+    @Test
+    void mergeCrossLanguageFeaturesMergesWhenEmbeddingSimilar() {
+        GraphNode docFeature = newNode(NodeType.Feature.name(), "feature:order", "订单创建");
+        docFeature.setId("doc-feature");
+        docFeature.setSourceType("DOC_AI");
+        GraphNode frontendFeature = newNode(NodeType.Feature.name(), "feature:create-order", "create order");
+        frontendFeature.setId("frontend-feature");
+        frontendFeature.setSourceType("FRONTEND_AST");
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"), eq(NodeType.Feature.name()),
+                isNull(), isNull(), isNull(), eq(0))).thenReturn(List.of(docFeature, frontendFeature));
+
+        EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
+        // 两个 feature 名称的 embedding 完全相同 → cosine = 1.0 > 0.78 阈值
+        when(embeddingModel.embed(anyList())).thenReturn(List.of(new float[]{1f, 0f}, new float[]{1f, 0f}));
+        ReflectionTestUtils.setField(businessGraphBuilder, "embeddingModel", embeddingModel);
+        // createEdge → writer.upsertEdge 返回非 null 表示候选边创建成功
+        when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenReturn(new GraphEdge());
+
+        int merged = businessGraphBuilder.mergeCrossLanguageFeatures("p1", "v1");
+
+        assertEquals(1, merged, "应合并 1 组跨语言 Feature");
+        ArgumentCaptor<GraphEdgeClaim> edgeCaptor = ArgumentCaptor.forClass(GraphEdgeClaim.class);
+        verify(writer).upsertEdge(edgeCaptor.capture());
+        assertEquals("POSSIBLE_SAME_AS", edgeCaptor.getValue().getEdgeType());
+        assertEquals("AI_FEATURE_MAPPING", edgeCaptor.getValue().getSourceType());
+        assertEquals("PENDING_CONFIRM", edgeCaptor.getValue().getStatus());
     }
 
     /**
@@ -566,5 +598,195 @@ class BusinessGraphBuilderTest {
         assertEquals("process-1", edge.getFromNodeId());
         assertEquals("api-1", edge.getToNodeId());
         assertTrue(edge.getEdgeKey().contains("->implements->"));
+    }
+
+    /**
+     * Task 2 测试：验证 mapFeaturesToCode 调用 embeddingModel.embed(List) 批量方法，
+     * 批量填充缓存后不再触发逐条 embed(String)。
+     */
+    @Test
+    void testMapFeaturesToCode_BatchEmbed_FillsCache_NoSingleEmbed() {
+        TerminologyService mockTerm = mock(TerminologyService.class);
+        when(mockTerm.tokenize(anyString())).thenReturn(Set.of("tok"));
+        when(mockTerm.similarityOfTokens(any(), any(), anyString(), anyString())).thenReturn(0.9);
+        BusinessGraphBuilder builder = new BusinessGraphBuilder(neo4jGraphDao, docChunkRepository, writer,
+                new FeatureIdentityNormalizer(), mockTerm);
+
+        EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
+        float[] unit = new float[]{1.0f};
+        when(embeddingModel.embed(anyList())).thenAnswer(inv -> {
+            List<String> in = inv.getArgument(0);
+            List<float[]> out = new ArrayList<>();
+            for (int i = 0; i < in.size(); i++) out.add(unit);
+            return out;
+        });
+        ReflectionTestUtils.setField(builder, "embeddingModel", embeddingModel);
+
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(inv -> {
+            List<GraphEdge> es = inv.getArgument(0);
+            return es.size();
+        });
+
+        GraphNode feature = newNode(NodeType.Feature.name(), "feature:F1", "F1");
+        GraphNode page = newNode(NodeType.Page.name(), "page:P1", "P1");
+        GraphNode api = newNode(NodeType.ApiEndpoint.name(), "api:A1", "A1");
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.Feature.name()), any(), any(), any(), anyInt())).thenReturn(List.of(feature));
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.Page.name()), any(), any(), any(), anyInt())).thenReturn(List.of(page));
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt())).thenReturn(List.of(api));
+
+        builder.mapFeaturesToCode("p1", "v1");
+
+        // 批量 embed 被调用一次，且收集了全部唯一名称（feature + page + api）
+        ArgumentCaptor<List<String>> captor = ArgumentCaptor.forClass(List.class);
+        verify(embeddingModel, times(1)).embed(captor.capture());
+        assertTrue(captor.getValue().containsAll(List.of("F1", "P1", "A1")));
+        // 缓存已被批量填充，不应触发逐条 embed(String)
+        verify(embeddingModel, never()).embed(anyString());
+        builder.clearEmbeddingCache("v1");
+    }
+
+    /**
+     * Task 3 测试：一个 Feature 匹配 5 个 API（score 0.66/0.68/0.72/0.75/0.80）时，
+     * top-N 筛选只保留 top-3。
+     */
+    @Test
+    void testMapFeaturesToCode_TopNFilter_KeepsOnlyTop3() {
+        TerminologyService mockTerm = mock(TerminologyService.class);
+        when(mockTerm.tokenize(anyString())).thenReturn(Set.of("tok"));
+        // 5 个 API 依次返回 0.66/0.68/0.72/0.75/0.80
+        when(mockTerm.similarityOfTokens(any(), any(), anyString(), anyString()))
+                .thenReturn(0.66, 0.68, 0.72, 0.75, 0.80);
+        BusinessGraphBuilder builder = new BusinessGraphBuilder(neo4jGraphDao, docChunkRepository, writer,
+                new FeatureIdentityNormalizer(), mockTerm);
+        // embeddingModel 保持 null → score = tokenScore（可控）
+
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(inv -> {
+            List<GraphEdge> es = inv.getArgument(0);
+            return es.size();
+        });
+
+        GraphNode feature = newNode(NodeType.Feature.name(), "feature:F", "F");
+        List<GraphNode> apis = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            apis.add(newNode(NodeType.ApiEndpoint.name(), "api:A" + i, "A" + i));
+        }
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.Feature.name()), any(), any(), any(), anyInt())).thenReturn(List.of(feature));
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.Page.name()), any(), any(), any(), anyInt())).thenReturn(List.of());
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt())).thenReturn(apis);
+
+        int mapped = builder.mapFeaturesToCode("p1", "v1");
+
+        // 5 个 API 全部通过门控（0.66~0.80 > 0.65），但 top-3 只保留 3 条
+        ArgumentCaptor<List<GraphEdge>> edgeCaptor = ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesBatch(edgeCaptor.capture());
+        List<GraphEdge> edges = edgeCaptor.getValue();
+        assertEquals(3, edges.size());
+        // 保留的应是 top-3：0.80, 0.75, 0.72
+        List<Double> scores = edges.stream()
+                .map(e -> e.getConfidence().doubleValue())
+                .sorted()
+                .toList();
+        assertEquals(0.72, scores.get(0), 1e-9);
+        assertEquals(0.75, scores.get(1), 1e-9);
+        assertEquals(0.80, scores.get(2), 1e-9);
+        assertEquals(3, mapped);
+    }
+
+    /**
+     * Task 8 测试：versionId 级 embedding 缓存跨调用复用 ——
+     * 第二次调用不重新 embed 已缓存名称；clearEmbeddingCache 后缓存清空，第三次调用重新 embed。
+     */
+    @Test
+    void testEmbeddingCache_ReuseAcrossCallsAndClear() {
+        TerminologyService mockTerm = mock(TerminologyService.class);
+        when(mockTerm.tokenize(anyString())).thenReturn(Set.of("tok"));
+        when(mockTerm.similarityOfTokens(any(), any(), anyString(), anyString())).thenReturn(0.9);
+        BusinessGraphBuilder builder = new BusinessGraphBuilder(neo4jGraphDao, docChunkRepository, writer,
+                new FeatureIdentityNormalizer(), mockTerm);
+
+        EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
+        float[] unit = new float[]{1.0f};
+        when(embeddingModel.embed(anyList())).thenAnswer(inv -> {
+            List<String> in = inv.getArgument(0);
+            List<float[]> out = new ArrayList<>();
+            for (int i = 0; i < in.size(); i++) out.add(unit);
+            return out;
+        });
+        ReflectionTestUtils.setField(builder, "embeddingModel", embeddingModel);
+
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(inv -> {
+            List<GraphEdge> es = inv.getArgument(0);
+            return es.size();
+        });
+
+        GraphNode feature = newNode(NodeType.Feature.name(), "feature:X", "X");
+        GraphNode page = newNode(NodeType.Page.name(), "page:X", "X");
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v8"),
+                eq(NodeType.Feature.name()), any(), any(), any(), anyInt())).thenReturn(List.of(feature));
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v8"),
+                eq(NodeType.Page.name()), any(), any(), any(), anyInt())).thenReturn(List.of(page));
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v8"),
+                eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt())).thenReturn(List.of());
+
+        // 第一次调用：批量 embed 触发
+        builder.mapFeaturesToCode("p1", "v8");
+        verify(embeddingModel, times(1)).embed(anyList());
+
+        // 第二次调用（同 version）：名称已缓存，不重新 embed
+        builder.mapFeaturesToCode("p1", "v8");
+        verify(embeddingModel, times(1)).embed(anyList());
+
+        // 清理缓存
+        builder.clearEmbeddingCache("v8");
+
+        // 第三次调用：缓存已清空，重新批量 embed
+        builder.mapFeaturesToCode("p1", "v8");
+        verify(embeddingModel, times(2)).embed(anyList());
+    }
+
+    /**
+     * Task 10 测试：Page 阈值 0.55→0.60，score=0.57 的 Page 边被过滤
+     * （0.55 < 0.57 < 0.60，旧阈值会通过，新阈值被拦截）。
+     */
+    @Test
+    void testMapFeaturesToCode_PageThreshold_FiltersScoreBetweenOldAndNew() {
+        TerminologyService mockTerm = mock(TerminologyService.class);
+        when(mockTerm.tokenize(anyString())).thenReturn(Set.of("tok"));
+        when(mockTerm.similarityOfTokens(any(), any(), anyString(), anyString())).thenReturn(0.57);
+        BusinessGraphBuilder builder = new BusinessGraphBuilder(neo4jGraphDao, docChunkRepository, writer,
+                new FeatureIdentityNormalizer(), mockTerm);
+        // embeddingModel 保持 null → score = tokenScore = 0.57
+
+        GraphNode feature = newNode(NodeType.Feature.name(), "feature:F", "F");
+        GraphNode page = newNode(NodeType.Page.name(), "page:P", "P");
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.Feature.name()), any(), any(), any(), anyInt())).thenReturn(List.of(feature));
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.Page.name()), any(), any(), any(), anyInt())).thenReturn(List.of(page));
+        when(neo4jGraphDao.queryNodes(eq("p1"), eq("v1"),
+                eq(NodeType.ApiEndpoint.name()), any(), any(), any(), anyInt())).thenReturn(List.of());
+
+        int mapped = builder.mapFeaturesToCode("p1", "v1");
+
+        // 0.57 > 0.55（旧阈值）但 0.57 < 0.60（新阈值）→ 被过滤，无边创建
+        assertEquals(0, mapped);
+        verify(neo4jGraphDao, never()).mergeEdgesBatch(anyList());
+    }
+
+    /** 构建带 id/nodeType/nodeKey/displayName/nodeName 的测试节点 */
+    private GraphNode newNode(String nodeType, String nodeKey, String displayName) {
+        GraphNode n = new GraphNode();
+        n.setId(nodeKey);
+        n.setNodeType(nodeType);
+        n.setNodeKey(nodeKey);
+        n.setDisplayName(displayName);
+        n.setNodeName(displayName);
+        return n;
     }
 }

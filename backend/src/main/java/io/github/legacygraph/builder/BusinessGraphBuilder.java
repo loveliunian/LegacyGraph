@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +49,9 @@ public class BusinessGraphBuilder {
     @Autowired(required = false)
     private EmbeddingModel embeddingModel;
 
+    /** versionId 级 embedding 缓存：mapFeaturesToCode 和 mergeCrossLanguageFeatures 共用，扫描后清理 */
+    private final Map<String, Map<String, float[]>> embeddingCacheByVersion = new java.util.concurrent.ConcurrentHashMap<>();
+
     public BusinessGraphBuilder(Neo4jGraphDao neo4jGraphDao,
                               DocChunkRepository docChunkRepository,
                               EvidenceGraphWriter writer,
@@ -58,6 +62,16 @@ public class BusinessGraphBuilder {
         this.writer = writer;
         this.featureIdentityNormalizer = featureIdentityNormalizer;
         this.terminologyService = terminologyService;
+    }
+
+    /** 获取指定版本的 embedding 缓存（mapFeaturesToCode 与 mergeCrossLanguageFeatures 共用） */
+    private Map<String, float[]> getEmbeddingCache(String versionId) {
+        return embeddingCacheByVersion.computeIfAbsent(versionId, k -> new java.util.concurrent.ConcurrentHashMap<>());
+    }
+
+    /** 清理指定版本的 embedding 缓存（扫描结束后由 FeatureMappingStep 调用） */
+    public void clearEmbeddingCache(String versionId) {
+        embeddingCacheByVersion.remove(versionId);
     }
 
     /**
@@ -327,22 +341,59 @@ public class BusinessGraphBuilder {
                 docFeatures.size(), meaningfulFeatures.size());
 
         // 3) 纯计算：内存中跑匹配（无 DB 占用，可长时间运行）
-        // token 门控 0.2：低于此值直接跳过（#19 调优：0.3→0.2，放宽跨语言匹配）
-        // API 阈值 0.6：Feature→ApiEndpoint 边质量门控（#19 调优：0.7→0.6，恢复正常边数水平）
-        // Page 阈值 0.55：Feature→Page 边质量门控（#19 调优：0.6→0.55）
-        final double TOKEN_GATE = 0.2;
-        final double API_SCORE_THRESHOLD = 0.6;
-        final double PAGE_SCORE_THRESHOLD = 0.55;
+        // token 门控 0.25：低于此值直接跳过（#21 调优：0.2→0.25，收紧弱匹配）
+        // API 阈值 0.65：Feature→ApiEndpoint 边质量门控（#21 调优：0.6→0.65，减少低质量边）
+        // Page 阈值 0.60：Feature→Page 边质量门控（#21 调优：0.55→0.60，与 API 阈值差距缩小）
+        final double TOKEN_GATE = 0.25;
+        final double API_SCORE_THRESHOLD = 0.65;
+        final double PAGE_SCORE_THRESHOLD = 0.60;
         log.info("Vector semantic matching: lazy embed mode (token gate={}, api>={}, page>={})",
                 TOKEN_GATE, API_SCORE_THRESHOLD, PAGE_SCORE_THRESHOLD);
 
-        Map<String, float[]> nameToEmbedding = new HashMap<>();
+        Map<String, float[]> nameToEmbedding = getEmbeddingCache(versionId);
+        // 预批量 embed：收集所有唯一名称一次性 embed，减少 HTTP 往返（跳过已缓存项）
+        if (embeddingModel != null) {
+            List<String> namesToEmbed = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            for (GraphNode f : safeList(meaningfulFeatures)) {
+                String name = normalizeSearchName(f);
+                if (!name.isBlank() && seen.add(name) && !nameToEmbedding.containsKey(name)) {
+                    namesToEmbed.add(name);
+                }
+            }
+            for (GraphNode p : safeList(pages)) {
+                String name = normalizeSearchName(p);
+                if (!name.isBlank() && seen.add(name) && !nameToEmbedding.containsKey(name)) {
+                    namesToEmbed.add(name);
+                }
+            }
+            for (GraphNode a : safeList(apis)) {
+                String name = normalizeSearchName(a);
+                if (!name.isBlank() && seen.add(name) && !nameToEmbedding.containsKey(name)) {
+                    namesToEmbed.add(name);
+                }
+            }
+            if (!namesToEmbed.isEmpty()) {
+                try {
+                    List<float[]> vectors = embeddingModel.embed(namesToEmbed);
+                    for (int i = 0; i < namesToEmbed.size(); i++) {
+                        nameToEmbedding.put(namesToEmbed.get(i), vectors.get(i));
+                    }
+                    log.info("Batch embedded {} names for feature-code mapping", namesToEmbed.size());
+                } catch (Exception e) {
+                    log.warn("Batch embed failed, fallback to lazy embed: {}", e.getMessage());
+                }
+            }
+        }
+
         List<GraphEdge> candidateEdges = new ArrayList<>();
         Map<String, Set<String>> tokensByName = new HashMap<>();
         for (GraphNode feature : safeList(meaningfulFeatures)) {
             String featureName = normalizeSearchName(feature);
             if (featureName.isBlank()) continue;
             Set<String> featTokens = tokensByName.computeIfAbsent(featureName, terminologyService::tokenize);
+            List<GraphEdge> featEdges = new ArrayList<>();
+            String featKey = feature.getNodeKey();
 
             for (GraphNode page : safeList(pages)) {
                 String pageName = normalizeSearchName(page);
@@ -352,9 +403,9 @@ public class BusinessGraphBuilder {
                 if (tokenScore < TOKEN_GATE) continue; // 修复：门控既挡向量也挡边
                 double score = lazyMaxTokenVector(tokenScore, featureName, pageName, nameToEmbedding);
                 if (score > PAGE_SCORE_THRESHOLD) {
-                    candidateEdges.add(buildEdgePOJO(projectId, versionId,
+                    featEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), page.getId(), EdgeType.EXPOSED_BY.name(),
-                            feature.getNodeKey() + "->exposed_by->" + page.getNodeKey(),
+                            featKey + "->exposed_by->" + page.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score),
                             score >= 0.8 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
@@ -369,13 +420,20 @@ public class BusinessGraphBuilder {
                 if (tokenScore < TOKEN_GATE) continue;
                 double score = lazyMaxTokenVector(tokenScore, featureName, apiName, nameToEmbedding);
                 if (score > API_SCORE_THRESHOLD) { // #19 调优：0.7→0.6
-                    candidateEdges.add(buildEdgePOJO(projectId, versionId,
+                    featEdges.add(buildEdgePOJO(projectId, versionId,
                             feature.getId(), api.getId(), EdgeType.IMPLEMENTED_BY.name(),
-                            feature.getNodeKey() + "->implemented_by->" + api.getNodeKey(),
+                            featKey + "->implemented_by->" + api.getNodeKey(),
                             SourceType.AI_INFERENCE.name(),
                             BigDecimal.valueOf(score),
                             score >= 0.7 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM));
                 }
+            }
+
+            // top-N 筛选：按 score 降序只保留 top-3，避免一个 Feature 产生大量低分冗余边
+            featEdges.sort((a, b) -> b.getConfidence().compareTo(a.getConfidence()));
+            int topN = Math.min(3, featEdges.size());
+            for (int i = 0; i < topN; i++) {
+                candidateEdges.add(featEdges.get(i));
             }
         }
 
@@ -665,13 +723,14 @@ public class BusinessGraphBuilder {
     }
 
     /**
-     * P2：跨语言 Feature 去重合并。
+     * P2：跨语言 Feature 候选关联。
      *
      * <p>DOC_AI 产中文 Feature（"释放会员保证金"），FRONTEND_AST 产英文 Feature（"unLock"），
-     * 两者语义相同但 nodeKey 不同 → 图谱中存在冗余节点。用 bge-m3 向量语义去重：余弦 > 0.75
-     * 的 DOC_AI↔FRONTEND_AST Feature 对，将英文 Feature 的关系迁移到中文 Feature 后删除。</p>
+     * 两者语义相同但 nodeKey 不同。用 bge-m3 向量语义识别余弦 > 0.78 的
+     * DOC_AI↔FRONTEND_AST Feature 对，创建 {@link EdgeType#POSSIBLE_SAME_AS} 待确认候选边。
+     * 不迁移关系、不删除任一节点；人工确认后才能进行实体合并。</p>
      *
-     * @return 合并的 Feature 对数
+     * @return 创建的跨语言候选 Feature 对数
      */
     @Transactional
     public int mergeCrossLanguageFeatures(String projectId, String versionId) {
@@ -696,8 +755,34 @@ public class BusinessGraphBuilder {
             return 0;
         }
 
-        // 预计算所有 Feature 的 embedding
-        Map<String, float[]> embCache = new HashMap<>();
+        // 复用 versionId 级共享 embedding 缓存（与 mapFeaturesToCode 共用，避免重复 embed）
+        Map<String, float[]> embCache = getEmbeddingCache(versionId);
+        // 批量 embed 所有 docFeature 和 frontendFeature 名称（跳过已缓存项），减少 HTTP 往返
+        List<String> namesToEmbed = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (GraphNode f : docFeatures) {
+            String name = normalizeSearchName(f);
+            if (!name.isBlank() && seen.add(name) && !embCache.containsKey(name)) {
+                namesToEmbed.add(name);
+            }
+        }
+        for (GraphNode f : frontendFeatures) {
+            String name = normalizeSearchName(f);
+            if (!name.isBlank() && seen.add(name) && !embCache.containsKey(name)) {
+                namesToEmbed.add(name);
+            }
+        }
+        if (!namesToEmbed.isEmpty()) {
+            try {
+                List<float[]> vectors = embeddingModel.embed(namesToEmbed);
+                for (int i = 0; i < namesToEmbed.size(); i++) {
+                    embCache.put(namesToEmbed.get(i), vectors.get(i));
+                }
+            } catch (Exception e) {
+                log.warn("Batch embed for cross-language merge failed, fallback to lazy: {}", e.getMessage());
+            }
+        }
+        // 降级 fallback：批量失败时逐条 embedOne 补齐缓存中仍缺失的名称（批量成功时为 no-op）
         for (GraphNode f : docFeatures) {
             embedOne(normalizeSearchName(f), embCache);
         }
@@ -705,13 +790,13 @@ public class BusinessGraphBuilder {
             embedOne(normalizeSearchName(f), embCache);
         }
 
-        int merged = 0;
+        int candidates = 0;
         for (GraphNode docFeat : docFeatures) {
             float[] docEmb = embCache.get(normalizeSearchName(docFeat));
             if (docEmb == null) continue;
 
             GraphNode bestMatch = null;
-            double bestScore = 0.75; // 阈值
+            double bestScore = 0.78; // 阈值（#21 调优：0.75→0.78，减少低质量合并）
             for (GraphNode feFeat : frontendFeatures) {
                 float[] feEmb = embCache.get(normalizeSearchName(feFeat));
                 if (feEmb == null) continue;
@@ -724,26 +809,31 @@ public class BusinessGraphBuilder {
 
             if (bestMatch != null) {
                 try {
-                    // 将英文源节点 bestMatch(FRONTEND_AST) 的边迁移到中文规范节点 docFeat 后，删除 bestMatch
-                    int moved = neo4jGraphDao.moveEdgesAndDeleteNode(
-                            projectId, versionId, bestMatch.getId(), docFeat.getId());
-                    if (moved > 0) {
-                        log.info("Feature merge: '{}' ({}) ← '{}' ({}), score={}",
+                    GraphEdge candidate = createEdge(
+                            projectId, versionId,
+                            docFeat.getId(), bestMatch.getId(),
+                            EdgeType.POSSIBLE_SAME_AS.name(),
+                            docFeat.getNodeKey() + "->possible_same_as->" + bestMatch.getNodeKey(),
+                            "AI_FEATURE_MAPPING",
+                            BigDecimal.valueOf(bestScore),
+                            NodeStatus.PENDING_CONFIRM);
+                    if (candidate != null) {
+                        log.info("Cross-language feature candidate: '{}' ({}) ↔ '{}' ({}), score={}",
                                 docFeat.getNodeName(), docFeat.getSourceType(),
                                 bestMatch.getNodeName(), bestMatch.getSourceType(),
                                 String.format("%.2f", bestScore));
-                        frontendFeatures.remove(bestMatch); // 已合并，不再参与匹配
-                        merged++;
+                        frontendFeatures.remove(bestMatch); // 一个前端 Feature 只生成一个待确认候选
+                        candidates++;
                     }
                 } catch (Exception e) {
-                    log.warn("Feature merge failed: '{}' ← '{}': {}",
+                    log.warn("Cross-language feature candidate failed: '{}' ↔ '{}': {}",
                             docFeat.getNodeName(), bestMatch.getNodeName(), e.getMessage());
                 }
             }
         }
 
-        log.info("Cross-language feature merge: {} groups merged (projectId={})", merged, projectId);
-        return merged;
+        log.info("Cross-language feature candidate: {} groups created (projectId={})", candidates, projectId);
+        return candidates;
     }
 
     /**

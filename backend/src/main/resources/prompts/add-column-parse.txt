@@ -4,14 +4,25 @@
 {question}
 
 ## changeKind 判断规则
-- ADD_COLUMN: 给表加字段/列
-- MODIFY_COLUMN: 修改字段类型/长度/约束
-- ADD_API: 新增接口
-- REFACTOR: 重构
+- ADD_COLUMN: 给表加字段/列（关键词：加字段、加列、新增字段）
+- MODIFY_COLUMN: 修改字段类型/长度/约束（关键词：改字段、修改类型、改长度）
+- ADD_API: 新增接口（关键词：加接口、新增 API）
+- MODIFY_API: 修改接口（关键词：改接口、修改参数）
+- REFACTOR: 重构（关键词：重构、拆分、优化结构）
 - UNKNOWN: 无法识别具体变更目标
 
+## 抽取规则
+- tableName：从问题中提取目标表名（如 lg_change_task），无法确定时置 null。
+- columnName：从问题中提取字段名，无法确定时置 null。
+- columnType：从问题中提取字段类型（如 VARCHAR(32)），无法确定时置 null。
+
+## 判断指导
+- "给 XX 表加一个 YY 字段" → ADD_COLUMN，tableName=XX，columnName=YY
+- "把 XX 表的 YY 字段改成 VARCHAR(64)" → MODIFY_COLUMN，tableName=XX，columnName=YY，columnType=VARCHAR(64)
+- "重构 XX 模块" → REFACTOR，tableName=null
+- 模糊问题（如"怎么改数据库"）→ UNKNOWN
+
 ## 输出要求
-抽取 tableName（如 lg_change_task）、columnName、columnType（如 VARCHAR(32)）。
 仅输出严格 JSON，不要其他内容：
 
 {"changeKind":"ADD_COLUMN","tableName":"lg_change_task","columnName":"priority","columnType":"VARCHAR(32)"}

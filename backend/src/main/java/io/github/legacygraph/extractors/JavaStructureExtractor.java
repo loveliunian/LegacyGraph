@@ -34,13 +34,23 @@ public class JavaStructureExtractor {
     });
 
     public List<JavaClassInfo> extractFromFile(Path javaFile) throws IOException {
+        return extractFromFile(javaFile, null);
+    }
+
+    /**
+     * 从 Java 文件抽取类结构信息。
+     *
+     * @param javaFile       Java 源文件路径
+     * @param cachedContent  预读的文件内容缓存（可为 null，null 时 fallback 读文件）
+     */
+    public List<JavaClassInfo> extractFromFile(Path javaFile, String cachedContent) throws IOException {
         List<JavaClassInfo> classes = new ArrayList<>();
 
-        // 先读入内存再解析，避免 I/O 竞争读到半截文件
+        // 先读入内存再解析，避免 I/O 竞争读到半截文件；优先用缓存内容避免重复 I/O
         JavaParser parser = javaParser.get();
         ParseResult<CompilationUnit> result;
         try {
-            result = parser.parse(Files.readString(javaFile));
+            result = parser.parse(cachedContent != null ? cachedContent : Files.readString(javaFile));
         } catch (RuntimeException e) {
             // JavaParser 词法分析器偶发内部崩溃（如 IndexOutOfBounds），重试一次
             log.warn("JavaParser crashed on first parse attempt (will retry): {} — {}", javaFile, e.getMessage());

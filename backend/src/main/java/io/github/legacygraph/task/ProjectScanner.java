@@ -37,6 +37,7 @@ import io.github.legacygraph.repository.ScanVersionRepository;
 import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 import io.github.legacygraph.service.scan.DatabaseMetadataScanService;
 import io.github.legacygraph.service.scan.FileChangeDetector;
+import io.github.legacygraph.service.scan.ScanArtifactPublisher;
 import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import io.github.legacygraph.service.systemoverview.SystemOverviewIngestService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -94,10 +95,14 @@ public class ProjectScanner {
     private final AdapterExecutionService adapterExecutionService;
     private final GraphifyRunner graphifyRunner;
     private final GraphifyImportService graphifyImportService;
+    /** 证据写入事务执行器：扫描结束时需 flush 剩余证据 */
+    private io.github.legacygraph.builder.PgEvidenceTxExecutor pgEvidenceTxExecutor;
     private ScanScopeResolver scanScopeResolver;
     private AssetDiscoveryService assetDiscoveryService;
     private SystemOverviewDocumentService systemOverviewDocumentService;
     private SystemOverviewIngestService systemOverviewIngestService;
+    /** 扫描产物发布服务（可选）：扫描完成后把总结性文档发布到 docs/legacygraph 并向量化 */
+    private ScanArtifactPublisher scanArtifactPublisher;
     /** 项目约定入库服务（可选）：扫描完成后把技术栈/分层/命名约定向量化为 PROJECT_CONVENTION */
     private io.github.legacygraph.service.scan.ProjectConventionIngestService projectConventionIngestService;
     /** 可复用组件标记服务（可选）：扫描完成后标记被多次继承的基类为 reusable */
@@ -268,8 +273,18 @@ public class ProjectScanner {
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setPgEvidenceTxExecutor(io.github.legacygraph.builder.PgEvidenceTxExecutor pgEvidenceTxExecutor) {
+        this.pgEvidenceTxExecutor = pgEvidenceTxExecutor;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setSystemOverviewIngestService(SystemOverviewIngestService systemOverviewIngestService) {
         this.systemOverviewIngestService = systemOverviewIngestService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setScanArtifactPublisher(ScanArtifactPublisher scanArtifactPublisher) {
+        this.scanArtifactPublisher = scanArtifactPublisher;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -338,6 +353,15 @@ public class ProjectScanner {
      */
     private void runScanBody(String projectId, String versionId, String baseDir, ScanVersion version) {
         try {
+            // 清除上一版本残留的 affected 标记（重扫同一 versionId 时避免旧标记残留）
+            if (blastRadiusAnalyzer != null) {
+                try {
+                    int cleared = blastRadiusAnalyzer.clearAffectedMarkers(projectId, versionId);
+                    log.info("Cleared {} stale affected markers from previous scan", cleared);
+                } catch (Exception e) {
+                    log.warn("Failed to clear affected markers", e);
+                }
+            }
             ResolvedScanPlan resolvedPlan = resolveScanPlan(projectId, versionId, version);
             // 解析 scanScope JSON，提取 repoIds/dbIds/docIds/scanTypes 用于过滤扫描范围
             List<String> scopeRepoIds = null;
@@ -525,6 +549,8 @@ public class ProjectScanner {
             // === 增量扫描：基于文件 SHA-256 哈希检测变更文件 ===
             // 首次扫描（无历史快照）→ 全量；有快照 → 仅对变更文件执行 ExtractionAdapter
             Set<String> incrementalChangedPaths = null;
+            // BlastRadius 分析产生的受影响节点 ID，传递到 AI 编排阶段用于缩小处理范围
+            Set<String> incrementalAffectedNodeIds = new LinkedHashSet<>();
             Map<String, String> incrementalSnapshotContents = null;
             if (incrementalScanEnabled && fileChangeDetector != null
                     && baseDir != null && !baseDir.isBlank() && shouldScanCode) {
@@ -547,6 +573,7 @@ public class ProjectScanner {
                                 try {
                                     var blastResult = blastRadiusAnalyzer.analyzeBlastRadius(projectId, changed);
                                     blastRadiusAnalyzer.markAffectedNodes(projectId, blastResult);
+                                    incrementalAffectedNodeIds.addAll(blastResult.affectedNodeIds());
                                     log.info("Blast radius analysis: {} affected nodes marked (projectId={}, versionId={})",
                                             blastResult.affectedNodeIds().size(), projectId, versionId);
                                 } catch (Exception e) {
@@ -851,7 +878,11 @@ public class ProjectScanner {
                         aiMinConfidenceDefault);
                 aiEnabled = aiConfig.isEnableAi();
                 if (aiEnabled) {
-                    aiScanOrchestrator.enqueue(projectId, versionId, aiConfig);
+                    // 传递增量上下文到 AI 编排阶段：首次扫描 incrementalChangedPaths 为 null，转为空集合
+                    Set<String> changedPathsForAi = incrementalChangedPaths != null
+                            ? incrementalChangedPaths : Collections.emptySet();
+                    aiScanOrchestrator.enqueue(projectId, versionId, aiConfig,
+                            changedPathsForAi, incrementalAffectedNodeIds);
                 } else {
                     aiScanOrchestrator.recordSkipped(projectId, versionId);
                 }
@@ -881,9 +912,18 @@ public class ProjectScanner {
             }
             if (!aiEnabled && !isCancelled(versionId)) {
                 generateSystemOverviewDocument(projectId, versionId);
+                publishScanArtifacts(projectId, versionId);
             }
 
-            // 扫描完成汇总：输出 Neo4j 节点数，快速判断图谱是否有数据
+            // 扫描完成汇总：flush 剩余证据，然后输出 Neo4j 节点数
+            if (pgEvidenceTxExecutor != null) {
+                try {
+                    pgEvidenceTxExecutor.flush();
+                    log.info("Flushed remaining evidence after scan: versionId={}", versionId);
+                } catch (Exception ex) {
+                    log.warn("Failed to flush evidence after scan: {}", ex.getMessage());
+                }
+            }
             long totalNodes = 0;
             try {
                 totalNodes = neo4jGraphDao.countNodes(projectId, versionId, null);
@@ -1054,6 +1094,24 @@ public class ProjectScanner {
         } catch (Exception e) {
             log.warn("Failed to generate system overview markdown after scan: versionId={}, error={}",
                     versionId, e.getMessage());
+        }
+    }
+
+    /**
+     * 发布扫描产物（边补全 / 社区检测 / 质量报告 / 总结文档发布到 docs/legacygraph 并向量化）。
+     *
+     * <p>在 {@link #generateSystemOverviewDocument} 之后调用：前者负责约定入库、Claim 回溯与
+     * Report 表登记，本方法负责图谱定稿后的质量评估与产物发布。失败只 warn，不阻塞扫描主流程。</p>
+     */
+    private void publishScanArtifacts(String projectId, String versionId) {
+        if (scanArtifactPublisher == null) {
+            log.debug("ScanArtifactPublisher not available, skip publishing scan artifacts: versionId={}", versionId);
+            return;
+        }
+        try {
+            scanArtifactPublisher.publish(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("ScanArtifactPublisher failed (non-blocking): versionId={}, error={}", versionId, e.getMessage());
         }
     }
 
@@ -1537,6 +1595,7 @@ public class ProjectScanner {
         return parseStatus == null
                 || parseStatus.isBlank()
                 || "UPLOADED".equals(parseStatus)
+                || "PARTIAL".equals(parseStatus)
                 || "FAILED".equals(parseStatus)
                 || "PARSE_FAILED".equals(parseStatus);
     }
@@ -1924,13 +1983,20 @@ public class ProjectScanner {
         }
 
         // 增量扫描：仅对变更文件执行抽取；快照与删除检测仍使用完整 assets 列表
+        // 修正：增量模式下 changedPaths 非空（含 0 个变更）也走过滤，避免 0 变更退化为全量
         List<SourceAsset> assetsToExtract = assets;
-        if (changedPaths != null && !changedPaths.isEmpty()) {
-            assetsToExtract = assets.stream()
-                    .filter(a -> a.getRelativePath() != null && changedPaths.contains(a.getRelativePath()))
-                    .collect(Collectors.toList());
-            log.info("Incremental adapter scan: {} of {} discovered assets changed (projectId={}, versionId={})",
-                    assetsToExtract.size(), assets.size(), projectId, versionId);
+        if (plan.isIncremental() && changedPaths != null) {
+            if (changedPaths.isEmpty()) {
+                log.info("Incremental scan: 0 files changed, skipping adapter extraction (projectId={}, versionId={})",
+                        projectId, versionId);
+                assetsToExtract = List.of();
+            } else {
+                assetsToExtract = assets.stream()
+                        .filter(a -> a.getRelativePath() != null && changedPaths.contains(a.getRelativePath()))
+                        .collect(Collectors.toList());
+                log.info("Incremental adapter scan: {} of {} discovered assets changed (projectId={}, versionId={})",
+                        assetsToExtract.size(), assets.size(), projectId, versionId);
+            }
         }
 
         // 使用并发 Adapter 执行器（替换原顺序 for 循环）

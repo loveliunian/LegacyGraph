@@ -1,7 +1,10 @@
 package io.github.legacygraph.understanding;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.legacygraph.common.NodeType;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.understanding.CodeUnderstandingTaskResult;
+import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.ToolEvidenceEntity;
 import io.github.legacygraph.entity.ToolRunEntity;
 import io.github.legacygraph.repository.ToolEvidenceRepository;
@@ -14,10 +17,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
@@ -42,6 +52,9 @@ class CodeUnderstandingReportServiceTest {
 
     @Mock
     private ToolEvidenceRepository toolEvidenceRepository;
+
+    @Mock
+    private Neo4jGraphDao neo4jGraphDao;
 
     @InjectMocks
     private CodeUnderstandingReportService reportService;
@@ -209,5 +222,266 @@ class CodeUnderstandingReportServiceTest {
         // then
         assertThat(markdown).contains("## 5. 已确认事实");
         assertThat(markdown).contains("UserService.java");
+    }
+
+    // ========================================================
+    // 聚合报告 & 章节级增量
+    // ========================================================
+
+    /** 构建模拟的 Feature GraphNode */
+    private GraphNode createFeatureNode(String id, String nodeKey, String nodeName,
+                                        String displayName, Double confidence, String description) {
+        GraphNode node = new GraphNode();
+        node.setId(id);
+        node.setNodeType(NodeType.Feature.name());
+        node.setNodeKey(nodeKey);
+        node.setNodeName(nodeName);
+        node.setDisplayName(displayName);
+        node.setConfidence(confidence != null ? BigDecimal.valueOf(confidence) : null);
+        node.setDescription(description);
+        node.setProjectId("proj-1");
+        node.setVersionId("v1");
+        return node;
+    }
+
+    // --------------------------------------------------------
+    // 场景 6：聚合报告按功能点组织章节
+    // --------------------------------------------------------
+
+    @Test
+    @DisplayName("generateAggregatedMarkdown 应按功能点组织章节")
+    void shouldOrganizeAggregatedReportByFeatures() {
+        // given: 两个 Feature 节点
+        List<GraphNode> features = List.of(
+                createFeatureNode("feat-1", "create-order", "创建订单", "创建订单", 0.9, "下单流程"),
+                createFeatureNode("feat-2", "user-login", "用户登录", "用户登录", null, null)
+        );
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
+                any(), any(), any(), any(), anyInt())).thenReturn(features);
+
+        // when
+        String markdown = reportService.generateAggregatedMarkdown("proj-1", "v1");
+
+        // then
+        assertThat(markdown).contains("# 代码理解聚合报告");
+        assertThat(markdown).contains("## 功能点概览");
+        assertThat(markdown).contains("## 功能点：创建订单");
+        assertThat(markdown).contains("## 功能点：用户登录");
+        assertThat(markdown).contains("feat-1");
+        assertThat(markdown).contains("create-order");
+    }
+
+    @Test
+    @DisplayName("无 Feature 节点时聚合报告应包含警告")
+    void shouldWarnWhenNoFeatureNodes() {
+        when(neo4jGraphDao.queryNodes(anyString(), anyString(), eq(NodeType.Feature.name()),
+                any(), any(), any(), any(), anyInt())).thenReturn(List.of());
+
+        String markdown = reportService.generateAggregatedMarkdown("proj-1", "v1");
+
+        assertThat(markdown).contains("未找到功能点");
+    }
+
+    // --------------------------------------------------------
+    // 场景 7：旧报告不存在时全量生成
+    // --------------------------------------------------------
+
+    @Test
+    @DisplayName("旧报告为空时，增量方法应退化为全量生成")
+    void shouldFallbackToFullGenerationWhenNoExistingReport() {
+        List<GraphNode> features = List.of(
+                createFeatureNode("feat-1", "create-order", "创建订单", "创建订单", 0.9, null)
+        );
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
+                any(), any(), any(), any(), anyInt())).thenReturn(features);
+
+        // 旧报告为 null
+        String markdown = reportService.generateIncrementalAggregatedMarkdown(
+                "proj-1", "v1", Set.of("feat-1"), null);
+
+        assertThat(markdown).contains("# 代码理解聚合报告");
+        assertThat(markdown).contains("## 功能点：创建订单");
+
+        // 旧报告为空串也应全量生成
+        String markdown2 = reportService.generateIncrementalAggregatedMarkdown(
+                "proj-1", "v1", Set.of("feat-1"), "  ");
+        assertThat(markdown2).contains("# 代码理解聚合报告");
+    }
+
+    @Test
+    @DisplayName("受影响节点为空时，增量方法应直接保留旧报告")
+    void shouldKeepExistingReportWhenNoAffectedNodes() {
+        String oldReport = "# 旧报告\n\n## 功能点：创建订单\n\n旧内容";
+
+        String result = reportService.generateIncrementalAggregatedMarkdown(
+                "proj-1", "v1", Set.of(), oldReport);
+
+        assertThat(result).isSameAs(oldReport);
+    }
+
+    // --------------------------------------------------------
+    // 场景 8：部分功能点变更时仅重写对应章节
+    // --------------------------------------------------------
+
+    @Test
+    @DisplayName("部分功能点变更时，仅重写受影响章节，保留未变更章节")
+    void shouldOnlyRewriteAffectedFeatureSections() {
+        // 旧报告：两个功能点章节 + 头部 + 概览
+        String oldReport = String.join("\n",
+                "# 代码理解聚合报告",
+                "",
+                "**项目ID:** proj-1",
+                "",
+                "## 功能点概览",
+                "",
+                "| # | 功能点 | 节点Key | 置信度 |",
+                "|---|--------|---------|--------|",
+                "| 1 | 创建订单 | create-order | 0.5 |",
+                "| 2 | 用户登录 | user-login | N/A |",
+                "",
+                "---",
+                "",
+                "## 功能点：创建订单",
+                "",
+                "- **节点ID:** feat-old-1",
+                "- **置信度:** 0.5",
+                "",
+                "> 📝 旧内容",
+                "",
+                "---",
+                "",
+                "## 功能点：用户登录",
+                "",
+                "- **节点ID:** feat-2",
+                "- **置信度:** N/A",
+                "",
+                "> 📝 用户登录旧内容（应保留）",
+                "");
+
+        // 图谱中两个 Feature 都存在
+        List<GraphNode> features = List.of(
+                createFeatureNode("feat-new-1", "create-order", "创建订单", "创建订单", 0.95, "更新后描述"),
+                createFeatureNode("feat-2", "user-login", "用户登录", "用户登录", null, null)
+        );
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
+                any(), any(), any(), any(), anyInt())).thenReturn(features);
+        // 受影响节点查询返回创建订单节点
+        when(neo4jGraphDao.findNodesByIds(anyList())).thenReturn(List.of(
+                createFeatureNode("feat-affected", "create-order", "创建订单", "创建订单", 0.95, null)
+        ));
+
+        // when: 仅创建订单功能点受影响
+        String result = reportService.generateIncrementalAggregatedMarkdown(
+                "proj-1", "v1", Set.of("feat-affected"), oldReport);
+
+        // then: 受影响章节被重写（节点ID变化、置信度更新）
+        assertThat(result).contains("## 功能点：创建订单");
+        assertThat(result).contains("feat-new-1");
+        assertThat(result).contains("0.95");
+        assertThat(result).doesNotContain("feat-old-1");
+
+        // 未受影响章节保留
+        assertThat(result).contains("## 功能点：用户登录");
+        assertThat(result).contains("用户登录旧内容（应保留）");
+        assertThat(result).contains("feat-2");
+
+        // 头部和概览保留
+        assertThat(result).contains("# 代码理解聚合报告");
+        assertThat(result).contains("## 功能点概览");
+    }
+
+    // --------------------------------------------------------
+    // 场景 9：报告结构无法按章节分割时退化为全量
+    // --------------------------------------------------------
+
+    @Test
+    @DisplayName("旧报告无二级标题时，退化为全量生成")
+    void shouldFallbackToFullWhenReportNotSplittable() {
+        // 旧报告无任何 ## 标题
+        String oldReport = "这是一段纯文本，没有章节标题。";
+
+        List<GraphNode> features = List.of(
+                createFeatureNode("feat-1", "create-order", "创建订单", "创建订单", 0.9, null)
+        );
+        when(neo4jGraphDao.queryNodes(eq("proj-1"), eq("v1"), eq(NodeType.Feature.name()),
+                any(), any(), any(), any(), anyInt())).thenReturn(features);
+        when(neo4jGraphDao.findNodesByIds(anyList())).thenReturn(List.of(
+                createFeatureNode("feat-1", "create-order", "创建订单", "创建订单", 0.9, null)
+        ));
+
+        String result = reportService.generateIncrementalAggregatedMarkdown(
+                "proj-1", "v1", Set.of("feat-1"), oldReport);
+
+        // 退化为全量：包含标准聚合报告头部
+        assertThat(result).contains("# 代码理解聚合报告");
+        assertThat(result).contains("## 功能点：创建订单");
+    }
+
+    // --------------------------------------------------------
+    // 辅助方法单元测试
+    // --------------------------------------------------------
+
+    @Test
+    @DisplayName("splitReportBySections 应按二级标题分割并保持顺序")
+    void shouldSplitReportBySections() {
+        String markdown = String.join("\n",
+                "# 标题",
+                "",
+                "## 章节A",
+                "",
+                "内容A",
+                "",
+                "## 章节B",
+                "",
+                "内容B",
+                "");
+
+        LinkedHashMap<String, String> sections = reportService.splitReportBySections(markdown);
+
+        assertThat(sections).isNotEmpty();
+        assertThat(sections).containsKey(CodeUnderstandingReportService.HEADER_SECTION_KEY);
+        assertThat(sections.keySet()).hasSize(3); // header + 章节A + 章节B
+        assertThat(sections).containsKeys("## 章节A", "## 章节B");
+        // 顺序保持
+        assertThat(sections.keySet().toArray()[1]).isEqualTo("## 章节A");
+        assertThat(sections.keySet().toArray()[2]).isEqualTo("## 章节B");
+        assertThat(sections.get("## 章节A")).contains("内容A");
+        assertThat(sections.get("## 章节B")).contains("内容B");
+    }
+
+    @Test
+    @DisplayName("splitReportBySections 对无标题文本应整体返回")
+    void shouldReturnWholeSectionWhenNoHeadings() {
+        String markdown = "纯文本无标题";
+
+        LinkedHashMap<String, String> sections = reportService.splitReportBySections(markdown);
+
+        assertThat(sections).hasSize(1);
+        assertThat(sections).containsKey(CodeUnderstandingReportService.WHOLE_SECTION_KEY);
+        assertThat(sections.get(CodeUnderstandingReportService.WHOLE_SECTION_KEY)).isEqualTo(markdown);
+    }
+
+    @Test
+    @DisplayName("extractFeatureNames 应仅返回 Feature 类型节点的名称")
+    void shouldExtractFeatureNamesOnly() {
+        GraphNode feature = createFeatureNode("feat-1", "create-order", "创建订单", "创建订单", 0.9, null);
+        GraphNode nonFeature = new GraphNode();
+        nonFeature.setId("svc-1");
+        nonFeature.setNodeType(NodeType.Service.name());
+        nonFeature.setNodeName("UserService");
+
+        when(neo4jGraphDao.findNodesByIds(anyList())).thenReturn(List.of(feature, nonFeature));
+
+        Set<String> names = reportService.extractFeatureNames(
+                Set.of("feat-1", "svc-1"), neo4jGraphDao);
+
+        assertThat(names).containsExactly("创建订单");
+    }
+
+    @Test
+    @DisplayName("extractFeatureNames 对空输入应返回空集合")
+    void shouldReturnEmptyWhenNoAffectedNodeIds() {
+        Set<String> names = reportService.extractFeatureNames(Set.of(), neo4jGraphDao);
+        assertThat(names).isEmpty();
     }
 }

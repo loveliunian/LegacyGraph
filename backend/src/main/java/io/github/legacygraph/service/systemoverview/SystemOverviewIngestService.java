@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 系统关系总览事实底座导入服务。
@@ -48,6 +49,10 @@ public class SystemOverviewIngestService {
     public static final String CHUNK_TYPE = "SYSTEM_OVERVIEW";
 
     private static final String EXTRACTOR = "SystemOverviewIngest";
+
+    /** 经 AST/SQL/XML/运行轨迹直接证明的来源类型；不在此集合的读写访问视为推断。 */
+    private static final Set<String> DIRECT_TABLE_SOURCES = Set.of(
+            "CODE_AST", "SQL_PARSE", "MYBATIS_XML", "RUNTIME_TRACE");
 
     /** 从图谱生成总览时，单次最多处理的 API 端点数（防止超大项目一次性拉爆 Neo4j）。 */
     private static final int MAX_GRAPH_APIS = 500;
@@ -262,19 +267,26 @@ public class SystemOverviewIngestService {
                 if (mapperKey == null && mapperName == null) {
                     continue;
                 }
-                List<String> tables = strList(r.get("tables"));
-                tables = tables.stream()
-                        .filter(t -> !t.startsWith("Neo4j") && !t.startsWith("Redis") && !t.startsWith("MinIO"))
-                        .collect(java.util.stream.Collectors.toList());
-                if (tables.isEmpty()) {
+                String table = str(r.get("tableName"));
+                if (!isRelationalTable(table)) {
+                    continue;
+                }
+                String accessType = normalizeTableAccessType(str(r.get("accessType")));
+                if (accessType == null) {
+                    log.warn("Skip table access without exact relation type: mapper={}, table={}", mapperName, table);
                     continue;
                 }
                 String module = notBlank(mapperName) ? mapperName : mapperKey;
                 String domain = deriveDomainFromModule(module);
-                // codeModuleType=Mapper：toClaims 以 Mapper 为 subject 生成 READS/WRITES Table
+                String accessSourceType = str(r.get("accessSourceType"));
+                Double accessConfidence = number(r.get("accessConfidence"));
+                // codeModuleType=Mapper：toClaims 以 Mapper 为 subject 生成原始访问类型，绝不补造反向关系。
                 RelationRow tr = row(domain, null, null, null, null, module,
-                        String.join(",", tables), "READS", "CODE", 0.85);
+                        table, accessType,
+                        notBlank(accessSourceType) ? accessSourceType : "AI_INFERENCE",
+                        accessConfidence != null ? accessConfidence : 0.6);
                 tr.setCodeModuleType("Mapper");
+                tr.setTableAccessType(accessType);
                 rows.add(tr);
             }
         }
@@ -309,6 +321,31 @@ public class SystemOverviewIngestService {
         return o == null ? null : String.valueOf(o);
     }
 
+    private Double number(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return value == null ? null : Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isRelationalTable(String table) {
+        return notBlank(table) && !table.startsWith("Neo4j") && !table.startsWith("Redis")
+                && !table.startsWith("MinIO");
+    }
+
+    private String normalizeTableAccessType(String accessType) {
+        if (!notBlank(accessType)) {
+            return null;
+        }
+        String normalized = accessType.trim().toUpperCase();
+        return "READS".equals(normalized) || "WRITES".equals(normalized) || "JOINS".equals(normalized)
+                ? normalized : null;
+    }
+
     /** 代码图谱无业务域层：用 Controller 名（去 Controller 后缀）近似，退化时用 API 名。 */
     private String deriveDomain(String controller, String apiName) {
         if (notBlank(controller)) {
@@ -327,6 +364,37 @@ public class SystemOverviewIngestService {
         }
         String d = module.replaceAll("(Mapper|Service|Controller|Repository)$", "").trim();
         return d.isBlank() ? module : d;
+    }
+
+    /**
+     * 判断 READS/WRITES 是否为推断（未经 AST/SQL/XML/运行轨迹直接证明）。
+     * <p>
+     * sourceType 不在 {@link #DIRECT_TABLE_SOURCES} 中即为推断；
+     * 或即便标记为直接来源但缺少明确的 codeModule/codeModuleType 锚点也视为聚合推断。
+     * </p>
+     */
+    private boolean isTableAccessInferred(RelationRow row) {
+        String source = row.getSourceType();
+        if (source == null || !DIRECT_TABLE_SOURCES.contains(source)) {
+            return true;
+        }
+        return !notBlank(row.getCodeModule()) || !notBlank(row.getCodeModuleType());
+    }
+
+    /**
+     * 判断业务域是否来自 {@link #deriveDomain} 推断（按 Controller 名去后缀猜业务域）。
+     * <p>
+     * 若 row 的 businessDomain 与 deriveDomain(controller, apiPath) 输出一致，
+     * 说明该域并非来自图谱 BusinessDomain 节点或人工梳理，而是启发式推断。
+     * </p>
+     */
+    private boolean isDomainInferred(RelationRow row) {
+        String domain = row.getBusinessDomain();
+        if (!notBlank(domain) || "未分类".equals(domain)) {
+            return false;
+        }
+        String derived = deriveDomain(row.getController(), row.getApiPath());
+        return notBlank(derived) && derived.equals(domain);
     }
 
     // ──────────── 关系 → Claim 转换 ────────────
@@ -358,10 +426,17 @@ public class SystemOverviewIngestService {
         String domain = row.getBusinessDomain();
         String capability = row.getCapability();
 
-        // 1. Domain CONTAINS Feature
+        // 1. Domain CONTAINS Feature —— deriveDomain() 推断的业务域降级为 AI_INFERENCE
         if (notBlank(domain) && notBlank(capability)) {
+            boolean domainInferred = isDomainInferred(row);
+            String domainSource = domainInferred ? "AI_INFERENCE" : source;
+            BigDecimal domainConf = domainInferred ? BigDecimal.valueOf(0.6) : confidence;
+            String domainLineage = domainInferred
+                    ? "[{\"rule\":\"CONTROLLER_NAME_HEURISTIC\",\"description\":\"按 Controller 名推断业务域\",\"originalConfidence\":"
+                            + conf + "}]"
+                    : null;
             drafts.add(draft(projectId, versionId, "BusinessDomain", domain, "CONTAINS",
-                    "Feature", capability, source, confidence));
+                    "Feature", capability, domainSource, domainConf, domainLineage));
         }
         // 2. Feature IMPLEMENTED_BY Controller
         if (notBlank(capability) && notBlank(row.getController())) {
@@ -383,23 +458,37 @@ public class SystemOverviewIngestService {
             drafts.add(draft(projectId, versionId, "Feature", capability, "USES",
                     "Service", row.getCodeModule(), source, confidence));
         }
-        // 6. codeModule READS/WRITES Table —— subjectType 取 codeModuleType（默认 Service）；
+        // 6. codeModule Table —— subjectType 取 codeModuleType（默认 Service）；
         //    Table 捕获行的 codeModule 是 Mapper，需以 Mapper 为 subject。
+        //    未经 AST/SQL/XML/运行轨迹直接证明的读写访问降级为 AI_INFERENCE/0.6。
         String codeSubjectType = notBlank(row.getCodeModuleType()) ? row.getCodeModuleType() : "Service";
         if (notBlank(row.getCodeModule()) && notBlank(row.getDataTables())) {
+            String exactAccessType = normalizeTableAccessType(row.getTableAccessType());
+            boolean tableInferred = isTableAccessInferred(row);
+            String tableSource = tableInferred ? "AI_INFERENCE" : source;
+            BigDecimal tableConf = tableInferred ? BigDecimal.valueOf(0.6) : confidence;
+            String readsLineage = tableInferred
+                    ? "[{\"rule\":\"TABLE_NAME_HEURISTIC\",\"description\":\"聚合表集合推断为 READS\",\"originalConfidence\":"
+                            + conf + "}]"
+                    : null;
+            String writesLineage = tableInferred
+                    ? "[{\"rule\":\"TABLE_NAME_HEURISTIC\",\"description\":\"非 _log/_snapshot 表推断为 WRITES\",\"originalConfidence\":"
+                            + conf + "}]"
+                    : null;
             for (String t : row.getDataTables().split(",")) {
                 String table = t.trim();
                 if (table.isEmpty() || table.startsWith("Neo4j") || table.startsWith("Redis")
                         || table.startsWith("MinIO")) {
                     continue; // 跳过非 PG 存储
                 }
-                // READS：所有表
-                drafts.add(draft(projectId, versionId, codeSubjectType, row.getCodeModule(), "READS",
-                        "Table", table, source, confidence));
-                // WRITES：非快照/日志类表（排除纯读表如 lg_sys_operation_log）
-                if (!table.endsWith("_log") && !table.endsWith("_snapshot")) {
-                    drafts.add(draft(projectId, versionId, codeSubjectType, row.getCodeModule(), "WRITES",
-                            "Table", table, source, confidence));
+                if (exactAccessType != null) {
+                    drafts.add(draft(projectId, versionId, codeSubjectType, row.getCodeModule(), exactAccessType,
+                            "Table", table, tableSource, tableConf,
+                            tableInferred ? readsLineage : null));
+                } else {
+                    // 表集合只能证明“可能关联”，不能证明读取或写入；保留向量召回信息，但不写伪造 Claim。
+                    log.debug("Skip inferred table operation without accessType: module={}, table={}",
+                            row.getCodeModule(), table);
                 }
             }
         }
@@ -408,8 +497,13 @@ public class SystemOverviewIngestService {
             for (String t : row.getDataTables().split(",")) {
                 String table = t.trim();
                 if (table.startsWith("lg_")) {
+                    boolean domainInferred = isDomainInferred(row);
                     drafts.add(draft(projectId, versionId, "BusinessDomain", domain, "MAPS_TO",
-                            "Table", table, source, confidence));
+                            "Table", table, domainInferred ? "AI_INFERENCE" : source,
+                            domainInferred ? BigDecimal.valueOf(0.6) : confidence,
+                            domainInferred
+                                    ? "[{\"rule\":\"DOMAIN_NAME_HEURISTIC\",\"description\":\"按代码模块或 Controller 名推断业务域\"}]"
+                                    : null));
                 }
             }
         }
@@ -420,7 +514,15 @@ public class SystemOverviewIngestService {
                                       String subjectType, String subjectKey, String predicate,
                                       String objectType, String objectKey,
                                       String sourceType, BigDecimal confidence) {
-        return KnowledgeClaimDraft.builder()
+        return draft(projectId, versionId, subjectType, subjectKey, predicate,
+                objectType, objectKey, sourceType, confidence, null);
+    }
+
+    private KnowledgeClaimDraft draft(String projectId, String versionId,
+                                      String subjectType, String subjectKey, String predicate,
+                                      String objectType, String objectKey,
+                                      String sourceType, BigDecimal confidence, String lineage) {
+        KnowledgeClaimDraft.KnowledgeClaimDraftBuilder b = KnowledgeClaimDraft.builder()
                 .projectId(projectId)
                 .versionId(versionId)
                 .subjectType(subjectType)
@@ -431,8 +533,11 @@ public class SystemOverviewIngestService {
                 .sourceType(sourceType)
                 .extractor(EXTRACTOR)
                 .confidence(confidence)
-                .evidenceIds(new ArrayList<>())
-                .build();
+                .evidenceIds(new ArrayList<>());
+        if (lineage != null) {
+            b.lineage(lineage);
+        }
+        return b.build();
     }
 
     // ──────────── 关系 → 向量 ────────────

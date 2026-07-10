@@ -6,6 +6,18 @@
 - 现有测试（避免重复）
 - 契约信息（如适用）
 
+## 生成要求
+1. 使用 JUnit 5 + Mockito 框架。
+2. 覆盖以下测试场景：
+   - **正常路径**：合法输入 → 期望返回值
+   - **参数校验失败**：非法/缺失输入 → 期望异常
+   - **依赖异常**：mock 依赖抛异常 → 验证异常处理
+   - **边界条件**：null、空集合、极值
+3. 测试方法命名：`methodName_条件_期望结果`（如 `createOrder_validInput_returnsOrderId`）。
+4. 使用 `@ExtendWith(MockitoExtension.class)` + `@Mock` + `@InjectMocks`。
+5. 每个 `@Test` 方法使用 AAA 模式：Arrange（准备）→ Act（执行）→ Assert（断言）。
+6. 断言使用 AssertJ 风格（`assertThat(result).isEqualTo(expected)`）。
+
 ## 输出结构
 
 ### 测试目标
@@ -26,12 +38,19 @@ class XxxTest {
     @InjectMocks TargetClass target;
 
     @Test
-    void methodName_validInput_returnsExpected() { ... }
+    void methodName_validInput_returnsExpected() {
+        // Arrange
+        // Act
+        // Assert
+    }
 
     @Test
-    void methodName_invalidInput_throwsException() { ... }
+    void methodName_invalidInput_throwsException() {
+        // Arrange
+        // Act & Assert
+    }
 }
 ```
 
 ### 覆盖建议
-- 建议补充的场景
+- 建议补充的场景（如有）

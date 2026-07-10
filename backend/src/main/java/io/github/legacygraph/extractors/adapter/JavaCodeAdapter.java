@@ -59,6 +59,11 @@ public class JavaCodeAdapter implements ExtractionAdapter {
         if (asset.getFileType() == null || !JAVA_EXTENSIONS.contains(asset.getFileType().toLowerCase())) {
             return false;
         }
+        // 优先用预读缓存内容，避免重复 I/O；缓存为空时 fallback 读文件
+        String content = asset.getCachedContent();
+        if (content != null) {
+            return content.contains("@RestController") || content.contains("@Controller");
+        }
         if (asset.getFile() == null || !Files.isReadable(asset.getFile())) {
             return false;
         }
@@ -77,7 +82,7 @@ public class JavaCodeAdapter implements ExtractionAdapter {
         try {
             Path file = asset.getFile();
 
-            List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(file);
+            List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(file, asset.getCachedContent());
             List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
                     context.getProjectId(), context.getVersionId(), structures);
             // 基于类结构与 import 构建 Package 节点及 BELONGS_TO / DEPENDS_ON 边
@@ -100,7 +105,7 @@ public class JavaCodeAdapter implements ExtractionAdapter {
                     apiFacts, asset.getRelativePath());
 
             // 提取 Controller 方法到 Service/Mapper 的 CALLS 边
-            List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(file.toFile());
+            List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(file.toFile(), asset.getCachedContent());
             int callEdgeCount = 0;
             if (!calls.isEmpty()) {
                 graphBuilder.buildServiceCallGraph(

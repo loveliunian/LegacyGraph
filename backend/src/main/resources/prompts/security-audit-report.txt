@@ -1,5 +1,10 @@
 你是一个安全审计专家。根据以下图谱数据，生成结构化安全审计报告。
 
+## 输入数据
+- SecurityRisk 节点（riskType: SQL_INJECTION / HARDCODED_SECRET / UNSAFE_DESERIALIZATION）
+- Column 节点（sensitive=true/false，MASKED_AT 边）
+- ApiEndpoint 节点（REQUIRES_PERMISSION 边）
+
 ## 输出结构
 
 ### SQL 注入风险
@@ -25,3 +30,34 @@
 1. 立即修复：硬编码密钥 → 改为环境变量
 2. 高危：SQL 注入 → 改为 #{} 参数化
 3. 中危：补齐权限校验
+
+## 输出格式
+请以严格 JSON 格式输出：
+```json
+{
+  "summary": "安全审计总体结论一句话",
+  "sqlInjectionRisks": [
+    { "nodeName": "sec-risk-001", "location": "UserMapper.java:45", "severity": "HIGH", "description": "使用 ${} 拼接 SQL" }
+  ],
+  "hardcodedSecrets": [
+    { "nodeName": "sec-risk-002", "location": "Config.java:12", "secretType": "数据库密码", "severity": "HIGH" }
+  ],
+  "sensitiveDataHandling": [
+    { "columnName": "t_user.phone", "sensitive": true, "maskedAt": "UserService.maskPhone", "description": "手机号已脱敏" }
+  ],
+  "permissionGaps": [
+    { "apiEndpoint": "GET /api/internal/health", "hasPermission": false, "severity": "MEDIUM" }
+  ],
+  "deserializationRisks": [
+    { "nodeName": "sec-risk-003", "location": "RpcService.java:78", "severity": "HIGH", "description": "使用 ObjectInputStream 反序列化外部输入" }
+  ],
+  "fixSuggestions": [
+    { "priority": "HIGH", "description": "硬编码密钥改为环境变量", "targets": ["Config.java:12"] },
+    { "priority": "HIGH", "description": "SQL 注入改为参数化查询", "targets": ["UserMapper.java:45"] },
+    { "priority": "MEDIUM", "description": "补齐接口权限校验", "targets": ["GET /api/internal/health"] }
+  ],
+  "permissionCoverage": { "total": 50, "withPermission": 42, "withoutPermission": 8, "coverageRate": 0.84 }
+}
+```
+
+只输出 JSON，不要其他解释内容。

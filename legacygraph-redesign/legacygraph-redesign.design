@@ -23,7 +23,7 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 480,
+        "x": 620,
         "y": 0,
         "group": 0
       },
@@ -39,7 +39,7 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 960,
+        "x": 1240,
         "y": 0,
         "group": 0
       },
@@ -55,7 +55,7 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1440,
+        "x": 1860,
         "y": 0,
         "group": 0
       },
@@ -71,7 +71,7 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1920,
+        "x": 2480,
         "y": 0,
         "group": 0
       },
@@ -88,7 +88,7 @@
       "createdAt": 1752192000000,
       "canvasData": {
         "x": 0,
-        "y": 1561,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -103,8 +103,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 480,
-        "y": 1561,
+        "x": 620,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -119,8 +119,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 960,
-        "y": 1561,
+        "x": 1240,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -135,8 +135,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1440,
-        "y": 1561,
+        "x": 1860,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -151,8 +151,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1920,
-        "y": 1561,
+        "x": 2480,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -167,8 +167,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2400,
-        "y": 1561,
+        "x": 3100,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -183,8 +183,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2880,
-        "y": 1561,
+        "x": 3720,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -199,8 +199,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3360,
-        "y": 1561,
+        "x": 4340,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -215,8 +215,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3840,
-        "y": 1561,
+        "x": 4960,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -231,8 +231,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 4320,
-        "y": 1561,
+        "x": 5580,
+        "y": 1657,
         "group": 1
       },
       "devMetadata": {
@@ -248,7 +248,7 @@
       "createdAt": 1752192000000,
       "canvasData": {
         "x": 0,
-        "y": 2160,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -263,8 +263,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 480,
-        "y": 2160,
+        "x": 620,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -279,8 +279,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 960,
-        "y": 2160,
+        "x": 1240,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -295,8 +295,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1440,
-        "y": 2160,
+        "x": 1860,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -311,8 +311,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1920,
-        "y": 2160,
+        "x": 2480,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -327,8 +327,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2400,
-        "y": 2160,
+        "x": 3100,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -343,8 +343,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2880,
-        "y": 2160,
+        "x": 3720,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -359,8 +359,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3360,
-        "y": 2160,
+        "x": 4340,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -375,8 +375,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3840,
-        "y": 2160,
+        "x": 4960,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -391,8 +391,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 4320,
-        "y": 2160,
+        "x": 5580,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -407,8 +407,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 4800,
-        "y": 2160,
+        "x": 6200,
+        "y": 2103,
         "group": 2
       },
       "devMetadata": {
@@ -424,7 +424,7 @@
       "createdAt": 1752192000000,
       "canvasData": {
         "x": 0,
-        "y": 2648,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -439,8 +439,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 480,
-        "y": 2648,
+        "x": 620,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -455,8 +455,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 960,
-        "y": 2648,
+        "x": 1240,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -471,8 +471,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1440,
-        "y": 2648,
+        "x": 1860,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -487,8 +487,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1920,
-        "y": 2648,
+        "x": 2480,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -503,8 +503,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2400,
-        "y": 2648,
+        "x": 3100,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -519,8 +519,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2880,
-        "y": 2648,
+        "x": 3720,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -535,8 +535,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3360,
-        "y": 2648,
+        "x": 4340,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -551,8 +551,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3840,
-        "y": 2648,
+        "x": 4960,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -567,8 +567,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 4320,
-        "y": 2648,
+        "x": 5580,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -583,8 +583,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 4800,
-        "y": 2648,
+        "x": 6200,
+        "y": 2480,
         "group": 3
       },
       "devMetadata": {
@@ -600,7 +600,7 @@
       "createdAt": 1752192000000,
       "canvasData": {
         "x": 0,
-        "y": 3136,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -615,8 +615,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 480,
-        "y": 3136,
+        "x": 620,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -631,8 +631,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 960,
-        "y": 3136,
+        "x": 1240,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -647,8 +647,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1440,
-        "y": 3136,
+        "x": 1860,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -663,8 +663,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1920,
-        "y": 3136,
+        "x": 2480,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -679,8 +679,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2400,
-        "y": 3136,
+        "x": 3100,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -695,8 +695,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2880,
-        "y": 3136,
+        "x": 3720,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -711,8 +711,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3360,
-        "y": 3136,
+        "x": 4340,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -727,8 +727,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3840,
-        "y": 3136,
+        "x": 4960,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -743,8 +743,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 4320,
-        "y": 3136,
+        "x": 5580,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -759,8 +759,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 4800,
-        "y": 3136,
+        "x": 6200,
+        "y": 2982,
         "group": 4
       },
       "devMetadata": {
@@ -776,7 +776,7 @@
       "createdAt": 1752192000000,
       "canvasData": {
         "x": 0,
-        "y": 3644,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -791,8 +791,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 480,
-        "y": 3644,
+        "x": 620,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -807,8 +807,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 960,
-        "y": 3644,
+        "x": 1240,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -823,8 +823,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1440,
-        "y": 3644,
+        "x": 1860,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -839,8 +839,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 1920,
-        "y": 3644,
+        "x": 2480,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -855,8 +855,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2400,
-        "y": 3644,
+        "x": 3100,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -871,8 +871,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 2880,
-        "y": 3644,
+        "x": 3720,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -887,8 +887,8 @@
       "version": 1,
       "createdAt": 1752192000000,
       "canvasData": {
-        "x": 3360,
-        "y": 3644,
+        "x": 4340,
+        "y": 3497,
         "group": 5
       },
       "devMetadata": {
@@ -904,18 +904,34 @@
       "createdAt": 1752192000000,
       "canvasData": {
         "x": 0,
-        "y": 4174,
+        "y": 4055,
         "group": 6
       },
       "devMetadata": {
         "htmlSrc": "pages/color-migration.html",
         "interactions": []
       }
+    },
+    {
+      "id": "page-interaction-components",
+      "title": "交互组件规范",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1752192000000,
+      "canvasData": {
+        "x": 620,
+        "y": 4055,
+        "group": 6
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/interaction-components.html",
+        "interactions": []
+      }
     }
   ],
   "config": {
     "autoLayout": true,
-    "deviceType": "tablet",
+    "deviceType": "desktop",
     "projectName": "LegacyGraph 前端重设计"
   }
 }

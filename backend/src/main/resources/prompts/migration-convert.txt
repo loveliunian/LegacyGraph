@@ -12,11 +12,18 @@
 - 自定义迁移规则（可选）: {customRules}
 
 ## 分析要求
-识别并转换常见迁移点（存在才报）：
+识别并转换常见迁移点（存在才报，不存在不要硬编）：
 1. 过时注解（如 `@Autowired` 字段注入 → 构造注入）。
 2. 包名迁移（`javax.*` → `jakarta.*`）。
-3. 配置/API 变化。
+3. 配置/API 变化（如 Spring Boot 2 → 3 的配置项变更）。
 4. 自定义规则匹配项。
+5. 废弃 API 替换（如 `WebSecurityConfigurerAdapter` → `SecurityFilterChain`）。
+
+## 约束
+- 只报告实际存在的变化点，不要编造代码中不存在的问题。
+- migratedCode 必须是完整的转换后代码，不是 diff。
+- manualReviewNeeded 列出无法自动确定的点（如语义级改动需要人工确认）。
+- 如果代码无需任何迁移改动，summary 写"无迁移点"，changes 为空数组。
 
 ## 输出格式
 请以严格 JSON 格式输出：

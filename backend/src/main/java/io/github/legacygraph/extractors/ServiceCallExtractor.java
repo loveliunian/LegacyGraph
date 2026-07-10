@@ -70,9 +70,19 @@ public class ServiceCallExtractor {
      * 增强：建立注入变量名→类型映射，用于精确绑定 Controller→Service、Service→Mapper 调用。
      */
     public List<CallRelation> extractFromFile(File file) throws IOException {
+        return extractFromFile(file, null);
+    }
+
+    /**
+     * 从 Java 文件抽取调用关系。
+     *
+     * @param file           Java 源文件
+     * @param cachedContent  预读的文件内容缓存（可为 null，null 时 fallback 读文件）
+     */
+    public List<CallRelation> extractFromFile(File file, String cachedContent) throws IOException {
         JavaParser parser = javaParser.get();
         List<CallRelation> relations = new ArrayList<>();
-        String content = Files.readString(file.toPath());
+        String content = cachedContent != null ? cachedContent : Files.readString(file.toPath());
         ParseResult<CompilationUnit> result;
         try {
             result = parser.parse(content);

@@ -2,8 +2,10 @@ package io.github.legacygraph.builder;
 
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.graph.EvidenceRecord;
+import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.Evidence;
+import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.NodeEvidence;
 import io.github.legacygraph.llm.SecretScanService;
@@ -18,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,8 +83,8 @@ class EvidenceGraphWriterTest {
         verify(evidenceRepository).insert(evidenceCaptor.capture());
         assertEquals("project-1", evidenceCaptor.getValue().getProjectId());
         assertEquals("v1", evidenceCaptor.getValue().getVersionId());
-        assertEquals("ai", evidenceCaptor.getValue().getEvidenceType());
-        verify(nodeEvidenceRepository).insert(any(NodeEvidence.class));
+        assertEquals("DOC_PARAGRAPH", evidenceCaptor.getValue().getEvidenceType());
+        verify(nodeEvidenceRepository).insertOrIgnore(any(NodeEvidence.class));
     }
 
     @Test
@@ -105,5 +108,38 @@ class EvidenceGraphWriterTest {
         verify(evidenceRepository).insert(evidenceCaptor.capture());
         assertEquals("project-1", evidenceCaptor.getValue().getProjectId());
         assertEquals("v1", evidenceCaptor.getValue().getVersionId());
+    }
+
+    @Test
+    void existingEdgeInheritsEvidenceAddedAfterItsInitialCreation() {
+        GraphEdge stored = new GraphEdge();
+        stored.setId("edge-1");
+        when(neo4jGraphDao.mergeEdge(any(GraphEdge.class)))
+                .thenReturn(new Neo4jGraphDao.EdgeUpsert(stored, false));
+
+        NodeEvidence nodeEvidence = new NodeEvidence();
+        nodeEvidence.setEvidenceId("evidence-new");
+        @SuppressWarnings("unchecked")
+        com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<NodeEvidence> query =
+                mock(com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper.class);
+        when(nodeEvidenceRepository.lambdaQuery()).thenReturn(query);
+        when(query.eq(any(), eq("node-source"))).thenReturn(query);
+        when(query.list()).thenReturn(List.of(nodeEvidence));
+
+        EvidenceGraphWriter writer = new EvidenceGraphWriter(
+                neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
+                new SecretScanService(), pgEvidenceTxExecutor);
+
+        writer.upsertEdge(GraphEdgeClaim.builder()
+                .projectId("project-1").versionId("v1")
+                .fromNodeId("node-source").toNodeId("node-target")
+                .edgeType("USES").edgeKey("source->uses->target")
+                .sourceType("CODE_AST").confidence(BigDecimal.ONE).build());
+
+        ArgumentCaptor<io.github.legacygraph.entity.EdgeEvidence> captor =
+                ArgumentCaptor.forClass(io.github.legacygraph.entity.EdgeEvidence.class);
+        verify(edgeEvidenceRepository).insertOrIgnore(captor.capture());
+        assertEquals("edge-1", captor.getValue().getEdgeId());
+        assertEquals("evidence-new", captor.getValue().getEvidenceId());
     }
 }

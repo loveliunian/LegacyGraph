@@ -45,7 +45,15 @@ public enum NodeType {
     Patch("补丁"),
     PullRequest("PR"),
     Dependency("依赖"),
-    VersionRisk("版本风险");
+    VersionRisk("版本风险"),
+
+    // ========== 需求结构化（Task 6） ==========
+    Requirement("需求"),
+    RequirementItem("需求条目"),
+    AcceptanceCriterion("验收条件"),
+    Constraint("约束"),
+    Assumption("假设"),
+    OpenQuestion("开放问题");
 
     private final String description;
 

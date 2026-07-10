@@ -376,7 +376,7 @@ class BlastRadiusAnalyzerTest {
         when(graphDao.findNodesBySourcePath(eq("p1"), isNull(), eq(filePath)))
                 .thenReturn(List.of(changedNode));
 
-        // 验证传入 findReverseDependents 的边类型列表包含所有 7 种
+        // 验证传入 findReverseDependents 的边类型列表包含所有 9 种
         when(graphDao.findReverseDependents(eq("p1"), isNull(), any(), anyList()))
                 .thenAnswer(inv -> {
                     List<String> edgeTypes = inv.getArgument(3);
@@ -387,10 +387,47 @@ class BlastRadiusAnalyzerTest {
                             EdgeType.BELONGS_TO.name(),
                             EdgeType.DEPENDS_ON.name(),
                             EdgeType.IMPLEMENTS.name(),
-                            EdgeType.EXTENDS.name());
+                            EdgeType.EXTENDS.name(),
+                            EdgeType.IMPLEMENTED_BY.name(),
+                            EdgeType.EXPOSED_BY.name());
                     return List.of();
                 });
 
         analyzer.analyzeBlastRadius("p1", List.of(filePath));
+    }
+
+    // ==================== clearAffectedMarkers ====================
+
+    @Test
+    @DisplayName("clearAffectedMarkers：委托 Neo4jGraphDao 清除标记并返回清除节点数")
+    void clearAffectedMarkersDelegatesAndReturnsCount() {
+        when(graphDao.clearAffectedMarkers("p1", "v1")).thenReturn(5);
+
+        int cleared = analyzer.clearAffectedMarkers("p1", "v1");
+
+        assertThat(cleared).isEqualTo(5);
+        verify(graphDao).clearAffectedMarkers("p1", "v1");
+    }
+
+    @Test
+    @DisplayName("clearAffectedMarkers：无标记时返回 0")
+    void clearAffectedMarkersReturnsZeroWhenNoMarkers() {
+        when(graphDao.clearAffectedMarkers("p1", "v1")).thenReturn(0);
+
+        int cleared = analyzer.clearAffectedMarkers("p1", "v1");
+
+        assertThat(cleared).isZero();
+        verify(graphDao).clearAffectedMarkers("p1", "v1");
+    }
+
+    @Test
+    @DisplayName("clearAffectedMarkers：versionId 为 null 时仍正确委托")
+    void clearAffectedMarkersWithNullVersionId() {
+        when(graphDao.clearAffectedMarkers("p1", null)).thenReturn(3);
+
+        int cleared = analyzer.clearAffectedMarkers("p1", null);
+
+        assertThat(cleared).isEqualTo(3);
+        verify(graphDao).clearAffectedMarkers("p1", null);
     }
 }

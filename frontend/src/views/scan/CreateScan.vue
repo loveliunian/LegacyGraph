@@ -177,10 +177,6 @@
                 :step="0.05" />
               <span class="form-tip">低于该置信度的推断结果将进入审核队列</span>
             </el-form-item>
-            <el-form-item label="覆盖已有图谱">
-              <el-switch v-model="scanForm.overwriteGraph" />
-              <span class="form-tip">关闭则保留历史版本，建议开启用于版本对比</span>
-            </el-form-item>
             <el-form-item label="自动生成测试用例">
               <el-switch v-model="scanForm.autoGenerateTestCase" />
               <span class="form-tip">扫描完成后自动基于新图谱生成测试用例</span>
@@ -266,7 +262,6 @@
               <el-descriptions-item label="增量扫描">{{ scanForm.incremental ? '是' : '否' }}</el-descriptions-item>
               <el-descriptions-item label="AI 归纳">{{ scanForm.enableAi ? '是' : '否' }}</el-descriptions-item>
               <el-descriptions-item label="最低置信度">{{ (scanForm.minConfidence * 100).toFixed(0) }}%</el-descriptions-item>
-              <el-descriptions-item label="覆盖已有图谱">{{ scanForm.overwriteGraph ? '是' : '否' }}</el-descriptions-item>
               <el-descriptions-item label="自动生成测试">{{ scanForm.autoGenerateTestCase ? '是' : '否' }}</el-descriptions-item>
             </el-descriptions>
           </div>
@@ -335,7 +330,6 @@ const scanForm = reactive({
   incremental: true,
   enableAi: true,
   minConfidence: 0.6,
-  overwriteGraph: false,
   autoGenerateTestCase: true
 })
 
@@ -437,7 +431,6 @@ const resetForm = () => {
   scanForm.incremental = true
   scanForm.enableAi = true
   scanForm.minConfidence = 0.6
-  scanForm.overwriteGraph = false
   scanForm.autoGenerateTestCase = true
 }
 

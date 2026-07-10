@@ -2,9 +2,11 @@ package io.github.legacygraph.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.builder.PgEvidenceTxExecutor;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.entity.AiScanJob;
 import io.github.legacygraph.repository.AiScanJobRepository;
+import io.github.legacygraph.service.scan.ScanArtifactPublisher;
 import io.github.legacygraph.service.systemoverview.SystemOverviewDocumentService;
 import io.github.legacygraph.service.systemoverview.SystemOverviewIngestService;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +29,10 @@ public class AiScanJobWorker {
     private final ObjectMapper objectMapper;
     private final ProjectScanner projectScanner;
     private final io.github.legacygraph.repository.ScanVersionRepository scanVersionRepository;
+    private PgEvidenceTxExecutor pgEvidenceTxExecutor;
     private SystemOverviewDocumentService systemOverviewDocumentService;
     private SystemOverviewIngestService systemOverviewIngestService;
+    private ScanArtifactPublisher scanArtifactPublisher;
 
     public AiScanJobWorker(AiScanJobRepository aiScanJobRepository,
                            AiScanOrchestrator aiScanOrchestrator,
@@ -43,6 +47,11 @@ public class AiScanJobWorker {
     }
 
     @Autowired(required = false)
+    void setPgEvidenceTxExecutor(PgEvidenceTxExecutor pgEvidenceTxExecutor) {
+        this.pgEvidenceTxExecutor = pgEvidenceTxExecutor;
+    }
+
+    @Autowired(required = false)
     void setSystemOverviewDocumentService(SystemOverviewDocumentService systemOverviewDocumentService) {
         this.systemOverviewDocumentService = systemOverviewDocumentService;
     }
@@ -50,6 +59,11 @@ public class AiScanJobWorker {
     @Autowired(required = false)
     void setSystemOverviewIngestService(SystemOverviewIngestService systemOverviewIngestService) {
         this.systemOverviewIngestService = systemOverviewIngestService;
+    }
+
+    @Autowired(required = false)
+    void setScanArtifactPublisher(ScanArtifactPublisher scanArtifactPublisher) {
+        this.scanArtifactPublisher = scanArtifactPublisher;
     }
 
     /**
@@ -87,6 +101,16 @@ public class AiScanJobWorker {
             job.setStatus("SUCCESS");
             log.info("AI scan job completed: jobId={}", job.getId());
             
+            // AI 任务完成后，flush 剩余证据
+            if (pgEvidenceTxExecutor != null) {
+                try {
+                    pgEvidenceTxExecutor.flush();
+                    log.info("Flushed remaining evidence after AI job: jobId={}", job.getId());
+                } catch (Exception ex) {
+                    log.warn("Failed to flush evidence after AI job: {}", ex.getMessage());
+                }
+            }
+            
             // AI 任务完成后，刷新 ScanVersion 的统计数据（节点/边/事实数量）
             // 并更新版本的 finishedAt 和状态，确保总耗时包含 AI 编排时间
             try {
@@ -100,6 +124,7 @@ public class AiScanJobWorker {
                     log.info("ScanVersion updated after AI job: versionId={}, nodeCount={}, finishedAt={}", 
                             job.getVersionId(), version.getNodeCount(), version.getFinishedAt());
                     generateSystemOverviewDocument(job.getProjectId(), job.getVersionId());
+                    publishScanArtifacts(job.getProjectId(), job.getVersionId());
                 }
             } catch (Exception statEx) {
                 log.warn("Failed to refresh ScanVersion stats after AI job: versionId={}, error={}", 
@@ -152,6 +177,26 @@ public class AiScanJobWorker {
             systemOverviewDocumentService.generateAfterScan(projectId, versionId);
         } catch (Exception e) {
             log.warn("Failed to generate system overview markdown after AI completion: versionId={}, error={}",
+                    versionId, e.getMessage());
+        }
+    }
+
+    /**
+     * AI 编排完成后发布扫描产物（边补全 / 社区检测 / 质量报告 / 总结文档发布到 docs/legacygraph 并向量化）。
+     *
+     * <p>在 {@link #generateSystemOverviewDocument} 之后调用，确保总结基于完整的 AI 增强图谱。
+     * 失败只 warn，不阻塞 AI 扫描主流程。</p>
+     */
+    private void publishScanArtifacts(String projectId, String versionId) {
+        if (scanArtifactPublisher == null) {
+            log.debug("ScanArtifactPublisher not available, skip publishing scan artifacts after AI: versionId={}",
+                    versionId);
+            return;
+        }
+        try {
+            scanArtifactPublisher.publish(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("ScanArtifactPublisher failed after AI (non-blocking): versionId={}, error={}",
                     versionId, e.getMessage());
         }
     }

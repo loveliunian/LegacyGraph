@@ -14,6 +14,7 @@
 3. usedEvidence 必须引用真实出现在上下文中的来源标识（如节点 key 或片段编号）。
 4. confidence 为 0~1 之间的小数，反映回答的可靠程度。
 5. relatedNodeKeys 列出与答案最相关的节点 key。
+6. answer 中每个关键结论后用方括号标注来源标识，如 `[api:/user/register]` 或 `[chunk#2]`。
 
 ## 输出格式
 请以严格 JSON 格式输出，结构如下：
