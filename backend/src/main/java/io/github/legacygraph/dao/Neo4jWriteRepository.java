@@ -185,27 +185,39 @@ public class Neo4jWriteRepository {
     }
 
     /**
-     * 批量 MERGE 节点（单次 UNWIND 替代逐条 MERGE，大幅减少网络往返）。
+     * 批量 MERGE 节点（按 nodeType 分组，使用类型特定标签如 :Mapper/:Service/:Method）。
+     * <p>修复：原实现统一使用 :GraphNode 标签，导致 findNode 按 :Mapper/:Service 等类型标签
+     * 查询时找不到节点。现在按 nodeType 分组，每组使用对应的类型标签。</p>
      */
     public void mergeNodesBatch(String projectId, String versionId, List<BatchNodeUpsert> nodes) {
         if (nodes == null || nodes.isEmpty()) {
             return;
         }
-        String cypher = """
-                UNWIND $nodes AS n
-                MERGE (node:GraphNode {projectId: $projectId, versionId: $versionId, nodeType: n.nodeType, nodeKey: n.nodeKey})
-                SET node.nodeName = n.nodeName,
-                    node += n.properties,
-                    node.updatedAt = datetime()
-                """;
-        try (Session session = neo4jDriver.session()) {
-            session.executeWrite(tx -> {
-                tx.run(cypher, Map.of(
-                        "projectId", projectId,
-                        "versionId", normalizeId(versionId),
-                        "nodes", nodes.stream().map(this::batchNodeToMap).toList()));
-                return null;
-            });
+        String normalizedVersionId = normalizeId(versionId);
+        // 按 nodeType 分组，每组使用类型特定标签
+        Map<String, List<BatchNodeUpsert>> byType = nodes.stream()
+                .filter(n -> n.nodeType() != null && !n.nodeType().isEmpty())
+                .collect(Collectors.groupingBy(BatchNodeUpsert::nodeType));
+
+        for (var entry : byType.entrySet()) {
+            String label = CypherCatalog.safeIdentifier(entry.getKey(), "nodeType");
+            List<BatchNodeUpsert> group = entry.getValue();
+            String cypher = String.format(
+                    "UNWIND $nodes AS n " +
+                    "MERGE (node:%s {projectId: $projectId, versionId: $versionId, nodeKey: n.nodeKey}) " +
+                    "ON CREATE SET node.nodeType = n.nodeType, node.id = n.id " +
+                    "SET node.nodeName = n.nodeName, " +
+                    "node += n.properties, " +
+                    "node.updatedAt = datetime()", label);
+            try (Session session = neo4jDriver.session()) {
+                session.executeWrite(tx -> {
+                    tx.run(cypher, Map.of(
+                            "projectId", projectId,
+                            "versionId", normalizedVersionId,
+                            "nodes", group.stream().map(this::batchNodeToMap).toList()));
+                    return null;
+                });
+            }
         }
     }
 
@@ -512,6 +524,7 @@ public class Neo4jWriteRepository {
 
     private Map<String, Object> batchNodeToMap(BatchNodeUpsert n) {
         Map<String, Object> map = new HashMap<>();
+        map.put("id", io.github.legacygraph.util.IdUtil.fastUUID());
         map.put("nodeType", n.nodeType());
         map.put("nodeKey", n.nodeKey());
         map.put("nodeName", n.nodeName() != null ? n.nodeName() : "");

@@ -53,8 +53,7 @@ class RequirementControllerTest {
                 mock(RequirementPatchService.class),
                 requirementRepository, itemRepository, criterionRepository,
                 scanVersionRepository, objectMapper,
-                mock(RequirementDataLineageService.class),
-                mock(ContractGeneratorService.class));
+                mock(RequirementDataLineageService.class));
 
         // 原需求
         Requirement req = new Requirement();
@@ -125,8 +124,7 @@ class RequirementControllerTest {
                 mock(RequirementPatchService.class),
                 requirementRepository, itemRepository, criterionRepository,
                 scanVersionRepository, objectMapper,
-                mock(RequirementDataLineageService.class),
-                mock(ContractGeneratorService.class));
+                mock(RequirementDataLineageService.class));
 
         when(requirementRepository.selectById("non-existent")).thenReturn(null);
 

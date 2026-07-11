@@ -129,13 +129,13 @@ class RequirementToSolutionIntegrationTest {
                 mock(RequirementPatchService.class),
                 requirementRepository, itemRepository, criterionRepository,
                 scanVersionRepository, objectMapper,
-                mock(RequirementDataLineageService.class),
-                mock(ContractGeneratorService.class));
+                mock(RequirementDataLineageService.class));
         solutionController = new SolutionController(
                 planner, verifier, repairAdvisor, linkingService, impactService,
                 solutionRepository, stepRepository, requirementRepository,
                 itemRepository, criterionRepository, scanVersionRepository,
-                bridgeService, reviewService, objectMapper);
+                bridgeService, reviewService, objectMapper,
+                mock(io.github.legacygraph.service.user.UserStoreService.class));
 
         // 通用 mock：insert 时自动设置 ID（模拟 MyBatis-Plus 的 ASSIGN_UUID 行为）
         lenient().when(requirementRepository.insert(any(Requirement.class))).thenAnswer(inv -> {
