@@ -56,6 +56,13 @@ public class Neo4jWriteRepository {
                                   String edgeKey,
                                   Map<String, Object> properties) {}
 
+    /** 按 nodeKey 匹配的批量边写入（不需要预先知道节点内部 ID） */
+    public record BatchEdgeByKeyUpsert(String fromNodeKey,
+                                       String toNodeKey,
+                                       String edgeType,
+                                       String edgeKey,
+                                       Map<String, Object> properties) {}
+
     // ==================== Node CRUD ====================
 
     /** 创建节点（使用 nodeType 作为 Neo4j 标签） */
@@ -203,6 +210,33 @@ public class Neo4jWriteRepository {
                         "projectId", projectId,
                         "versionId", normalizeId(versionId),
                         "edges", edges.stream().map(this::batchEdgeToMap).toList()));
+                return null;
+            });
+        }
+    }
+
+    /**
+     * 按 nodeKey 匹配的批量 MERGE 边（不需要预先知道节点内部 ID，减少往返）。
+     * 节点必须已存在（由 mergeNodesBatch 先创建）。
+     */
+    public void mergeEdgesByKeyBatch(String projectId, String versionId, List<BatchEdgeByKeyUpsert> edges) {
+        if (edges == null || edges.isEmpty()) {
+            return;
+        }
+        String cypher = """
+                UNWIND $edges AS e
+                MATCH (from {projectId: $projectId, versionId: $versionId, nodeKey: e.fromNodeKey})
+                MATCH (to {projectId: $projectId, versionId: $versionId, nodeKey: e.toNodeKey})
+                MERGE (from)-[r:RELATES {projectId: $projectId, versionId: $versionId, edgeType: e.edgeType, edgeKey: e.edgeKey}]->(to)
+                SET r += e.properties,
+                    r.updatedAt = datetime()
+                """;
+        try (Session session = neo4jDriver.session()) {
+            session.executeWrite(tx -> {
+                tx.run(cypher, Map.of(
+                        "projectId", projectId,
+                        "versionId", normalizeId(versionId),
+                        "edges", edges.stream().map(this::batchEdgeByKeyToMap).toList()));
                 return null;
             });
         }
@@ -472,6 +506,18 @@ public class Neo4jWriteRepository {
         Map<String, Object> map = new HashMap<>();
         map.put("fromNodeId", e.fromNodeId());
         map.put("toNodeId", e.toNodeId());
+        map.put("edgeType", e.edgeType());
+        map.put("edgeKey", e.edgeKey() != null ? e.edgeKey() : "");
+        if (e.properties() != null) {
+            map.putAll(e.properties());
+        }
+        return map;
+    }
+
+    private Map<String, Object> batchEdgeByKeyToMap(BatchEdgeByKeyUpsert e) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("fromNodeKey", e.fromNodeKey());
+        map.put("toNodeKey", e.toNodeKey());
         map.put("edgeType", e.edgeType());
         map.put("edgeKey", e.edgeKey() != null ? e.edgeKey() : "");
         if (e.properties() != null) {

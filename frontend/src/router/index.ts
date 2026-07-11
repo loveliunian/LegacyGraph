@@ -260,6 +260,18 @@ const routes: RouteRecordRaw[] = [
             name: 'SystemOverviewWorkbench',
             component: () => import('@/views/workbench/SystemOverviewWorkbench.vue'),
             meta: { title: 'menu.systemOverview' }
+          },
+          {
+            path: 'requirements',
+            name: 'RequirementAnalysis',
+            component: () => import('@/views/requirement/RequirementAnalysis.vue'),
+            meta: { title: 'menu.requirementAnalysis' }
+          },
+          {
+            path: 'solutions/:solutionId?',
+            name: 'SolutionReview',
+            component: () => import('@/views/solution/SolutionReview.vue'),
+            meta: { title: 'menu.solutionReview' }
           }
         ]
       },

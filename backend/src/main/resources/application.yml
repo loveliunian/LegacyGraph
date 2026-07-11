@@ -116,8 +116,8 @@ spring:
       username: ${NEO4J_USERNAME:}
       password: ${NEO4J_PASSWORD:}
     pool:
-      max-connection-pool-size: 25
-      connection-acquisition-timeout: 10000
+      max-connection-pool-size: 50
+      connection-acquisition-timeout: 30000
       max-connection-lifetime: 3600s
 
   # Spring AI OpenAI 配置（兼容 DeepSeek）
@@ -194,6 +194,14 @@ springdoc:
 
 # LegacyGraph 自定义配置
 legacygraph:
+  document:
+    partition:
+      # Feature Flag：结构感知切块开关（spec 5.4）
+      # 开启时使用 DocumentPartitionService + StructureAwareChunkService 进行结构感知切块
+      # 关闭时走旧 DocumentContentService + vectorizeContent 路径
+      enabled: true
+      # 每块最大字符数（默认 2500，不含 headingPath 前缀）
+      max-chars: 2500
   understanding:
     scan-enhancement:
       enabled: false
@@ -239,6 +247,20 @@ legacygraph:
     extra-args:
       - --no-viz
       - --timing
+  # 图谱发布门禁开关 — 开启后 QA 在版本未通过质量门禁时拒答（DRAFT/VALIDATING/FAILED）
+  graph-release:
+    enabled: true
+  # G5 跨语言实体消解 embedding 增强 Feature Flag
+  # 开启时对前端 Feature 与文档 Feature 名称分别生成 embedding，余弦相似度 > 0.78 创建 POSSIBLE_SAME_AS 边
+  # 关闭时退化为名称匹配（TerminologyService 跨语言相似度，阈值 0.6）
+  cross-language:
+    embedding:
+      enabled: false
+  # Task 8.3：向量检索 GraphRelease + ACL 过滤开关
+  # 开启后向量检索按 graphReleaseId / aclPrincipal 过滤，与关键词检索行为一致
+  qa:
+    graph-release-filter:
+      enabled: true
 
 legacy-graph:
   scan:

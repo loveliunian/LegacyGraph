@@ -29,5 +29,10 @@ public class Requirement {
     /** 状态：ANALYZED / FAILED / PENDING */
     private String status;
 
+    /** 开放问题列表 JSON 数组字符串（V67：全局 openQuestions 持久化，避免重建丢失导致方案绕过人工确认） */
+    private String openQuestionsJson;
+
     private LocalDateTime createdAt;
+
+    private LocalDateTime updatedAt;
 }

@@ -7,17 +7,24 @@ import io.github.legacygraph.dto.ChangeImpactAnalysis;
 import io.github.legacygraph.dto.EvidenceItem;
 import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
+import io.github.legacygraph.dto.qa.AccessContext;
+import io.github.legacygraph.dto.qa.ConfidenceBreakdown;
+import io.github.legacygraph.dto.qa.VerificationResult;
 import io.github.legacygraph.dto.rag.GraphRagEvidenceCard;
 import io.github.legacygraph.dto.rag.GraphRagExecutionResult;
 import io.github.legacygraph.dto.rag.GraphRagPlan;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.entity.KnowledgeClaim;
+import io.github.legacygraph.entity.SemanticCacheEntry;
+import io.github.legacygraph.entity.Solution;
 import io.github.legacygraph.entity.VectorDocument;
 import io.github.legacygraph.llm.LlmGateway;
 import io.github.legacygraph.service.change.ImpactSubgraphService;
 import io.github.legacygraph.service.graph.GraphRagPlanExecutor;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
+import io.github.legacygraph.service.qa.ConfidenceScorer;
 import io.github.legacygraph.service.qa.ConversationContextManager;
+import io.github.legacygraph.service.qa.EvidenceVerifier;
 import io.github.legacygraph.service.qa.HybridRetrievalService;
 import io.github.legacygraph.service.qa.ReRankingService;
 import io.github.legacygraph.service.qa.SemanticCache;
@@ -31,10 +38,14 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEventBuilder;
 import io.github.legacygraph.util.IdUtil;
 
 /**
@@ -62,6 +73,11 @@ public class EnhancedQaAgent {
     private final ImpactSubgraphService impactSubgraphService;
     private final ChangeImpactAgent changeImpactAgent;
     private final ChangeImpactQuestionParser changeImpactParser;
+    private final EvidenceVerifier evidenceVerifier;
+    private final ConfidenceScorer confidenceScorer;
+    private final io.github.legacygraph.repository.GraphReleaseRepository graphReleaseRepository;
+    private final io.github.legacygraph.repository.SolutionRepository solutionRepository;
+    private final io.github.legacygraph.config.GraphReleaseConfig graphReleaseConfig;
 
     /** QA 链路专用虚拟线程执行器 — 意图分类/改写/HyDE/规划/召回可部分并行 */
     private final ExecutorService qaExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -85,6 +101,14 @@ public class EnhancedQaAgent {
      */
     public void answerStream(String projectId, String versionId, String question,
                              String conversationId, SseEmitter emitter) {
+        answerStream(projectId, versionId, question, conversationId, emitter, AccessContext.PUBLIC);
+    }
+
+    /**
+     * 流式问答（带访问上下文 — 支持证据 ACL 校验和版本化缓存）
+     */
+    public void answerStream(String projectId, String versionId, String question,
+                             String conversationId, SseEmitter emitter, AccessContext accessContext) {
         long totalStart = System.currentTimeMillis();
         Map<String, Long> stageTimings = new LinkedHashMap<>();
         try {
@@ -96,21 +120,34 @@ public class EnhancedQaAgent {
             conversationManager.saveUserMessage(conversation.getId(), question);
             stageTimings.put("init", System.currentTimeMillis() - stageStart);
 
-            // 1. 语义缓存检查
+            // 0. GraphRelease 状态检查 — 版本未通过质量门禁时直接拒答
+            if (checkGraphReleaseFailed(projectId, versionId, emitter, conversation.getId())) {
+                return;
+            }
+
+            // 1. 语义缓存检查（版本化：按 graphReleaseId + aclHash 隔离）
             stageStart = System.currentTimeMillis();
             sendEvent(emitter, "thinking", Map.of("stage", "cache_check"));
-            String cachedAnswer = semanticCache.get(projectId, question);
+            String aclHash = accessContext != null ? accessContext.aclHash() : null;
+            String graphReleaseId = resolveGraphReleaseId(projectId, versionId);
+            var cachedEntry = semanticCache.getVersioned(projectId, question, graphReleaseId, aclHash);
             stageTimings.put("cache_check", System.currentTimeMillis() - stageStart);
-            
-            if (cachedAnswer != null && !cachedAnswer.isBlank()) {
-                String evidencesJson = "[]";
+
+            if (cachedEntry.isPresent()) {
+                SemanticCacheEntry cacheEntry = cachedEntry.get();
+                String cachedAnswer = cacheEntry.getAnswer();
+                String cachedEvidenceJson = cacheEntry.getEvidence() != null ? cacheEntry.getEvidence() : "[]";
+                double cachedConfidence = cacheEntry.getConfidence() != null ? cacheEntry.getConfidence() : 0.8;
+                List<EvidenceItem> cachedEvidences = parseEvidences(cachedEvidenceJson);
+
                 var assistantMessage = conversationManager.saveAssistantMessage(
-                    conversation.getId(), cachedAnswer, evidencesJson, 1.0
+                    conversation.getId(), cachedAnswer, cachedEvidenceJson, cachedConfidence
                 );
                 conversationManager.updateConversationTitle(conversation.getId());
 
                 // 缓存命中：流式输出缓存答案
-                log.info("Semantic cache hit for projectId={}, answerLength={}", projectId, cachedAnswer.length());
+                log.info("Semantic cache hit for projectId={}, releaseId={}, answerLength={}",
+                    projectId, graphReleaseId, cachedAnswer.length());
                 for (int i = 0; i < cachedAnswer.length(); i++) {
                     String token = String.valueOf(cachedAnswer.charAt(i));
                     sendEvent(emitter, "token", Map.of("text", token));
@@ -119,8 +156,8 @@ public class EnhancedQaAgent {
                 completeData.put("conversationId", conversation.getId());
                 completeData.put("messageId", assistantMessage != null ? assistantMessage.getId() : IdUtil.fastUUID());
                 completeData.put("fromCache", true);
-                completeData.put("confidence", 1.0);
-                completeData.put("evidences", List.of());
+                completeData.put("confidence", cachedConfidence);
+                completeData.put("evidences", cachedEvidences);
                 sendEvent(emitter, "complete", completeData);
                 emitter.complete();
                 return;
@@ -146,6 +183,19 @@ public class EnhancedQaAgent {
             // 等待 classify 完成（后续依赖）
             QueryIntent intent = intentFuture.join();
             stageTimings.put("intent_classify", System.currentTimeMillis() - stageStart);
+
+            // G10: 方案评估专用分支 — 加载最新 Solution + ImpactResult，调用 LLM 评估方案完整性/风险/成本
+            if (intent == QueryIntent.SOLUTION_EVALUATION) {
+                handleSolutionEvaluation(projectId, question, conversation.getId(), emitter,
+                    stageTimings, totalStart);
+                return;
+            }
+            // G10: 问题诊断专用分支 — 结合图谱路径检索 + 问题描述，调用 LLM 诊断根因
+            if (intent.requiresDiagnosis()) {
+                handleDiagnosis(projectId, versionId, question, conversation.getId(), emitter,
+                    stageTimings, totalStart);
+                return;
+            }
 
             // 5.5 变更影响专用链路（与 GraphRAG 分支并列互斥，CHANGE_IMPACT 不触发 GraphRAG Planner）
             long impactStart = System.currentTimeMillis();
@@ -201,6 +251,10 @@ public class EnhancedQaAgent {
             final List<EvidenceItem> finalImpactEvidences = impactEvidences;
             final ChangeImpactAnalysis finalImpactAnalysis = impactAnalysis;
             final ChangeImpactQuestionParser.ParsedChangeRequest finalParsedChange = parsedChange;
+            final QueryIntent finalIntent = intent;
+            final String finalGraphReleaseId = graphReleaseId;
+            final String finalAclHash = aclHash;
+            final AccessContext finalAccessContext = accessContext;
 
             // 6. 查询改写（依赖 intent）+ 等待 HyDE 结果
             stageStart = System.currentTimeMillis();
@@ -216,9 +270,11 @@ public class EnhancedQaAgent {
             // 6.5 GraphRAG 规划 + 7. 多路召回 — 并发执行（两者无依赖）
             List<GraphRagEvidenceCard> graphRagCards = Collections.emptyList();
             GraphRagPlan plan = null;
-            // 启动多路召回（异步）
+            // 启动多路召回（异步）— 传入 graphReleaseId + ACL principals 做检索期过滤
             CompletableFuture<List<VectorDocument>> retrievalFuture = CompletableFuture.supplyAsync(
-                () -> hybridRetrievalService.retrieve(projectId, versionId, question, queryVariants, 20),
+                () -> hybridRetrievalService.retrieve(projectId, versionId, question, queryVariants, 20,
+                    finalGraphReleaseId,
+                    finalAccessContext != null ? finalAccessContext.principals() : null),
                 qaExecutor);
             CompletableFuture<GraphRagResult> graphRagFuture = null;
             if (intent.requiresPlanner()) {
@@ -356,31 +412,100 @@ public class EnhancedQaAgent {
                         }
 
                         stageTimings.put("llm_generate", System.currentTimeMillis() - generateStart);
-                        
-                        // 保存助手消息（使用提取后的纯文本回答）
-                        String evidencesJson = objectMapper.writeValueAsString(evidences);
-                        var assistantMessage = conversationManager.saveAssistantMessage(
-                            conversation.getId(), displayText, evidencesJson, 0.8
+
+                        // ===== 证据验证 + 置信度打分（Task 9.4/9.5）=====
+                        long verifyStart = System.currentTimeMillis();
+                        VerificationResult verificationResult = evidenceVerifier.verify(
+                            displayText, evidences, projectId, finalGraphReleaseId, finalAccessContext
                         );
-                        
+
+                        // 检索一致性：简化估算（有 GraphRAG 卡片时一致性更高）
+                        double retrievalConsistency = evidences.isEmpty() ? 0.3
+                            : Math.min(1.0, (double) evidences.size() / 10.0);
+                        // 路径置信度：有图谱节点证据时更高
+                        double pathConfidence = computePathConfidence(evidences);
+
+                        ConfidenceBreakdown confidenceBreakdown = confidenceScorer.score(
+                            verificationResult, finalIntent, retrievalConsistency, pathConfidence, null
+                        );
+                        stageTimings.put("verify_confidence", System.currentTimeMillis() - verifyStart);
+
+                        double finalConfidence = confidenceBreakdown.finalScore();
+                        boolean isLowConfidence = verificationResult.isLowCoverage();
+
+                        // 高风险意图（CHANGE_IMPACT）置信度 < 0.5 → 拒答
+                        if (finalIntent == QueryIntent.CHANGE_IMPACT
+                                && finalConfidence < ConfidenceScorer.HIGH_RISK_REJECT_THRESHOLD) {
+                            String rejectMsg = "抱歉，基于当前证据无法给出可靠的变更影响分析。"
+                                + "置信度不足（" + String.format("%.2f", finalConfidence) + "），"
+                                + "建议补充更多上下文或联系人工确认。"
+                                + (verificationResult.violations().isEmpty() ? ""
+                                    : " 违规项: " + String.join("; ", verificationResult.violations()));
+
+                            var rejectMessage = conversationManager.saveAssistantMessage(
+                                conversation.getId(), rejectMsg, "[]", finalConfidence
+                            );
+                            conversationManager.updateConversationTitle(conversation.getId());
+
+                            // 拒答不写入缓存（避免低质量答案被复用）
+                            sendEvent(emitter, "token", Map.of("text", rejectMsg));
+                            Map<String, Object> rejectData = new HashMap<>();
+                            rejectData.put("conversationId", conversation.getId());
+                            rejectData.put("messageId", rejectMessage != null ? rejectMessage.getId() : IdUtil.fastUUID());
+                            rejectData.put("confidence", finalConfidence);
+                            rejectData.put("rejected", true);
+                            rejectData.put("reason", "HIGH_RISK_LOW_CONFIDENCE");
+                            rejectData.put("evidences", verificationResult.verifiedEvidences());
+                            rejectData.put("answer", rejectMsg);
+                            rejectData.put("latencyMs", System.currentTimeMillis() - totalStart);
+                            sendEvent(emitter, "complete", rejectData);
+                            emitter.complete();
+                            return;
+                        }
+
+                        // 低覆盖率标记 LOW_CONFIDENCE（仍返回答案，但前端可展示警告）
+                        if (isLowConfidence) {
+                            displayText = displayText + "\n\n> ⚠️ **LOW_CONFIDENCE**: 本答案的证据覆盖率为 "
+                                + String.format("%.0f%%", verificationResult.evidenceCoverage() * 100)
+                                + "，部分结论可能缺乏证据支撑，请谨慎参考。";
+                        }
+
+                        // 保存助手消息（使用动态置信度）
+                        String evidencesJson = objectMapper.writeValueAsString(
+                            verificationResult.verifiedEvidences().isEmpty()
+                                ? evidences : verificationResult.verifiedEvidences()
+                        );
+                        var assistantMessage = conversationManager.saveAssistantMessage(
+                            conversation.getId(), displayText, evidencesJson, finalConfidence
+                        );
+
                         // 更新对话标题
                         conversationManager.updateConversationTitle(conversation.getId());
 
-                        // 写入语义缓存
+                        // 写入版本化语义缓存
                         if (displayText != null && !displayText.isBlank()) {
-                            semanticCache.put(projectId, question, displayText, evidencesJson);
+                            semanticCache.putVersioned(
+                                projectId, question, displayText, evidencesJson,
+                                finalGraphReleaseId, finalAclHash,
+                                finalIntent.name(), finalConfidence
+                            );
                         }
 
                         // 记录端到端延迟
                         long totalLatency = System.currentTimeMillis() - totalStart;
-                        log.info("QA 端到端延迟: {}ms, 各阶段: {}", totalLatency, stageTimings);
+                        log.info("QA 端到端延迟: {}ms, 各阶段: {}, confidence={}",
+                            totalLatency, stageTimings, String.format("%.2f", finalConfidence));
 
                         // 发送完成事件（包含提取后的 answer，前端直接用）
                         Map<String, Object> completeData = new HashMap<>();
                         completeData.put("conversationId", conversation.getId());
                         completeData.put("messageId", assistantMessage != null ? assistantMessage.getId() : IdUtil.fastUUID());
-                        completeData.put("confidence", 0.8);
-                        completeData.put("evidences", evidences);
+                        completeData.put("confidence", finalConfidence);
+                        completeData.put("confidenceBreakdown", confidenceBreakdown);
+                        completeData.put("lowConfidence", isLowConfidence);
+                        completeData.put("evidenceCoverage", verificationResult.evidenceCoverage());
+                        completeData.put("evidences", verificationResult.verifiedEvidences().isEmpty()
+                            ? evidences : verificationResult.verifiedEvidences());
                         completeData.put("answer", displayText);
                         completeData.put("latencyMs", totalLatency);
                         completeData.put("stageTimings", stageTimings);
@@ -862,6 +987,223 @@ public class EnhancedQaAgent {
         return ctx.toString();
     }
 
+    /**
+     * 解析图谱发布 ID — 从 versionId（scanVersionId）查询对应的 GraphRelease。
+     * 用于版本化缓存隔离。查不到时返回 null（不版本化，向后兼容）。
+     */
+    private String resolveGraphReleaseId(String projectId, String versionId) {
+        if (versionId == null || versionId.isBlank()) return null;
+        try {
+            var release = graphReleaseRepository.findByProjectAndVersion(projectId, versionId);
+            return release != null ? release.getId() : null;
+        } catch (Exception e) {
+            log.debug("Failed to resolve graphReleaseId for version {}: {}", versionId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 检查 GraphRelease 发布门禁 — 配置关闭时全部放行；配置开启时按版本状态决定是否拒答：
+     * <ul>
+     *   <li>release == null → 允许回答（向后兼容，无发布版本时不阻断）</li>
+     *   <li>PUBLISHED → 允许回答</li>
+     *   <li>FAILED → 拒绝（未通过质量门禁）</li>
+     *   <li>DRAFT / VALIDATING → 拒绝（图谱正在发布验证中，暂不可用）</li>
+     * </ul>
+     * 返回 true 表示已拒答（调用方应直接 return）。
+     */
+    private boolean checkGraphReleaseFailed(String projectId, String versionId,
+                                             SseEmitter emitter, String conversationId) {
+        // 配置关闭时不做任何检查，全部放行
+        if (!graphReleaseConfig.isEnabled()) {
+            return false;
+        }
+        if (versionId == null || versionId.isBlank()) return false;
+        try {
+            var release = graphReleaseRepository.findByProjectAndVersion(projectId, versionId);
+            if (release == null) {
+                // 无发布版本 → 向后兼容，允许回答
+                return false;
+            }
+            String status = release.getStatus();
+            if ("FAILED".equals(status)) {
+                String msg = "该版本未通过质量门禁，无法回答。请重新扫描或选择已发布的版本。";
+                sendEvent(emitter, "answer", Map.of("content", msg));
+                emitter.complete();
+                conversationManager.saveAssistantMessage(conversationId, msg, "[]", 0.0);
+                return true;
+            }
+            if ("DRAFT".equals(status) || "VALIDATING".equals(status)) {
+                String msg = "图谱正在发布验证中，暂不可用。";
+                sendEvent(emitter, "answer", Map.of("content", msg));
+                emitter.complete();
+                conversationManager.saveAssistantMessage(conversationId, msg, "[]", 0.0);
+                return true;
+            }
+            // PUBLISHED 及其它状态 → 允许回答
+            return false;
+        } catch (Exception e) {
+            log.debug("Failed to check GraphRelease status for version {}: {}", versionId, e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * G10: 方案评估 — 加载最新 Solution（含 ImpactResult / 风险 / 成本快照），调用 LLM 从
+     * 完整性、风险、成本三个维度评估方案。无 Solution 时返回"暂无方案可评估"。
+     * <p>轻量实现：复用 {@link LlmGateway#call} 直接传 system + user prompt，不新建模板。</p>
+     */
+    private void handleSolutionEvaluation(String projectId, String question, String conversationId,
+                                          SseEmitter emitter, Map<String, Long> stageTimings,
+                                          long totalStart) {
+        long start = System.currentTimeMillis();
+        sendEvent(emitter, "thinking", Map.of("stage", "loading_solution"));
+        Solution solution;
+        try {
+            solution = solutionRepository.lambdaQuery()
+                .eq(Solution::getProjectId, projectId)
+                .orderByDesc(Solution::getCreatedAt)
+                .last("LIMIT 1")
+                .one();
+        } catch (Exception e) {
+            log.warn("Failed to load latest solution for evaluation: {}", e.getMessage());
+            solution = null;
+        }
+        if (solution == null) {
+            String msg = "暂无方案可评估。请先生成实施方案后再发起评估。";
+            sendEvent(emitter, "answer", Map.of("content", msg));
+            emitter.complete();
+            conversationManager.saveAssistantMessage(conversationId, msg, "[]", 0.0);
+            stageTimings.put("solution_evaluation", System.currentTimeMillis() - start);
+            return;
+        }
+        StringBuilder ctx = new StringBuilder();
+        ctx.append("## 方案摘要\n")
+            .append(solution.getSummary() != null ? solution.getSummary() : "（无）").append("\n\n");
+        ctx.append("## 状态\n")
+            .append(solution.getStatus() != null ? solution.getStatus() : "UNKNOWN").append("\n\n");
+        if (solution.getImpactResultJson() != null && !solution.getImpactResultJson().isBlank()) {
+            ctx.append("## 影响分析结果\n").append(solution.getImpactResultJson()).append("\n\n");
+        }
+        if (solution.getRiskAssessmentJson() != null && !solution.getRiskAssessmentJson().isBlank()) {
+            ctx.append("## 风险评估\n").append(solution.getRiskAssessmentJson()).append("\n\n");
+        }
+        if (solution.getEstimatedCostJson() != null && !solution.getEstimatedCostJson().isBlank()) {
+            ctx.append("## 成本估算\n").append(solution.getEstimatedCostJson()).append("\n\n");
+        }
+
+        String systemPrompt = "你是资深架构评审专家。请基于给定方案上下文，从完整性、风险、成本三个维度评估该方案，"
+            + "指出潜在风险点和遗漏，并给出改进建议。回答用中文，结构清晰。";
+        String userPrompt = "用户问题：\n" + question + "\n\n方案上下文：\n" + ctx;
+
+        String answer;
+        try {
+            answer = llmGateway.call(projectId, systemPrompt, userPrompt, String.class);
+        } catch (Exception e) {
+            log.warn("Solution evaluation LLM call failed: {}", e.getMessage());
+            answer = "方案评估生成失败，请稍后重试。";
+        }
+        streamSimpleAnswer(emitter, conversationId, answer, stageTimings,
+            "solution_evaluation", start, totalStart);
+    }
+
+    /**
+     * G10: 问题诊断 — 复用现有 GraphRAG 检索（混合召回 + 图谱扩展）收集上下文，
+     * 结合用户问题描述调用 LLM 诊断根因与传播路径。
+     * <p>轻量实现：复用 {@link LlmGateway#call} 直接传诊断 prompt。</p>
+     */
+    private void handleDiagnosis(String projectId, String versionId, String question,
+                                  String conversationId, SseEmitter emitter,
+                                  Map<String, Long> stageTimings, long totalStart) {
+        long start = System.currentTimeMillis();
+        sendEvent(emitter, "thinking", Map.of("stage", "diagnosing"));
+        // 复用现有检索能力收集上下文
+        String graphReleaseId = resolveGraphReleaseId(projectId, versionId);
+        List<VectorDocument> docs = Collections.emptyList();
+        try {
+            docs = hybridRetrievalService.retrieve(projectId, versionId, question,
+                List.of(question), 10, graphReleaseId, null);
+            docs = reRankingService.reRank(question, docs, 5);
+        } catch (Exception e) {
+            log.warn("Diagnosis retrieval failed: {}", e.getMessage());
+        }
+        List<GraphNode> graphNodes = expandGraph(projectId, versionId, question, QueryIntent.DIAGNOSIS);
+        String retrievalContext = buildRetrievalContext(docs, graphNodes);
+
+        String systemPrompt = "你是根因诊断专家。请结合图谱路径与问题描述，分析问题的根本原因与传播路径，"
+            + "定位关键节点，并给出可执行的修复方向。回答用中文，结构清晰。";
+        String userPrompt = "问题描述：\n" + question + "\n\n图谱与文档证据：\n" + retrievalContext;
+
+        String answer;
+        try {
+            answer = llmGateway.call(projectId, systemPrompt, userPrompt, String.class);
+        } catch (Exception e) {
+            log.warn("Diagnosis LLM call failed: {}", e.getMessage());
+            answer = "问题诊断生成失败，请稍后重试。";
+        }
+        streamSimpleAnswer(emitter, conversationId, answer, stageTimings,
+            "diagnosis", start, totalStart);
+    }
+
+    /**
+     * 流式输出轻量分支的简单答案（非 GraphRAG 链路复用）。
+     * <p>逐字符 token + complete 事件 + 持久化助手消息。</p>
+     */
+    private void streamSimpleAnswer(SseEmitter emitter, String conversationId, String answer,
+                                     Map<String, Long> stageTimings, String stageKey,
+                                     long stageStart, long totalStart) {
+        if (answer == null) answer = "";
+        for (int i = 0; i < answer.length(); i++) {
+            sendEvent(emitter, "token", Map.of("text", String.valueOf(answer.charAt(i))));
+        }
+        conversationManager.saveAssistantMessage(conversationId, answer, "[]", 0.7);
+        conversationManager.updateConversationTitle(conversationId);
+        stageTimings.put(stageKey, System.currentTimeMillis() - stageStart);
+        Map<String, Object> completeData = new HashMap<>();
+        completeData.put("conversationId", conversationId);
+        completeData.put("messageId", IdUtil.fastUUID());
+        completeData.put("confidence", 0.7);
+        completeData.put("answer", answer);
+        completeData.put("latencyMs", System.currentTimeMillis() - totalStart);
+        completeData.put("stageTimings", stageTimings);
+        sendEvent(emitter, "complete", completeData);
+        emitter.complete();
+    }
+
+    /**
+     * 解析证据 JSON 为列表。
+     */
+    private List<EvidenceItem> parseEvidences(String evidencesJson) {
+        if (evidencesJson == null || evidencesJson.isBlank() || "[]".equals(evidencesJson)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(evidencesJson,
+                objectMapper.getTypeFactory().constructCollectionType(List.class, EvidenceItem.class));
+        } catch (Exception e) {
+            log.debug("Failed to parse cached evidences JSON: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 计算路径置信度 — 基于证据类型和数量估算图谱路径完整度。
+     * <p>有 GRAPH_NODE / GRAPH_RAG 类型证据时路径置信度更高；
+     * 纯 DOC_CHUNK 证据时路径置信度较低（无图谱路径支撑）。</p>
+     */
+    private double computePathConfidence(List<EvidenceItem> evidences) {
+        if (evidences == null || evidences.isEmpty()) return 0.0;
+        long graphEvidences = evidences.stream()
+            .filter(e -> "GRAPH_NODE".equals(e.getSourceKind()) || "GRAPH_RAG".equals(e.getSourceKind()))
+            .count();
+        long docEvidences = evidences.stream()
+            .filter(e -> "DOC_CHUNK".equals(e.getSourceKind()))
+            .count();
+        double graphScore = Math.min(1.0, graphEvidences / 3.0);
+        double docScore = Math.min(0.5, docEvidences / 5.0 * 0.5);
+        return Math.min(1.0, graphScore * 0.7 + docScore * 0.3);
+    }
+
     private void sendEvent(SseEmitter emitter, String eventName, Object data) {
         try {
             emitter.send(SseEmitter.event()
@@ -871,6 +1213,140 @@ public class EnhancedQaAgent {
             log.debug("SSE connection already closed by client, event={}", eventName);
         } catch (IOException e) {
             log.debug("Failed to send SSE event, connection may be closed, event={}", eventName);
+        }
+    }
+
+    /**
+     * 同步问答 — 评测 / 门禁场景使用。
+     * <p>
+     * 内部复用 {@link #answerStream}，通过 {@link CollectingSseEmitter} 拦截 SSE 事件，
+     * 阻塞等待 {@code complete} 事件后返回答案与证据。超时或异常返回 {@code error=true} 的空结果。
+     * </p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 扫描版本 ID
+     * @param question  问题
+     * @return 同步问答结果（answer / evidences / confidence / error）
+     */
+    public QaAnswerResult answer(String projectId, String versionId, String question) {
+        CollectingSseEmitter emitter = new CollectingSseEmitter();
+        // 评测用独立 conversationId（null → 自动创建），避免污染线上对话历史
+        try {
+            qaExecutor.execute(() -> {
+                try {
+                    answerStream(projectId, versionId, question, null, emitter);
+                } catch (Exception e) {
+                    emitter.fail(e);
+                }
+            });
+        } catch (Exception e) {
+            return new QaAnswerResult("", List.of(), 0.0, true);
+        }
+        try {
+            if (!emitter.latch.await(120, TimeUnit.SECONDS)) {
+                log.warn("EnhancedQaAgent#answer: timed out for question='{}'", question);
+                return new QaAnswerResult("", List.of(), 0.0, true);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new QaAnswerResult("", List.of(), 0.0, true);
+        }
+        if (emitter.errorRef.get() != null) {
+            return new QaAnswerResult("", List.of(), 0.0, true);
+        }
+        String answer = emitter.answerRef.get() != null ? emitter.answerRef.get() : "";
+        List<EvidenceItem> evidences = emitter.evidencesRef.get() != null
+            ? emitter.evidencesRef.get() : List.of();
+        double confidence = emitter.confidenceRef.get() != null ? emitter.confidenceRef.get() : 0.0;
+        return new QaAnswerResult(answer, evidences, confidence, false);
+    }
+
+    /**
+     * 收集型 SseEmitter — 拦截 {@code send} 不向真实客户端推送，仅解析 {@code complete}/{@code error}
+     * 事件并填充结果引用。同步评测场景下 handler 未初始化，需重写 {@code complete*} 避免空指针。
+     */
+    private final class CollectingSseEmitter extends SseEmitter {
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<String> answerRef = new AtomicReference<>();
+        final AtomicReference<List<EvidenceItem>> evidencesRef = new AtomicReference<>();
+        final AtomicReference<Double> confidenceRef = new AtomicReference<>();
+        final AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        private String currentEvent;
+
+        CollectingSseEmitter() {
+            super(120_000L);
+        }
+
+        /**
+         * 拦截 {@code sendEvent} 通过 {@code emitter.send(SseEmitter.event()...)} 发出的事件，
+         * 解析事件名与 data 负载，不向真实 handler 委托（同步模式下无 SSE 客户端）。
+         * <p>
+         * 必须重写 {@code send(SseEventBuilder)} 而非 {@code send(Object, MediaType)}：
+         * 后者由 {@code SseEmitter.send(SseEventBuilder)} 通过 {@code super.send} 调用，
+         * {@code INVOKESPECIAL} 会绕过子类覆写。
+         * </p>
+         */
+        @Override
+        public synchronized void send(SseEventBuilder builder) {
+            if (builder == null) {
+                return;
+            }
+            for (ResponseBodyEmitter.DataWithMediaType item : builder.build()) {
+                Object data = item.getData();
+                if (data instanceof String s) {
+                    if (s.startsWith("event:")) {
+                        currentEvent = s.substring("event:".length()).trim();
+                    } else if (s.startsWith("data:")) {
+                        handleData(currentEvent, s.substring("data:".length()).trim());
+                    }
+                }
+            }
+        }
+
+        private void handleData(String event, String json) {
+            if (event == null) {
+                return;
+            }
+            try {
+                var node = objectMapper.readTree(json);
+                if ("complete".equals(event)) {
+                    if (node.has("answer") && !node.get("answer").isNull()) {
+                        answerRef.set(node.get("answer").asText(""));
+                    }
+                    if (node.has("confidence") && node.get("confidence").isNumber()) {
+                        confidenceRef.set(node.get("confidence").asDouble());
+                    }
+                    if (node.has("evidences")) {
+                        evidencesRef.set(objectMapper.convertValue(
+                            node.get("evidences"),
+                            new com.fasterxml.jackson.core.type.TypeReference<List<EvidenceItem>>() {}));
+                    }
+                    latch.countDown();
+                } else if ("error".equals(event)) {
+                    String msg = node.has("message") ? node.get("message").asText() : "qa stream error";
+                    errorRef.set(new RuntimeException(msg));
+                    latch.countDown();
+                }
+            } catch (Exception ignored) {
+                // 单条事件解析失败不影响整体，继续等待 complete
+            }
+        }
+
+        void fail(Throwable t) {
+            errorRef.set(t);
+            latch.countDown();
+        }
+
+        @Override
+        public void complete() {
+            // 同步模式：complete 由 complete 事件触发 latch，此处不向 handler 委托
+        }
+
+        @Override
+        public void completeWithError(Throwable failure) {
+            errorRef.set(failure);
+            latch.countDown();
         }
     }
 

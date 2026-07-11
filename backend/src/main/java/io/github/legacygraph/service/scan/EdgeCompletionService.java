@@ -50,16 +50,18 @@ public class EdgeCompletionService {
     private static final int TRANSITIVE_MAX_HOPS = 3;
     /** 单次补全的边数上限，防止超大图谱一次性写入过多 */
     private static final int TRANSITIVE_LIMIT = 100;
-    private static final int RULE_SCAN_LIMIT = 200;
+    private static final int RULE_SCAN_LIMIT = 2000;
 
     /** 补全边的统一置信度 */
     private static final BigDecimal COMPLETION_CONFIDENCE = BigDecimal.valueOf(0.7);
 
-    /** 视为「类节点」的 nodeType 集合（无独立 Class 类型，由 Controller/Service/Mapper 承担） */
+    /** 视为「类节点」的 nodeType 集合（无独立 Class 类型，由 Controller/Service/Mapper 等承担） */
     private static final List<String> CLASS_NODE_TYPES = List.of(
             NodeType.Controller.name(),
             NodeType.Service.name(),
-            NodeType.Mapper.name());
+            NodeType.Mapper.name(),
+            NodeType.ConfigItem.name(),
+            NodeType.ExternalSystem.name());
 
     private final Neo4jGraphDao neo4jGraphDao;
 

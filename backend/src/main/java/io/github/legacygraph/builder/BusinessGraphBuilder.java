@@ -16,6 +16,7 @@ import io.github.legacygraph.terminology.TerminologyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +49,10 @@ public class BusinessGraphBuilder {
     /** 向量语义匹配（bge-m3 @ Ollama）；不可用时回退纯 token 匹配，永不劣化 */
     @Autowired(required = false)
     private EmbeddingModel embeddingModel;
+
+    /** G5 Feature Flag：跨语言 embedding 语义匹配开关，默认 false（关闭时退化为名称匹配） */
+    @Value("${legacygraph.cross-language.embedding.enabled:false}")
+    private boolean crossLanguageEmbeddingEnabled;
 
     /** versionId 级 embedding 缓存：mapFeaturesToCode 和 mergeCrossLanguageFeatures 共用，扫描后清理 */
     private final Map<String, Map<String, float[]>> embeddingCacheByVersion = new java.util.concurrent.ConcurrentHashMap<>();
@@ -723,20 +728,29 @@ public class BusinessGraphBuilder {
     }
 
     /**
-     * P2：跨语言 Feature 候选关联。
+     * P2：跨语言 Feature 候选关联（G5 embedding 增强）。
      *
      * <p>DOC_AI 产中文 Feature（"释放会员保证金"），FRONTEND_AST 产英文 Feature（"unLock"），
-     * 两者语义相同但 nodeKey 不同。用 bge-m3 向量语义识别余弦 > 0.78 的
-     * DOC_AI↔FRONTEND_AST Feature 对，创建 {@link EdgeType#POSSIBLE_SAME_AS} 待确认候选边。
+     * 两者语义相同但 nodeKey 不同。创建 {@link EdgeType#POSSIBLE_SAME_AS} 待确认候选边，
      * 不迁移关系、不删除任一节点；人工确认后才能进行实体合并。</p>
+     *
+     * <p><b>G5 跨语言实体消解 embedding 增强：</b>通过 Feature Flag
+     * {@code legacygraph.cross-language.embedding.enabled}（默认 false）控制：
+     * <ul>
+     *   <li>开启且 EmbeddingModel 可用：对前端 Feature 与文档 Feature 名称分别生成 embedding，
+     *       计算余弦相似度，&gt; 0.78 时创建 POSSIBLE_SAME_AS 边，confidence 记录相似度值</li>
+     *   <li>关闭或 EmbeddingModel 不可用：退化为名称匹配（TerminologyService 跨语言相似度），
+     *       阈值 0.6，永不劣化</li>
+     * </ul></p>
      *
      * @return 创建的跨语言候选 Feature 对数
      */
     @Transactional
     public int mergeCrossLanguageFeatures(String projectId, String versionId) {
-        if (embeddingModel == null) {
-            log.info("Skip cross-language feature merge: EmbeddingModel not available");
-            return 0;
+        boolean embeddingEnabled = crossLanguageEmbeddingEnabled && embeddingModel != null;
+        if (!embeddingEnabled) {
+            log.info("Cross-language feature merge: embedding disabled (flag={}, modelAvailable={}), fallback to name matching",
+                    crossLanguageEmbeddingEnabled, embeddingModel != null);
         }
 
         List<GraphNode> docFeatures = new ArrayList<>();
@@ -755,6 +769,76 @@ public class BusinessGraphBuilder {
             return 0;
         }
 
+        if (!embeddingEnabled) {
+            return mergeCrossLanguageFeaturesByName(projectId, versionId, docFeatures, frontendFeatures);
+        }
+        return mergeCrossLanguageFeaturesByEmbedding(projectId, versionId, docFeatures, frontendFeatures);
+    }
+
+    /**
+     * 名称匹配降级路径：feature flag 关闭或 EmbeddingModel 不可用时使用。
+     * 基于 {@link TerminologyService#calculateSimilarity} 跨语言相似度，阈值 0.6，
+     * confidence 记录相似度值。一个前端 Feature 只生成一个待确认候选。
+     */
+    private int mergeCrossLanguageFeaturesByName(String projectId, String versionId,
+                                                 List<GraphNode> docFeatures,
+                                                 List<GraphNode> frontendFeatures) {
+        final double NAME_THRESHOLD = 0.6;
+        List<GraphNode> remaining = new ArrayList<>(frontendFeatures);
+        int candidates = 0;
+        for (GraphNode docFeat : docFeatures) {
+            String docName = normalizeSearchName(docFeat);
+            if (docName.isBlank()) continue;
+
+            GraphNode bestMatch = null;
+            double bestScore = NAME_THRESHOLD;
+            for (GraphNode feFeat : remaining) {
+                String feName = normalizeSearchName(feFeat);
+                if (feName.isBlank()) continue;
+                double score = terminologyService.calculateSimilarity(docName, feName);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = feFeat;
+                }
+            }
+
+            if (bestMatch != null) {
+                try {
+                    GraphEdge candidate = createEdge(
+                            projectId, versionId,
+                            docFeat.getId(), bestMatch.getId(),
+                            EdgeType.POSSIBLE_SAME_AS.name(),
+                            docFeat.getNodeKey() + "->possible_same_as->" + bestMatch.getNodeKey(),
+                            "AI_FEATURE_MAPPING",
+                            BigDecimal.valueOf(bestScore),
+                            NodeStatus.PENDING_CONFIRM);
+                    if (candidate != null) {
+                        log.info("Cross-language feature candidate (name match): '{}' ({}) ↔ '{}' ({}), score={}",
+                                docFeat.getNodeName(), docFeat.getSourceType(),
+                                bestMatch.getNodeName(), bestMatch.getSourceType(),
+                                String.format("%.2f", bestScore));
+                        remaining.remove(bestMatch); // 一个前端 Feature 只生成一个待确认候选
+                        candidates++;
+                    }
+                } catch (Exception e) {
+                    log.warn("Cross-language feature candidate (name match) failed: '{}' ↔ '{}': {}",
+                            docFeat.getNodeName(), bestMatch.getNodeName(), e.getMessage());
+                }
+            }
+        }
+
+        log.info("Cross-language feature candidate (name match): {} groups created (projectId={})", candidates, projectId);
+        return candidates;
+    }
+
+    /**
+     * embedding 语义匹配路径：feature flag 开启且 EmbeddingModel 可用时使用。
+     * 对前端/文档 Feature 名称分别生成 embedding，余弦相似度 > 0.78 创建候选边，
+     * confidence 记录相似度值。
+     */
+    private int mergeCrossLanguageFeaturesByEmbedding(String projectId, String versionId,
+                                                      List<GraphNode> docFeatures,
+                                                      List<GraphNode> frontendFeatures) {
         // 复用 versionId 级共享 embedding 缓存（与 mapFeaturesToCode 共用，避免重复 embed）
         Map<String, float[]> embCache = getEmbeddingCache(versionId);
         // 批量 embed 所有 docFeature 和 frontendFeature 名称（跳过已缓存项），减少 HTTP 往返
@@ -818,7 +902,7 @@ public class BusinessGraphBuilder {
                             BigDecimal.valueOf(bestScore),
                             NodeStatus.PENDING_CONFIRM);
                     if (candidate != null) {
-                        log.info("Cross-language feature candidate: '{}' ({}) ↔ '{}' ({}), score={}",
+                        log.info("Cross-language feature candidate (embedding): '{}' ({}) ↔ '{}' ({}), score={}",
                                 docFeat.getNodeName(), docFeat.getSourceType(),
                                 bestMatch.getNodeName(), bestMatch.getSourceType(),
                                 String.format("%.2f", bestScore));
@@ -826,13 +910,13 @@ public class BusinessGraphBuilder {
                         candidates++;
                     }
                 } catch (Exception e) {
-                    log.warn("Cross-language feature candidate failed: '{}' ↔ '{}': {}",
+                    log.warn("Cross-language feature candidate (embedding) failed: '{}' ↔ '{}': {}",
                             docFeat.getNodeName(), bestMatch.getNodeName(), e.getMessage());
                 }
             }
         }
 
-        log.info("Cross-language feature candidate: {} groups created (projectId={})", candidates, projectId);
+        log.info("Cross-language feature candidate (embedding): {} groups created (projectId={})", candidates, projectId);
         return candidates;
     }
 

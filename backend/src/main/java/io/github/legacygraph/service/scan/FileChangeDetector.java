@@ -5,6 +5,7 @@ import io.github.legacygraph.entity.FileSnapshot;
 import io.github.legacygraph.repository.FileSnapshotRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -37,10 +38,13 @@ import java.util.Set;
 public class FileChangeDetector {
 
     private final FileSnapshotRepository fileSnapshotRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Autowired
-    public FileChangeDetector(FileSnapshotRepository fileSnapshotRepository) {
+    public FileChangeDetector(FileSnapshotRepository fileSnapshotRepository,
+                              JdbcTemplate jdbcTemplate) {
         this.fileSnapshotRepository = fileSnapshotRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -82,15 +86,43 @@ public class FileChangeDetector {
         if (projectId == null || pathToContent == null || pathToContent.isEmpty()) {
             return;
         }
+        // 批量 upsert：使用 PostgreSQL INSERT ... ON CONFLICT，将 1222 次往返压缩到 1 次
+        List<Object[]> batchParams = new ArrayList<>(pathToContent.size());
         for (Map.Entry<String, String> entry : pathToContent.entrySet()) {
-            try {
-                recordFileSnapshot(projectId, entry.getKey(), entry.getValue());
-            } catch (Exception e) {
-                log.warn("Failed to record file snapshot: projectId={}, filePath={}, err={}",
-                        projectId, entry.getKey(), e.getMessage());
-            }
+            String filePath = entry.getKey();
+            String content = entry.getValue();
+            String hash = computeHash(content);
+            long size = content != null ? content.getBytes(StandardCharsets.UTF_8).length : 0L;
+            batchParams.add(new Object[]{projectId, filePath, hash, size, LocalDateTime.now()});
         }
-        log.info("Recorded {} file snapshots for projectId={}", pathToContent.size(), projectId);
+        String sql = "INSERT INTO lg_file_snapshot (id, project_id, file_path, file_hash, file_size, scanned_at, created_at, updated_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON CONFLICT (project_id, file_path) DO UPDATE SET " +
+                "file_hash = EXCLUDED.file_hash, file_size = EXCLUDED.file_size, " +
+                "scanned_at = EXCLUDED.scanned_at, updated_at = EXCLUDED.updated_at";
+        try {
+            // 生成 UUID 并批量执行
+            List<Object[]> fullParams = new ArrayList<>(batchParams.size());
+            LocalDateTime now = LocalDateTime.now();
+            for (Object[] p : batchParams) {
+                fullParams.add(new Object[]{
+                    io.github.legacygraph.util.IdUtil.fastUUID(), p[0], p[1], p[2], p[3], p[4], now, now
+                });
+            }
+            jdbcTemplate.batchUpdate(sql, fullParams);
+            log.info("Recorded {} file snapshots for projectId={}", pathToContent.size(), projectId);
+        } catch (Exception e) {
+            log.warn("Batch upsert file snapshots failed, fallback to row-by-row: {}", e.getMessage());
+            for (Map.Entry<String, String> entry : pathToContent.entrySet()) {
+                try {
+                    recordFileSnapshot(projectId, entry.getKey(), entry.getValue());
+                } catch (Exception ex) {
+                    log.warn("Failed to record file snapshot: projectId={}, filePath={}, err={}",
+                            projectId, entry.getKey(), ex.getMessage());
+                }
+            }
+            log.info("Recorded {} file snapshots for projectId={} (fallback)", pathToContent.size(), projectId);
+        }
     }
 
     /**

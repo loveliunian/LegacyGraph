@@ -2,6 +2,7 @@ package io.github.legacygraph.task.step;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.common.SourceType;
+import io.github.legacygraph.dto.DocumentChunk;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.entity.ExtractCheckpoint;
 import io.github.legacygraph.entity.Fact;
@@ -342,6 +343,84 @@ public class AiScanStepSupport {
             });
         } catch (RejectedExecutionException e) {
             // 有界队列满（CallerRunsPolicy 不会抛 Rejected，这里兜底其他拒绝场景）
+            log.debug("Vectorization rejected (queue full) for {}", sourceUri);
+        }
+    }
+
+    /**
+     * 向量化结构化切块列表（spec 5.4）。
+     * <p>
+     * 与 {@link #vectorizeContent} 不同，本方法接收预切好的 {@link DocumentChunk} 列表，
+     * 每个 chunk 已含 headingPath 前缀和 sourceLocation，直接调用 {@code embedAndStore}
+     * 逐条入库，保留结构感知的切块边界与章节上下文。
+     * <p>
+     * 内存保护与背压策略与 {@link #vectorizeContent} 一致。
+     *
+     * @param projectId   项目 ID
+     * @param versionId   扫描版本 ID
+     * @param chunkType   分片类型（DOC/CODE 等）
+     * @param sourceUri    来源 URI（通常为文件路径）
+     * @param chunks      结构化切块列表
+     */
+    public void vectorizeChunks(String projectId, String versionId, String chunkType,
+                                String sourceUri, List<DocumentChunk> chunks) {
+        if (vectorizationService == null || !vectorizationService.isAvailable()) {
+            return;
+        }
+        if (chunks == null || chunks.isEmpty()) {
+            return;
+        }
+        if (!isMemoryHealthy()) {
+            log.debug("Vectorization skipped (memory high) for {}: {}MB used / {}%",
+                    sourceUri,
+                    (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024,
+                    (int) (memoryUsageRatio() * 100));
+            return;
+        }
+        try {
+            vectorizeExecutor.execute(() -> {
+                try {
+                    if (!isMemoryHealthy()) {
+                        log.debug("Vectorization skipped (memory high in worker) for {}", sourceUri);
+                        return;
+                    }
+                    int stored = 0;
+                    for (DocumentChunk chunk : chunks) {
+                        if (!isMemoryHealthy()) {
+                            log.warn("Vectorization aborted (memory high) at chunk {}/{} for {}",
+                                    chunk.getChunkIndex(), chunks.size(), sourceUri);
+                            break;
+                        }
+                        try {
+                            Long id = vectorizationService.embedAndStore(
+                                    projectId, versionId, chunkType, sourceUri,
+                                    chunk.getChunkIndex(), chunk.getContent(), EMBEDDING_MODEL_NAME);
+                            if (id != null) {
+                                stored++;
+                            }
+                        } catch (OutOfMemoryError oom) {
+                            log.warn("Embedding OOM at chunk {} for {}, aborting: {}",
+                                    chunk.getChunkIndex(), sourceUri, oom.getMessage());
+                            break;
+                        } catch (Exception e) {
+                            if (e.getMessage() != null && e.getMessage().contains("duplicate key")) {
+                                log.debug("Chunk {} already exists for {}, skip", chunk.getChunkIndex(), sourceUri);
+                            } else {
+                                log.warn("Failed to embed chunk {} for {}: {}",
+                                        chunk.getChunkIndex(), sourceUri, e.getMessage());
+                            }
+                        }
+                    }
+                    if (stored > 0) {
+                        log.debug("Vectorized {}: {} chunks stored (structure-aware)", sourceUri, stored);
+                    }
+                } catch (OutOfMemoryError oom) {
+                    log.warn("Vectorization OOM (non-blocking) for {}: {}", sourceUri, oom.getMessage());
+                } catch (Exception e) {
+                    log.debug("Vectorization skipped for {}: {}", sourceUri, e.getMessage());
+                }
+            });
+        } catch (RejectedExecutionException e) {
             log.debug("Vectorization rejected (queue full) for {}", sourceUri);
         }
     }

@@ -234,6 +234,9 @@ public class AdapterExecutionService {
         AtomicInteger visited = new AtomicInteger(0);
         AtomicInteger processed = new AtomicInteger(0);
         Queue<KnowledgeClaimDraft> claimDrafts = new ConcurrentLinkedQueue<>();
+        // 适配器耗时统计，便于排查 ADAPTER_SCAN 慢的根因
+        ConcurrentHashMap<String, Long> adapterTimeMs = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Integer> adapterCallCount = new ConcurrentHashMap<>();
 
         // 预读文件内容缓存到 asset，避免 supports()/extract() 重复读文件（Task 9: 文件 I/O 缓存）
         for (SourceAsset asset : assets) {
@@ -266,7 +269,12 @@ public class AdapterExecutionService {
                         var adapters = adapterRegistry.selectAdapters(context, asset);
                         for (var adapter : adapters) {
                             try {
+                                long t0 = System.currentTimeMillis();
                                 ExtractionResult result = adapter.extract(context, asset);
+                                long t1 = System.currentTimeMillis();
+                                String adapterName = adapter.capability().getName();
+                                adapterTimeMs.merge(adapterName, t1 - t0, Long::sum);
+                                adapterCallCount.merge(adapterName, 1, Integer::sum);
                                 if (result != null) {
                                     processed.addAndGet(Math.max(0, result.getProcessedAssets()));
                                     collectClaimDrafts(result, claimDrafts);
@@ -295,6 +303,22 @@ public class AdapterExecutionService {
             Thread.currentThread().interrupt();
         }
         compileClaimDraftsIfConfigured(context, claimDrafts);
+        // 输出适配器耗时分布（Top-10 最慢）
+        if (!adapterTimeMs.isEmpty()) {
+            List<Map.Entry<String, Long>> topAdapters = adapterTimeMs.entrySet().stream()
+                    .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                    .limit(10)
+                    .toList();
+            StringBuilder sb = new StringBuilder("ADAPTER_SCAN time by adapter (Top-10): ");
+            for (int i = 0; i < topAdapters.size(); i++) {
+                if (i > 0) sb.append(", ");
+                Map.Entry<String, Long> e = topAdapters.get(i);
+                int callCount = adapterCallCount.getOrDefault(e.getKey(), 0);
+                sb.append(e.getKey()).append("=").append(e.getValue()).append("ms")
+                        .append("(").append(callCount).append(" calls)");
+            }
+            log.info(sb.toString());
+        }
         return processed.get();
     }
 

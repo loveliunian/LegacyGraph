@@ -21,6 +21,10 @@ import java.util.Optional;
  * 3. 如果命中，直接返回缓存答案
  * 4. 如果未命中，调用 LLM 生成答案后写入缓存
  * </p>
+ *
+ * <p><b>版本化缓存（Task 9.6）</b>：新增 graphReleaseId 和 aclHash 维度，
+ * 同一问题在不同图谱版本/不同 ACL 上下文下有独立的缓存条目，
+ * 避免跨版本返回过时答案或泄露 ACL 隔离数据。</p>
  */
 @Slf4j
 @Service
@@ -33,60 +37,141 @@ public class SemanticCache {
     private static final double SIMILARITY_THRESHOLD = 0.95;
     private static final int CACHE_TTL_HOURS = 24;
 
+    // ==================== 版本化缓存方法（推荐） ====================
+
     /**
-     * 查询缓存 - 返回语义相似的历史答案
+     * 版本化查询缓存 — 返回完整证据 JSON。
+     *
+     * @param projectId      项目 ID
+     * @param question       用户问题
+     * @param graphReleaseId 图谱发布 ID（版本化隔离维度，可为 null）
+     * @param aclHash        ACL 哈希（版本化隔离维度，可为 null）
+     * @return 缓存命中时返回完整缓存条目（含答案和证据 JSON），否则返回 empty
+     */
+    public Optional<SemanticCacheEntry> getVersioned(String projectId, String question,
+                                                      String graphReleaseId, String aclHash) {
+        try {
+            float[] queryEmbedding = vectorService.computeEmbedding(question);
+
+            Optional<SemanticCacheEntry> cached = vectorService.findSimilarCacheVersioned(
+                projectId, queryEmbedding, SIMILARITY_THRESHOLD, graphReleaseId, aclHash
+            );
+
+            if (cached.isPresent()) {
+                SemanticCacheEntry entry = cached.get();
+
+                if (isExpired(entry)) {
+                    log.debug("Versioned cache expired for question: {}", truncate(question, 50));
+                    cacheRepository.deleteById(entry.getId());
+                    return Optional.empty();
+                }
+
+                Integer currentHitCount = entry.getHitCount();
+                entry.setHitCount(currentHitCount != null ? currentHitCount + 1 : 1);
+                entry.setLastAccessAt(LocalDateTime.now());
+                cacheRepository.updateById(entry);
+
+                log.info("Versioned cache hit: question='{}', releaseId={}, aclHash={}, similarity={}",
+                    truncate(question, 50), graphReleaseId, aclHash, entry.getSimilarity());
+
+                return Optional.of(entry);
+            }
+
+            log.debug("Versioned cache miss for question: {}", truncate(question, 50));
+            return Optional.empty();
+
+        } catch (Exception e) {
+            log.warn("Versioned cache lookup failed: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 版本化写入缓存。
+     *
+     * @param projectId      项目 ID
+     * @param question       用户问题
+     * @param answer         LLM 生成的答案
+     * @param evidence       使用的证据（JSON）
+     * @param graphReleaseId 图谱发布 ID
+     * @param aclHash        ACL 哈希
+     * @param intent         意图分类
+     * @param confidence     置信度分数
+     */
+    public void putVersioned(String projectId, String question, String answer, String evidence,
+                             String graphReleaseId, String aclHash, String intent, Double confidence) {
+        try {
+            // 并发写入去重
+            LambdaQueryWrapper<SemanticCacheEntry> dedupWrapper = new LambdaQueryWrapper<>();
+            dedupWrapper.eq(SemanticCacheEntry::getProjectId, projectId)
+                    .eq(SemanticCacheEntry::getQuestion, question);
+            if (graphReleaseId != null) {
+                dedupWrapper.eq(SemanticCacheEntry::getGraphReleaseId, graphReleaseId);
+            } else {
+                dedupWrapper.isNull(SemanticCacheEntry::getGraphReleaseId);
+            }
+            if (aclHash != null) {
+                dedupWrapper.eq(SemanticCacheEntry::getAclHash, aclHash);
+            } else {
+                dedupWrapper.isNull(SemanticCacheEntry::getAclHash);
+            }
+            dedupWrapper.last("LIMIT 1");
+            if (cacheRepository.selectOne(dedupWrapper) != null) {
+                log.debug("Versioned cache skipped: duplicate question already cached for projectId={}, releaseId={}",
+                    projectId, graphReleaseId);
+                return;
+            }
+
+            float[] embedding = vectorService.computeEmbedding(question);
+            if (embedding == null || embedding.length == 0) {
+                log.warn("Versioned cache store skipped: embedding unavailable for question='{}'",
+                    truncate(question, 50));
+                return;
+            }
+
+            String embeddingStr = VectorUtils.floatArrayToVectorLiteral(embedding);
+
+            SemanticCacheEntry entry = new SemanticCacheEntry();
+            entry.setProjectId(projectId);
+            entry.setQuestion(question);
+            entry.setAnswer(answer);
+            entry.setEvidence(evidence);
+            entry.setQuestionEmbedding(embeddingStr);
+            entry.setGraphReleaseId(graphReleaseId);
+            entry.setAclHash(aclHash);
+            entry.setIntent(intent);
+            entry.setConfidence(confidence);
+            entry.setHitCount(0);
+            entry.setCreatedAt(LocalDateTime.now());
+            entry.setLastAccessAt(LocalDateTime.now());
+
+            cacheRepository.insert(entry);
+
+            log.info("Versioned cache stored: question='{}', answerLength={}, releaseId={}, aclHash={}, intent={}, confidence={}",
+                truncate(question, 50), answer.length(), graphReleaseId, aclHash, intent, confidence);
+
+        } catch (Exception e) {
+            log.warn("Versioned cache store failed: {}", e.getMessage(), e);
+        }
+    }
+
+    // ==================== 旧方法签名（向后兼容） ====================
+
+    /**
+     * 查询缓存 - 返回语义相似的历史答案（旧签名，向后兼容）。
      *
      * @param projectId 项目 ID
      * @param question  用户问题
      * @return 缓存命中时返回答案，否则返回 null
      */
     public String get(String projectId, String question) {
-        try {
-            // 1. 计算问题 embedding
-            float[] queryEmbedding = vectorService.computeEmbedding(question);
-
-            // 2. 向量检索相似缓存
-            Optional<SemanticCacheEntry> cached = vectorService.findSimilarCache(
-                projectId, queryEmbedding, SIMILARITY_THRESHOLD
-            );
-
-            if (cached.isPresent()) {
-                SemanticCacheEntry entry = cached.get();
-                
-                // 3. 检查 TTL
-                if (isExpired(entry)) {
-                    log.debug("Cache expired for question: {}", question);
-                    cacheRepository.deleteById(entry.getId());
-                    return null;
-                }
-
-                // 4. 命中，增加访问次数
-                Integer currentHitCount = entry.getHitCount();
-                entry.setHitCount(currentHitCount != null ? currentHitCount + 1 : 1);
-                entry.setLastAccessAt(LocalDateTime.now());
-                cacheRepository.updateById(entry);
-
-                String answerText = entry.getAnswer();
-                int answerLength = answerText != null ? answerText.length() : 0;
-                log.info("Semantic cache hit: question='{}', similarity={}, answerLength={}",
-                    truncate(question, 50),
-                    entry.getSimilarity(),
-                    answerLength);
-
-                return entry.getAnswer();
-            }
-
-            log.debug("Semantic cache miss for question: {}", truncate(question, 50));
-            return null;
-
-        } catch (Exception e) {
-            log.warn("Semantic cache lookup failed: {}", e.getMessage());
-            return null;
-        }
+        return getVersioned(projectId, question, null, null)
+            .map(SemanticCacheEntry::getAnswer)
+            .orElse(null);
     }
 
     /**
-     * 写入缓存 - 保存问答对供后续复用
+     * 写入缓存 - 保存问答对供后续复用（旧签名，向后兼容）。
      *
      * @param projectId 项目 ID
      * @param question  用户问题
@@ -94,53 +179,13 @@ public class SemanticCache {
      * @param evidence  使用的证据（JSON）
      */
     public void put(String projectId, String question, String answer, String evidence) {
-        try {
-            // M6 修复：并发写入去重 —— 先按问题文本精确去重，避免并发 cache miss 写入重复条目
-            LambdaQueryWrapper<SemanticCacheEntry> dedupWrapper = new LambdaQueryWrapper<>();
-            dedupWrapper.eq(SemanticCacheEntry::getProjectId, projectId)
-                    .eq(SemanticCacheEntry::getQuestion, question)
-                    .last("LIMIT 1");
-            if (cacheRepository.selectOne(dedupWrapper) != null) {
-                log.debug("Semantic cache skipped: duplicate question already cached for projectId={}", projectId);
-                return;
-            }
-
-            // 1. 计算问题 embedding
-            float[] embedding = vectorService.computeEmbedding(question);
-            if (embedding == null || embedding.length == 0) {
-                log.warn("Semantic cache store skipped: embedding unavailable for question='{}'",
-                    truncate(question, 50));
-                return;
-            }
-
-            // 2. 转为 pgvector 文本格式 "[0.1,0.2,...]"
-            String embeddingStr = VectorUtils.floatArrayToVectorLiteral(embedding);
-
-            // 3. 创建缓存条目
-            SemanticCacheEntry entry = new SemanticCacheEntry();
-            entry.setProjectId(projectId);
-            entry.setQuestion(question);
-            entry.setAnswer(answer);
-            entry.setEvidence(evidence);
-            entry.setQuestionEmbedding(embeddingStr);
-            entry.setHitCount(0);
-            entry.setCreatedAt(LocalDateTime.now());
-            entry.setLastAccessAt(LocalDateTime.now());
-
-            // 4. 保存
-            cacheRepository.insert(entry);
-
-            log.info("Semantic cache stored: question='{}', answerLength={}",
-                truncate(question, 50), answer.length());
-
-        } catch (Exception e) {
-            log.warn("Semantic cache store failed: {}", e.getMessage(), e);
-        }
+        putVersioned(projectId, question, answer, evidence, null, null, null, null);
     }
+
+    // ==================== 其他方法 ====================
 
     /**
      * 失效某项目下全部语义缓存（schema 变更后调用，避免返回过时答案）。
-     * <p>对齐 doc/项目升级计划/QA变更影响问答打通详细设计.md §4.4.2</p>
      */
     public void invalidateByProject(String projectId) {
         try {
@@ -155,8 +200,28 @@ public class SemanticCache {
     }
 
     /**
+     * 失效某项目某图谱发布版本下的语义缓存。
+     *
+     * @param projectId      项目 ID
+     * @param graphReleaseId 图谱发布 ID
+     */
+    public void invalidateByRelease(String projectId, String graphReleaseId) {
+        try {
+            if (projectId == null || projectId.isBlank() || graphReleaseId == null) return;
+            LambdaQueryWrapper<SemanticCacheEntry> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(SemanticCacheEntry::getProjectId, projectId)
+                   .eq(SemanticCacheEntry::getGraphReleaseId, graphReleaseId);
+            int deleted = cacheRepository.delete(wrapper);
+            log.info("Invalidated {} semantic cache entries for project {} release {}",
+                deleted, projectId, graphReleaseId);
+        } catch (Exception e) {
+            log.warn("Semantic cache invalidation failed for project {} release {}: {}",
+                projectId, graphReleaseId, e.getMessage());
+        }
+    }
+
+    /**
      * 清除过期缓存
-     * L7 修复：添加 @Scheduled 定时触发，每小时执行一次
      */
     @Scheduled(fixedRate = 3600000)
     public void evictExpired() {

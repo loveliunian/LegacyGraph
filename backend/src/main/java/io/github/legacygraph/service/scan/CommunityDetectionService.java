@@ -5,6 +5,7 @@ import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.llm.LlmGateway;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -51,9 +52,11 @@ public class CommunityDetectionService {
             EdgeType.IMPLEMENTS.name());
 
     private final Neo4jGraphDao graphDao;
+    private final LlmGateway llmGateway;
 
-    public CommunityDetectionService(Neo4jGraphDao graphDao) {
+    public CommunityDetectionService(Neo4jGraphDao graphDao, LlmGateway llmGateway) {
         this.graphDao = graphDao;
+        this.llmGateway = llmGateway;
     }
 
     /**
@@ -143,6 +146,170 @@ public class CommunityDetectionService {
         }
         log.info("CommunityDetectionService: wrote community labels to {} Package nodes (projectId={})",
                 updated, projectId);
+    }
+
+    /**
+     * 生成社区摘要 — 调用 LLM 为每个社区生成一句话职责描述，写入节点 properties.communitySummary。
+     *
+     * <p>流程：
+     * <ol>
+     *   <li>调用 {@link #detectCommunities} 获取社区映射（nodeKey → communityLabel）</li>
+     *   <li>反转为 communityLabel → List&lt;GraphNode&gt;</li>
+     *   <li>对每个社区收集 nodeName + nodeType，按 nodeType 分组统计，调用 LLM 生成摘要</li>
+     *   <li>调用 {@link #writeCommunitySummaryToNodes} 写入节点 properties.communitySummary</li>
+     * </ol>
+     * LLM 调用失败时使用 fallback：基于节点统计生成简单摘要。</p>
+     *
+     * @param projectId 项目 ID
+     * @return communityLabel → 摘要 映射
+     */
+    public Map<String, String> generateCommunitySummaries(String projectId) {
+        Map<String, String> communityMap = detectCommunities(projectId);
+        if (communityMap == null || communityMap.isEmpty()) {
+            log.info("CommunityDetectionService: no communities to summarize (projectId={})", projectId);
+            return Collections.emptyMap();
+        }
+
+        // 反转映射：communityLabel → List<GraphNode>
+        List<GraphNode> packages = graphDao.queryNodes(projectId, null,
+                NodeType.Package.name(), null, null, null, QUERY_LIMIT);
+        Map<String, List<GraphNode>> communityNodes = new LinkedHashMap<>();
+        if (packages != null) {
+            for (GraphNode pkg : packages) {
+                String label = communityMap.get(pkg.getNodeKey());
+                if (label == null && pkg.getNodeName() != null) {
+                    label = communityMap.get(pkg.getNodeName());
+                }
+                if (label != null) {
+                    communityNodes.computeIfAbsent(label, k -> new ArrayList<>()).add(pkg);
+                }
+            }
+        }
+
+        // 为每个社区生成摘要
+        Map<String, String> summaryMap = new LinkedHashMap<>();
+        for (Map.Entry<String, List<GraphNode>> entry : communityNodes.entrySet()) {
+            String label = entry.getKey();
+            List<GraphNode> nodes = entry.getValue();
+            String summary = generateSummaryForCommunity(projectId, label, nodes);
+            summaryMap.put(label, summary);
+        }
+
+        // 转换为 nodeKey → summary 并写入节点
+        Map<String, String> nodeSummaryMap = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : communityMap.entrySet()) {
+            String nodeKey = entry.getKey();
+            String label = entry.getValue();
+            String summary = summaryMap.get(label);
+            if (summary != null) {
+                nodeSummaryMap.put(nodeKey, summary);
+            }
+        }
+        writeCommunitySummaryToNodes(projectId, nodeSummaryMap);
+
+        log.info("CommunityDetectionService: generated {} community summaries (projectId={})",
+                summaryMap.size(), projectId);
+        return summaryMap;
+    }
+
+    /**
+     * 将社区摘要写入 Package 节点的 properties.communitySummary 字段。
+     *
+     * @param projectId  项目 ID
+     * @param summaryMap nodeKey → 摘要 映射
+     */
+    public void writeCommunitySummaryToNodes(String projectId, Map<String, String> summaryMap) {
+        if (summaryMap == null || summaryMap.isEmpty()) {
+            return;
+        }
+        List<GraphNode> packages = graphDao.queryNodes(projectId, null,
+                NodeType.Package.name(), null, null, null, QUERY_LIMIT);
+        if (packages == null || packages.isEmpty()) {
+            return;
+        }
+        int updated = 0;
+        for (GraphNode pkg : packages) {
+            String summary = summaryMap.get(pkg.getNodeKey());
+            if (summary == null && pkg.getNodeName() != null) {
+                summary = summaryMap.get(pkg.getNodeName());
+            }
+            if (summary != null && pkg.getId() != null) {
+                try {
+                    graphDao.setNodeProperty(pkg.getId(), "communitySummary", summary);
+                    updated++;
+                } catch (Exception e) {
+                    log.warn("CommunityDetectionService: failed to set communitySummary for Package {}: {}",
+                            pkg.getNodeKey(), e.getMessage());
+                }
+            }
+        }
+        log.info("CommunityDetectionService: wrote community summaries to {} Package nodes (projectId={})",
+                updated, projectId);
+    }
+
+    /**
+     * 为单个社区生成摘要 — 调用 LLM，失败时回退到基于节点统计的简单摘要。
+     */
+    private String generateSummaryForCommunity(String projectId, String communityLabel, List<GraphNode> nodes) {
+        Map<String, Integer> typeCounts = new LinkedHashMap<>();
+        for (GraphNode node : nodes) {
+            String type = node.getNodeType();
+            if (type != null) {
+                typeCounts.merge(type, 1, Integer::sum);
+            }
+        }
+        String fallbackSummary = buildFallbackSummary(typeCounts);
+
+        try {
+            String systemPrompt = "你是一个代码分析助手。根据社区内的节点信息，用一句话概括这个代码社区/子系统的职责。";
+            String userPrompt = buildCommunityPrompt(communityLabel, nodes, typeCounts);
+            String result = llmGateway.call(projectId, systemPrompt, userPrompt, String.class);
+            if (result != null && !result.isBlank()) {
+                return result.trim();
+            }
+        } catch (Exception e) {
+            log.warn("CommunityDetectionService: LLM summary failed for community {}, using fallback: {}",
+                    communityLabel, e.getMessage());
+        }
+        return fallbackSummary;
+    }
+
+    /**
+     * 构建基于节点统计的 fallback 摘要（如"社区包含 3 个 Controller、5 个 Service、2 个 Mapper"）。
+     */
+    private String buildFallbackSummary(Map<String, Integer> typeCounts) {
+        if (typeCounts.isEmpty()) {
+            return "空社区";
+        }
+        List<String> parts = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : typeCounts.entrySet()) {
+            parts.add(entry.getValue() + " 个 " + entry.getKey());
+        }
+        return "社区包含 " + String.join("、", parts);
+    }
+
+    /**
+     * 组装社区摘要的 LLM prompt 输入。
+     */
+    private String buildCommunityPrompt(String communityLabel, List<GraphNode> nodes, Map<String, Integer> typeCounts) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("社区标签：").append(communityLabel).append("\n\n");
+        sb.append("社区内节点：\n");
+        for (GraphNode node : nodes) {
+            sb.append("- ").append(node.getNodeName());
+            if (node.getNodeType() != null) {
+                sb.append(" (").append(node.getNodeType()).append(")");
+            }
+            sb.append("\n");
+        }
+        sb.append("\n节点类型统计：");
+        List<String> stats = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : typeCounts.entrySet()) {
+            stats.add(entry.getKey() + ":" + entry.getValue());
+        }
+        sb.append(String.join(", ", stats));
+        sb.append("\n\n请用一句话概括这个代码社区/子系统的职责。");
+        return sb.toString();
     }
 
     /**

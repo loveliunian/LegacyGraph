@@ -48,4 +48,28 @@ class QueryIntentTest {
         assertTrue(QueryIntent.COMPARATIVE.requiresPlanner(),
                 "COMPARATIVE 走 GraphRAG Planner 支持跨版本对比");
     }
+
+    @Test
+    void requiresPlannerReturnsTrueForSolutionEvaluation() {
+        assertTrue(QueryIntent.SOLUTION_EVALUATION.requiresPlanner(),
+                "SOLUTION_EVALUATION 走 GraphRAG Planner 评估方案上下文");
+    }
+
+    @Test
+    void requiresDiagnosisReturnsTrueOnlyForDiagnosis() {
+        assertTrue(QueryIntent.DIAGNOSIS.requiresDiagnosis(),
+                "DIAGNOSIS 走问题诊断专用链路");
+        assertFalse(QueryIntent.SOLUTION_EVALUATION.requiresDiagnosis());
+        assertFalse(QueryIntent.CHANGE_IMPACT.requiresDiagnosis());
+        assertFalse(QueryIntent.FACT_LOOKUP.requiresDiagnosis());
+        assertFalse(QueryIntent.STRUCTURAL.requiresDiagnosis());
+    }
+
+    @Test
+    void getRecommendedGraphDepthForNewIntents() {
+        assertEquals(2, QueryIntent.SOLUTION_EVALUATION.getRecommendedGraphDepth(),
+                "SOLUTION_EVALUATION 推荐深度 2");
+        assertEquals(3, QueryIntent.DIAGNOSIS.getRecommendedGraphDepth(),
+                "DIAGNOSIS 推荐深度 3（需更深路径分析根因）");
+    }
 }

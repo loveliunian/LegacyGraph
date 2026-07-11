@@ -6,6 +6,7 @@ import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dao.Neo4jWriteRepository;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
@@ -356,194 +357,280 @@ public class GraphBuilder {
      * 构建Mapper和SQL图谱
      */
     public void buildMapperSqlGraph(String projectId, String versionId, MapperSqlFact mapperFact) {
-        // 创建Mapper节点
         String mapperKey = mapperFact.getNamespace();
+        if (mapperKey == null || mapperKey.isBlank()) {
+            return;
+        }
         String mapperName = (mapperFact.getMapperInterface() != null && !mapperFact.getMapperInterface().isBlank())
                 ? mapperFact.getMapperInterface()
-                : (mapperKey != null && !mapperKey.isBlank() ? mapperKey : "未命名Mapper");
+                : mapperKey;
         String mapperDesc = mapperFact.getNamespace() != null
                 ? "MyBatis Mapper: " + mapperFact.getNamespace() : null;
-        GraphNode mapperNode = findOrCreateNode(
-                projectId, versionId,
-                NodeType.Mapper.name(),
-                mapperKey,
-                mapperName,
-                mapperName,
-                mapperDesc,
-                SourceType.MYBATIS_XML.name(),
-                mapperFact.getSourcePath(),
-                null,
-                null,
-                BigDecimal.ONE,
-                NodeStatus.CONFIRMED
-        );
 
-        // 为每个SQL语句创建节点和关系
+        List<Neo4jWriteRepository.BatchNodeUpsert> nodeBatch = new ArrayList<>();
+        List<Neo4jWriteRepository.BatchEdgeByKeyUpsert> edgeBatch = new ArrayList<>();
+        Set<String> seenNodeKeys = new HashSet<>();
+
+        Map<String, Object> mapperProps = new HashMap<>();
+        mapperProps.put("displayName", mapperName);
+        mapperProps.put("description", mapperDesc);
+        mapperProps.put("sourceType", SourceType.MYBATIS_XML.name());
+        mapperProps.put("sourcePath", mapperFact.getSourcePath());
+        mapperProps.put("confidence", 1.0);
+        mapperProps.put("status", NodeStatus.CONFIRMED.name());
+        nodeBatch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                NodeType.Mapper.name(), mapperKey, mapperName, mapperProps));
+        seenNodeKeys.add(mapperKey);
+
         for (MyBatisXmlExtractor.SqlStatement stmt : mapperFact.getStatements()) {
             String sqlKey = mapperKey + "." + stmt.getId();
-            GraphNode sqlNode = findOrCreateNode(
-                    projectId, versionId,
-                    NodeType.SqlStatement.name(),
-                    sqlKey,
-                    stmt.getId(),
-                    stmt.getType().toUpperCase() + " " + stmt.getId(),
-                    null,
-                    SourceType.MYBATIS_XML.name(),
-                    mapperFact.getSourcePath(),
-                    stmt.getStartLine(),
-                    stmt.getEndLine(),
-                    BigDecimal.ONE,
-                    NodeStatus.CONFIRMED
-            );
+            String sqlName = stmt.getType().toUpperCase() + " " + stmt.getId();
 
-            // Mapper -CONTAINS-> SqlStatement
-            createEdge(projectId, versionId,
-                    mapperNode.getId(), sqlNode.getId(),
-                    EdgeType.CONTAINS.name(),
-                    mapperKey + "->contains->" + sqlKey,
-                    SourceType.MYBATIS_XML.name(),
-                    BigDecimal.ONE,
-                    NodeStatus.CONFIRMED
-            );
-
-            // P1-1：绑定 Java Mapper 接口方法 ↔ SqlStatement（按 namespace + methodId 匹配 Method 节点）
-            // 打通 Service→Method→SqlStatement→Table 全链路
-            GraphNode methodNode = findMapperMethodNode(projectId, versionId, mapperKey, stmt.getId());
-            if (methodNode != null) {
-                createEdge(projectId, versionId,
-                        methodNode.getId(), sqlNode.getId(),
-                        EdgeType.EXECUTES.name(),
-                        methodNode.getNodeKey() + "->executes->" + sqlKey,
-                        SourceType.CODE_AST.name(),
-                        BigDecimal.valueOf(0.95),
-                        NodeStatus.CONFIRMED
-                );
+            if (!seenNodeKeys.contains(sqlKey)) {
+                Map<String, Object> sqlProps = new HashMap<>();
+                sqlProps.put("displayName", sqlName);
+                sqlProps.put("sourceType", SourceType.MYBATIS_XML.name());
+                sqlProps.put("sourcePath", mapperFact.getSourcePath());
+                sqlProps.put("startLine", stmt.getStartLine());
+                sqlProps.put("endLine", stmt.getEndLine());
+                sqlProps.put("confidence", 1.0);
+                sqlProps.put("status", NodeStatus.CONFIRMED.name());
+                nodeBatch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                        NodeType.SqlStatement.name(), sqlKey, stmt.getId(), sqlProps));
+                seenNodeKeys.add(sqlKey);
             }
 
-            // 解析SQL表关系 - 优先使用展开include后的SQL
-            String sqlToParse = (stmt.getExpandedSql() != null && !stmt.getExpandedSql().isBlank()) 
+            edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                    mapperKey, sqlKey, EdgeType.CONTAINS.name(),
+                    mapperKey + "->contains->" + sqlKey,
+                    edgeProps(SourceType.MYBATIS_XML.name(), BigDecimal.ONE, NodeStatus.CONFIRMED)));
+
+            edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                    mapperKey, sqlKey, EdgeType.EXECUTES.name(),
+                    mapperKey + "->executes->" + sqlKey,
+                    edgeProps(SourceType.MYBATIS_XML.name(), BigDecimal.ONE, NodeStatus.CONFIRMED)));
+
+            String sqlToParse = (stmt.getExpandedSql() != null && !stmt.getExpandedSql().isBlank())
                     ? stmt.getExpandedSql() : stmt.getSql();
             SqlTableExtractor.SqlTableResult tableResult = new SqlTableExtractor().extractTables(sqlToParse);
-            // SQL 性能顾问（LLM）已移出扫描主链路，改由 LlmAgentController 独立入口按需触发，避免逐 SQL 同步调用拖慢扫描。
 
-            // 建立读写关系
-            Map<String, GraphNode> readTableNodes = new LinkedHashMap<>();
+            Set<String> allTables = new HashSet<>();
+            allTables.addAll(tableResult.getReadTables());
+            allTables.addAll(tableResult.getWriteTables());
+
             for (String readTable : tableResult.getReadTables()) {
-                String tableKey = readTable; // schema.table already
-                GraphNode tableNode = findOrCreateTableNode(projectId, versionId, readTable);
-                readTableNodes.put(readTable, tableNode);
-                createEdge(projectId, versionId,
-                        sqlNode.getId(), tableNode.getId(),
-                        EdgeType.READS.name(),
-                        sqlKey + "->reads->" + tableKey,
-                        SourceType.SQL_PARSE.name(),
-                        BigDecimal.valueOf(0.95),
-                        NodeStatus.CONFIRMED
-                );
+                addTableNodeIfAbsent(nodeBatch, seenNodeKeys, projectId, versionId, readTable);
+                edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                        sqlKey, readTable, EdgeType.READS.name(),
+                        sqlKey + "->reads->" + readTable,
+                        edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.95), NodeStatus.CONFIRMED)));
             }
 
-            Map<String, GraphNode> writeTableNodes = new LinkedHashMap<>();
             for (String writeTable : tableResult.getWriteTables()) {
-                String tableKey = writeTable;
-                GraphNode tableNode = findOrCreateTableNode(projectId, versionId, writeTable);
-                writeTableNodes.put(writeTable, tableNode);
-                createEdge(projectId, versionId,
-                        sqlNode.getId(), tableNode.getId(),
-                        EdgeType.WRITES.name(),
-                        sqlKey + "->writes->" + tableKey,
-                        SourceType.SQL_PARSE.name(),
-                        BigDecimal.valueOf(0.95),
-                        NodeStatus.CONFIRMED
-                );
+                addTableNodeIfAbsent(nodeBatch, seenNodeKeys, projectId, versionId, writeTable);
+                edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                        sqlKey, writeTable, EdgeType.WRITES.name(),
+                        sqlKey + "->writes->" + writeTable,
+                        edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.95), NodeStatus.CONFIRMED)));
             }
 
-            // 构建 DATA_FLOW 边：Table --DATA_FLOW--> Table（数据血缘正向追踪）
-            // 仅当 SQL 同时存在源表（READS）和目标表（WRITES）时构建，如 INSERT INTO b SELECT FROM a
-            // SqlStatement 中间节点链路 table_a --READS--> SqlStatement --WRITES--> table_b 已建好，
-            // 此处补 Table --DATA_FLOW--> Table 直接边，方便 QA 正向遍历
-            if (!readTableNodes.isEmpty() && !writeTableNodes.isEmpty()) {
-                for (Map.Entry<String, GraphNode> readEntry : readTableNodes.entrySet()) {
-                    String readTable = readEntry.getKey();
-                    GraphNode readNode = readEntry.getValue();
-                    for (Map.Entry<String, GraphNode> writeEntry : writeTableNodes.entrySet()) {
-                        String writeTable = writeEntry.getKey();
-                        GraphNode writeNode = writeEntry.getValue();
-                        if (readNode == null || writeNode == null) {
-                            log.warn("DATA_FLOW 边跳过：源表 {} 或目标表 {} 节点为空", readTable, writeTable);
-                            continue;
-                        }
-                        // 同表自引用（如 INSERT INTO a SELECT FROM a）跳过自环边
+            for (String joinTable : tableResult.getJoinTables()) {
+                addTableNodeIfAbsent(nodeBatch, seenNodeKeys, projectId, versionId, joinTable);
+                edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                        sqlKey, joinTable, EdgeType.JOINS.name(),
+                        sqlKey + "->joins->" + joinTable,
+                        edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.95), NodeStatus.CONFIRMED)));
+            }
+
+            if (!tableResult.getReadTables().isEmpty() && !tableResult.getWriteTables().isEmpty()) {
+                for (String readTable : tableResult.getReadTables()) {
+                    for (String writeTable : tableResult.getWriteTables()) {
                         if (readTable.equalsIgnoreCase(writeTable)) {
                             continue;
                         }
-                        createEdge(projectId, versionId,
-                                readNode.getId(), writeNode.getId(),
-                                EdgeType.DATA_FLOW.name(),
+                        edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                                readTable, writeTable, EdgeType.DATA_FLOW.name(),
                                 readTable + "->data_flow->" + writeTable,
-                                SourceType.SQL_PARSE.name(),
-                                BigDecimal.valueOf(0.9),
-                                NodeStatus.CONFIRMED
-                        );
+                                edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED)));
                     }
                 }
             }
 
-            for (String joinTable : tableResult.getJoinTables()) {
-                String tableKey = joinTable;
-                GraphNode tableNode = findOrCreateTableNode(projectId, versionId, joinTable);
-                createEdge(projectId, versionId,
-                        sqlNode.getId(), tableNode.getId(),
-                        EdgeType.JOINS.name(),
-                        sqlKey + "->joins->" + tableKey,
-                        SourceType.SQL_PARSE.name(),
-                        BigDecimal.valueOf(0.95),
-                        NodeStatus.CONFIRMED
-                );
-            }
-
-            // 字段级血缘：SqlStatement → Column (READS/WRITES)
-            // Column nodeKey 格式为 schema.tableName.columnName，SQL 中仅提取字段简单名，
-            // 将其关联到本 SQL 涉及的所有表（单表查询最常见，多表 JOIN 按保守策略全关联）。
-            Set<String> allTables = new HashSet<>();
-            allTables.addAll(tableResult.getReadTables());
-            allTables.addAll(tableResult.getWriteTables());
             for (String colName : tableResult.getReadColumns()) {
                 for (String tbl : allTables) {
-                    GraphNode colNode = findOrCreateColumnNode(projectId, versionId, tbl, colName);
-                    createEdge(projectId, versionId,
-                            sqlNode.getId(), colNode.getId(),
-                            EdgeType.READS.name(),
+                    String colKey = tbl.toLowerCase() + "." + colName.toLowerCase();
+                    addColumnNodeIfAbsent(nodeBatch, seenNodeKeys, tbl, colName);
+                    edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                            sqlKey, colKey, EdgeType.READS.name(),
                             sqlKey + "->reads->" + tbl + "." + colName,
-                            SourceType.SQL_PARSE.name(),
-                            BigDecimal.valueOf(0.85),
-                            NodeStatus.CONFIRMED
-                    );
+                            edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.85), NodeStatus.CONFIRMED)));
                 }
             }
             for (String colName : tableResult.getWriteColumns()) {
                 for (String tbl : allTables) {
-                    GraphNode colNode = findOrCreateColumnNode(projectId, versionId, tbl, colName);
-                    createEdge(projectId, versionId,
-                            sqlNode.getId(), colNode.getId(),
-                            EdgeType.WRITES.name(),
+                    String colKey = tbl.toLowerCase() + "." + colName.toLowerCase();
+                    addColumnNodeIfAbsent(nodeBatch, seenNodeKeys, tbl, colName);
+                    edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                            sqlKey, colKey, EdgeType.WRITES.name(),
                             sqlKey + "->writes->" + tbl + "." + colName,
-                            SourceType.SQL_PARSE.name(),
-                            BigDecimal.valueOf(0.85),
-                            NodeStatus.CONFIRMED
-                    );
+                            edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.85), NodeStatus.CONFIRMED)));
                 }
             }
-
-            // Mapper -EXECUTES-> SqlStatement
-            createEdge(projectId, versionId,
-                    mapperNode.getId(), sqlNode.getId(),
-                    EdgeType.EXECUTES.name(),
-                    mapperKey + "->executes->" + sqlKey,
-                    SourceType.MYBATIS_XML.name(),
-                    BigDecimal.ONE,
-                    NodeStatus.CONFIRMED
-            );
         }
+
+        if (!nodeBatch.isEmpty()) {
+            neo4jGraphDao.mergeNodesBatch(projectId, versionId, nodeBatch);
+        }
+        if (!edgeBatch.isEmpty()) {
+            neo4jGraphDao.mergeEdgesByKeyBatch(projectId, versionId, edgeBatch);
+        }
+
+        for (MyBatisXmlExtractor.SqlStatement stmt : mapperFact.getStatements()) {
+            String sqlKey = mapperKey + "." + stmt.getId();
+            GraphNode methodNode = findMapperMethodNode(projectId, versionId, mapperKey, stmt.getId());
+            if (methodNode != null) {
+                neo4jGraphDao.mergeEdgesByKeyBatch(projectId, versionId, List.of(
+                        new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                                methodNode.getNodeKey(), sqlKey, EdgeType.EXECUTES.name(),
+                                methodNode.getNodeKey() + "->executes->" + sqlKey,
+                                edgeProps(SourceType.CODE_AST.name(), BigDecimal.valueOf(0.95), NodeStatus.CONFIRMED))
+                ));
+            }
+        }
+    }
+
+    /**
+     * 后置连接：在所有适配器执行完成后，重新执行 Method → SqlStatement 的 EXECUTES 边创建。
+     * 补偿并发执行时因 Method 节点尚未创建而遗漏的边。
+     */
+    public int linkMapperMethodsToSqlStatements(String projectId, String versionId) {
+        // 1. 一次性加载所有 Method 节点到内存索引（按 FQN 前缀匹配）
+        List<GraphNode> allMethods = neo4jGraphDao.queryNodes(
+                projectId, versionId, NodeType.Method.name(), null, null, null, 0);
+        if (allMethods == null || allMethods.isEmpty()) {
+            log.info("Mapper-SQL link: no Method nodes found for versionId={}", versionId);
+            return 0;
+        }
+
+        // 2. 查询所有 Mapper → SqlStatement 的 CONTAINS 边（Mapper nodeKey = namespace）
+        List<GraphEdge> containsEdges = neo4jGraphDao.queryEdges(
+                projectId, versionId, EdgeType.CONTAINS.name(), null, 0);
+        if (containsEdges == null || containsEdges.isEmpty()) {
+            log.info("Mapper-SQL link: no CONTAINS edges found for versionId={}", versionId);
+            return 0;
+        }
+
+        // 3. 查询已存在的 EXECUTES 边去重
+        List<GraphEdge> existingExecutes = neo4jGraphDao.queryEdges(
+                projectId, versionId, EdgeType.EXECUTES.name(), null, 0);
+        Set<String> existingPairs = new HashSet<>();
+        if (existingExecutes != null) {
+            for (GraphEdge e : existingExecutes) {
+                if (e.getFromNodeId() != null && e.getToNodeId() != null) {
+                    existingPairs.add(e.getFromNodeId() + "|" + e.getToNodeId());
+                }
+            }
+        }
+
+        // 4. 构建 namespace+methodId → Method 节点 的索引
+        // Method nodeKey 格式: FQN.methodName(paramTypes)，如 com.example.UserMapper.selectById(Long)
+        // SqlStatement nodeKey 格式: namespace.statementId，如 com.example.UserMapper.selectById
+        // 匹配: Method nodeKey.startsWith(namespace + "." + statementId + "(")
+        int linked = 0;
+        List<Neo4jWriteRepository.BatchEdgeByKeyUpsert> edgeBatch = new ArrayList<>();
+
+        for (GraphEdge containsEdge : containsEdges) {
+            // containsEdge: Mapper -CONTAINS-> SqlStatement
+            // 需要 fromNode 是 Mapper，toNode 是 SqlStatement
+            // 但 CONTAINS 边也用于 Class→Method 等，需要按 toNode 的 nodeType 过滤
+            // 这里通过 toNodeId 查找 SqlStatement 节点
+            String sqlNodeId = containsEdge.getToNodeId();
+            if (sqlNodeId == null) continue;
+
+            // 查找 SqlStatement 节点（从 fromNode 获取 namespace）
+            GraphNode mapperNode = neo4jGraphDao.findNodeById(containsEdge.getFromNodeId()).orElse(null);
+            if (mapperNode == null || !NodeType.Mapper.name().equals(mapperNode.getNodeType())) continue;
+
+            String namespace = mapperNode.getNodeKey(); // Mapper nodeKey = namespace (FQN)
+            if (namespace == null || namespace.isBlank()) continue;
+
+            // SqlStatement nodeKey = namespace.statementId
+            GraphNode sqlNode = neo4jGraphDao.findNodeById(sqlNodeId).orElse(null);
+            if (sqlNode == null || !NodeType.SqlStatement.name().equals(sqlNode.getNodeType())) continue;
+
+            String sqlNodeKey = sqlNode.getNodeKey();
+            if (sqlNodeKey == null || !sqlNodeKey.startsWith(namespace + ".")) continue;
+
+            String statementId = sqlNodeKey.substring(namespace.length() + 1);
+
+            // 在内存索引中查找 Method 节点
+            String prefix = namespace + "." + statementId;
+            GraphNode methodNode = null;
+            for (GraphNode m : allMethods) {
+                String key = m.getNodeKey();
+                if (key != null && key.startsWith(prefix + "(")) {
+                    methodNode = m;
+                    break; // 取第一个匹配
+                }
+            }
+            if (methodNode == null) continue;
+
+            // 去重检查
+            String pair = methodNode.getId() + "|" + sqlNode.getId();
+            if (existingPairs.contains(pair)) continue;
+            existingPairs.add(pair);
+
+            edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                    methodNode.getNodeKey(), sqlNode.getNodeKey(), EdgeType.EXECUTES.name(),
+                    methodNode.getNodeKey() + "->executes->" + sqlNode.getNodeKey(),
+                    edgeProps(SourceType.CODE_AST.name(), BigDecimal.valueOf(0.95), NodeStatus.CONFIRMED)));
+            linked++;
+        }
+
+        if (!edgeBatch.isEmpty()) {
+            neo4jGraphDao.mergeEdgesByKeyBatch(projectId, versionId, edgeBatch);
+        }
+        log.info("Mapper-SQL link: {} new EXECUTES edges created for versionId={}", linked, versionId);
+        return linked;
+    }
+
+    private Map<String, Object> edgeProps(String sourceType, BigDecimal confidence, NodeStatus status) {
+        Map<String, Object> props = new HashMap<>();
+        props.put("sourceType", sourceType);
+        props.put("confidence", confidence.doubleValue());
+        props.put("status", status.name());
+        return props;
+    }
+
+    private void addTableNodeIfAbsent(List<Neo4jWriteRepository.BatchNodeUpsert> batch, Set<String> seen,
+                                       String projectId, String versionId, String tableName) {
+        if (seen.contains(tableName)) {
+            return;
+        }
+        Map<String, Object> props = new HashMap<>();
+        props.put("displayName", tableName);
+        props.put("sourceType", SourceType.SQL_PARSE.name());
+        props.put("confidence", 1.0);
+        props.put("status", NodeStatus.CONFIRMED.name());
+        batch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                NodeType.Table.name(), tableName, tableName, props));
+        seen.add(tableName);
+    }
+
+    private void addColumnNodeIfAbsent(List<Neo4jWriteRepository.BatchNodeUpsert> batch, Set<String> seen,
+                                        String tableName, String colName) {
+        String colKey = tableName.toLowerCase() + "." + colName.toLowerCase();
+        if (seen.contains(colKey)) {
+            return;
+        }
+        Map<String, Object> props = new HashMap<>();
+        props.put("displayName", colName);
+        props.put("sourceType", SourceType.SQL_PARSE.name());
+        props.put("confidence", 1.0);
+        props.put("status", NodeStatus.CONFIRMED.name());
+        batch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                NodeType.Column.name(), colKey, colName, props));
+        seen.add(colKey);
     }
 
     /**
@@ -557,7 +644,7 @@ public class GraphBuilder {
         // 构建表名映射，用于启发式推断
         Map<String, String> tableNameToKey = new HashMap<>();
         for (var tableMeta : tables) {
-            String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
+            String tableKey = (tableMeta.getTableSchema() + "." + tableMeta.getTableName()).toLowerCase();
             tableNameToKey.put(tableMeta.getTableName().toLowerCase(), tableKey);
             // 也存储不带 schema 的映射
             tableNameToKey.put(tableMeta.getTableName().toLowerCase(), tableKey);
@@ -567,7 +654,7 @@ public class GraphBuilder {
         Map<String, GraphNode> tableNodes = new HashMap<>();
         int nodeCount = 0, edgeCount = 0;
         for (var tableMeta : tables) {
-            String tableKey = tableMeta.getTableSchema() + "." + tableMeta.getTableName();
+            String tableKey = (tableMeta.getTableSchema() + "." + tableMeta.getTableName()).toLowerCase();
 
             // 表节点
             GraphNode tableNode = writer.upsertNode(GraphNodeClaim.builder()
@@ -1168,7 +1255,7 @@ public class GraphBuilder {
                                 createEdge(projectId, versionId,
                                         tableNode.getId(), colNode.getId(),
                                         EdgeType.HAS_COLUMN.name(),
-                                        tableName + "->has_column->" + colName,
+                                        tableName.toLowerCase() + "->has_column->" + colKey,
                                         "CODE_ENTITY",
                                         BigDecimal.valueOf(0.85),
                                         NodeStatus.CONFIRMED);
@@ -1852,32 +1939,88 @@ public class GraphBuilder {
             return nodes;
         }
 
+        List<Neo4jWriteRepository.BatchNodeUpsert> nodeBatch = new ArrayList<>();
+        List<Neo4jWriteRepository.BatchEdgeByKeyUpsert> edgeBatch = new ArrayList<>();
+        Set<String> seenNodeKeys = new HashSet<>();
+
+        // 第一遍：收集所有节点和 CONTAINS 边，批量写入
         for (JavaStructureExtractor.JavaClassInfo classInfo : classes) {
             if (classInfo.getQualifiedName() == null || classInfo.getQualifiedName().isBlank()) {
                 continue;
             }
             NodeType classNodeType = inferNodeType(classInfo.getQualifiedName());
+            String classKey = classInfo.getQualifiedName();
             String inheritProps = buildInheritProperties(classInfo);
-            GraphNode classNode = findOrCreateNodeWithProperties(
-                    projectId, versionId,
-                    classNodeType.name(),
-                    classInfo.getQualifiedName(),
-                    classInfo.getClassName(),
-                    classInfo.getClassName(),
-                    null,
-                    SourceType.CODE_AST.name(),
-                    classInfo.getSourcePath(),
-                    classInfo.getStartLine(),
-                    classInfo.getEndLine(),
-                    BigDecimal.ONE,
-                    NodeStatus.CONFIRMED,
-                    "CODE_SCAN",
-                    classInfo.getQualifiedName(),
-                    inheritProps
-            );
+
+            if (!seenNodeKeys.contains(classKey)) {
+                Map<String, Object> props = new HashMap<>();
+                props.put("displayName", classInfo.getClassName());
+                props.put("sourceType", SourceType.CODE_AST.name());
+                props.put("sourcePath", classInfo.getSourcePath());
+                props.put("startLine", classInfo.getStartLine());
+                props.put("endLine", classInfo.getEndLine());
+                props.put("confidence", 1.0);
+                props.put("status", NodeStatus.CONFIRMED.name());
+                props.put("scanType", "CODE_SCAN");
+                props.put("className", classInfo.getQualifiedName());
+                if (inheritProps != null) {
+                    props.put("properties", inheritProps);
+                }
+                nodeBatch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                        classNodeType.name(), classKey, classInfo.getClassName(), props));
+                seenNodeKeys.add(classKey);
+            }
+
+            if (classInfo.getMethods() != null) {
+                for (JavaStructureExtractor.JavaMethodInfo methodInfo : classInfo.getMethods()) {
+                    if (methodInfo.getQualifiedName() == null || methodInfo.getQualifiedName().isBlank()) {
+                        continue;
+                    }
+                    String methodKey = methodInfo.getQualifiedName();
+                    if (!seenNodeKeys.contains(methodKey)) {
+                        Map<String, Object> mProps = new HashMap<>();
+                        mProps.put("displayName", methodInfo.getMethodName());
+                        mProps.put("sourceType", SourceType.CODE_AST.name());
+                        mProps.put("sourcePath", classInfo.getSourcePath());
+                        mProps.put("startLine", methodInfo.getStartLine());
+                        mProps.put("endLine", methodInfo.getEndLine());
+                        mProps.put("confidence", 1.0);
+                        mProps.put("status", NodeStatus.CONFIRMED.name());
+                        mProps.put("scanType", "CODE_SCAN");
+                        mProps.put("className", classInfo.getQualifiedName());
+                        nodeBatch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                                NodeType.Method.name(), methodKey, methodInfo.getMethodName(), mProps));
+                        seenNodeKeys.add(methodKey);
+                    }
+                    edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                            classKey, methodKey, EdgeType.CONTAINS.name(),
+                            classKey + "->contains->" + methodKey,
+                            edgeProps(SourceType.CODE_AST.name(), BigDecimal.ONE, NodeStatus.CONFIRMED)));
+                }
+            }
+        }
+
+        if (!nodeBatch.isEmpty()) {
+            neo4jGraphDao.mergeNodesBatch(projectId, versionId, nodeBatch);
+        }
+        if (!edgeBatch.isEmpty()) {
+            neo4jGraphDao.mergeEdgesByKeyBatch(projectId, versionId, edgeBatch);
+        }
+
+        // 第二遍：EXTENDS/IMPLEMENTS 边需要查找已存在节点，保持逐条
+        for (JavaStructureExtractor.JavaClassInfo classInfo : classes) {
+            if (classInfo.getQualifiedName() == null || classInfo.getQualifiedName().isBlank()) {
+                continue;
+            }
+            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName());
+            String classKey = classInfo.getQualifiedName();
+            GraphNode classNode = neo4jGraphDao.findNode(projectId, versionId,
+                    classNodeType.name(), classKey).orElse(null);
+            if (classNode == null) {
+                continue;
+            }
             nodes.add(classNode);
 
-            // 尝试创建 EXTENDS/IMPLEMENTS 边（find-only，跨文件未解析的留给 resolver 二次扫描）
             if (classInfo.getExtendedTypes() != null) {
                 for (String parentSimple : classInfo.getExtendedTypes()) {
                     GraphNode parentNode = findClassNodeBySimpleName(
@@ -1886,7 +2029,7 @@ public class GraphBuilder {
                         createEdge(projectId, versionId,
                                 classNode.getId(), parentNode.getId(),
                                 EdgeType.EXTENDS.name(),
-                                classInfo.getQualifiedName() + "->extends->" + parentNode.getNodeKey(),
+                                classKey + "->extends->" + parentNode.getNodeKey(),
                                 SourceType.CODE_AST.name(),
                                 BigDecimal.ONE,
                                 NodeStatus.CONFIRMED
@@ -1902,47 +2045,13 @@ public class GraphBuilder {
                         createEdge(projectId, versionId,
                                 classNode.getId(), ifaceNode.getId(),
                                 EdgeType.IMPLEMENTS.name(),
-                                classInfo.getQualifiedName() + "->implements->" + ifaceNode.getNodeKey(),
+                                classKey + "->implements->" + ifaceNode.getNodeKey(),
                                 SourceType.CODE_AST.name(),
                                 BigDecimal.ONE,
                                 NodeStatus.CONFIRMED
                         );
                     }
                 }
-            }
-
-            if (classInfo.getMethods() == null || classInfo.getMethods().isEmpty()) {
-                continue;
-            }
-            for (JavaStructureExtractor.JavaMethodInfo methodInfo : classInfo.getMethods()) {
-                if (methodInfo.getQualifiedName() == null || methodInfo.getQualifiedName().isBlank()) {
-                    continue;
-                }
-                GraphNode methodNode = findOrCreateNode(
-                        projectId, versionId,
-                        NodeType.Method.name(),
-                        methodInfo.getQualifiedName(),
-                        methodInfo.getMethodName(),
-                        methodInfo.getMethodName(),
-                        null,
-                        SourceType.CODE_AST.name(),
-                        classInfo.getSourcePath(),
-                        methodInfo.getStartLine(),
-                        methodInfo.getEndLine(),
-                        BigDecimal.ONE,
-                        NodeStatus.CONFIRMED,
-                        "CODE_SCAN",
-                        classInfo.getQualifiedName()
-                );
-                nodes.add(methodNode);
-                createEdge(projectId, versionId,
-                        classNode.getId(), methodNode.getId(),
-                        EdgeType.CONTAINS.name(),
-                        classInfo.getQualifiedName() + "->contains->" + methodInfo.getQualifiedName(),
-                        SourceType.CODE_AST.name(),
-                        BigDecimal.ONE,
-                        NodeStatus.CONFIRMED
-                );
             }
         }
         return nodes;
@@ -2032,7 +2141,7 @@ public class GraphBuilder {
         if (simpleName == null || simpleName.isBlank()) {
             return null;
         }
-        for (NodeType t : new NodeType[]{NodeType.Controller, NodeType.Service, NodeType.Mapper}) {
+        for (NodeType t : new NodeType[]{NodeType.Controller, NodeType.Service, NodeType.Mapper, NodeType.ConfigItem, NodeType.ExternalSystem}) {
             List<GraphNode> nodes = neo4jGraphDao.queryNodes(
                     projectId, versionId, t.name(), null, null, null, 0);
             if (nodes == null) continue;

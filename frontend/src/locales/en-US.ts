@@ -136,7 +136,9 @@ export default {
     systemOverview: 'System Overview',
     llmProvider: 'LLM Provider',
     promptTemplates: 'Prompt Templates',
-    plugins: 'Plugin Management'
+    plugins: 'Plugin Management',
+    requirementAnalysis: 'Requirement Analysis',
+    solutionReview: 'Solution Review'
   },
   dashboard: {
     title: 'Dashboard',

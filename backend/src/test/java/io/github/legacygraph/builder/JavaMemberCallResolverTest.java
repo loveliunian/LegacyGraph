@@ -14,6 +14,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,6 +26,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class JavaMemberCallResolverTest {
 
     @Mock
@@ -104,7 +107,7 @@ class JavaMemberCallResolverTest {
         GraphNode targetMethod = methodNode("com.x.OrderMapper", "insert(Object)");
         stubQueryNodes(List.of(svc, mapper, callerMethod, targetMethod));
 
-        when(neo4jGraphDao.queryEdges(eq("p"), eq("v1"), eq(EdgeType.CALLS.name()), isNull(), eq(0)))
+        when(neo4jGraphDao.queryEdges(any(), any(), any(), any(), anyInt()))
                 .thenReturn(Collections.emptyList());
         when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(inv -> ((List<GraphEdge>) inv.getArgument(0)).size());
         when(factRepository.selectList(any())).thenReturn(List.of(
@@ -190,6 +193,10 @@ class JavaMemberCallResolverTest {
         GraphEdge existing = new GraphEdge();
         existing.setFromNodeId(callerMethod.getId());
         existing.setToNodeId(targetMethod.getId());
+        // 兜底：继承边查询（edgeType=null）返回空列表，避免 NPE
+        when(neo4jGraphDao.queryEdges(any(), any(), any(), any(), anyInt()))
+                .thenReturn(Collections.emptyList());
+        // 精确：CALLS 边查询返回已存在边，触发去重
         when(neo4jGraphDao.queryEdges(eq("p"), eq("v1"), eq(EdgeType.CALLS.name()), isNull(), eq(0)))
                 .thenReturn(List.of(existing));
         when(factRepository.selectList(any())).thenReturn(List.of(

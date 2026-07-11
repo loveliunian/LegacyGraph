@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -28,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -46,6 +49,9 @@ class FileChangeDetectorTest {
     @Mock
     private FileSnapshotRepository repository;
 
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
     private FileChangeDetector detector;
 
     @BeforeAll
@@ -58,7 +64,7 @@ class FileChangeDetectorTest {
 
     @BeforeEach
     void setUp() {
-        detector = new FileChangeDetector(repository);
+        detector = new FileChangeDetector(repository, jdbcTemplate);
     }
 
     @Test
@@ -177,11 +183,11 @@ class FileChangeDetectorTest {
         Map<String, String> pathToContent = new HashMap<>();
         pathToContent.put("src/A.java", "class A {}");
         pathToContent.put("src/B.java", "class B {}");
-        when(repository.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
 
         detector.recordSnapshots("p1", pathToContent);
 
-        verify(repository, times(2)).insert((FileSnapshot) any());
+        // 生产代码使用 jdbcTemplate.batchUpdate 批量 upsert，不再调用 repository.insert
+        verify(jdbcTemplate, times(1)).batchUpdate(anyString(), anyList());
     }
 
     @Test

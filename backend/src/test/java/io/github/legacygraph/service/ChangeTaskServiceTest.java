@@ -5,6 +5,7 @@ import io.github.legacygraph.agent.ChangeImpactAgent;
 import io.github.legacygraph.agent.adapter.AddColumnPatchAgentAdapter;
 import io.github.legacygraph.agent.adapter.MigrationAgentAdapter;
 import io.github.legacygraph.agent.adapter.RefactorAgentAdapter;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.graph.PatchPlan;
 import io.github.legacygraph.entity.ChangeTask;
@@ -47,6 +48,7 @@ class ChangeTaskServiceTest {
     @Mock private PrOrchestrator prOrchestrator;
     @Mock private TransactionTemplate transactionTemplate;
     @Mock private ColumnIngestService columnIngestService;
+    @Mock private Neo4jGraphDao neo4jGraphDao;
 
     private ChangeTaskService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -68,7 +70,7 @@ class ChangeTaskServiceTest {
                 validationGateRepository, reviewRecordRepository, impactSubgraphService,
                 changeImpactAgent, refactorAgentAdapter, migrationAgentAdapter,
                 addColumnPatchAgentAdapter, patchPlanAgent, new PatchPlanValidator(), validationGateRunner,
-                prOrchestrator, objectMapper, transactionTemplate, columnIngestService);
+                prOrchestrator, objectMapper, transactionTemplate, columnIngestService, neo4jGraphDao);
     }
 
     @Test

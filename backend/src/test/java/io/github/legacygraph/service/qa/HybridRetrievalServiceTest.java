@@ -34,7 +34,10 @@ class HybridRetrievalServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new HybridRetrievalService(vectorDocumentRepository, docChunkRepository, vectorRetrievalService);
+        // ReciprocalRankFusionService 无外部依赖，直接 new 实例；rrfEnabled 默认 false 走 dedup 分支
+        service = new HybridRetrievalService(
+            vectorDocumentRepository, docChunkRepository,
+            vectorRetrievalService, new ReciprocalRankFusionService());
     }
 
     @Test
@@ -48,7 +51,7 @@ class HybridRetrievalServiceTest {
         doc2.setId(2L);
         doc2.setContent("关键词检索结果");
 
-        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("测试查询"), eq(10), isNull()))
+        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("测试查询"), eq(10), isNull(), isNull(), isNull()))
                 .thenReturn(List.of(doc1));
         when(vectorDocumentRepository.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(List.of(doc2));
@@ -58,7 +61,7 @@ class HybridRetrievalServiceTest {
 
         // then
         assertEquals(2, result.size());
-        verify(vectorRetrievalService).semanticSearch("p1", "v1", "测试查询", 10, null);
+        verify(vectorRetrievalService).semanticSearch("p1", "v1", "测试查询", 10, null, null, null);
     }
 
     @Test
@@ -68,7 +71,7 @@ class HybridRetrievalServiceTest {
         doc.setId(1L);
         doc.setContent("共同结果");
 
-        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("查询"), eq(10), isNull()))
+        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("查询"), eq(10), isNull(), isNull(), isNull()))
                 .thenReturn(List.of(doc));
         when(vectorDocumentRepository.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(List.of(doc));
@@ -90,9 +93,9 @@ class HybridRetrievalServiceTest {
         variantDoc.setId(2L);
         variantDoc.setContent("变体查询结果");
 
-        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("原始查询"), eq(10), isNull()))
+        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("原始查询"), eq(10), isNull(), isNull(), isNull()))
                 .thenReturn(List.of(mainDoc));
-        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("变体1"), eq(5), isNull()))
+        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("变体1"), eq(5), isNull(), isNull(), isNull()))
                 .thenReturn(List.of(variantDoc));
         when(vectorDocumentRepository.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(List.of());
@@ -100,7 +103,7 @@ class HybridRetrievalServiceTest {
         List<VectorDocument> result = service.retrieve("p1", "v1", "原始查询", List.of("变体1"), 10);
 
         assertEquals(2, result.size());
-        verify(vectorRetrievalService).semanticSearch("p1", "v1", "变体1", 5, null);
+        verify(vectorRetrievalService).semanticSearch("p1", "v1", "变体1", 5, null, null, null);
     }
 
     @Test
@@ -109,7 +112,7 @@ class HybridRetrievalServiceTest {
         keywordDoc.setId(1L);
         keywordDoc.setContent("关键词结果");
 
-        when(vectorRetrievalService.semanticSearch(any(), any(), any(), anyInt(), any()))
+        when(vectorRetrievalService.semanticSearch(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenThrow(new RuntimeException("向量服务不可用"));
         when(vectorDocumentRepository.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(List.of(keywordDoc));
@@ -126,7 +129,7 @@ class HybridRetrievalServiceTest {
         vectorDoc.setId(1L);
         vectorDoc.setContent("向量结果");
 
-        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("查询"), eq(10), isNull()))
+        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("查询"), eq(10), isNull(), isNull(), isNull()))
                 .thenReturn(List.of(vectorDoc));
         when(vectorDocumentRepository.selectList(any(LambdaQueryWrapper.class)))
                 .thenThrow(new RuntimeException("数据库不可用"));
@@ -138,7 +141,7 @@ class HybridRetrievalServiceTest {
 
     @Test
     void retrieve_allFail_returnsEmptyList() {
-        when(vectorRetrievalService.semanticSearch(any(), any(), any(), anyInt(), any()))
+        when(vectorRetrievalService.semanticSearch(any(), any(), any(), anyInt(), any(), any(), any()))
                 .thenThrow(new RuntimeException("向量服务不可用"));
         when(vectorDocumentRepository.selectList(any(LambdaQueryWrapper.class)))
                 .thenThrow(new RuntimeException("数据库不可用"));
@@ -150,7 +153,7 @@ class HybridRetrievalServiceTest {
 
     @Test
     void retrieve_emptyResults_returnsEmptyList() {
-        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("查询"), eq(10), isNull()))
+        when(vectorRetrievalService.semanticSearch(eq("p1"), eq("v1"), eq("查询"), eq(10), isNull(), isNull(), isNull()))
                 .thenReturn(List.of());
         when(vectorDocumentRepository.selectList(any(LambdaQueryWrapper.class)))
                 .thenReturn(List.of());

@@ -51,6 +51,9 @@ public class EvidenceItem {
     /** 路径上出现的关系类型（GraphRAG 证据卡携带，前端可忽略） */
     private List<String> relationTypes;
 
+    /** ACL 授权主体列表（null 或空表示无 ACL 限制，所有人可访问） */
+    private List<String> aclPrincipals;
+
     /**
      * 从图谱节点构建证据项
      */

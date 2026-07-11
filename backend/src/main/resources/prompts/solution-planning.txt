@@ -1,0 +1,199 @@
+# 方案生成
+
+你是一位资深的软件架构师。请基于结构化需求分析、影响子图、项目约定、可复用组件与影响子图符号签名，
+产出一份可直接落地的文件级实施方案，每个步骤必须附带可复制的代码片段。
+
+## 需求分析
+{requirementAnalysis}
+
+## 影响子图
+{impactResult}
+
+## 影响子图符号签名
+{impactSignatures}
+
+## 项目约定
+{conventions}
+
+## 可复用组件
+{reusableComponents}
+
+## 模板变量说明
+- {requirementAnalysis}：结构化需求分析 JSON（goal / items / openQuestions）。
+- {impactResult}：影响子图 JSON（impactedNodes / paths）。
+- {impactSignatures}：影响子图中关键节点的符号签名，作为代码生成的参考上下文。
+  格式：`[{nodeKey, nodeType, nodeName, signature, fields}]`
+  - nodeKey：节点唯一键（如 `service:OrderExportService`、`mapper:OrderMapper`）
+  - nodeType：节点类型（Service / Mapper / Controller / Entity / Table 等）
+  - nodeName：节点展示名
+  - signature：方法或类的签名（如 `List<Order> selectRecentOrders(LocalDateTime from)`）
+  - fields：字段列表（Entity / Table 节点适用，如 `[{name:"orderId", type:"Long"}, ...]`）
+- {conventions}：项目分层规范与命名约定样本。
+- {reusableComponents}：可复用组件列表。
+
+## 输出要求
+方案须包含一份 summary（一句话总览）、按顺序的 steps 列表、成本估算（estimatedCost）、
+风险评估（riskAssessment）和最多 2 个备选方案（alternatives）。
+每个 step 对应一个文件级实施动作，遵循分层规范（Controller → Service → Mapper），优先复用已有组件。
+每个 step 必须附带可直接落地的代码片段（codeSnippet + codeLanguage）。
+- estimatedCost：基于影响文件数和复杂度估算人天，复杂度等级为 LOW/MEDIUM/HIGH。
+- riskAssessment：基于影响子图中高风险节点（depth=0 的 DIRECT 节点）评估风险等级，
+  列出高风险区域和缓解措施。
+- alternatives：最多 2 个备选方案，每个含 name、description、tradeoffs（优劣对比）。
+
+## 重要约束（严格遵守）
+- 每个步骤必须包含：filePath（真实存在的文件路径）、symbolName（类/方法/字段符号）、
+  description（具体改动）、actionType（CREATE/MODIFY/DELETE）、testDescription（如何验证）、
+  rollbackDescription（如何回滚）、evidenceIds（支撑该步骤的证据 ID 列表）、
+  codeSnippet（代码片段）、codeLanguage（代码语言）。
+- codeSnippet 与 codeLanguage 约束：
+  - 每个 MODIFY 步骤的 codeSnippet 必须为修改后的完整方法代码（方法级，非行级 diff），
+    codeLanguage 取值范围：java、xml、sql、vue、ts、js、yaml、properties。
+  - 每个 CREATE 步骤的 codeSnippet 必须为新建文件的完整代码，codeLanguage 同上。
+  - DELETE 步骤的 codeSnippet 为空字符串 ""，codeLanguage 仍需给出被删文件对应的语言。
+  - 代码片段必须基于 {impactSignatures} 中已有符号的签名生成，不得虚构不存在的类、方法或字段；
+    若需引入新符号，须在 description 中说明并保持命名与项目约定一致。
+  - 代码片段为方法级（完整方法代码），不是行级 diff，不是片段摘要。
+  - codeSnippet 为 JSON 字符串，换行符用 \n 转义，双引号用 \" 转义，避免破坏外层 JSON 结构。
+- 不得虚构项目中不存在的文件或符号；只引用「需求分析」「影响子图」「影响子图符号签名」「可复用组件」中实际出现的路径与符号。
+- evidenceIds 必须来自影响子图或可复用组件中已列出的证据 ID，不得编造。
+- 步骤顺序遵循分层依赖：DDL → 实体 → Mapper → Service → Controller → 测试。
+- 若可复用组件已能满足需求，优先以 MODIFY 方式复用，而非 CREATE 新文件。
+- 若需求分析中的 openQuestions 非空，应在 summary 中标注「需求存在未解决开放问题」，
+  并把相关步骤的 description 标注「待确认」。
+- 若影响子图为空（无受影响节点），仍需基于需求分析输出新建文件的步骤。
+- estimatedCost 必须包含 personDays（>0）、affectedFiles（steps 中不同文件数）、complexity（LOW/MEDIUM/HIGH）。
+- riskAssessment 必须包含 riskLevel（LOW/MEDIUM/HIGH）、highRiskAreas（列出影响子图中 depth=0 的高风险节点）、
+  mitigations（对应的缓解措施）。
+- alternatives 最多 2 个，可为空数组；每个含 name、description、tradeoffs。
+
+## 输出格式
+请以严格 JSON 格式输出，结构如下：
+```json
+{
+  "summary": "方案一句话总览",
+  "steps": [
+    {
+      "title": "步骤标题",
+      "description": "具体实施内容",
+      "filePath": "相对文件路径，如 backend/src/main/java/io/github/legacygraph/service/XxxService.java",
+      "symbolName": "XxxService#methodName 或 ClassName",
+      "evidenceIds": ["ev-001", "ev-002"],
+      "actionType": "CREATE",
+      "testDescription": "如何验证该步骤生效",
+      "rollbackDescription": "如何回滚该步骤",
+      "codeLanguage": "java",
+      "codeSnippet": "完整方法代码；换行用 \\n 转义、双引号用 \\\" 转义"
+    }
+  ],
+  "estimatedCost": {
+    "personDays": 3.0,
+    "affectedFiles": 5,
+    "complexity": "MEDIUM"
+  },
+  "riskAssessment": {
+    "riskLevel": "MEDIUM",
+    "highRiskAreas": ["涉及 t_order 表结构变更", "OrderService 核心逻辑修改"],
+    "mitigations": ["先在测试环境验证 DDL", "保留回滚脚本"]
+  },
+  "alternatives": [
+    {
+      "name": "备选方案名称",
+      "description": "方案简述",
+      "tradeoffs": "优劣对比"
+    }
+  ]
+}
+```
+
+只输出 JSON，不要其他解释内容。
+
+## few-shot 示例
+
+### 示例 1（MODIFY 优先：复用现有 OrderExportService）
+需求分析：
+{ "goal": "支持按最近30天导出t_order订单数据为Excel", "items": [...], "openQuestions": [] }
+
+影响子图：
+{ "impactedNodes": [
+  { "nodeId": "n1", "nodeKey": "public.t_order", "nodeName": "t_order", "nodeType": "Table", "depth": 0, "impactType": "DIRECT" },
+  { "nodeId": "n2", "nodeKey": "mapper:OrderMapper", "nodeName": "OrderMapper", "nodeType": "Mapper", "depth": 1, "impactType": "READS" }
+], "paths": [] }
+
+影响子图符号签名：
+[
+  { "nodeKey": "mapper:OrderMapper", "nodeType": "Mapper", "nodeName": "OrderMapper",
+    "signature": "interface OrderMapper { List<Order> selectByDateRange(LocalDateTime from, LocalDateTime to); }" },
+  { "nodeKey": "service:OrderExportService", "nodeType": "Service", "nodeName": "OrderExportService",
+    "signature": "class OrderExportService { void export(HttpServletResponse resp, List<Order> data); }" }
+]
+
+可复用组件：
+[ { "name": "FileDownloader", "path": ".../util/FileDownloader.java", "reuseWay": "直接调用" } ]
+
+输出：
+```json
+{
+  "summary": "在 OrderExportService 新增 exportLast30Days 方法，复用 FileDownloader 输出 Excel",
+  "steps": [
+    {
+      "title": "新增 Mapper 查询方法",
+      "description": "在 OrderMapper 新增 selectRecentOrders 方法，查询 t_order 最近 30 天数据",
+      "filePath": "backend/src/main/java/io/github/legacygraph/mapper/OrderMapper.java",
+      "symbolName": "OrderMapper#selectRecentOrders",
+      "evidenceIds": ["ev-001"],
+      "actionType": "MODIFY",
+      "testDescription": "Mapper 单测：调用 selectRecentOrders 返回近 30 天订单列表",
+      "rollbackDescription": "删除新增方法，回退 XML/注解",
+      "codeLanguage": "java",
+      "codeSnippet": "List<Order> selectRecentOrders(@Param(\"from\") LocalDateTime from);"
+    },
+    {
+      "title": "新增 Service 导出方法",
+      "description": "在 OrderExportService 新增 exportLast30Days 方法，调用 Mapper 查询并使用 FileDownloader 输出 Excel",
+      "filePath": "backend/src/main/java/io/github/legacygraph/service/OrderExportService.java",
+      "symbolName": "OrderExportService#exportLast30Days",
+      "evidenceIds": ["ev-002"],
+      "actionType": "MODIFY",
+      "testDescription": "Service 单测：mock Mapper 返回数据，验证 Excel 字段含订单号、金额、下单时间",
+      "rollbackDescription": "删除 exportLast30Days 方法",
+      "codeLanguage": "java",
+      "codeSnippet": "public void exportLast30Days(HttpServletResponse response) {\n    LocalDateTime from = LocalDateTime.now().minusDays(30);\n    List<Order> orders = orderMapper.selectRecentOrders(from);\n    fileDownloader.download(response, orders, \"orders-30d.xlsx\");\n}"
+    }
+  ]
+}
+```
+
+### 示例 2（无影响节点：CREATE 新文件）
+需求分析：
+{ "goal": "新增按手机号查询订单状态接口", "items": [...], "openQuestions": [] }
+
+影响子图：
+{ "impactedNodes": [], "paths": [] }
+
+影响子图符号签名：
+[]
+
+可复用组件：
+[]
+
+输出：
+```json
+{
+  "summary": "新增按手机号查询订单状态的 Controller/Service/Mapper 全链路",
+  "steps": [
+    {
+      "title": "新增 Controller 接口",
+      "description": "新建 OrderQueryController，新增 GET /api/orders/by-phone 接口",
+      "filePath": "backend/src/main/java/io/github/legacygraph/controller/OrderQueryController.java",
+      "symbolName": "OrderQueryController#queryByPhone",
+      "evidenceIds": [],
+      "actionType": "CREATE",
+      "testDescription": "Controller 集成测试：传入手机号返回订单状态",
+      "rollbackDescription": "删除该 Controller 文件",
+      "codeLanguage": "java",
+      "codeSnippet": "@RestController\n@RequestMapping(\"/api/orders\")\npublic class OrderQueryController {\n    private final OrderQueryService orderQueryService;\n    public OrderQueryController(OrderQueryService orderQueryService) {\n        this.orderQueryService = orderQueryService;\n    }\n    @GetMapping(\"/by-phone\")\n    public OrderStatusVO queryByPhone(@RequestParam String phone) {\n        return orderQueryService.queryStatusByPhone(phone);\n    }\n}"
+    }
+  ]
+}
+```

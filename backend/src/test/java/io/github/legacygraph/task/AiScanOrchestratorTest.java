@@ -38,6 +38,7 @@ import io.github.legacygraph.task.step.StepExecutionContext;
 import io.github.legacygraph.understanding.ScanUnderstandingEnhancer;
 import io.github.legacygraph.util.IdUtil;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -106,13 +107,14 @@ class AiScanOrchestratorTest {
         List<io.github.legacygraph.task.step.AiScanStepExecutor> stepExecutors = List.of(
                 new io.github.legacygraph.task.step.DocExtractStep(support, documentRepository,
                         docUnderstandingAgent, businessGraphBuilder, neo4jGraphDao,
+                        new io.github.legacygraph.service.document.DefaultDocumentPartitionService(),
+                        new io.github.legacygraph.service.document.StructureAwareChunkService(2500),
                         agentCallCounter, graphNodeCounter, graphEdgeCounter),
                 new io.github.legacygraph.task.step.CodeExtractStep(support, neo4jGraphDao,
                         codeFactAgent, businessGraphBuilder),
-                new io.github.legacygraph.task.step.FeatureCodeMappingStep(support, businessGraphBuilder),
                 new io.github.legacygraph.task.step.FeatureMappingStep(support, neo4jGraphDao,
                         featureMappingAgent, evidenceGraphWriter, reviewRecordRepository,
-                        objectMapper, agentCallCounter),
+                        objectMapper, agentCallCounter, businessGraphBuilder),
                 new io.github.legacygraph.task.step.TestGenerateStep(support, neo4jGraphDao,
                         testCaseAgent, testCaseRepository, objectMapper),
                 new io.github.legacygraph.task.step.ReviewPrepareStep(support, neo4jGraphDao,
@@ -247,6 +249,7 @@ class AiScanOrchestratorTest {
     }
 
     @Test
+    @Disabled("FeatureCodeMappingStep 已移除，该步骤不再独立编排")
     void testFeatureCodeMapping_NoEdges_MarksWarning() {
         AiScanConfig config = new AiScanConfig();
         config.setEnableAi(true);
@@ -293,13 +296,12 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
-        // 创建了 7 个子任务（含 AI_GAP_FINDING / AI_CODE_UNDERSTANDING），未创建 TEST_GENERATE
+        // 创建了 6 个子任务（含 AI_GAP_FINDING / AI_CODE_UNDERSTANDING），未创建 TEST_GENERATE
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(7)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(6)).insert(taskCaptor.capture());
         List<String> types = taskCaptor.getAllValues().stream().map(ScanTask::getTaskType).toList();
         assertTrue(types.contains("AI_DOC_EXTRACT"));
         assertTrue(types.contains("AI_CODE_EXTRACT"));
-        assertTrue(types.contains("AI_FEATURE_CODE_MAPPING"));
         assertTrue(types.contains("AI_FEATURE_MAPPING"));
         assertTrue(types.contains("AI_REVIEW_PREPARE"));
         assertTrue(types.contains("AI_GAP_FINDING"));
@@ -348,9 +350,9 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
-        // 创建了 8 个子任务（含 AI_GAP_FINDING / AI_CODE_UNDERSTANDING）
+        // 创建了 7 个子任务（含 AI_GAP_FINDING / AI_CODE_UNDERSTANDING）
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
-        verify(scanTaskRepository, times(8)).insert(taskCaptor.capture());
+        verify(scanTaskRepository, times(7)).insert(taskCaptor.capture());
         assertTrue(taskCaptor.getAllValues().stream()
                 .anyMatch(t -> "AI_TEST_GENERATE".equals(t.getTaskType())));
         assertTrue(taskCaptor.getAllValues().stream()
@@ -627,16 +629,14 @@ class AiScanOrchestratorTest {
 
         orchestrator.orchestrate("proj-1", "v1", config, null);
 
-        // 验证：AI_FEATURE_CODE_MAPPING 任务已创建（自动路径执行了 mapFeaturesToCode）
+        // 验证：AI_FEATURE_MAPPING 任务已创建（自动路径执行了 Feature 映射）
         ArgumentCaptor<ScanTask> taskCaptor = ArgumentCaptor.forClass(ScanTask.class);
         verify(scanTaskRepository, atLeastOnce()).insert(taskCaptor.capture());
         List<String> taskTypes = taskCaptor.getAllValues().stream()
                 .map(ScanTask::getTaskType).toList();
-        assertTrue(taskTypes.contains("AI_FEATURE_CODE_MAPPING"),
-                "Auto orchestration should include AI_FEATURE_CODE_MAPPING task, got: " + taskTypes);
-        // AI_FEATURE_MAPPING 也应在编排中（以 Feature 为锚点）
+        // AI_FEATURE_MAPPING 应在编排中（以 Feature 为锚点）
         assertTrue(taskTypes.contains("AI_FEATURE_MAPPING"),
-                "Auto orchestration should include AI_FEATURE_MAPPING task");
+                "Auto orchestration should include AI_FEATURE_MAPPING task, got: " + taskTypes);
     }
 
     // ==================== Task 2: 增量上下文传递测试 ====================

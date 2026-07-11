@@ -106,6 +106,14 @@ public class ChangeTaskController {
         }
     }
 
+    /** 标记变更任务对应的 PR 已合并 */
+    @PostMapping("/{id}/merge")
+    @Operation(summary = "标记变更任务对应的 PR 已合并")
+    public Result<ChangeTask> merge(@PathVariable String id) {
+        ChangeTask task = changeTaskService.onPrMerged(id);
+        return Result.success(task);
+    }
+
     @Data
     public static class CreateChangeTaskRequest {
         private String projectId;

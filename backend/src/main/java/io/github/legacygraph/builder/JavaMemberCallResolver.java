@@ -76,7 +76,7 @@ public class JavaMemberCallResolver {
         // 2. 建全局索引
         Map<String, List<GraphNode>> simpleNameToClassNodes = new HashMap<>();
         Map<String, GraphNode> fqnToClassNode = new HashMap<>();
-        for (NodeType t : new NodeType[]{NodeType.Controller, NodeType.Service, NodeType.Mapper}) {
+        for (NodeType t : new NodeType[]{NodeType.Controller, NodeType.Service, NodeType.Mapper, NodeType.ConfigItem, NodeType.ExternalSystem}) {
             List<GraphNode> classNodes = neo4jGraphDao.queryNodes(
                     projectId, versionId, t.name(), null, null, null, 0);
             for (GraphNode n : classNodes) {
@@ -148,7 +148,15 @@ public class JavaMemberCallResolver {
                     // 正向路径：targetClass 已由 ServiceCallExtractor 解析 → god-node 精确匹配
                     edge = resolveOne(projectId, versionId, call,
                             fqnToClassNode, simpleNameToClassNodes, methodIndex, methodByExactKey, existingPairs);
-                    if (edge != null) forwardResolved++;
+                    if (edge != null) {
+                        forwardResolved++;
+                    } else {
+                        // 正向匹配失败（索引找不到或歧义），回退到反向方法名匹配
+                        edge = resolveByMethodName(projectId, versionId, call,
+                                fqnToClassNode, simpleNameToClassNodes, methodNameIndex,
+                                methodIndex, methodByExactKey, existingPairs);
+                        if (edge != null) reverseResolved++;
+                    }
                 } else {
                     // P0 反向路径：targetClass 未解析（XML 配置注入等场景）→ 按 calledMethod 名全局搜索
                     edge = resolveByMethodName(projectId, versionId, call,
@@ -205,10 +213,16 @@ public class JavaMemberCallResolver {
         if (candidates == null || candidates.isEmpty()) {
             return null; // 缺失，跳过
         }
+        GraphNode targetClassNode;
         if (candidates.size() > 1) {
-            return null; // 歧义（同名多类），跳过，不留错边
+            // 同名多类消歧：同包优先 → 语义关联
+            targetClassNode = disambiguateClassCandidates(candidates, call.callerClass);
+            if (targetClassNode == null) {
+                return null; // 无法消歧，跳过
+            }
+        } else {
+            targetClassNode = candidates.get(0);
         }
-        GraphNode targetClassNode = candidates.get(0);
         String targetFqn = targetClassNode.getNodeKey();
 
         // Target Method（god-node + 精确签名快路径）
@@ -279,7 +293,6 @@ public class JavaMemberCallResolver {
         }
 
         // 端点：方法级优先，回退类级（与 resolveOne 一致）
-        GraphNode toNode = targetMethodNode; // 方法节点已通过 god-node 验证
         // 同时查找类级节点用于备选（方法节点不存在时回退）
         String targetFqn = owningFqn(targetMethodNode.getNodeKey());
         GraphNode targetClassNode = fqnToClassNode.get(targetFqn);
@@ -293,7 +306,11 @@ public class JavaMemberCallResolver {
             }
         }
         // 方法级优先，类级回退
-        if (targetClassNode != null && toNode == null) {
+        GraphNode toNode = null;
+        if (targetMethodNode != null) {
+            toNode = targetMethodNode;
+        }
+        if (toNode == null && targetClassNode != null) {
             toNode = targetClassNode;
         }
         if (fromNode.getId().equals(toNode.getId())) {
@@ -311,6 +328,52 @@ public class JavaMemberCallResolver {
         edge.setConfidence(BigDecimal.valueOf(0.85));
         edge.setStatus(NodeStatus.PENDING_CONFIRM.name());
         return edge;
+    }
+
+    /**
+     * 类节点消歧策略（用于 resolveOne 中同名多类场景）：
+     * 1. 同包过滤（caller 与 candidate 在同一包下）
+     * 2. 语义关联（caller 类名与 candidate 类名共享词根）
+     */
+    private GraphNode disambiguateClassCandidates(List<GraphNode> candidates, String callerFqn) {
+        // 1. 同包过滤
+        String callerPkg = callerFqn.contains(".") ? callerFqn.substring(0, callerFqn.lastIndexOf('.')) : "";
+        List<GraphNode> filtered = new ArrayList<>();
+        for (GraphNode c : candidates) {
+            String targetFqn = c.getNodeKey();
+            if (targetFqn != null && targetFqn.startsWith(callerPkg)) {
+                filtered.add(c);
+            }
+        }
+        if (filtered.size() == 1) return filtered.get(0);
+        if (filtered.isEmpty()) filtered = new ArrayList<>(candidates);
+
+        // 同名歧义守卫：所有候选简单名完全相同时，语义消歧无意义，判定为歧义
+        String firstSimple = simpleName(filtered.get(0).getNodeKey());
+        if (firstSimple != null) {
+            boolean allSameName = filtered.stream()
+                    .allMatch(c -> firstSimple.equals(simpleName(c.getNodeKey())));
+            if (allSameName) return null;
+        }
+
+        // 2. 语义关联消歧：根据类名的共享词根推断调用意图
+        String callerSimple = simpleName(callerFqn);
+        if (callerSimple == null) return null;
+        GraphNode bestMatch = null;
+        int bestScore = 0;
+        for (GraphNode c : filtered) {
+            String targetSimple = simpleName(c.getNodeKey());
+            if (targetSimple == null) continue;
+            int score = calculateSemanticScore(callerSimple, targetSimple);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = c;
+            }
+        }
+        if (bestMatch != null && bestScore >= 1) {
+            return bestMatch;
+        }
+        return null; // 无法消歧
     }
 
     /**

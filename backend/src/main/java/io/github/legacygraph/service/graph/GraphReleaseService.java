@@ -116,6 +116,12 @@ public class GraphReleaseService {
     public GraphRelease markFailed(String graphReleaseId, List<String> reasons) {
         GraphRelease release = requireRelease(graphReleaseId);
 
+        GraphReleaseStatus current = GraphReleaseStatus.valueOf(release.getStatus());
+        if (current == GraphReleaseStatus.FAILED) {
+            log.info("GraphRelease already FAILED, skip: id={}", graphReleaseId);
+            return release;
+        }
+
         release.setStatus(GraphReleaseStatus.FAILED.name());
         release.setFailureReasons(reasons);
         repository.updateById(release);

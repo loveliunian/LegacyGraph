@@ -4,6 +4,7 @@ import io.github.legacygraph.config.GraphWriteConfig;
 import io.github.legacygraph.dto.claim.CompileOptions;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
 import io.github.legacygraph.entity.ScanTask;
+import io.github.legacygraph.extractors.adapter.AdapterCapability;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapter;
 import io.github.legacygraph.extractors.adapter.ExtractionAdapterRegistry;
 import io.github.legacygraph.extractors.adapter.ExtractionResult;
@@ -69,6 +70,7 @@ class AdapterExecutionServiceWriteModeTest {
                 .build();
 
         when(adapterRegistry.selectAdapters(context, asset)).thenReturn(List.of(adapter));
+        when(adapter.capability()).thenReturn(AdapterCapability.builder().name("TestAdapter").build());
         when(adapter.extract(context, asset)).thenReturn(ExtractionResult.builder()
                 .processedAssets(1)
                 .claimDrafts(List.of(draft))

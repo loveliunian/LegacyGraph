@@ -119,7 +119,7 @@ public class DatabaseMetadataScanService {
             } else if (msg.contains("does not exist") || msg.contains("not found") || msg.contains("no tables")) {
                 log.info("DB metadata empty for schema {}: {}", effectiveSchema, msg);
             } else {
-                log.error("Failed to extract database metadata for schema {}: {}", effectiveSchema, msg);
+                log.error("Failed to extract database metadata for schema {}: {}", effectiveSchema, msg, e);
             }
             return 0;
         }

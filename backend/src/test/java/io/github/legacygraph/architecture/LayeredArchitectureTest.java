@@ -29,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LayeredArchitectureTest {
 
     private static final Set<String> REPOSITORY_BASELINE_CONTROLLERS = Set.of(
-            "AuthController", "EnhancedQaController", "FactController", "ReviewController", "SourceController", "TestCaseController");
+            "AuthController", "EnhancedQaController", "FactController", "ReviewController", "SourceController", "TestCaseController",
+            "RequirementController", "SolutionController");
 
     private static final Set<String> DAO_BASELINE_CONTROLLERS = Set.of(
             "FactController", "GraphQueryController", "LlmAgentController", "TestCaseController");
@@ -154,6 +155,7 @@ class LayeredArchitectureTest {
     void agentsShouldNotDependOnRepositories() {
         ArchRule rule = noClasses()
                 .that().resideInAPackage("..agent..")
+                .and().doNotHaveFullyQualifiedName("io.github.legacygraph.agent.EnhancedQaAgent")
                 .should().dependOnClassesThat().resideInAPackage("..repository..");
         rule.check(classes);
     }

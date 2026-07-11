@@ -26,6 +26,23 @@ export type {
   GraphifyQualityResult,
   CrossRepoImpactChain,
 } from './graphify.api'
+export { requirementApi } from './requirement'
+export type {
+  RequirementItem,
+  RequirementAnalysis,
+  SavedRequirement,
+  ImpactedNode,
+  ImpactPath,
+  ImpactAnalysis,
+} from './requirement'
+export { solutionApi } from './solution'
+export type {
+  SolutionGenerateRequest,
+  SolutionStep,
+  Solution,
+  SolutionGenerateResponse,
+  SolutionVerifyResult,
+} from './solution'
 
 // 保留原有导出向后兼容
 import { get, post, del, put } from '@/utils/request'

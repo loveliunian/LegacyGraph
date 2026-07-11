@@ -91,7 +91,8 @@ import {
   VideoPlay,
   Tools,
   ChatDotRound,
-  Grid
+  Grid,
+  Edit
 } from '@element-plus/icons-vue'
 import { useProjectStore } from '@/stores/project'
 import { useTaskStore } from '@/stores/task'
@@ -189,6 +190,15 @@ const menuSections = computed<ProjectMenuSection[]>(() => {
       items: [
         { label: '变更任务', path: `${basePath}/change-tasks` },
         { label: 'AI 助手', path: `${basePath}/agents` }
+      ]
+    },
+    {
+      index: 'requirement',
+      label: '需求与方案',
+      icon: markRaw(Edit),
+      items: [
+        { label: '需求分析', path: `${basePath}/requirements` },
+        { label: '方案评审', path: `${basePath}/solutions`, routeNames: ['SolutionReview'] }
       ]
     }
   ]

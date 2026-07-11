@@ -2,6 +2,7 @@ package io.github.legacygraph.task.step;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.FeatureMappingAgent;
+import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.builder.EvidenceGraphWriter;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
@@ -39,12 +40,14 @@ class FeatureMappingStepTest {
     @Mock private AiScanStepSupport support;
     @Mock private EvidenceGraphWriter evidenceGraphWriter;
     @Mock private ReviewRecordRepository reviewRecordRepository;
+    @Mock private BusinessGraphBuilder businessGraphBuilder;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private FeatureMappingStep createStep() {
         return new FeatureMappingStep(support, neo4jGraphDao, featureMappingAgent,
-                evidenceGraphWriter, reviewRecordRepository, objectMapper, agentCallCounter);
+                evidenceGraphWriter, reviewRecordRepository, objectMapper, agentCallCounter,
+                businessGraphBuilder);
     }
 
     private static GraphNode node(String key, String name, String type) {

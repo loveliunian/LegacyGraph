@@ -3,8 +3,13 @@ package io.github.legacygraph.task.step;
 import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dto.DocumentChunk;
 import io.github.legacygraph.entity.Document;
+import io.github.legacygraph.entity.DocumentElement;
 import io.github.legacygraph.repository.DocumentRepository;
+import io.github.legacygraph.service.document.DefaultDocumentPartitionService;
+import io.github.legacygraph.service.document.DocumentPartitionService;
+import io.github.legacygraph.service.document.StructureAwareChunkService;
 import io.micrometer.core.instrument.Counter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,9 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,11 +60,24 @@ class DocExtractStepTest {
     @Mock private Counter agentCallCounter;
     @Mock private Counter graphNodeCounter;
     @Mock private Counter graphEdgeCounter;
+    @Mock private DocumentPartitionService mockPartitionService;
+    @Mock private StructureAwareChunkService mockChunkService;
 
     /** 构造 DocExtractStep 实例（embeddingModel 默认为 null，需反射注入） */
     private DocExtractStep createStep() {
         return new DocExtractStep(support, documentRepository, docUnderstandingAgent,
-                businessGraphBuilder, neo4jGraphDao, agentCallCounter, graphNodeCounter, graphEdgeCounter);
+                businessGraphBuilder, neo4jGraphDao,
+                new DefaultDocumentPartitionService(),
+                new StructureAwareChunkService(2500),
+                agentCallCounter, graphNodeCounter, graphEdgeCounter);
+    }
+
+    /** 构造 DocExtractStep 实例（使用 mock 的 partition/chunk 服务，用于结构感知切块测试） */
+    private DocExtractStep createStepWithMockServices() {
+        return new DocExtractStep(support, documentRepository, docUnderstandingAgent,
+                businessGraphBuilder, neo4jGraphDao,
+                mockPartitionService, mockChunkService,
+                agentCallCounter, graphNodeCounter, graphEdgeCounter);
     }
 
     /** 反射调用 private extractFromChunks */
@@ -642,13 +662,13 @@ class DocExtractStepTest {
 
     @Test
     void chunkSizeConstants_三级分级值正确() throws Exception {
-        // 验证三级 chunk size 常量值：>50KB→2500, >20KB→1800, 其他→4000
+        // 验证三级 chunk size 常量值：>50KB→2500, >20KB→1800, 其他→2500（spec 5.5）
         assertEquals(2500, getPrivateIntConstant("LARGE_DOC_CHUNK_SIZE"),
                 "LARGE_DOC_CHUNK_SIZE (>50KB) 应为 2500");
         assertEquals(1800, getPrivateIntConstant("MEDIUM_DOC_CHUNK_SIZE"),
                 "MEDIUM_DOC_CHUNK_SIZE (>20KB) 应为 1800");
-        assertEquals(4000, getPrivateIntConstant("NORMAL_DOC_CHUNK_SIZE"),
-                "NORMAL_DOC_CHUNK_SIZE 应为 4000");
+        assertEquals(2500, getPrivateIntConstant("NORMAL_DOC_CHUNK_SIZE"),
+                "NORMAL_DOC_CHUNK_SIZE 应为 2500（spec 5.5）");
         assertEquals(400, getPrivateIntConstant("DOC_CHUNK_OVERLAP"),
                 "DOC_CHUNK_OVERLAP 应为 400");
         assertEquals(16000, getPrivateIntConstant("DOC_CHUNK_THRESHOLD"),
@@ -656,8 +676,8 @@ class DocExtractStepTest {
     }
 
     @Test
-    void extractFromChunks_普通文档使用4000chunkSize() throws Exception {
-        // 普通文档（<20KB）应使用 NORMAL_DOC_CHUNK_SIZE=4000
+    void extractFromChunks_普通文档使用2500chunkSize() throws Exception {
+        // 普通文档（<20KB）应使用 NORMAL_DOC_CHUNK_SIZE=2500（spec 5.5）
         DocExtractStep step = createStep();
         ExecutorService testExecutor = Executors.newFixedThreadPool(4);
         try {
@@ -670,7 +690,7 @@ class DocExtractStepTest {
                         return e;
                     });
 
-            // 10000 字符 < 20000 → 普通文档，使用 4000 chunk size
+            // 10000 字符 < 20000 → 普通文档，使用 2500 chunk size
             String content = generateContent(10000);
             Document doc = new Document();
             doc.setFilePath("/test/normal.md");
@@ -680,7 +700,7 @@ class DocExtractStepTest {
                     invokeExtractFromChunks(step, "p1", doc, content);
 
             assertNotNull(result);
-            // 10000 / (4000-400) ≈ 3 chunks，验证确实分了多段
+            // 10000 / (2500-400) ≈ 4-5 chunks，验证确实分了多段
             // 由于 cachedExtract 被调用次数等于 chunk 数，这里通过 verify 验证
             verify(support, org.mockito.Mockito.atLeast(2)).cachedExtract(
                     eq("doc-chunk"), anyString(), any(),
@@ -836,6 +856,175 @@ class DocExtractStepTest {
         for (DocExtractStep.DocChunk chunk : chunks) {
             assertTrue(chunk.content().length() <= 1000,
                     "每块长度不应超过 chunkSize，实际: " + chunk.content().length());
+        }
+    }
+
+    // ──────────────────────────────────────────────
+    // G2：结构感知切块（partitionEnabled 分支）
+    // ──────────────────────────────────────────────
+
+    @Test
+    void testExtractFromChunks_PartitionEnabled_UsesStructureAwareChunk() throws Exception {
+        // partitionEnabled=true 时走结构感知切块路径：partition + chunk 被调用
+        DocExtractStep step = createStepWithMockServices();
+        ReflectionTestUtils.setField(step, "partitionEnabled", true);
+        ExecutorService testExecutor = Executors.newFixedThreadPool(4);
+        try {
+            when(support.getDocExtractExecutor()).thenReturn(testExecutor);
+
+            // mock partition 返回 2 个元素
+            DocumentElement el1 = DocumentElement.builder()
+                    .type(DocumentElement.Type.NARRATIVE_TEXT)
+                    .text("内容段落一。")
+                    .headingPath(List.of("标题一"))
+                    .sourceLocation("doc.md#标题一")
+                    .build();
+            DocumentElement el2 = DocumentElement.builder()
+                    .type(DocumentElement.Type.NARRATIVE_TEXT)
+                    .text("内容段落二。")
+                    .headingPath(List.of("标题一"))
+                    .sourceLocation("doc.md#标题一")
+                    .build();
+            when(mockPartitionService.partition(anyString(), anyString(), anyString()))
+                    .thenReturn(List.of(el1, el2));
+
+            // mock chunk 返回 2 个 DocumentChunk
+            DocumentChunk dc1 = DocumentChunk.builder()
+                    .content("[标题一]\n内容段落一。")
+                    .headingPath(List.of("标题一"))
+                    .sourceLocation("doc.md#标题一")
+                    .chunkIndex(0)
+                    .build();
+            DocumentChunk dc2 = DocumentChunk.builder()
+                    .content("[标题一]\n内容段落二。")
+                    .headingPath(List.of("标题一"))
+                    .sourceLocation("doc.md#标题一")
+                    .chunkIndex(1)
+                    .build();
+            when(mockChunkService.totalTextSize(any())).thenReturn(100);
+            when(mockChunkService.determineMaxChars(anyInt())).thenReturn(2500);
+            when(mockChunkService.chunk(any(), anyInt())).thenReturn(List.of(dc1, dc2));
+
+            // mock LLM 抽取
+            when(support.cachedExtract(eq("doc-chunk"), anyString(), any(),
+                    eq(DocUnderstandingAgent.BusinessFactExtraction.class), any()))
+                    .thenAnswer(inv -> {
+                        DocUnderstandingAgent.BusinessFactExtraction e = new DocUnderstandingAgent.BusinessFactExtraction();
+                        e.setFeatures(List.of("structured_chunk_feature"));
+                        return e;
+                    });
+
+            // 20000 字符 > DOC_CHUNK_THRESHOLD(16000) 触发分块抽取
+            String content = generateContent(20000);
+            Document doc = new Document();
+            doc.setFilePath("/test/doc.md");
+            doc.setDocName("doc.md");
+            doc.setId("doc-1");
+
+            DocExtractStep.ChunkExtractionResult result =
+                    invokeExtractFromChunksWithCoverage(step, "p1", doc, content);
+
+            assertNotNull(result, "结果不应为 null");
+            // 验证结构感知切块路径被调用
+            verify(mockPartitionService).partition(eq("doc-1"), eq("doc.md"), anyString());
+            verify(mockChunkService).chunk(any(), anyInt());
+            // 验证 LLM 抽取使用结构化切块内容（2 个 chunk → 至少 2 次 cachedExtract）
+            verify(support, atLeast(2)).cachedExtract(
+                    eq("doc-chunk"), anyString(), any(),
+                    eq(DocUnderstandingAgent.BusinessFactExtraction.class), any());
+            // 验证抽取到了结果
+            assertNotNull(result.extraction());
+            assertNotNull(result.extraction().getFeatures());
+            assertTrue(result.extraction().getFeatures().contains("structured_chunk_feature"),
+                    "应包含结构化切块抽取的 feature");
+            assertTrue(result.isComplete(), "2/2 chunk 成功应为 complete");
+        } finally {
+            testExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void testExtractFromChunks_PartitionDisabled_UsesSplitContent() throws Exception {
+        // partitionEnabled=false 时走旧 splitContent 路径：partition 不被调用
+        DocExtractStep step = createStepWithMockServices();
+        ReflectionTestUtils.setField(step, "partitionEnabled", false);
+        ExecutorService testExecutor = Executors.newFixedThreadPool(4);
+        try {
+            when(support.getDocExtractExecutor()).thenReturn(testExecutor);
+            when(support.cachedExtract(eq("doc-chunk"), anyString(), any(),
+                    eq(DocUnderstandingAgent.BusinessFactExtraction.class), any()))
+                    .thenAnswer(inv -> {
+                        DocUnderstandingAgent.BusinessFactExtraction e = new DocUnderstandingAgent.BusinessFactExtraction();
+                        e.setFeatures(List.of("split_content_feature"));
+                        return e;
+                    });
+
+            String content = generateContent(20000);
+            Document doc = new Document();
+            doc.setFilePath("/test/doc.md");
+            doc.setDocName("doc.md");
+            doc.setId("doc-1");
+
+            DocExtractStep.ChunkExtractionResult result =
+                    invokeExtractFromChunksWithCoverage(step, "p1", doc, content);
+
+            assertNotNull(result, "结果不应为 null");
+            // 验证 partition 未被调用——走的是旧 splitContent 路径
+            verify(mockPartitionService, never()).partition(anyString(), anyString(), anyString());
+            verify(mockChunkService, never()).chunk(any(), anyInt());
+            // 验证 LLM 抽取仍正常执行（splitContent 产生多个 chunk）
+            verify(support, atLeast(2)).cachedExtract(
+                    eq("doc-chunk"), anyString(), any(),
+                    eq(DocUnderstandingAgent.BusinessFactExtraction.class), any());
+            assertNotNull(result.extraction());
+            assertTrue(result.extraction().getFeatures().contains("split_content_feature"),
+                    "应包含 splitContent 路径抽取的 feature");
+        } finally {
+            testExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void testExtractFromChunks_PartitionEnabled_FallbackOnException() throws Exception {
+        // partitionEnabled=true 但 partition 抛异常时，降级到 splitContent 路径
+        DocExtractStep step = createStepWithMockServices();
+        ReflectionTestUtils.setField(step, "partitionEnabled", true);
+        ExecutorService testExecutor = Executors.newFixedThreadPool(4);
+        try {
+            when(support.getDocExtractExecutor()).thenReturn(testExecutor);
+            // mock partition 抛异常
+            when(mockPartitionService.partition(anyString(), anyString(), anyString()))
+                    .thenThrow(new RuntimeException("partition service unavailable"));
+            // mock LLM 抽取（降级后走 splitContent → 多 chunk → cachedExtract）
+            when(support.cachedExtract(eq("doc-chunk"), anyString(), any(),
+                    eq(DocUnderstandingAgent.BusinessFactExtraction.class), any()))
+                    .thenAnswer(inv -> {
+                        DocUnderstandingAgent.BusinessFactExtraction e = new DocUnderstandingAgent.BusinessFactExtraction();
+                        e.setFeatures(List.of("fallback_feature"));
+                        return e;
+                    });
+
+            String content = generateContent(20000);
+            Document doc = new Document();
+            doc.setFilePath("/test/doc.md");
+            doc.setDocName("doc.md");
+            doc.setId("doc-1");
+
+            DocExtractStep.ChunkExtractionResult result =
+                    invokeExtractFromChunksWithCoverage(step, "p1", doc, content);
+
+            assertNotNull(result, "异常降级后结果不应为 null");
+            // 验证 partition 被尝试调用（但失败了）
+            verify(mockPartitionService).partition(anyString(), anyString(), anyString());
+            // 验证 LLM 抽取仍正常执行——降级到 splitContent 后仍完成抽取
+            verify(support, atLeast(2)).cachedExtract(
+                    eq("doc-chunk"), anyString(), any(),
+                    eq(DocUnderstandingAgent.BusinessFactExtraction.class), any());
+            assertNotNull(result.extraction());
+            assertTrue(result.extraction().getFeatures().contains("fallback_feature"),
+                    "降级后仍应抽取到 feature");
+        } finally {
+            testExecutor.shutdownNow();
         }
     }
 

@@ -296,6 +296,11 @@ public class Neo4jGraphDao {
         writeRepo.mergeEdgesBatch(projectId, versionId, edges);
     }
 
+    public void mergeEdgesByKeyBatch(String projectId, String versionId,
+                                      List<Neo4jWriteRepository.BatchEdgeByKeyUpsert> edges) {
+        writeRepo.mergeEdgesByKeyBatch(projectId, versionId, edges);
+    }
+
     public GraphEdge createEdge(GraphEdge edge) {
         return writeRepo.createEdge(edge);
     }

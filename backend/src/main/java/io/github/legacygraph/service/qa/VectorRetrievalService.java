@@ -11,6 +11,7 @@ import io.github.legacygraph.util.IdUtil;
 import io.github.legacygraph.util.VectorUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +41,14 @@ public class VectorRetrievalService {
     /** 语义检索缓存 TTL */
     private static final java.time.Duration SEARCH_CACHE_TTL = java.time.Duration.ofMinutes(3);
 
+    /**
+     * Task 8.3 Feature Flag：GraphRelease + ACL 过滤开关。
+     * 关闭时（默认）走原 findSimilar 不加任何过滤，保持向后兼容；
+     * 开启时按 graphReleaseId / aclPrincipal 过滤。
+     */
+    @Value("${legacygraph.qa.graph-release-filter.enabled:false}")
+    private boolean graphReleaseFilterEnabled;
+
     public VectorRetrievalService(VectorDocumentRepository vectorDocumentRepository,
                                Neo4jGraphDao neo4jGraphDao,
                                VectorizationService vectorizationService,
@@ -67,6 +76,15 @@ public class VectorRetrievalService {
     }
 
     private String searchCacheKey(String projectId, String versionId, String query, int topK, String chunkType) {
+        return searchCacheKey(projectId, versionId, query, topK, chunkType, null, null);
+    }
+
+    /**
+     * Task 8.3：缓存键扩展过滤维度，避免不同 graphReleaseId/aclPrincipal 的查询共享缓存。
+     * 当过滤参数为 null 时退化为原缓存键（向后兼容）。
+     */
+    private String searchCacheKey(String projectId, String versionId, String query, int topK, String chunkType,
+                                   String graphReleaseId, String aclPrincipal) {
         String raw = String.join("|",
             projectId,
             versionId,
@@ -74,7 +92,9 @@ public class VectorRetrievalService {
             corpusVersion,
             String.valueOf(topK),
             chunkType != null ? chunkType : "",
-            query
+            query,
+            graphReleaseId != null ? graphReleaseId : "",
+            aclPrincipal != null ? aclPrincipal : ""
         );
         return "vec:search:" + sha256(raw);
     }
@@ -128,25 +148,48 @@ public class VectorRetrievalService {
      * 语义搜索 - 对查询向量化，返回相似度最高的 topK 文档
      */
     public List<VectorDocument> semanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
-        log.debug("Semantic search: projectId={}, query={}, topK={}", projectId, query, topK);
+        return semanticSearch(projectId, versionId, query, topK, chunkType, null, null);
+    }
+
+    /**
+     * 语义搜索（带 GraphRelease + ACL 过滤，Task 8.3）。
+     * <p>当 {@code legacygraph.qa.graph-release-filter.enabled=false}（默认）时，
+     * graphReleaseId / aclPrincipal 参数被忽略，退化为原行为。</p>
+     *
+     * @param graphReleaseId 图谱发布ID，null/空 时忽略；feature flag 关闭时也忽略
+     * @param aclPrincipal   ACL 主体，null/空 时忽略；feature flag 关闭时也忽略
+     */
+    public List<VectorDocument> semanticSearch(String projectId, String versionId, String query, int topK,
+                                              String chunkType, String graphReleaseId, String aclPrincipal) {
+        log.debug("Semantic search: projectId={}, query={}, topK={}, graphReleaseFilter={}, graphReleaseId={}, aclPrincipal={}",
+            projectId, query, topK, graphReleaseFilterEnabled, graphReleaseId, aclPrincipal);
         String effectiveVersionId = resolveVersionId(projectId, versionId);
 
-        // 缓存优先：相同 (project, version, query, topK, chunkType) 复用
+        // feature flag 关闭时不参与缓存键计算，保持与原缓存键兼容
+        boolean effectiveFilter = graphReleaseFilterEnabled;
+        String effectiveGraphReleaseId = effectiveFilter ? graphReleaseId : null;
+        String effectiveAclPrincipal = effectiveFilter ? aclPrincipal : null;
+
+        // 缓存优先：相同 (project, version, query, topK, chunkType, filter维度) 复用
         if (cacheService != null) {
-            String cacheKey = searchCacheKey(projectId, effectiveVersionId, query, topK, chunkType);
+            String cacheKey = searchCacheKey(projectId, effectiveVersionId, query, topK, chunkType,
+                effectiveGraphReleaseId, effectiveAclPrincipal);
             @SuppressWarnings("unchecked")
             List<VectorDocument> cached = cacheService.get(cacheKey, List.class);
             if (cached != null) {
                 return cached;
             }
-            List<VectorDocument> fresh = doSemanticSearch(projectId, effectiveVersionId, query, topK, chunkType);
+            List<VectorDocument> fresh = doSemanticSearch(projectId, effectiveVersionId, query, topK, chunkType,
+                effectiveGraphReleaseId, effectiveAclPrincipal);
             cacheService.put(cacheKey, fresh, SEARCH_CACHE_TTL);
             return fresh;
         }
-        return doSemanticSearch(projectId, effectiveVersionId, query, topK, chunkType);
+        return doSemanticSearch(projectId, effectiveVersionId, query, topK, chunkType,
+            effectiveGraphReleaseId, effectiveAclPrincipal);
     }
 
-    private List<VectorDocument> doSemanticSearch(String projectId, String versionId, String query, int topK, String chunkType) {
+    private List<VectorDocument> doSemanticSearch(String projectId, String versionId, String query, int topK,
+                                                  String chunkType, String graphReleaseId, String aclPrincipal) {
         if (embeddingModel == null) {
             log.debug("EmbeddingModel not available (SILICONFLOW_API_KEY not set)");
             return Collections.emptyList();
@@ -156,7 +199,14 @@ public class VectorRetrievalService {
             float[] embedding = embeddingModel.embed(query);
             List<Double> queryEmbedding = VectorUtils.floatArrayToDoubleList(embedding);
 
-            // 使用 pgvector 余弦相似度检索
+            // feature flag 开启且任一过滤参数非空时走带过滤查询；否则走原查询保持兼容
+            boolean useFilter = graphReleaseFilterEnabled
+                && (isNonBlank(graphReleaseId) || isNonBlank(aclPrincipal));
+            if (useFilter) {
+                return vectorDocumentRepository.findSimilarWithFilters(
+                    projectId, versionId, queryEmbedding, topK, chunkType, graphReleaseId, aclPrincipal
+                );
+            }
             return vectorDocumentRepository.findSimilar(
                 projectId, versionId, queryEmbedding, topK, chunkType
             );
@@ -164,6 +214,10 @@ public class VectorRetrievalService {
             log.error("Semantic search failed: {}", e.getMessage(), e);
             return Collections.emptyList();
         }
+    }
+
+    private static boolean isNonBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     /**
@@ -256,6 +310,34 @@ public class VectorRetrievalService {
             return candidates.isEmpty() ? Optional.empty() : Optional.of(candidates.get(0));
         } catch (Exception e) {
             log.error("Find similar cache failed: {}", e.getMessage(), e);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 版本化查找相似的语义缓存条目 — 按 graphReleaseId 和 aclHash 过滤。
+     *
+     * @param projectId      项目 ID
+     * @param queryEmbedding 查询 embedding
+     * @param threshold      相似度阈值
+     * @param graphReleaseId 图谱发布 ID（null 匹配 NULL 列）
+     * @param aclHash        ACL 哈希（null 匹配 NULL 列）
+     * @return 匹配的缓存条目，无匹配时返回 empty
+     */
+    public Optional<SemanticCacheEntry> findSimilarCacheVersioned(String projectId, float[] queryEmbedding,
+                                                                    double threshold, String graphReleaseId,
+                                                                    String aclHash) {
+        if (embeddingModel == null || queryEmbedding == null || queryEmbedding.length == 0) {
+            return Optional.empty();
+        }
+        try {
+            String embeddingStr = VectorUtils.floatArrayToVectorLiteral(queryEmbedding);
+            List<SemanticCacheEntry> candidates = semanticCacheRepository.findSimilarVersioned(
+                projectId, embeddingStr, 1, threshold, graphReleaseId, aclHash
+            );
+            return candidates.isEmpty() ? Optional.empty() : Optional.of(candidates.get(0));
+        } catch (Exception e) {
+            log.error("Find similar versioned cache failed: {}", e.getMessage(), e);
             return Optional.empty();
         }
     }

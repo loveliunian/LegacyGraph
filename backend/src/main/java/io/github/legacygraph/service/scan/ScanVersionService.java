@@ -306,7 +306,8 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
      *
      * @return 子阶段列表；无任何 AI_* 子任务时返回 null
      */
-    private List<ScanProgressResponse.TaskProgress> buildAiSubPhases(String projectId, List<ScanTask> tasks) {
+    private List<ScanProgressResponse.TaskProgress> buildAiSubPhases(
+            String projectId, List<ScanTask> tasks, boolean aiTerminal) {
         // 同 taskType 多条时保留最新的一条，避免重试场景覆盖
         Map<String, ScanTask> aiTaskMap = new LinkedHashMap<>();
         for (ScanTask t : tasks) {
@@ -333,11 +334,12 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                 }
             }
             if (matched.isEmpty()) {
-                // 子环节尚未开始
+                // 子环节无对应的任务记录
                 ScanProgressResponse.TaskProgress sp = new ScanProgressResponse.TaskProgress();
                 sp.setTaskType(def.displayTaskType);
                 sp.setPhaseName(def.displayName);
-                sp.setStatus("PENDING");
+                // AI 整体已终态时显示 SKIPPED（按需跳过的环节），否则显示 PENDING
+                sp.setStatus(aiTerminal ? "SKIPPED" : "PENDING");
                 sp.setFactCount(0);
                 sp.setTotalItems(0);
                 sp.setProcessedItems(0);
@@ -621,7 +623,8 @@ public class ScanVersionService extends ServiceImpl<ScanVersionRepository, ScanV
                         completedWeight += partialWeight;
                     }
                     // 展开显示 AI 内部子环节（合并并行步骤）
-                    tp.setSubPhases(buildAiSubPhases(projectId, tasks));
+                    boolean aiTerminal = isCompletedTaskStatus(agg.status) || "FAILED".equals(agg.status);
+                    tp.setSubPhases(buildAiSubPhases(projectId, tasks, aiTerminal));
                     taskProgressList.add(tp);
                     continue;
                 } else {

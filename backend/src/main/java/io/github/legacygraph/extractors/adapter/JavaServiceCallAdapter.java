@@ -52,9 +52,20 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
         if (asset.getFileType() == null || !JAVA_EXTENSIONS.contains(asset.getFileType().toLowerCase())) {
             return false;
         }
-        // Controller 文件交给 JavaCodeAdapter，避免重复
-        if (JavaCodeAdapter.isControllerFile(asset.getRelativePath())) {
-            return false;
+        // Controller 文件交给 JavaCodeAdapter，避免重复（按内容判断，与 JavaCodeAdapter.supports 一致）
+        String content = asset.getCachedContent();
+        if (content != null) {
+            if (content.contains("@RestController") || content.contains("@Controller")) {
+                return false;
+            }
+        } else if (asset.getFile() != null && Files.isReadable(asset.getFile())) {
+            try (var lines = Files.lines(asset.getFile())) {
+                if (lines.anyMatch(line -> line.contains("@RestController") || line.contains("@Controller"))) {
+                    return false;
+                }
+            } catch (IOException e) {
+                // 读取失败时不排除，让 JavaServiceCallAdapter 处理
+            }
         }
         // 不依赖文件命名，基于 AST 实际内容判定调用关系
         return asset.getFile() != null && Files.isReadable(asset.getFile());
@@ -63,7 +74,7 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
     @Override
     public ExtractionResult extract(ScanContext context, SourceAsset asset) {
         try {
-            List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(asset.getFile());
+            List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(asset.getFile(), asset.getCachedContent());
             List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
                     context.getProjectId(), context.getVersionId(), structures);
             // 基于类结构与 import 构建 Package 节点及 BELONGS_TO / DEPENDS_ON 边

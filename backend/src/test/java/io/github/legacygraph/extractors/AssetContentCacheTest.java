@@ -135,6 +135,7 @@ class AssetContentCacheTest {
         return new JavaCodeAdapter(
                 mock(GraphBuilder.class),
                 mock(JavaStructureExtractor.class),
-                mock(PackageExtractor.class));
+                mock(PackageExtractor.class),
+                mock(io.github.legacygraph.extractors.adapter.FactPersister.class));
     }
 }

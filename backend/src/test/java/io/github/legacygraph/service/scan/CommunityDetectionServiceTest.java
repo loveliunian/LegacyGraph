@@ -5,6 +5,7 @@ import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
+import io.github.legacygraph.llm.LlmGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,11 +40,14 @@ class CommunityDetectionServiceTest {
     @Mock
     private Neo4jGraphDao graphDao;
 
+    @Mock
+    private LlmGateway llmGateway;
+
     private CommunityDetectionService service;
 
     @BeforeEach
     void setUp() {
-        service = new CommunityDetectionService(graphDao);
+        service = new CommunityDetectionService(graphDao, llmGateway);
     }
 
     // ========================================================
@@ -292,6 +296,62 @@ class CommunityDetectionServiceTest {
         Map<String, String> result = service.detectCommunitiesByClasses("proj-7");
 
         assertThat(result).isEmpty();
+    }
+
+    // ========================================================
+    // 场景 7：社区摘要生成 — 无社区时返回空
+    // ========================================================
+
+    @Test
+    @DisplayName("无社区时 generateCommunitySummaries 返回空映射")
+    void generateCommunitySummariesWithEmptyCommunitiesReturnsEmpty() {
+        when(graphDao.queryNodes(eq("proj-empty-sum"), isNull(), eq(NodeType.Package.name()),
+                isNull(), isNull(), isNull(), anyInt()))
+                .thenReturn(Collections.emptyList());
+
+        Map<String, String> result = service.generateCommunitySummaries("proj-empty-sum");
+
+        assertThat(result).isEmpty();
+        verify(llmGateway, never()).call(anyString(), anyString(), anyString(), any());
+    }
+
+    // ========================================================
+    // 场景 8：社区摘要生成 — 有社区时生成摘要
+    // ========================================================
+
+    @Test
+    @DisplayName("有社区时 generateCommunitySummaries 生成摘要")
+    void generateCommunitySummariesWithCommunitiesReturnsSummaries() {
+        GraphNode pkgA = pkgNode("id-a", "com.example.a");
+        GraphNode pkgB = pkgNode("id-b", "com.example.b");
+
+        when(graphDao.queryNodes(eq("proj-sum"), isNull(), eq(NodeType.Package.name()),
+                isNull(), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of(pkgA, pkgB));
+        when(graphDao.queryEdges(eq("proj-sum"), isNull(), eq(EdgeType.DEPENDS_ON.name()),
+                isNull(), anyInt()))
+                .thenReturn(List.of(depEdge("id-a", "id-b")));
+        when(llmGateway.call(eq("proj-sum"), anyString(), anyString(), eq(String.class)))
+                .thenReturn("用户管理子系统");
+
+        Map<String, String> result = service.generateCommunitySummaries("proj-sum");
+
+        assertThat(result).isNotEmpty();
+        assertThat(result).hasSize(1);
+        assertThat(result.values().iterator().next()).isEqualTo("用户管理子系统");
+        verify(llmGateway, times(1)).call(eq("proj-sum"), anyString(), anyString(), eq(String.class));
+    }
+
+    // ========================================================
+    // 场景 9：writeCommunitySummaryToNodes — 空映射不执行写入
+    // ========================================================
+
+    @Test
+    @DisplayName("writeCommunitySummaryToNodes 空映射不应调用 setNodeProperty")
+    void writeCommunitySummaryToNodesWithEmptyMapDoesNothing() {
+        service.writeCommunitySummaryToNodes("proj-empty", Collections.emptyMap());
+        verify(graphDao, never()).setNodeProperty(anyString(), anyString(), any());
+        verify(graphDao, never()).queryNodes(anyString(), any(), anyString(), any(), any(), any(), anyInt());
     }
 
     // ========================================================

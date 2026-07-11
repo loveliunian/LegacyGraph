@@ -730,9 +730,10 @@ public class GraphQueryService {
         for (ScanTask t : tasks) {
             TaskAggregate agg = map.computeIfAbsent(t.getVersionId(), k -> new TaskAggregate());
             agg.total++;
-            if ("SUCCESS".equals(t.getTaskStatus())) {
+            String status = t.getTaskStatus();
+            if ("SUCCESS".equals(status) || "WARNING".equals(status) || "SKIPPED".equals(status)) {
                 agg.success++;
-            } else if ("FAILED".equals(t.getTaskStatus())) {
+            } else if ("FAILED".equals(status)) {
                 agg.failed++;
                 if (agg.stage == null) agg.stage = t.getTaskType();
             } else {

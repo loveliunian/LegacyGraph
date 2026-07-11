@@ -17,6 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,7 +45,7 @@ class JavaCodeAdapterTest {
                 """);
         when(graphBuilder.buildJavaStructureGraph(any(), any(), any())).thenReturn(List.of());
 
-        JavaCodeAdapter adapter = new JavaCodeAdapter(graphBuilder, new JavaStructureExtractor(), new io.github.legacygraph.extractors.PackageExtractor());
+        JavaCodeAdapter adapter = new JavaCodeAdapter(graphBuilder, new JavaStructureExtractor(), new io.github.legacygraph.extractors.PackageExtractor(), mock(io.github.legacygraph.extractors.adapter.FactPersister.class));
         ScanContext context = ScanContext.builder()
                 .projectId("project-1")
                 .versionId("v1")

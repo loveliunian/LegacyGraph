@@ -37,7 +37,7 @@ describe('pluginApi', () => {
     })
 
     it('应正确传递 params 查询参数', () => {
-      const params = { type: 'SCANNER' }
+      const params = { type: 'SCANNER' as const }
       pluginApi.listAll(params)
       expect(mockGet).toHaveBeenCalledWith('/lg/plugins', params)
     })

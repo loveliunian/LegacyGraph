@@ -53,7 +53,12 @@ public enum EdgeType {
     RAISES_QUESTION("提出问题"),                      // RequirementItem → OpenQuestion
     SATISFIES("满足"),                                 // Solution → Requirement（Solution 在 Task 10 定义）
     DERIVED_FROM("派生自"),                            // ImplementationStep → Requirement
-    VERIFIES("验证");                                  // VerificationStep → AcceptanceCriterion
+    VERIFIES("验证"),                                  // VerificationStep → AcceptanceCriterion
+
+    // ========== 方案生成关系（Task 10） ==========
+    STEP_OF("步骤属于"),                               // SolutionStep → Solution
+    VALIDATED_BY("由...校验"),                         // Solution / SolutionStep → Evidence / ValidationGate
+    REVISED_BY("由...修订");                           // Solution → Solution（修订版本链）
 
     private final String description;
 

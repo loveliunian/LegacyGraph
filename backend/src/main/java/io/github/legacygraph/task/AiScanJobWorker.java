@@ -33,6 +33,8 @@ public class AiScanJobWorker {
     private SystemOverviewDocumentService systemOverviewDocumentService;
     private SystemOverviewIngestService systemOverviewIngestService;
     private ScanArtifactPublisher scanArtifactPublisher;
+    private io.github.legacygraph.service.scan.ScanFinalizationService scanFinalizationService;
+    private io.github.legacygraph.config.GraphReleaseConfig graphReleaseConfig;
 
     public AiScanJobWorker(AiScanJobRepository aiScanJobRepository,
                            AiScanOrchestrator aiScanOrchestrator,
@@ -64,6 +66,16 @@ public class AiScanJobWorker {
     @Autowired(required = false)
     void setScanArtifactPublisher(ScanArtifactPublisher scanArtifactPublisher) {
         this.scanArtifactPublisher = scanArtifactPublisher;
+    }
+
+    @Autowired(required = false)
+    void setScanFinalizationService(io.github.legacygraph.service.scan.ScanFinalizationService scanFinalizationService) {
+        this.scanFinalizationService = scanFinalizationService;
+    }
+
+    @Autowired(required = false)
+    void setGraphReleaseConfig(io.github.legacygraph.config.GraphReleaseConfig graphReleaseConfig) {
+        this.graphReleaseConfig = graphReleaseConfig;
     }
 
     /**
@@ -123,8 +135,12 @@ public class AiScanJobWorker {
                     scanVersionRepository.updateById(version);
                     log.info("ScanVersion updated after AI job: versionId={}, nodeCount={}, finishedAt={}", 
                             job.getVersionId(), version.getNodeCount(), version.getFinishedAt());
-                    generateSystemOverviewDocument(job.getProjectId(), job.getVersionId());
-                    publishScanArtifacts(job.getProjectId(), job.getVersionId());
+                    if (isScanFinalizationEnabled()) {
+                        runScanFinalization(job.getProjectId(), job.getVersionId());
+                    } else {
+                        generateSystemOverviewDocument(job.getProjectId(), job.getVersionId());
+                        publishScanArtifacts(job.getProjectId(), job.getVersionId());
+                    }
                 }
             } catch (Exception statEx) {
                 log.warn("Failed to refresh ScanVersion stats after AI job: versionId={}, error={}", 
@@ -198,6 +214,29 @@ public class AiScanJobWorker {
         } catch (Exception e) {
             log.warn("ScanArtifactPublisher failed after AI (non-blocking): versionId={}, error={}",
                     versionId, e.getMessage());
+        }
+    }
+
+    /**
+     * 判断是否启用 ScanFinalizationService 收口路径。
+     * <p>需同时满足：{@code legacygraph.graph-release.enabled=true} 且 {@link ScanFinalizationService} 已注入。</p>
+     */
+    private boolean isScanFinalizationEnabled() {
+        return graphReleaseConfig != null && graphReleaseConfig.isEnabled()
+                && scanFinalizationService != null;
+    }
+
+    /**
+     * 调用 ScanFinalizationService 统一收口 AI 扫描流程。
+     * <p>替代旧路径的 {@code generateSystemOverviewDocument} + {@code publishScanArtifacts}，
+     * 由 {@link ScanFinalizationService#finalize} 统一编排收口流程。失败只 warn，不阻塞 AI 扫描主流程。</p>
+     */
+    private void runScanFinalization(String projectId, String versionId) {
+        try {
+            scanFinalizationService.finalize(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("ScanFinalizationService failed after AI (non-blocking): versionId={}, error={}",
+                    versionId, e.getMessage(), e);
         }
     }
 }

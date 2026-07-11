@@ -21,11 +21,16 @@ import org.springframework.retry.support.RetryTemplate;
 import java.time.Duration;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * LLM 配置类
  */
 @Configuration
 public class LlmConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(LlmConfig.class);
 
     @Bean
     public RetryTemplate llmRetryTemplate() {
@@ -51,8 +56,8 @@ public class LlmConfig {
     public EmbeddingModel embeddingModel(LlmProviderService llmProviderService) {
         LlmProvider provider = llmProviderService.getEmbeddingProvider();
         if (provider == null) {
-            throw new IllegalStateException(
-                    "lg_llm_provider 表中缺少 Embedding 提供商（provider_code 包含 'embedding'），语义搜索不可用");
+            log.warn("lg_llm_provider 表中缺少 Embedding 提供商（provider_code 包含 'embedding'），语义搜索将静默降级");
+            return null;
         }
 
         Map<String, Object> config = provider.getApiConfig();
@@ -61,7 +66,8 @@ public class LlmConfig {
         // 解析环境变量占位符 ${VAR} 或 ${VAR:default}
         apiKey = io.github.legacygraph.service.system.LlmProviderService.resolveEnvPlaceholders(apiKey);
         if (apiKey.isBlank()) {
-            throw new IllegalStateException("默认提供商的 api_key 为空");
+            log.warn("Embedding 提供商的 api_key 为空，语义搜索将静默降级");
+            return null;
         }
 
         var httpClient = SpringAiOpenAiHttpClient.builder()

@@ -32,9 +32,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * 全链路集成测试：从输入资料到解析完成的完整流程。
+ * 扫描链路集成测试（前半段：扫描→抽取→图谱构建）。
  *
- * <p>覆盖路径：</p>
+ * <p><b>覆盖范围</b>：</p>
  * <ol>
  *   <li>ScanContext 构建（project/version/baseDir/backendDir/frontendDir/config）</li>
  *   <li>文件遍历与候选过滤（排除 node_modules/.git/target 等）</li>
@@ -47,10 +47,18 @@ import static org.mockito.Mockito.*;
  *   <li>已有适配器跳过不支持的资产 & 异常隔离</li>
  * </ol>
  *
+ * <p><b>未覆盖范围</b>（需单独测试）：</p>
+ * <ul>
+ *   <li>GraphRelease 发布与质量门禁</li>
+ *   <li>需求分析（RequirementController）</li>
+ *   <li>方案生成与校验（SolutionController）</li>
+ *   <li>QA 问答全链路（EnhancedQaAgent）</li>
+ * </ul>
+ *
  * <p>测试数据：模拟一个包含 Java + MyBatis XML + Vue 组件的典型项目结构。</p>
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("全链路：输入资料 → 适配器选择 → 抽取 → 事实落库")
+@DisplayName("扫描链路（前半段）：输入资料 → 适配器选择 → 抽取 → 事实落库 → 图谱构建")
 class FullPipelineIntegrationTest {
 
     @TempDir

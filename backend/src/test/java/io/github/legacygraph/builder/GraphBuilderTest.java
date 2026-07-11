@@ -3,6 +3,7 @@ package io.github.legacygraph.builder;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dao.Neo4jWriteRepository;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.dto.graph.GraphNodeClaim;
 import io.github.legacygraph.entity.GraphEdge;
@@ -22,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.List;
 import java.util.Map;
@@ -29,10 +32,12 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class GraphBuilderTest {
 
     @Mock
@@ -114,8 +119,8 @@ class GraphBuilderTest {
         graphBuilder.buildMapperSqlGraph("project-1", "v1", mapper);
 
         // 仍构建 Mapper、SqlStatement、Table 等节点与 CONTAINS/READS/EXECUTES 等边
-        verify(writer, atLeast(2)).upsertNode(any(GraphNodeClaim.class));
-        verify(writer, atLeast(1)).upsertEdge(any(GraphEdgeClaim.class));
+        verify(neo4jGraphDao).mergeNodesBatch(eq("project-1"), eq("v1"), anyList());
+        verify(neo4jGraphDao).mergeEdgesByKeyBatch(eq("project-1"), eq("v1"), anyList());
     }
 
     @Test
@@ -166,18 +171,24 @@ class GraphBuilderTest {
 
         graphBuilder.buildJavaStructureGraph("project-1", "v1", List.of(classInfo));
 
-        var nodeCaptor = org.mockito.ArgumentCaptor.forClass(GraphNodeClaim.class);
-        verify(writer, times(3)).upsertNode(nodeCaptor.capture());
-        List<GraphNodeClaim> nodes = nodeCaptor.getAllValues();
+        // 生产代码使用 neo4jGraphDao 批量写入，不再走 writer.upsertNode/upsertEdge
+        @SuppressWarnings("unchecked")
+        var nodeBatchCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeNodesBatch(eq("project-1"), eq("v1"), nodeBatchCaptor.capture());
+        List<Neo4jWriteRepository.BatchNodeUpsert> nodes = nodeBatchCaptor.getValue();
+        assertEquals(3, nodes.size());
         assertTrue(nodes.stream().anyMatch(n ->
-                NodeType.Service.name().equals(n.getNodeType())
-                        && "com.demo.OrderService".equals(n.getNodeKey())));
-        assertEquals(2, nodes.stream().filter(n -> NodeType.Method.name().equals(n.getNodeType())).count());
+                NodeType.Service.name().equals(n.nodeType())
+                        && "com.demo.OrderService".equals(n.nodeKey())));
+        assertEquals(2, nodes.stream().filter(n -> NodeType.Method.name().equals(n.nodeType())).count());
 
-        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(writer, times(2)).upsertEdge(edgeCaptor.capture());
-        assertTrue(edgeCaptor.getAllValues().stream()
-                .allMatch(e -> EdgeType.CONTAINS.name().equals(e.getEdgeType())));
+        @SuppressWarnings("unchecked")
+        var edgeBatchCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao).mergeEdgesByKeyBatch(eq("project-1"), eq("v1"), edgeBatchCaptor.capture());
+        List<Neo4jWriteRepository.BatchEdgeByKeyUpsert> edges = edgeBatchCaptor.getValue();
+        assertEquals(2, edges.size());
+        assertTrue(edges.stream()
+                .allMatch(e -> EdgeType.CONTAINS.name().equals(e.edgeType())));
     }
 
     @Test
@@ -726,22 +737,27 @@ class GraphBuilderTest {
 
         graphBuilder.buildMapperSqlGraph("project-1", "v1", mapper);
 
-        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(writer, atLeastOnce()).upsertEdge(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao, atLeastOnce()).mergeEdgesByKeyBatch(eq("project-1"), eq("v1"), edgeCaptor.capture());
+        var allEdges = edgeCaptor.getAllValues().stream()
+                .map(list -> (List<Neo4jWriteRepository.BatchEdgeByKeyUpsert>) list)
+                .flatMap(List::stream)
+                .toList();
         // 验证存在 DATA_FLOW 边：orders ->data_flow-> order_archive
-        assertTrue(edgeCaptor.getAllValues().stream().anyMatch(edge ->
-                EdgeType.DATA_FLOW.name().equals(edge.getEdgeType())
-                        && edge.getEdgeKey().contains("orders->data_flow->order_archive")),
+        assertTrue(allEdges.stream().anyMatch(edge ->
+                EdgeType.DATA_FLOW.name().equals(edge.edgeType())
+                        && edge.edgeKey().contains("orders->data_flow->order_archive")),
                 "INSERT INTO ... SELECT FROM 应构建源表到目标表的 DATA_FLOW 边");
         // 验证存在 READS 边（SqlStatement -> orders）
-        assertTrue(edgeCaptor.getAllValues().stream().anyMatch(edge ->
-                EdgeType.READS.name().equals(edge.getEdgeType())
-                        && edge.getEdgeKey().contains("->reads->orders")),
+        assertTrue(allEdges.stream().anyMatch(edge ->
+                EdgeType.READS.name().equals(edge.edgeType())
+                        && edge.edgeKey().contains("->reads->orders")),
                 "应存在 SqlStatement --READS--> orders 边");
         // 验证存在 WRITES 边（SqlStatement -> order_archive）
-        assertTrue(edgeCaptor.getAllValues().stream().anyMatch(edge ->
-                EdgeType.WRITES.name().equals(edge.getEdgeType())
-                        && edge.getEdgeKey().contains("->writes->order_archive")),
+        assertTrue(allEdges.stream().anyMatch(edge ->
+                EdgeType.WRITES.name().equals(edge.edgeType())
+                        && edge.edgeKey().contains("->writes->order_archive")),
                 "应存在 SqlStatement --WRITES--> order_archive 边");
     }
 
@@ -785,16 +801,21 @@ class GraphBuilderTest {
 
         graphBuilder.buildMapperSqlGraph("project-1", "v1", mapper);
 
-        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(writer, atLeastOnce()).upsertEdge(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao, atLeastOnce()).mergeEdgesByKeyBatch(eq("project-1"), eq("v1"), edgeCaptor.capture());
+        var allEdges = edgeCaptor.getAllValues().stream()
+                .map(list -> (List<Neo4jWriteRepository.BatchEdgeByKeyUpsert>) list)
+                .flatMap(List::stream)
+                .toList();
         // 验证存在 WRITES 边（SqlStatement -> orders）
-        assertTrue(edgeCaptor.getAllValues().stream().anyMatch(edge ->
-                EdgeType.WRITES.name().equals(edge.getEdgeType())
-                        && edge.getEdgeKey().contains("->writes->orders")),
+        assertTrue(allEdges.stream().anyMatch(edge ->
+                EdgeType.WRITES.name().equals(edge.edgeType())
+                        && edge.edgeKey().contains("->writes->orders")),
                 "UPDATE 应构建写入目标表的 WRITES 边");
         // 验证不存在 DATA_FLOW 边（UPDATE 无源表）
-        assertFalse(edgeCaptor.getAllValues().stream().anyMatch(edge ->
-                EdgeType.DATA_FLOW.name().equals(edge.getEdgeType())),
+        assertFalse(allEdges.stream().anyMatch(edge ->
+                EdgeType.DATA_FLOW.name().equals(edge.edgeType())),
                 "简单 UPDATE 无源表，不应构建 DATA_FLOW 边");
     }
 
@@ -838,16 +859,21 @@ class GraphBuilderTest {
 
         graphBuilder.buildMapperSqlGraph("project-1", "v1", mapper);
 
-        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(GraphEdgeClaim.class);
-        verify(writer, atLeastOnce()).upsertEdge(edgeCaptor.capture());
+        @SuppressWarnings("unchecked")
+        var edgeCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao, atLeastOnce()).mergeEdgesByKeyBatch(eq("project-1"), eq("v1"), edgeCaptor.capture());
+        var allEdges = edgeCaptor.getAllValues().stream()
+                .map(list -> (List<Neo4jWriteRepository.BatchEdgeByKeyUpsert>) list)
+                .flatMap(List::stream)
+                .toList();
         // 验证存在 WRITES 边（SqlStatement -> orders）
-        assertTrue(edgeCaptor.getAllValues().stream().anyMatch(edge ->
-                EdgeType.WRITES.name().equals(edge.getEdgeType())
-                        && edge.getEdgeKey().contains("->writes->orders")),
+        assertTrue(allEdges.stream().anyMatch(edge ->
+                EdgeType.WRITES.name().equals(edge.edgeType())
+                        && edge.edgeKey().contains("->writes->orders")),
                 "INSERT INTO ... VALUES 应构建写入目标表的 WRITES 边");
         // 验证不存在 DATA_FLOW 边（无源表）
-        assertFalse(edgeCaptor.getAllValues().stream().anyMatch(edge ->
-                EdgeType.DATA_FLOW.name().equals(edge.getEdgeType())),
+        assertFalse(allEdges.stream().anyMatch(edge ->
+                EdgeType.DATA_FLOW.name().equals(edge.edgeType())),
                 "INSERT INTO ... VALUES 无源表，不应构建 DATA_FLOW 边");
     }
 

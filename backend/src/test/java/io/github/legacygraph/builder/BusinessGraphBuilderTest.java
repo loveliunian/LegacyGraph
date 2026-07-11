@@ -82,6 +82,8 @@ class BusinessGraphBuilderTest {
         // 两个 feature 名称的 embedding 完全相同 → cosine = 1.0 > 0.78 阈值
         when(embeddingModel.embed(anyList())).thenReturn(List.of(new float[]{1f, 0f}, new float[]{1f, 0f}));
         ReflectionTestUtils.setField(businessGraphBuilder, "embeddingModel", embeddingModel);
+        // G5：开启 embedding feature flag（默认 false），走 embedding 语义匹配路径
+        ReflectionTestUtils.setField(businessGraphBuilder, "crossLanguageEmbeddingEnabled", true);
         // createEdge → writer.upsertEdge 返回非 null 表示候选边创建成功
         when(writer.upsertEdge(any(GraphEdgeClaim.class))).thenReturn(new GraphEdge());
 

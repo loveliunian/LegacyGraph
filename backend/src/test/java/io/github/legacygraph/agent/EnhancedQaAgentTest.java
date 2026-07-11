@@ -16,8 +16,16 @@ import io.github.legacygraph.service.graph.GraphRagPlanExecutor;
 import io.github.legacygraph.service.qa.HybridRetrievalService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import io.github.legacygraph.service.qa.ReRankingService;
+import io.github.legacygraph.service.qa.ConfidenceScorer;
+import io.github.legacygraph.service.qa.EvidenceVerifier;
 import io.github.legacygraph.service.qa.SemanticCache;
 import io.github.legacygraph.service.qa.VectorRetrievalService;
+import io.github.legacygraph.repository.GraphReleaseRepository;
+import io.github.legacygraph.repository.SolutionRepository;
+import io.github.legacygraph.config.GraphReleaseConfig;
+import io.github.legacygraph.dto.qa.ConfidenceBreakdown;
+import io.github.legacygraph.dto.qa.VerificationResult;
+import io.github.legacygraph.entity.SemanticCacheEntry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +42,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -41,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
@@ -83,6 +93,16 @@ class EnhancedQaAgentTest {
     private ChangeImpactAgent changeImpactAgent;
     @Mock
     private ChangeImpactQuestionParser changeImpactParser;
+    @Mock
+    private EvidenceVerifier evidenceVerifier;
+    @Mock
+    private ConfidenceScorer confidenceScorer;
+    @Mock
+    private GraphReleaseRepository graphReleaseRepository;
+    @Mock
+    private SolutionRepository solutionRepository;
+    @Mock
+    private GraphReleaseConfig graphReleaseConfig;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -108,7 +128,12 @@ class EnhancedQaAgentTest {
     @Test
     void streamAnswer_usesHydeInHybridRetrievalAndDoesPlanFactLookup() {
         stubConversationContext();
-        when(semanticCache.get("proj-1", "OrderService 有哪些方法？")).thenReturn(null);
+        when(semanticCache.getVersioned(eq("proj-1"), eq("OrderService 有哪些方法？"), any(), any()))
+                .thenReturn(Optional.empty());
+        when(evidenceVerifier.verify(anyString(), anyList(), anyString(), any(), any()))
+                .thenReturn(new VerificationResult(true, 1.0, 1.0, List.of(), List.of(), List.of(), List.of()));
+        when(confidenceScorer.score(any(), any(), anyDouble(), anyDouble(), any()))
+                .thenReturn(new ConfidenceBreakdown(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ConfidenceBreakdown.Weights.DEFAULT));
         when(intentClassifier.classify(eq("proj-1"), anyString(), anyList()))
                 .thenReturn(QueryIntent.FACT_LOOKUP);
         when(queryRewriter.rewrite(eq("proj-1"), anyString(), eq(QueryIntent.FACT_LOOKUP)))
@@ -131,7 +156,7 @@ class EnhancedQaAgentTest {
         doc.setId(1L);
         doc.setSourceUri("OrderService.java");
         doc.setContent("class OrderService { void createOrder() {} }");
-        when(hybridRetrievalService.retrieve(eq("proj-1"), eq("v1"), anyString(), anyList(), eq(20)))
+        when(hybridRetrievalService.retrieve(eq("proj-1"), eq("v1"), anyString(), anyList(), eq(20), any(), any()))
                 .thenReturn(List.of(doc));
         when(reRankingService.reRank(anyString(), anyList(), eq(10))).thenReturn(List.of(doc));
         when(vectorRetrievalService.semanticSearch(eq("proj-1"), eq("v1"), anyString(), eq(5), isNull()))
@@ -150,7 +175,7 @@ class EnhancedQaAgentTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> variantsCaptor = ArgumentCaptor.forClass(List.class);
         verify(hybridRetrievalService).retrieve(
-                eq("proj-1"), eq("v1"), eq("OrderService 有哪些方法？"), variantsCaptor.capture(), eq(20));
+                eq("proj-1"), eq("v1"), eq("OrderService 有哪些方法？"), variantsCaptor.capture(), eq(20), any(), any());
         assertTrue(variantsCaptor.getValue().contains("OrderService method list"));
         assertTrue(variantsCaptor.getValue().contains("OrderService exposes createOrder and cancelOrder methods."));
         verify(plannerAgent).plan("proj-1", "OrderService 有哪些方法？", List.of(claim), QueryIntent.FACT_LOOKUP);
@@ -159,7 +184,11 @@ class EnhancedQaAgentTest {
     @Test
     void streamAnswer_cacheHitStillPersistsConversationAndReturnsSavedMessageId() throws Exception {
         stubConversation();
-        when(semanticCache.get("proj-1", "重复问题")).thenReturn("cached answer");
+        SemanticCacheEntry cacheEntry = new SemanticCacheEntry();
+        cacheEntry.setAnswer("cached answer");
+        cacheEntry.setConfidence(1.0);
+        when(semanticCache.getVersioned(eq("proj-1"), eq("重复问题"), any(), any()))
+                .thenReturn(Optional.of(cacheEntry));
 
         RecordingSseEmitter emitter = new RecordingSseEmitter();
         agent.answerStream("proj-1", "v1", "重复问题", null, emitter);
@@ -178,7 +207,12 @@ class EnhancedQaAgentTest {
     @Test
     void streamAnswer_structuralIntentPlansWithRelevantClaims() {
         stubConversationContext();
-        when(semanticCache.get("proj-1", "订单创建涉及哪些表？")).thenReturn(null);
+        when(semanticCache.getVersioned(eq("proj-1"), eq("订单创建涉及哪些表？"), any(), any()))
+                .thenReturn(Optional.empty());
+        when(evidenceVerifier.verify(anyString(), anyList(), anyString(), any(), any()))
+                .thenReturn(new VerificationResult(true, 1.0, 1.0, List.of(), List.of(), List.of(), List.of()));
+        when(confidenceScorer.score(any(), any(), anyDouble(), anyDouble(), any()))
+                .thenReturn(new ConfidenceBreakdown(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ConfidenceBreakdown.Weights.DEFAULT));
         when(intentClassifier.classify(eq("proj-1"), anyString(), anyList()))
                 .thenReturn(QueryIntent.STRUCTURAL);
         when(queryRewriter.rewrite(eq("proj-1"), anyString(), eq(QueryIntent.STRUCTURAL)))
@@ -234,7 +268,7 @@ class EnhancedQaAgentTest {
 
         for (Constructor<?> constructor : EnhancedQaAgent.class.getConstructors()) {
             Class<?>[] types = constructor.getParameterTypes();
-            if (types.length == 17) {
+            if (types.length == 22) {
                 try {
                     return (EnhancedQaAgent) constructor.newInstance(
                             conversationManager,
@@ -253,14 +287,19 @@ class EnhancedQaAgentTest {
                             objectMapper,
                             impactSubgraphService,
                             changeImpactAgent,
-                            changeImpactParser
+                            changeImpactParser,
+                            evidenceVerifier,
+                            confidenceScorer,
+                            graphReleaseRepository,
+                            solutionRepository,
+                            graphReleaseConfig
                     );
                 } catch (ReflectiveOperationException e) {
                     throw new AssertionError(e);
                 }
             }
         }
-        throw new AssertionError("EnhancedQaAgent constructor with 17 params was not found");
+        throw new AssertionError("EnhancedQaAgent constructor with 22 params was not found");
     }
 
     private class RecordingSseEmitter extends SseEmitter {

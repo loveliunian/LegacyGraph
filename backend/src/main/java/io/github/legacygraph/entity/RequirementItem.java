@@ -26,5 +26,8 @@ public class RequirementItem {
     /** 条目描述 */
     private String text;
 
+    /** 约束列表 JSON 数组字符串（V67：持久化 constraints，避免重建丢失） */
+    private String constraintsJson;
+
     private LocalDateTime createdAt;
 }

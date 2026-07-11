@@ -53,7 +53,11 @@ public enum NodeType {
     AcceptanceCriterion("验收条件"),
     Constraint("约束"),
     Assumption("假设"),
-    OpenQuestion("开放问题");
+    OpenQuestion("开放问题"),
+
+    // ========== 方案生成（Task 10） ==========
+    Solution("方案"),
+    SolutionStep("方案步骤");
 
     private final String description;
 

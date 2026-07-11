@@ -140,7 +140,9 @@ export default {
     systemOverview: '系统关系总览',
     llmProvider: 'LLM 提供商',
     promptTemplates: '提示词管理',
-    plugins: '插件管理'
+    plugins: '插件管理',
+    requirementAnalysis: '需求分析',
+    solutionReview: '方案评审'
   },
   dashboard: {
     title: '仪表盘',

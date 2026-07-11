@@ -48,7 +48,7 @@ class JavaServiceCallAdapterTest {
         classInfo.setClassName("OrderService");
         classInfo.setPackageName("com.demo");
         classInfo.setMethods(List.of());
-        when(structureExtractor.extractFromFile(any())).thenReturn(List.of(classInfo));
+        when(structureExtractor.extractFromFile(any(), any())).thenReturn(List.of(classInfo));
 
         JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor, new io.github.legacygraph.extractors.PackageExtractor());
         ScanContext context = ScanContext.builder()
@@ -102,7 +102,7 @@ class JavaServiceCallAdapterTest {
         classInfo.setClassName("OrderService");
         classInfo.setPackageName("com.demo");
         classInfo.setMethods(List.of());
-        when(structureExtractor.extractFromFile(any())).thenReturn(List.of(classInfo));
+        when(structureExtractor.extractFromFile(any(), any())).thenReturn(List.of(classInfo));
 
         JavaServiceCallAdapter adapter = new JavaServiceCallAdapter(graphBuilder, factPersister, structureExtractor, new io.github.legacygraph.extractors.PackageExtractor());
         ScanContext context = ScanContext.builder()

@@ -121,6 +121,14 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.github.legacygraph.service.graph.GraphCacheInvalidator graphCacheInvalidator;
 
+    /** 扫描收口服务（可选）：图谱发布功能启用时替代旧路径分散调用，统一编排收口流程 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.scan.ScanFinalizationService scanFinalizationService;
+
+    /** 图谱发布配置（可选）：控制是否启用 ScanFinalizationService 收口路径 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.config.GraphReleaseConfig graphReleaseConfig;
+
     /** 增量扫描开关（基于文件 SHA-256 哈希），默认开启 */
     @org.springframework.beans.factory.annotation.Value("${legacygraph.scan.incremental.enabled:true}")
     private boolean incrementalScanEnabled;
@@ -660,6 +668,21 @@ public class ProjectScanner {
                 }
             }
 
+            // 3c. Mapper-SQL 后置连接：补偿并发时序导致的 Method→SqlStatement 边遗漏
+            if (isCancelled(versionId)) return;
+            if (shouldScanCode) {
+                ScanTask linkTask = createTask(projectId, versionId, "MAPPER_SQL_LINK", "Mapper-SQL后置连接");
+                try {
+                    int linked = graphBuilder.linkMapperMethodsToSqlStatements(projectId, versionId);
+                    completeTask(linkTask, "linked " + linked + " method-sql edges", null);
+                    log.info("Scan still running: projectId={}, versionId={}, phase=MAPPER_SQL_LINK, detail=linked {} method-sql edges",
+                            projectId, versionId, linked);
+                } catch (Exception e) {
+                    log.warn("Mapper-SQL link failed (non-blocking): versionId={}, err={}", versionId, e.getMessage());
+                    completeTask(linkTask, "failed: " + e.getMessage(), e.getMessage());
+                }
+            }
+
             // === EXTERNAL_VERIFY 阶段：外部工具对照校验 ===
             if (externalVerificationEnabled && externalVerificationService != null) {
                 if (isCancelled(versionId)) return;
@@ -911,8 +934,12 @@ public class ProjectScanner {
                 scanVersionRepository.updateById(version);
             }
             if (!aiEnabled && !isCancelled(versionId)) {
-                generateSystemOverviewDocument(projectId, versionId);
-                publishScanArtifacts(projectId, versionId);
+                if (isScanFinalizationEnabled()) {
+                    runScanFinalization(projectId, versionId);
+                } else {
+                    generateSystemOverviewDocument(projectId, versionId);
+                    publishScanArtifacts(projectId, versionId);
+                }
             }
 
             // 扫描完成汇总：flush 剩余证据，然后输出 Neo4j 节点数
@@ -1046,8 +1073,12 @@ public class ProjectScanner {
                         .list();
                 taskTotal = tasks.size();
                 for (ScanTask t : tasks) {
-                    if ("SUCCESS".equals(t.getTaskStatus())) taskSuccess++;
-                    else if ("FAILED".equals(t.getTaskStatus())) taskFailed++;
+                    String status = t.getTaskStatus();
+                    if ("SUCCESS".equals(status) || "WARNING".equals(status) || "SKIPPED".equals(status)) {
+                        taskSuccess++;
+                    } else if ("FAILED".equals(status)) {
+                        taskFailed++;
+                    }
                 }
                 stage = tasks.stream()
                         .filter(t -> !"SUCCESS".equals(t.getTaskStatus()))
@@ -1112,6 +1143,30 @@ public class ProjectScanner {
             scanArtifactPublisher.publish(projectId, versionId);
         } catch (Exception e) {
             log.warn("ScanArtifactPublisher failed (non-blocking): versionId={}, error={}", versionId, e.getMessage());
+        }
+    }
+
+    /**
+     * 判断是否启用 ScanFinalizationService 收口路径。
+     * <p>需同时满足：{@code legacygraph.graph-release.enabled=true} 且 {@link ScanFinalizationService} 已注入。</p>
+     */
+    private boolean isScanFinalizationEnabled() {
+        return graphReleaseConfig != null && graphReleaseConfig.isEnabled()
+                && scanFinalizationService != null;
+    }
+
+    /**
+     * 调用 ScanFinalizationService 统一收口扫描流程。
+     * <p>替代旧路径的 {@code generateSystemOverviewDocument} + {@code publishScanArtifacts}，
+     * 由 {@link ScanFinalizationService#finalize} 统一编排约定提取、可复用标记、质量评估、
+     * 边补全、社区检测、产物发布、质量门禁、GraphRelease 发布与缓存失效。失败只 warn，不阻塞扫描主流程。</p>
+     */
+    private void runScanFinalization(String projectId, String versionId) {
+        try {
+            scanFinalizationService.finalize(projectId, versionId);
+        } catch (Exception e) {
+            log.warn("ScanFinalizationService failed (non-blocking): versionId={}, error={}",
+                    versionId, e.getMessage(), e);
         }
     }
 
@@ -1748,10 +1803,21 @@ public class ProjectScanner {
         // M9修复: 连接时使用原始密码（已在扫描时脱敏存储，此处需要真实值连接）
         // 实际连接密码应从安全配置或加密存储获取，此处暂时保留原逻辑
         dataSource.setPassword(conn.getPassword() != null ? conn.getPassword() : "");
-        dataSource.setDriverClassName(getDriverClassName(conn.getDbType()));
-        // 注意：连接超时已在 buildJdbcUrl 的 URL 参数中设置。
-        // PostgreSQL 驱动使用秒为单位（connectTimeout=10, socketTimeout=30），
-        // MySQL 驱动使用毫秒为单位（connectTimeout=10000, socketTimeout=30000）。
+        // 修复：CompletableFuture.runAsync() 使用 ForkJoinPool.commonPool()，
+        // 其线程的上下文类加载器可能无法访问 Spring Boot fat jar 的 BOOT-INF/lib/，
+        // 导致 DriverManagerDataSource.setDriverClassName() 内部的 Class.forName() 失败。
+        // 临时切换为当前类的类加载器（LaunchedURLClassLoader），确保驱动可见。
+        String driverClassName = getDriverClassName(conn.getDbType());
+        ClassLoader originalCl = Thread.currentThread().getContextClassLoader();
+        ClassLoader appCl = getClass().getClassLoader();
+        if (originalCl != appCl) {
+            Thread.currentThread().setContextClassLoader(appCl);
+        }
+        try {
+            dataSource.setDriverClassName(driverClassName);
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalCl);
+        }
         // 不要在此处通过 connectionProperties 覆盖 URL 参数，避免单位混淆导致超时异常。
         return dataSource;
     }
@@ -1782,10 +1848,10 @@ public class ProjectScanner {
     }
 
     /**
-     * 自动纠偏：当 dbType 与 port 明显不匹配时修正。
+     * 自动纠偏：当 dbType 与 port 明显不匹配时仅修正端口，不改变 dbType。
      * <ul>
-     *   <li>POSTGRESQL + 3306 → 修正为 MYSQL，port 保持 3306</li>
-     *   <li>MYSQL/MARIADB + 5432 → 修正为 POSTGRESQL，port 保持 5432</li>
+     *   <li>POSTGRESQL + 3306 → port 修正为 5432</li>
+     *   <li>MYSQL/MARIADB + 5432 → port 修正为 3306</li>
      * </ul>
      * 修正后同步写回 DB 记录，避免下次扫描重复纠偏。
      */
@@ -1793,21 +1859,18 @@ public class ProjectScanner {
         if (conn == null || conn.getDbType() == null) return;
         String dbType = conn.getDbType().toUpperCase();
         Integer port = conn.getPort();
-        String corrected = null;
         Integer correctedPort = null;
 
+        // 仅修正端口，不改变 dbType（之前根据端口推断 dbType 会导致 PG 被误判为 MySQL）
         if ("POSTGRESQL".equals(dbType) && port != null && port == 3306) {
-            corrected = "MYSQL";
-            correctedPort = 3306;
-        } else if (("MYSQL".equals(dbType) || "MARIADB".equals(dbType)) && port != null && port == 5432) {
-            corrected = "POSTGRESQL";
             correctedPort = 5432;
+        } else if (("MYSQL".equals(dbType) || "MARIADB".equals(dbType)) && port != null && port == 5432) {
+            correctedPort = 3306;
         }
 
-        if (corrected != null) {
-            log.warn("自动纠偏: connection={}, 原配置 dbType={}, port={} → 修正为 dbType={}, port={}",
-                    conn.getConnectionName(), conn.getDbType(), port, corrected, correctedPort);
-            conn.setDbType(corrected);
+        if (correctedPort != null) {
+            log.warn("自动纠偏: connection={}, dbType={}, 原端口={} → 修正端口={}",
+                    conn.getConnectionName(), conn.getDbType(), port, correctedPort);
             conn.setPort(correctedPort);
             // 同步写回 DB
             if (dbConnectionRepository != null) {

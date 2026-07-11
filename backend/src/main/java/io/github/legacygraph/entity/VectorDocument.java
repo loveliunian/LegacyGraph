@@ -60,4 +60,13 @@ public class VectorDocument {
 
     /** 创建时间 */
     private LocalDateTime createdAt;
+
+    /** 所属图谱发布ID（关联 lg_graph_release.id） */
+    private String graphReleaseId;
+
+    /** ACL 主体列表（JSON 数组字符串，如 ["user:alice","group:dev"]） */
+    private String aclPrincipals;
+
+    /** 文档状态：PUBLISHED / DRAFT */
+    private String documentStatus;
 }

@@ -5,16 +5,21 @@ import io.github.legacygraph.agent.DocUnderstandingAgent;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.common.ScanStep;
 import io.github.legacygraph.common.SourceType;
+import io.github.legacygraph.dto.DocumentChunk;
 import io.github.legacygraph.entity.Document;
+import io.github.legacygraph.entity.DocumentElement;
 import io.github.legacygraph.entity.Fact;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.DocumentRepository;
+import io.github.legacygraph.service.document.DocumentPartitionService;
+import io.github.legacygraph.service.document.StructureAwareChunkService;
 import io.github.legacygraph.service.scan.DocumentContentService;
 import io.micrometer.core.instrument.Counter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
@@ -43,8 +48,8 @@ public class DocExtractStep implements AiScanStepExecutor {
     private static final int LARGE_DOC_CHUNK_SIZE = 2500;
     /** 中文档(>20KB)分段大小（#21 调优：1200→1800） */
     private static final int MEDIUM_DOC_CHUNK_SIZE = 1800;
-    /** 普通文档分段大小（#21 调优：2500→4000，减少 LLM 调用次数） */
-    private static final int NORMAL_DOC_CHUNK_SIZE = 4000;
+    /** 普通文档分段大小（spec 5.5：分级 chunk size，其他用 2500） */
+    private static final int NORMAL_DOC_CHUNK_SIZE = 2500;
     /** 分段重叠（字符），避免切割处跨句上下文丢失 */
     private static final int DOC_CHUNK_OVERLAP = 400;
     /** 超过此大小的文档才分段，中间大小直接截断（性价比：分段 LLM 耗时 vs 覆盖内容） */
@@ -58,6 +63,8 @@ public class DocExtractStep implements AiScanStepExecutor {
     private final BusinessGraphBuilder businessGraphBuilder;
     private final Neo4jGraphDao neo4jGraphDao;
     private final DocumentContentService documentContentService = new DocumentContentService();
+    private final DocumentPartitionService documentPartitionService;
+    private final StructureAwareChunkService structureAwareChunkService;
     private final Counter agentCallCounter;
     private final Counter graphNodeCounter;
     private final Counter graphEdgeCounter;
@@ -66,11 +73,17 @@ public class DocExtractStep implements AiScanStepExecutor {
     @Autowired(required = false)
     private EmbeddingModel embeddingModel;
 
+    /** Feature Flag：结构感知切块开关（spec 5.4），关闭时走旧 DocumentContentService 路径 */
+    @Value("${legacygraph.document.partition.enabled:true}")
+    private boolean partitionEnabled;
+
     public DocExtractStep(AiScanStepSupport support,
                           DocumentRepository documentRepository,
                           DocUnderstandingAgent docUnderstandingAgent,
                           BusinessGraphBuilder businessGraphBuilder,
                           Neo4jGraphDao neo4jGraphDao,
+                          DocumentPartitionService documentPartitionService,
+                          StructureAwareChunkService structureAwareChunkService,
                           @Qualifier("agentCallCounter") Counter agentCallCounter,
                           @Qualifier("graphNodeCounter") Counter graphNodeCounter,
                           @Qualifier("graphEdgeCounter") Counter graphEdgeCounter) {
@@ -79,6 +92,8 @@ public class DocExtractStep implements AiScanStepExecutor {
         this.docUnderstandingAgent = docUnderstandingAgent;
         this.businessGraphBuilder = businessGraphBuilder;
         this.neo4jGraphDao = neo4jGraphDao;
+        this.documentPartitionService = documentPartitionService;
+        this.structureAwareChunkService = structureAwareChunkService;
         this.agentCallCounter = agentCallCounter;
         this.graphNodeCounter = graphNodeCounter;
         this.graphEdgeCounter = graphEdgeCounter;
@@ -130,9 +145,10 @@ public class DocExtractStep implements AiScanStepExecutor {
                         docs.size(), allDocs.size() - docs.size());
             }
             if (docs.isEmpty()) {
-                support.completeTask(task, buildDocExtractSummary(0, 0), null);
+                String summary = "未发现需要抽取的文档（" + allDocs.size() + " 篇全部为扫描产物或未变更），跳过 AI_DOC_EXTRACT";
+                support.completeTask(task, summary, null);
                 return StepExecutionResult.builder().success(true)
-                        .message(buildDocExtractSummary(0, 0)).processedCount(0).build();
+                        .message(summary).processedCount(0).build();
             }
 
             // 断点续传：跳过已完成的文件
@@ -174,9 +190,10 @@ public class DocExtractStep implements AiScanStepExecutor {
                     }
                     // 向量化：support 内部已用专用有界线程池 + 内存水位背压，这里直接委托
                     // #20 修复：大文档（>20KB）延迟到 LLM 抽取完成后再向量化，避免 embedding 与 LLM 并发导致 OOM
+                    // spec 5.4：partitionEnabled 时走结构感知切块路径，否则走旧 vectorizeContent 路径
                     boolean deferVectorize = content.length() > 20000;
                     if (!deferVectorize) {
-                        support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                        vectorizeDocument(projectId, versionId, doc, content);
                     }
                     try {
                         // 内存保护：堆快满时跳过 LLM 调用，避免 OOM 中断扫描
@@ -237,7 +254,7 @@ public class DocExtractStep implements AiScanStepExecutor {
                         }
                         // #20 修复：大文档延迟向量化——LLM 抽取完成后内存释放，再提交向量化
                         if (deferVectorize) {
-                            support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                            vectorizeDocument(projectId, versionId, doc, content);
                         }
                         // 更新进度（每 5 个文件写一次 DB，减少写入频率）
                         int done = processedCount.incrementAndGet();
@@ -309,7 +326,13 @@ public class DocExtractStep implements AiScanStepExecutor {
         } else {
             chunkSize = NORMAL_DOC_CHUNK_SIZE;
         }
-        List<DocChunk> chunks = splitContent(content, chunkSize, DOC_CHUNK_OVERLAP);
+        // spec 5.4 G2：partitionEnabled 时优先走结构感知切块路径，失败/空时降级到 splitContent
+        List<DocChunk> chunks;
+        if (partitionEnabled) {
+            chunks = tryStructureAwareChunk(doc, content, chunkSize);
+        } else {
+            chunks = splitContent(content, chunkSize, DOC_CHUNK_OVERLAP);
+        }
         // P0-2：分块数上限告警——超大文档可能产生数百块，记录以便后续治理（不影响流程）
         if (chunks.size() > 200) {
             log.warn("AI_DOC_EXTRACT chunk count {} exceeds 200 for doc {} (contentLen={}, chunkSize={})",
@@ -451,6 +474,59 @@ public class DocExtractStep implements AiScanStepExecutor {
         return chunks;
     }
 
+    /**
+     * 结构感知切块（spec 5.4 G2）。
+     * <p>
+     * DocumentPartitionService.partition → StructureAwareChunkService.chunk → 转 DocChunk。
+     * partition/chunk 返回空或抛异常时降级到 {@link #splitContent}，保证不劣化。
+     *
+     * @param doc                文档实体
+     * @param content            原始文本内容
+     * @param fallbackChunkSize  降级时 splitContent 使用的 chunk size
+     * @return 结构感知切块结果（已转为 DocChunk），失败时返回 splitContent 结果
+     */
+    private List<DocChunk> tryStructureAwareChunk(Document doc, String content, int fallbackChunkSize) {
+        try {
+            String fileName = doc.getDocName() != null && !doc.getDocName().isBlank()
+                    ? doc.getDocName()
+                    : extractFileName(doc.getFilePath());
+            // 文本型文件（md/txt）传文本内容；二进制型文件（docx/xlsx）传文件路径
+            String partitionContent = isTextFile(fileName) ? content : doc.getFilePath();
+            List<DocumentElement> elements = documentPartitionService.partition(
+                    doc.getId(), fileName, partitionContent);
+            if (elements == null || elements.isEmpty()) {
+                log.debug("Structure-aware partition returned empty for {}, fallback to splitContent",
+                        doc.getFilePath());
+                return splitContent(content, fallbackChunkSize, DOC_CHUNK_OVERLAP);
+            }
+            int totalSize = structureAwareChunkService.totalTextSize(elements);
+            int maxChars = structureAwareChunkService.determineMaxChars(totalSize);
+            List<DocumentChunk> docChunks = structureAwareChunkService.chunk(elements, maxChars);
+            if (docChunks == null || docChunks.isEmpty()) {
+                log.debug("Structure-aware chunking returned empty for {}, fallback to splitContent",
+                        doc.getFilePath());
+                return splitContent(content, fallbackChunkSize, DOC_CHUNK_OVERLAP);
+            }
+            log.info("AI_DOC_EXTRACT structure-aware chunking: doc={}, contentLen={}, chunks={}",
+                    doc.getDocName(), content.length(), docChunks.size());
+            // 转 DocChunk 以复用后续并行抽取逻辑（DocumentChunk 无 charStart/charEnd，用 0/length 近似）
+            List<DocChunk> result = new ArrayList<>(docChunks.size());
+            for (DocumentChunk dc : docChunks) {
+                String sectionTitle = dc.getHeadingPath() != null && !dc.getHeadingPath().isEmpty()
+                        ? String.join(" > ", dc.getHeadingPath())
+                        : null;
+                int chunkContentLen = dc.getContent() != null ? dc.getContent().length() : 0;
+                result.add(new DocChunk(dc.getContent(), dc.getChunkIndex(), 0, chunkContentLen,
+                        sectionTitle, null));
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("Structure-aware chunking failed for doc {}, fallback to splitContent: {}",
+                    doc.getId(), e.getMessage());
+            return splitContent(content, fallbackChunkSize, DOC_CHUNK_OVERLAP);
+        }
+    }
+
     /** 合并多个分段抽取结果：按 name/key 去重，取最高置信度。 */
     static DocUnderstandingAgent.BusinessFactExtraction mergeExtractions(
             List<DocUnderstandingAgent.BusinessFactExtraction> results) {
@@ -551,7 +627,7 @@ public class DocExtractStep implements AiScanStepExecutor {
             }
             return kept;
         } catch (Exception e) {
-            log.debug("Semantic dedup failed, fallback to original: {}", e.getMessage());
+            log.warn("Semantic dedup failed, fallback to original: {}", e.getMessage());
             return features;
         }
     }
@@ -809,13 +885,79 @@ public class DocExtractStep implements AiScanStepExecutor {
                 log.warn("readDocContent: file not found or not regular: {} (doc={})", doc.getFilePath(), doc.getId());
                 return null;
             }
-            // P0-2：不再前置截断大文档——返回完整内容，由 extractFromChunks() 全量分块处理，
-            // 避免文档后半部分永远不进入图谱。分块大小由 chunkSize 控制，OOM 由 isMemoryHealthy() 兜底。
+            // P0-2 / spec 5.5：不再前置截断大文档（已取消 100KB 截断）——返回完整内容，
+            // 由 extractFromChunks() / StructureAwareChunkService 全量分块处理。
+            // 分块大小由分级 chunkSize 控制，OOM 由 isMemoryHealthy() 兜底。
             return documentContentService.readText(doc.getFilePath());
         } catch (Exception e) {
             log.warn("readDocContent: failed to read {}: {}", doc.getFilePath(), e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 文档向量化入口（spec 5.4）。
+     * <p>
+     * 通过 Feature Flag {@code legacygraph.document.partition.enabled} 控制路径：
+     * <ul>
+     *   <li>开启：DocumentPartitionService 解析 → StructureAwareChunkService 结构感知切块 → vectorizeChunks 逐块入库</li>
+     *   <li>关闭（默认）：走旧 {@link AiScanStepSupport#vectorizeContent} 路径</li>
+     * </ul>
+     * 结构感知路径失败时自动降级到旧路径，保证不劣化。
+     */
+    private void vectorizeDocument(String projectId, String versionId, Document doc, String content) {
+        if (!partitionEnabled) {
+            support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+            return;
+        }
+        try {
+            String fileName = doc.getDocName() != null && !doc.getDocName().isBlank()
+                    ? doc.getDocName()
+                    : extractFileName(doc.getFilePath());
+            // 文本型文件（md/txt）传文本内容；二进制型文件（docx/xlsx）传文件路径
+            String partitionContent = isTextFile(fileName) ? content : doc.getFilePath();
+            List<DocumentElement> elements = documentPartitionService.partition(
+                    doc.getId(), fileName, partitionContent);
+            if (elements.isEmpty()) {
+                log.debug("Structure-aware partition returned empty for {}, fallback to plain", doc.getFilePath());
+                support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                return;
+            }
+            // spec 5.5：分级 chunk size（>50KB 用 2500，>20KB 用 1800，其他用 2500）
+            int totalSize = structureAwareChunkService.totalTextSize(elements);
+            int maxChars = structureAwareChunkService.determineMaxChars(totalSize);
+            List<DocumentChunk> chunks = structureAwareChunkService.chunk(elements, maxChars);
+            if (chunks.isEmpty()) {
+                log.debug("Structure-aware chunking returned empty for {}, fallback to plain", doc.getFilePath());
+                support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+                return;
+            }
+            log.debug("Structure-aware vectorization: doc={}, elements={}, chunks={}, maxChars={}",
+                    doc.getDocName(), elements.size(), chunks.size(), maxChars);
+            support.vectorizeChunks(projectId, versionId, "DOC", doc.getFilePath(), chunks);
+        } catch (Exception e) {
+            log.warn("Structure-aware vectorization failed for doc {}, fallback to plain: {}",
+                    doc.getId(), e.getMessage());
+            support.vectorizeContent(projectId, versionId, "DOC", doc.getFilePath(), content);
+        }
+    }
+
+    /** 从文件路径提取文件名。 */
+    private static String extractFileName(String filePath) {
+        if (filePath == null) {
+            return "";
+        }
+        int slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+        return slash >= 0 ? filePath.substring(slash + 1) : filePath;
+    }
+
+    /** 判断是否为文本型文件（md/txt），二进制型（docx/xlsx）返回 false。 */
+    private static boolean isTextFile(String fileName) {
+        if (fileName == null) {
+            return false;
+        }
+        String lower = fileName.toLowerCase();
+        return lower.endsWith(".md") || lower.endsWith(".txt") || lower.endsWith(".text");
     }
 
     /**

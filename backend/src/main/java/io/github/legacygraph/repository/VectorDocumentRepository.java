@@ -94,6 +94,60 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
             @Param("topK") int topK);
 
     /**
+     * 带 GraphRelease + ACL 过滤的相似度查询（按类型过滤）。
+     * <p>Task 8.3：graphReleaseId 非空时按发布版本过滤；aclPrincipal 非空时
+     * 仅返回无 ACL 限制或包含该主体的文档。</p>
+     */
+    @Select("<script>" +
+            "SELECT *, embedding &lt;=&gt; CAST(#{embedding} AS vector) AS distance " +
+            "FROM lg_vector_document " +
+            "WHERE project_id = #{projectId} " +
+            "AND version_id = #{versionId} " +
+            "AND chunk_type = #{chunkType} " +
+            "<if test='graphReleaseId != null and graphReleaseId != \"\"'>" +
+            "AND graph_release_id = #{graphReleaseId} " +
+            "</if>" +
+            "<if test='aclPrincipal != null and aclPrincipal != \"\"'>" +
+            "AND (acl_principals IS NULL OR acl_principals LIKE CONCAT('%', #{aclPrincipal}, '%')) " +
+            "</if>" +
+            "ORDER BY distance ASC " +
+            "LIMIT #{topK}" +
+            "</script>")
+    List<VectorDocument> findSimilarByEmbeddingWithTypeFiltered(
+            @Param("projectId") String projectId,
+            @Param("versionId") String versionId,
+            @Param("embedding") String embedding,
+            @Param("topK") int topK,
+            @Param("chunkType") String chunkType,
+            @Param("graphReleaseId") String graphReleaseId,
+            @Param("aclPrincipal") String aclPrincipal);
+
+    /**
+     * 带 GraphRelease + ACL 过滤的相似度查询（不过滤类型）。
+     */
+    @Select("<script>" +
+            "SELECT *, embedding &lt;=&gt; CAST(#{embedding} AS vector) AS distance " +
+            "FROM lg_vector_document " +
+            "WHERE project_id = #{projectId} " +
+            "AND version_id = #{versionId} " +
+            "<if test='graphReleaseId != null and graphReleaseId != \"\"'>" +
+            "AND graph_release_id = #{graphReleaseId} " +
+            "</if>" +
+            "<if test='aclPrincipal != null and aclPrincipal != \"\"'>" +
+            "AND (acl_principals IS NULL OR acl_principals LIKE CONCAT('%', #{aclPrincipal}, '%')) " +
+            "</if>" +
+            "ORDER BY distance ASC " +
+            "LIMIT #{topK}" +
+            "</script>")
+    List<VectorDocument> findSimilarByEmbeddingWithoutTypeFiltered(
+            @Param("projectId") String projectId,
+            @Param("versionId") String versionId,
+            @Param("embedding") String embedding,
+            @Param("topK") int topK,
+            @Param("graphReleaseId") String graphReleaseId,
+            @Param("aclPrincipal") String aclPrincipal);
+
+    /**
      * 通用方法：根据是否有chunkType选择不同查询。
      * pgvector 扩展未安装或 embedding 列不存在时，记录告警并返回空列表。
      */
@@ -115,6 +169,39 @@ public interface VectorDocumentRepository extends LegacyBaseMapper<VectorDocumen
             }
         } catch (Exception e) {
             LOG.warn("pgvector similarity query failed for projectId={}, versionId={}: {}",
+                    projectId, versionId, e.getMessage(), e);
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    /**
+     * 带 GraphRelease + ACL 过滤的相似度查询（Task 8.3）。
+     * <p>当 feature flag 关闭时应调用原 {@link #findSimilar} 而非本方法。</p>
+     *
+     * @param graphReleaseId 图谱发布ID，null/空 时忽略该过滤
+     * @param aclPrincipal   ACL 主体，null/空 时忽略该过滤
+     */
+    default List<VectorDocument> findSimilarWithFilters(String projectId, String versionId,
+                                                        List<Double> embedding, int topK, String chunkType,
+                                                        String graphReleaseId, String aclPrincipal) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < embedding.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append(embedding.get(i));
+        }
+        sb.append("]");
+        String embeddingStr = sb.toString();
+
+        try {
+            if (chunkType != null && !chunkType.isBlank()) {
+                return findSimilarByEmbeddingWithTypeFiltered(
+                    projectId, versionId, embeddingStr, topK, chunkType, graphReleaseId, aclPrincipal);
+            } else {
+                return findSimilarByEmbeddingWithoutTypeFiltered(
+                    projectId, versionId, embeddingStr, topK, graphReleaseId, aclPrincipal);
+            }
+        } catch (Exception e) {
+            LOG.warn("pgvector filtered similarity query failed for projectId={}, versionId={}: {}",
                     projectId, versionId, e.getMessage(), e);
             return java.util.Collections.emptyList();
         }

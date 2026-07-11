@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -37,13 +38,15 @@ public class JavaCodeAdapter implements ExtractionAdapter {
     private final JavaStructureExtractor structureExtractor;
     private final PackageExtractor packageExtractor;
     private final ServiceCallExtractor callExtractor;
+    private final FactPersister factPersister;
 
     public JavaCodeAdapter(GraphBuilder graphBuilder, JavaStructureExtractor structureExtractor,
-                           PackageExtractor packageExtractor) {
+                           PackageExtractor packageExtractor, FactPersister factPersister) {
         this.graphBuilder = graphBuilder;
         this.structureExtractor = structureExtractor;
         this.packageExtractor = packageExtractor;
         this.callExtractor = new ServiceCallExtractor();
+        this.factPersister = factPersister;
     }
 
     /**
@@ -108,6 +111,24 @@ public class JavaCodeAdapter implements ExtractionAdapter {
             List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(file.toFile(), asset.getCachedContent());
             int callEdgeCount = 0;
             if (!calls.isEmpty()) {
+                // 保存 SERVICE_CALL 事实（供 JavaMemberCallResolver 二次解析使用）
+                factPersister.saveFacts(calls.stream()
+                        .map(call -> FactPersister.FactDraft.builder()
+                                .projectId(context.getProjectId())
+                                .versionId(context.getVersionId())
+                                .sourceType("CODE_AST")
+                                .factType("SERVICE_CALL")
+                                .factKey(call.getCallerClass() + "." + call.getCallerMethod())
+                                .factName(call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod())
+                                .sourcePath(asset.getRelativePath())
+                                .startLine(call.getLineNumber())
+                                .endLine(call.getLineNumber())
+                                .data(call)
+                                .confidence(BigDecimal.ONE)
+                                .status("EXTRACTED")
+                                .build())
+                        .toList());
+                // 首次构建调用图（简单名匹配可能部分成功）
                 graphBuilder.buildServiceCallGraph(
                         context.getProjectId(), context.getVersionId(), calls);
                 callEdgeCount = (int) calls.stream()

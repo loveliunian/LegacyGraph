@@ -7,6 +7,7 @@ import io.github.legacygraph.agent.ChangeImpactAgent;
 import io.github.legacygraph.agent.adapter.AddColumnPatchAgentAdapter;
 import io.github.legacygraph.agent.adapter.MigrationAgentAdapter;
 import io.github.legacygraph.agent.adapter.RefactorAgentAdapter;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.ChangeImpactAnalysis;
 import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
@@ -27,6 +28,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import io.github.legacygraph.util.IdUtil;
 
@@ -64,6 +66,7 @@ public class ChangeTaskService {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
     private final ColumnIngestService columnIngestService;
+    private final Neo4jGraphDao neo4jGraphDao;
 
     public ChangeTaskService(ChangeTaskRepository changeTaskRepository,
                              PatchFileRepository patchFileRepository,
@@ -80,7 +83,8 @@ public class ChangeTaskService {
                              PrOrchestrator prOrchestrator,
                              ObjectMapper objectMapper,
                              TransactionTemplate transactionTemplate,
-                             ColumnIngestService columnIngestService) {
+                             ColumnIngestService columnIngestService,
+                             Neo4jGraphDao neo4jGraphDao) {
         this.changeTaskRepository = changeTaskRepository;
         this.patchFileRepository = patchFileRepository;
         this.validationGateRepository = validationGateRepository;
@@ -97,6 +101,7 @@ public class ChangeTaskService {
         this.objectMapper = objectMapper;
         this.transactionTemplate = transactionTemplate;
         this.columnIngestService = columnIngestService;
+        this.neo4jGraphDao = neo4jGraphDao;
     }
 
     /** 创建变更任务（状态 OPEN）—— 短 TX。 */
@@ -378,6 +383,32 @@ public class ChangeTaskService {
         return prTask;
     }
 
+    /**
+     * PR 合并后的回调：标记相关图谱节点为 stale。
+     * 不触发自动重新扫描，下次手动扫描时优先处理 stale 节点。
+     */
+    @Transactional
+    public ChangeTask onPrMerged(String taskId) {
+        ChangeTask task = requireTask(taskId);
+        task.setStatus("MERGED");
+        task.setUpdatedAt(LocalDateTime.now());
+        changeTaskRepository.updateById(task);
+
+        // 标记 PatchFile 涉及的图谱节点为 stale
+        List<PatchFile> patches = patchFileRepository.lambdaQuery()
+                .eq(PatchFile::getChangeTaskId, taskId).list();
+        for (PatchFile pf : patches) {
+            // 通过 filePath 在图谱中查找节点，设置 properties.stale=true
+            try {
+                markGraphNodesStale(task.getProjectId(), pf.getFilePath());
+            } catch (Exception e) {
+                log.warn("Failed to mark stale for {}: {}", pf.getFilePath(), e.getMessage());
+            }
+        }
+        log.info("ChangeTask {} PR merged, marked {} patches as stale", taskId, patches.size());
+        return task;
+    }
+
     // ==================== 内部辅助 ====================
 
     private ChangeTask requireTask(String taskId) {
@@ -386,6 +417,20 @@ public class ChangeTaskService {
             throw new IllegalArgumentException("变更任务不存在: " + taskId);
         }
         return task;
+    }
+
+    /**
+     * 按 sourcePath 查找图谱节点并标记 stale=true。
+     * versionId 传 null 以覆盖项目下所有版本。
+     */
+    private void markGraphNodesStale(String projectId, String filePath) {
+        List<Map<String, Object>> nodes = neo4jGraphDao.findNodesBySourcePath(projectId, null, filePath);
+        for (Map<String, Object> node : nodes) {
+            Object nodeId = node.get("nodeId");
+            if (nodeId != null) {
+                neo4jGraphDao.setNodeProperty(nodeId.toString(), "stale", true);
+            }
+        }
     }
 
     private void createReviewRecord(ChangeTask task, PatchPlanValidator.ValidationResult vr) {

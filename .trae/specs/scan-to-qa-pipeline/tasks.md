@@ -4,20 +4,20 @@
 
 ## 阶段一：扫描收口与发布门禁
 
-- [ ] Task 1: GraphRelease 持久化与状态机
+- [x] Task 1: GraphRelease 持久化与状态机
   - [ ] 1.1 创建 `GraphRelease` 实体（id, projectId, scanVersionId, graphVersionTag, status, createdAt, publishedAt, failureReasons）
   - [ ] 1.2 创建 `GraphReleaseRepository`（findByProjectAndVersion 唯一约束）
   - [ ] 1.3 实现状态机：`DRAFT → VALIDATING → PUBLISHED | FAILED`（含幂等校验：同 project+version 重复调用返回已有记录）
   - [ ] 1.4 新增配置开关 `legacygraph.graph-release.enabled`（默认 false）
   - [ ] 1.5 新增数据库迁移脚本：`lg_graph_release` 表 + 唯一索引 `(project_id, scan_version_id)`
 
-- [ ] Task 2: GraphQualityGate 质量门禁
+- [x] Task 2: GraphQualityGate 质量门禁
   - [ ] 2.1 创建 `GraphQualityGate` 接口和 `DefaultGraphQualityGate` 实现
   - [ ] 2.2 实现 `GraphQualitySnapshot` 数据采集：调用 Neo4jGraphDao 统计边/节点比、孤立率、约束违反、证据率
   - [ ] 2.3 实现门禁规则：EDGE_NODE_RATIO_BELOW_1、ISOLATED_RATE_ABOVE_10_PERCENT、CONSTRAINT_VIOLATIONS、EVIDENCE_RATE_BELOW_95_PERCENT
   - [ ] 2.4 返回 `GraphQualityGate.Decision(passed, reasons)`，不通过返回具体原因
 
-- [ ] Task 3: ScanFinalizationService 统一收口
+- [x] Task 3: ScanFinalizationService 统一收口
   - [ ] 3.1 创建 `ScanFinalizationService`，编排收口流程：约定提取→可复用标记→质量评估→边补全→社区检测→产物发布→质量门禁→GraphRelease 发布→缓存失效
   - [ ] 3.2 拆分 `ScanArtifactPublisher`，新增 `publishArtifactsOnly` 方法只负责报告和向量化
   - [ ] 3.3 修改 `ProjectScanner.runPostScanConventionIngest` 和 `AiScanJobWorker`，在 `legacygraph.graph-release.enabled=true` 时调用 `ScanFinalizationService.finalize`，false 时保留旧路径
@@ -25,7 +25,7 @@
 
 ## 阶段二：文档结构化解析
 
-- [ ] Task 4: DocumentElement 与结构化切块
+- [x] Task 4: DocumentElement 与结构化切块
   - [ ] 4.1 创建 `DocumentElement` 实体（id, docId, type, text, headingPath, bbox, sourceLocation）
   - [ ] 4.2 创建 `DocumentPartitionService` 接口和 `DefaultDocumentPartitionService` 实现
   - [ ] 4.3 实现 `MarkdownPartitioner`：按 `#/##/###` 标题层级生成 TITLE 元素，维护 headingPath，代码块生成 CODE_BLOCK，表格生成 TABLE
@@ -33,7 +33,7 @@
   - [ ] 4.5 实现 `ExcelPartitioner`：按 Sheet 名 + 行范围生成 TABLE 元素，sourceLocation = `file#sheet:rowStart-rowEnd`
   - [ ] 4.6 实现 `PlainTextPartitioner`：按空行分段
 
-- [ ] Task 5: StructureAwareChunkService
+- [x] Task 5: StructureAwareChunkService
   - [ ] 5.1 创建 `StructureAwareChunkService`，输入 DocumentElement 列表，输出 DocumentChunk 列表
   - [ ] 5.2 实现切块规则：不跨一级标题合并、TABLE 单独成块、CODE_BLOCK 单独成块、超长段落按句子边界切分
   - [ ] 5.3 每块前缀包含 headingPath，携带 sourceLocation
@@ -42,7 +42,7 @@
 
 ## 阶段三：需求模型与影响分析
 
-- [ ] Task 6: 需求结构化抽取与图谱构建
+- [x] Task 6: 需求结构化抽取与图谱构建
   - [ ] 6.1 新增 NodeType：Requirement, RequirementItem, AcceptanceCriterion, Constraint, Assumption, OpenQuestion
   - [ ] 6.2 新增 EdgeType：HAS_ITEM, HAS_ACCEPTANCE_CRITERION, HAS_CONSTRAINT, HAS_ASSUMPTION, RAISES_QUESTION, AFFECTS, SATISFIES, DERIVED_FROM, VERIFIES
   - [ ] 6.3 创建 `RequirementExtractionService`：LLM 结构化抽取（system prompt 约束不补造信息，缺失写入 openQuestions），输出 RequirementAnalysis DTO
@@ -51,7 +51,7 @@
   - [ ] 6.6 创建 `RequirementController`：POST `/lg/projects/{projectId}/requirements/analyze` 提交需求文本，返回结构化分析
   - [ ] 6.7 新增数据库迁移：`lg_requirement`、`lg_requirement_item`、`lg_acceptance_criterion` 表
 
-- [ ] Task 7: 需求-图谱链接与影响子图
+- [x] Task 7: 需求-图谱链接与影响子图
   - [ ] 7.1 创建 `RequirementLinkingService`：确定性优先链接（schema.table.column / FQN / URL / 文件路径精确匹配→术语映射→向量相似度>0.80 语义匹配）
   - [ ] 7.2 精确匹配标记 CONFIRMED，语义匹配标记 PENDING_CONFIRM，低于阈值不创建边
   - [ ] 7.3 创建 `ImpactSubgraphService`：从链接节点出发，沿图谱边 BFS 提取影响路径
@@ -60,14 +60,14 @@
 
 ## 阶段四：检索融合与证据验证
 
-- [ ] Task 8: RRF 混合检索
+- [x] Task 8: RRF 混合检索
   - [ ] 8.1 创建 `ReciprocalRankFusionService`（K=60，加权 RRF）
   - [ ] 8.2 `VectorDocument` 新增字段：graphReleaseId, aclPrincipals(JSON), documentStatus
   - [ ] 8.3 修改 `VectorRetrievalService` SQL：新增 GraphRelease 和 ACL 过滤条件
   - [ ] 8.4 修改 `HybridRetrievalService`：RRF 开启时（`legacygraph.qa.rrf-enabled=true`）使用 RRF 融合，关闭时保留 LinkedHashMap 去重
   - [ ] 8.5 新增数据库迁移：`lg_vector_document` 表新增列 + 索引
 
-- [ ] Task 9: 证据验证与版本化缓存
+- [x] Task 9: 证据验证与版本化缓存
   - [ ] 9.1 创建 `EvidenceVerifier`：校验证据存在性、归属当前 project+graphRelease、ACL 可访问、sourceLocation 非空、答案声明匹配
   - [ ] 9.2 创建 `ConfidenceScorer`：基于证据覆盖率(0.30)、可靠度(0.25)、检索一致性(0.20)、路径置信度(0.15)、时效性(0.10) 动态计算
   - [ ] 9.3 高风险意图（CHANGE_IMPACT）权重调整：pathConfidence 0.35、coverage 0.20
@@ -80,7 +80,7 @@
 
 ## 阶段五：方案生成与验证
 
-- [ ] Task 10: Solution Package 生成与验证
+- [x] Task 10: Solution Package 生成与验证
   - [ ] 10.1 新增 NodeType：Solution, SolutionStep；EdgeType：STEP_OF, VALIDATED_BY, REVISED_BY
   - [ ] 10.2 创建 `Solution`/`SolutionStep` 实体和 Repository
   - [ ] 10.3 创建 `SolutionPlanner`：基于 RequirementAnalysis + ImpactResult + 项目约定 + 可复用组件，LLM 生成文件级实施步骤（含测试和回滚）
@@ -92,7 +92,7 @@
 
 ## 阶段六：QA 评测与门禁
 
-- [ ] Task 11: QA 评测门禁
+- [x] Task 11: QA 评测门禁
   - [ ] 11.1 创建 `QaEvaluationService` 接口和 `DefaultQaEvaluationService` 实现
   - [ ] 11.2 实现评估指标：entityRecall、evidencePrecision、requiredKeywordCoverage、abstentionAccuracy
   - [ ] 11.3 创建 `QaTestCase` 实体（question, expectedEntities, expectedKeywords, shouldAbstain）

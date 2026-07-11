@@ -262,7 +262,9 @@ public class ServiceCallExtractor {
             boolean hasAutowired = field.getAnnotations().stream()
                     .anyMatch(a -> {
                         String name = a.getNameAsString();
-                        return "Autowired".equalsIgnoreCase(name) || "Inject".equalsIgnoreCase(name);
+                        return "Autowired".equalsIgnoreCase(name)
+                                || "Inject".equalsIgnoreCase(name)
+                                || "Resource".equalsIgnoreCase(name);
                     });
             // Lombok @RequiredArgsConstructor / Spring 单构造器注入：非 static final 字段即构造器注入，
             // 源码无 @Autowired、也无显式构造器（Lombok 编译期生成），原逻辑漏掉导致 targetClass 全 null、

@@ -119,6 +119,41 @@ public class LlmGateway {
     }
 
     /**
+     * 直接调用 LLM（无模板渲染），适用于一次性 prompt 场景如社区摘要生成。
+     * <p>跳过模板加载，直接组合 system + user prompt 后调用模型。
+     * 不创建 PromptRun 审计记录，适用于非关键路径的辅助生成。</p>
+     *
+     * @param projectId    项目 ID
+     * @param systemPrompt 系统提示（可为 null）
+     * @param userPrompt   用户提示
+     * @param responseType 返回类型（String.class 直接返回文本）
+     * @return LLM 响应
+     * @throws LlmCallException 调用失败或输出无法解析时抛出
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T call(String projectId, String systemPrompt, String userPrompt, Class<T> responseType) {
+        String prompt = (systemPrompt != null && !systemPrompt.isBlank())
+                ? systemPrompt + "\n\n" + userPrompt
+                : userPrompt;
+        String safePrompt = redactForEgress(prompt);
+        log.info("LLM direct call: projectId={}", projectId);
+
+        ChatResponse chatResponse = invokeModel(safePrompt);
+        String response = extractText(chatResponse);
+
+        if (responseType == String.class) {
+            return (T) response;
+        }
+        String cleanResponse = cleanJsonResponse(response);
+        try {
+            return objectMapper.readValue(cleanResponse, responseType);
+        } catch (Exception e) {
+            throw new LlmCallException(
+                    "Failed to parse LLM response as " + responseType.getSimpleName(), e, false, null);
+        }
+    }
+
+    /**
      * 调用 LLM 并按 {@link AgentRunContract} 记录合约信息（doc 4.3）。
      *
      * @param contract 调用方填充 agentType / schema 版本 / usedEvidenceIds 等；tokens / cost /

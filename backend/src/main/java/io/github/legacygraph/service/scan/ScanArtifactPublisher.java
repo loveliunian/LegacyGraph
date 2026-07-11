@@ -178,6 +178,44 @@ public class ScanArtifactPublisher {
         // 3. 质量评估（在图谱定稿后，反映最终图谱质量）
         publishGraphQualityReport(projectId, versionId);
         // 4. 分层总结及各产物发布（基于定稿图谱 + 质量报告）
+        publishArtifactsDocuments(projectId, versionId, docsDir, incremental, affectedNodeIds, affectedModuleNames);
+    }
+
+    /**
+     * 仅发布扫描产物（报告生成 + 向量化），不包含图谱定稿步骤（边补全 / 社区检测 / 质量评估）。
+     *
+     * <p>供 {@code ScanFinalizationService} 调用：后者已分别执行约定提取、可复用标记、质量评估、
+     * 边补全、社区检测，本方法只负责基于定稿图谱生成总结文档并向量化。</p>
+     *
+     * <p>等价于全量模式（非增量）：先按 sourceUri+versionId 删除旧向量，再全量嵌入。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 扫描版本 ID
+     */
+    public void publishArtifactsOnly(String projectId, String versionId) {
+        Path docsDir = resolveDocsDir(projectId);
+        if (docsDir == null) {
+            log.warn("ScanArtifactPublisher: cannot resolve docs dir for projectId={}, skip publishing artifacts only", projectId);
+            return;
+        }
+        try {
+            Files.createDirectories(docsDir);
+        } catch (IOException e) {
+            log.warn("ScanArtifactPublisher: failed to create docs dir {}: {}", docsDir, e.getMessage());
+            return;
+        }
+        log.info("ScanArtifactPublisher: publishing artifacts only to {} for projectId={}, versionId={}",
+                docsDir, projectId, versionId);
+        publishArtifactsDocuments(projectId, versionId, docsDir, false, null, null);
+    }
+
+    /**
+     * 分层总结及各产物发布（基于定稿图谱 + 质量报告）— 由 {@link #publishInternal} 与
+     * {@link #publishArtifactsOnly} 共用。
+     */
+    private void publishArtifactsDocuments(String projectId, String versionId, Path docsDir,
+                                            boolean incremental, Set<String> affectedNodeIds,
+                                            Set<String> affectedModuleNames) {
         publishSystemOverview(projectId, versionId, docsDir, incremental, affectedModuleNames);
         publishScanPerformanceReport(projectId, versionId, docsDir, incremental);
         publishCodeUnderstandingReport(projectId, versionId, docsDir, incremental, affectedNodeIds);

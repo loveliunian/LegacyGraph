@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.EnhancedQaAgent;
 import io.github.legacygraph.common.Result;
+import io.github.legacygraph.dto.qa.AccessContext;
 import io.github.legacygraph.entity.QaConversation;
 import io.github.legacygraph.entity.QaFeedback;
 import io.github.legacygraph.entity.QaMessage;
@@ -13,9 +14,13 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -42,7 +47,7 @@ public class EnhancedQaController {
     @PostMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter askStream(@RequestBody QaStreamRequest request) {
         SseEmitter emitter = new SseEmitter(120_000L);
-        
+
         // 校验必填参数
         if (request.getProjectId() == null || request.getProjectId().isBlank()) {
             try {
@@ -55,17 +60,54 @@ public class EnhancedQaController {
             }
             return emitter;
         }
-        
+
+        // 从 SecurityContext 解析访问上下文（principals + team）
+        AccessContext accessContext = resolveAccessContext();
+
         // 异步执行（使用受控 TaskExecutor，替代裸线程）
         taskExecutor.execute(() -> enhancedQaAgent.answerStream(
             request.getProjectId(),
             request.getVersionId(),
             request.getQuestion(),
             request.getConversationId(),
-            emitter
+            emitter,
+            accessContext
         ));
-        
+
         return emitter;
+    }
+
+    /**
+     * 从 Spring Security 上下文解析访问上下文。
+     * <p>从 SecurityContextHolder 获取当前认证用户的 userId 和角色列表，
+     * 构建 principals（如 {@code ["user:alice", "role:ADMIN"]}）。</p>
+     * <p>未认证时返回 {@link AccessContext#PUBLIC}（公开访问）。</p>
+     */
+    private AccessContext resolveAccessContext() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated() || auth.getPrincipal() == null) {
+                return AccessContext.PUBLIC;
+            }
+            String userId = auth.getName();
+            List<String> principals = new ArrayList<>();
+            if (userId != null && !userId.isBlank()) {
+                principals.add("user:" + userId);
+            }
+            // 从 authorities 构建 role principals
+            if (auth.getAuthorities() != null) {
+                for (GrantedAuthority ga : auth.getAuthorities()) {
+                    String authority = ga.getAuthority();
+                    if (authority != null && !authority.isBlank()) {
+                        principals.add("role:" + authority.replaceFirst("^ROLE_", ""));
+                    }
+                }
+            }
+            return principals.isEmpty() ? AccessContext.PUBLIC : new AccessContext(principals, null);
+        } catch (Exception e) {
+            log.debug("Failed to resolve access context, falling back to PUBLIC: {}", e.getMessage());
+            return AccessContext.PUBLIC;
+        }
     }
 
     /**
