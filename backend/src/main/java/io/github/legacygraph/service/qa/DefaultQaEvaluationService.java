@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.EnhancedQaAgent;
 import io.github.legacygraph.agent.QaAnswerResult;
 import io.github.legacygraph.dto.EvidenceItem;
+import io.github.legacygraph.dto.evaluation.RagasReport;
 import io.github.legacygraph.dto.qa.QaEvaluationResult;
 import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.QaTestCase;
+import io.github.legacygraph.service.evaluation.RagasMetricsService;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.QaTestCaseRepository;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +43,7 @@ public class DefaultQaEvaluationService implements QaEvaluationService {
     private final QaTestCaseRepository qaTestCaseRepository;
     private final CodeRepoRepository codeRepoRepository;
     private final ObjectMapper objectMapper;
+    private final RagasMetricsService ragasMetricsService;
 
     private static final String DOCS_SUBDIR = "docs/legacygraph";
 
@@ -214,6 +217,19 @@ public class DefaultQaEvaluationService implements QaEvaluationService {
         if (ar.error()) {
             failures.add("agentError");
         }
+        // 计算 Ragas 指标（简化版，不调用 LLM）
+        List<String> retrievedContexts = evidences.stream()
+                .map(ev -> {
+                    String title = ev.getTitle() != null ? ev.getTitle() : "";
+                    String excerpt = ev.getExcerpt() != null ? ev.getExcerpt() : "";
+                    return (title + " " + excerpt).trim();
+                })
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+        RagasReport ragasReport = ragasMetricsService.evaluate(
+                tc.getQuestion(), answer, retrievedContexts, expectedEntities, expectedKeywords);
+        cr.setRagasReport(ragasReport);
+
         cr.setPassed(failures.isEmpty());
         cr.setFailureReason(failures.isEmpty() ? null : String.join("; ", failures));
         return cr;

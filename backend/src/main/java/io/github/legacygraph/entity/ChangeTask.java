@@ -60,6 +60,18 @@ public class ChangeTask {
     /** 关联的 AgentRun 合约ID，便于回放补丁生成过程 */
     private String agentRunId;
 
+    /** 指派给的用户/团队/角色标识 */
+    private String assignee;
+
+    /** 指派类型：USER / TEAM / ROLE */
+    private String assigneeType;
+
+    /** 领取时间（用户实际接手任务的时间） */
+    private LocalDateTime claimedAt;
+
+    /** 截止时间 */
+    private LocalDateTime dueAt;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

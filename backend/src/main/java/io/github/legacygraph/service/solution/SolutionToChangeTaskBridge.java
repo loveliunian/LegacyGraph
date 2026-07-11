@@ -1,15 +1,23 @@
 package io.github.legacygraph.service.solution;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dto.change.ChangeTaskProposal;
 import io.github.legacygraph.dto.solution.SolutionPlan;
 import io.github.legacygraph.dto.solution.SolutionPlanStep;
 import io.github.legacygraph.entity.ChangeTask;
+import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.Solution;
+import io.github.legacygraph.entity.SolutionStep;
+import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.SolutionRepository;
+import io.github.legacygraph.repository.SolutionStepRepository;
 import io.github.legacygraph.service.change.ChangeTaskService;
+import io.github.legacygraph.service.change.PatchComposer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,15 +34,24 @@ public class SolutionToChangeTaskBridge {
     private static final String STATUS_APPROVED = "APPROVED";
 
     private final SolutionRepository solutionRepository;
+    private final SolutionStepRepository stepRepository;
     private final ChangeTaskService changeTaskService;
     private final ObjectMapper objectMapper;
+    private final PatchComposer patchComposer;
+    private final CodeRepoRepository codeRepoRepository;
 
     public SolutionToChangeTaskBridge(SolutionRepository solutionRepository,
+                                       SolutionStepRepository stepRepository,
                                        ChangeTaskService changeTaskService,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       PatchComposer patchComposer,
+                                       CodeRepoRepository codeRepoRepository) {
         this.solutionRepository = solutionRepository;
+        this.stepRepository = stepRepository;
         this.changeTaskService = changeTaskService;
         this.objectMapper = objectMapper;
+        this.patchComposer = patchComposer;
+        this.codeRepoRepository = codeRepoRepository;
     }
 
     /**
@@ -68,6 +85,9 @@ public class SolutionToChangeTaskBridge {
 
         ChangeTask task = changeTaskService.createTask(
                 projectId, versionId, taskType, title, inputIssue);
+
+        // G-12: 将 SolutionStep.codeSnippet 注入 ChangeTask.proposal
+        injectCodeSnippets(task, solutionId);
 
         solution.setChangeTaskId(task.getId());
         solutionRepository.updateById(solution);
@@ -128,5 +148,86 @@ public class SolutionToChangeTaskBridge {
         SolutionPlan plan = new SolutionPlan();
         plan.setSummary(solution.getSummary());
         return plan;
+    }
+
+    /**
+     * G-12: 将 SolutionStep.codeSnippet 注入 ChangeTask.proposal（ChangeTaskProposal）。
+     * <p>将方案步骤中带 codeSnippet 的项通过 {@link PatchComposer} 转为 unified diff，
+     * 封装为 {@link ChangeTaskProposal}，JSON 序列化后写入 ChangeTask.proposal，
+     * 作为后续补丁生成流程的起点，加速 Agent 生成过程。</p>
+     */
+    private void injectCodeSnippets(ChangeTask task, String solutionId) {
+        LambdaQueryWrapper<SolutionStep> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SolutionStep::getSolutionId, solutionId)
+                .orderByAsc(SolutionStep::getStepIndex);
+        List<SolutionStep> steps = stepRepository.selectList(wrapper);
+
+        if (steps == null || steps.isEmpty()) {
+            return;
+        }
+
+        // 解析项目本地仓库根路径（用于读取原文件生成 diff）
+        String projectBasePath = resolveProjectBasePath(task.getProjectId());
+
+        List<ChangeTaskProposal.ProposalFile> proposalFiles = new ArrayList<>();
+
+        for (SolutionStep step : steps) {
+            if (step.getCodeSnippet() == null || step.getCodeSnippet().isBlank()) {
+                continue;
+            }
+            if (step.getFilePath() == null || step.getFilePath().isBlank()) {
+                continue;
+            }
+            ChangeTaskProposal.ProposalFile file = patchComposer.composePatch(
+                    step, projectBasePath);
+            if (file != null) {
+                proposalFiles.add(file);
+            }
+        }
+
+        if (proposalFiles.isEmpty()) {
+            return;
+        }
+
+        try {
+            ChangeTaskProposal proposal = ChangeTaskProposal.builder()
+                    .files(proposalFiles)
+                    .build();
+            String proposalJson = objectMapper.writeValueAsString(proposal);
+            task.setProposal(proposalJson);
+            task.setUpdatedAt(java.time.LocalDateTime.now());
+            // 通过 ChangeTaskService 更新以确保状态机一致性
+            changeTaskService.updateProposal(task.getId(), proposalJson);
+            log.info("Injected {} unified-diff proposals from solution {} into changeTask {}",
+                    proposalFiles.size(), solutionId, task.getId());
+        } catch (Exception e) {
+            log.warn("Failed to inject code snippets from solution {}: {}",
+                    solutionId, e.getMessage());
+        }
+    }
+
+    /**
+     * 根据 projectId 解析项目本地仓库根路径。
+     * <p>查询项目关联的第一个配置了 localPath 的 CodeRepo，返回其 localPath。
+     * 若无可用 localPath，返回 null（PatchComposer 在 MODIFY 场景会回退为 CREATE）。</p>
+     */
+    private String resolveProjectBasePath(String projectId) {
+        if (projectId == null || projectId.isBlank()) {
+            return null;
+        }
+        try {
+            List<CodeRepo> repos = codeRepoRepository.selectList(
+                    new LambdaQueryWrapper<CodeRepo>()
+                            .eq(CodeRepo::getProjectId, projectId)
+                            .isNotNull(CodeRepo::getLocalPath));
+            for (CodeRepo repo : repos) {
+                if (repo.getLocalPath() != null && !repo.getLocalPath().isBlank()) {
+                    return repo.getLocalPath();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve projectBasePath for project {}: {}", projectId, e.getMessage());
+        }
+        return null;
     }
 }

@@ -1,6 +1,7 @@
 package io.github.legacygraph.service.change;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.ChangeImpactAgent;
@@ -9,6 +10,7 @@ import io.github.legacygraph.agent.adapter.MigrationAgentAdapter;
 import io.github.legacygraph.agent.adapter.RefactorAgentAdapter;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.ChangeImpactAnalysis;
+import io.github.legacygraph.dto.change.ChangeTaskProposal;
 import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.graph.PatchPlan;
@@ -136,6 +138,24 @@ public class ChangeTaskService {
     }
 
     /**
+     * 更新任务的 proposal（补丁方案 JSON），不改变状态。
+     * <p>用于方案桥接时注入初始代码片段，或人工补充补丁草案。</p>
+     *
+     * @param taskId      任务 ID
+     * @param proposalJson PatchPlan JSON 字符串
+     * @return 更新后的任务
+     */
+    @Transactional
+    public ChangeTask updateProposal(String taskId, String proposalJson) {
+        ChangeTask task = requireTask(taskId);
+        task.setProposal(proposalJson);
+        task.setUpdatedAt(LocalDateTime.now());
+        changeTaskRepository.updateById(task);
+        log.info("ChangeTask proposal updated: taskId={}", taskId);
+        return task;
+    }
+
+    /**
      * 基于图谱刷新影响子图（OPEN → IMPACT_READY）。
      * targetNodeId 为变更目标节点。
      * <p>Phase 0-2：移除 @Transactional，LLM 调用不再持有数据库连接。</p>
@@ -191,14 +211,90 @@ public class ChangeTaskService {
      * 生成补丁草案（IMPACT_READY → PATCH_DRAFTED，越界/缺证据 → REVIEW_PENDING）。
      * 复用 Refactor/Migration Adapter；补丁落库前过 PatchPlanValidator 三类校验。
      * <p>Phase 0-2：移除 @Transactional，Agent 调用不再持有数据库连接。</p>
+     * <p>G-12：若 task.proposal 已包含 ChangeTaskProposal 格式 JSON（由方案桥接注入），
+     * 优先从 proposal.files 读取已有 unified diff，跳过 Agent 调用。
+     * 仅在无 proposal 或非 ChangeTaskProposal 格式时走原有 Adapter 链路。</p>
      */
     public PatchPlan generatePatch(String taskId, PatchGenRequest req) {
         ChangeTask task = requireTask(taskId);
         ImpactSubgraph subgraph = fromJson(task.getImpactedSubgraph(), ImpactSubgraph.class);
 
+        // G-12: 优先从已有 ChangeTaskProposal 读取 patch（方案桥接阶段注入）
+        PatchPlan plan = tryBuildPlanFromProposal(task);
+        if (plan == null) {
+            // 无可用 ChangeTaskProposal，走原有 Agent 链路
+            plan = generatePatchViaAgent(taskId, task, req, subgraph);
+        }
+
+        if (plan == null) {
+            throw new IllegalStateException("补丁生成失败：Agent 返回空计划");
+        }
+
+        final PatchPlan finalPlan = plan;
+        // 三类校验：范围/格式/证据（无 TX）
+        PatchPlanValidator.ValidationResult vr = patchPlanValidator.validate(finalPlan, subgraph);
+
+        // 短 TX 持久化 patch files + 状态更新
+        transactionTemplate.executeWithoutResult(status ->
+                persistPatchResult(taskId, finalPlan, vr, task.getProjectId(), task.getVersionId()));
+        return finalPlan;
+    }
+
+    /**
+     * G-12: 尝试从 task.proposal 解析 ChangeTaskProposal 并转换为 PatchPlan。
+     * <p>仅当 proposal 为 ChangeTaskProposal 格式（含非空 files 数组）时返回非 null，
+     * 否则返回 null（调用方应走 Agent 链路）。</p>
+     */
+    private PatchPlan tryBuildPlanFromProposal(ChangeTask task) {
+        String proposalJson = task.getProposal();
+        if (proposalJson == null || proposalJson.isBlank()) {
+            return null;
+        }
+        try {
+            ChangeTaskProposal proposal = objectMapper.readValue(
+                    proposalJson, ChangeTaskProposal.class);
+            if (proposal == null
+                    || proposal.getFiles() == null
+                    || proposal.getFiles().isEmpty()) {
+                return null;
+            }
+            // 转换 ChangeTaskProposal.ProposalFile → PatchPlan.Patch
+            List<PatchPlan.Patch> patches = new ArrayList<>();
+            List<PatchPlan.ImpactedFile> impactedFiles = new ArrayList<>();
+            for (ChangeTaskProposal.ProposalFile file : proposal.getFiles()) {
+                patches.add(PatchPlan.Patch.builder()
+                        .filePath(file.getFilePath())
+                        .changeType(file.getOp())
+                        .patchText(file.getDiff())
+                        .evidenceIds(file.getEvidenceIds())
+                        .build());
+                impactedFiles.add(PatchPlan.ImpactedFile.builder()
+                        .path(file.getFilePath())
+                        .reason(file.getSymbolName())
+                        .build());
+            }
+            return PatchPlan.builder()
+                    .taskId(task.getId())
+                    .taskType(task.getTaskType())
+                    .riskLevel(task.getRiskLevel() != null ? task.getRiskLevel() : "LOW")
+                    .impactedFiles(impactedFiles)
+                    .patches(patches)
+                    .generatedBy("solution-bridge")
+                    .build();
+        } catch (Exception e) {
+            // 非 ChangeTaskProposal 格式（如旧 PatchPlan 或非法 JSON），走 Agent 链路
+            log.debug("Proposal 不为 ChangeTaskProposal 格式，将走 Agent 链路: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 通过 Adapter 链路生成补丁（原有逻辑）。
+     */
+    private PatchPlan generatePatchViaAgent(String taskId, ChangeTask task,
+                                            PatchGenRequest req, ImpactSubgraph subgraph) {
         List<String> evidenceIds = req.getEvidenceIds() != null ? req.getEvidenceIds() : List.of();
 
-        // Agent 调用（长 IO，无 TX）
         PatchPlan plan;
         switch (task.getTaskType()) {
             case "REFACTOR" -> plan = refactorAgentAdapter.toPatchPlan(
@@ -219,17 +315,6 @@ public class ChangeTaskService {
             default -> throw new IllegalArgumentException(
                     "任务类型 " + task.getTaskType() + " 暂无自动补丁生成器");
         }
-
-        if (plan == null) {
-            throw new IllegalStateException("补丁生成失败：Agent 返回空计划");
-        }
-
-        // 三类校验：范围/格式/证据（无 TX）
-        PatchPlanValidator.ValidationResult vr = patchPlanValidator.validate(plan, subgraph);
-
-        // 短 TX 持久化 patch files + 状态更新
-        transactionTemplate.executeWithoutResult(status ->
-                persistPatchResult(taskId, plan, vr, task.getProjectId(), task.getVersionId()));
         return plan;
     }
 
@@ -407,6 +492,113 @@ public class ChangeTaskService {
         }
         log.info("ChangeTask {} PR merged, marked {} patches as stale", taskId, patches.size());
         return task;
+    }
+
+    // ==================== 指派与领取（G-13） ====================
+
+    /**
+     * 领取任务：当前 principal 接手任务。
+     * <p>仅 OPEN / IMPACT_READY 状态可领取；使用原子 UPDATE 防止并发冲突。</p>
+     *
+     * @param taskId    任务 ID
+     * @param principal 领取人标识
+     * @return 更新后的任务
+     * @throws IllegalStateException 任务已被他人领取或状态不允许领取
+     */
+    @Transactional
+    public ChangeTask claimTask(String taskId, String principal) {
+        if (principal == null || principal.isBlank()) {
+            throw new IllegalArgumentException("领取人 principal 不能为空");
+        }
+        ChangeTask task = requireTask(taskId);
+
+        String status = task.getStatus();
+        if (!"OPEN".equals(status) && !"IMPACT_READY".equals(status)) {
+            throw new IllegalStateException(
+                    "任务状态不允许领取: " + status + "（仅 OPEN / IMPACT_READY 可领取）");
+        }
+
+        // 原子更新：只有 assignee 为空时才更新，防止并发领取
+        UpdateWrapper<ChangeTask> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", taskId)
+                .isNull("assignee")
+                .set("assignee", principal)
+                .set("assignee_type", "USER")
+                .set("claimed_at", LocalDateTime.now())
+                .set("updated_at", LocalDateTime.now());
+        int updated = changeTaskRepository.update(null, updateWrapper);
+
+        if (updated == 0) {
+            throw new IllegalStateException("任务已被他人领取，请刷新后重试");
+        }
+
+        ChangeTask claimed = requireTask(taskId);
+        log.info("ChangeTask {} claimed by {}", taskId, principal);
+        return claimed;
+    }
+
+    /**
+     * 指派任务：将任务指派给指定的用户/团队/角色。
+     * <p>仅 Lead/PM 角色可调用（权限校验在 controller 层做）。</p>
+     *
+     * @param taskId       任务 ID
+     * @param assignee     被指派人/团队/角色标识
+     * @param assigneeType 指派类型：USER / TEAM / ROLE
+     * @param dueAt        截止时间（可选）
+     * @return 更新后的任务
+     */
+    @Transactional
+    public ChangeTask assignTask(String taskId, String assignee, String assigneeType,
+                                  LocalDateTime dueAt) {
+        if (assignee == null || assignee.isBlank()) {
+            throw new IllegalArgumentException("被指派人 assignee 不能为空");
+        }
+        if (assigneeType == null || assigneeType.isBlank()) {
+            assigneeType = "USER";
+        }
+        String type = assigneeType.toUpperCase();
+        if (!"USER".equals(type) && !"TEAM".equals(type) && !"ROLE".equals(type)) {
+            throw new IllegalArgumentException("无效的 assigneeType: " + assigneeType
+                    + "（应为 USER / TEAM / ROLE）");
+        }
+
+        ChangeTask task = requireTask(taskId);
+        task.setAssignee(assignee);
+        task.setAssigneeType(type);
+        task.setDueAt(dueAt);
+        if (task.getClaimedAt() == null && "USER".equals(type)) {
+            task.setClaimedAt(LocalDateTime.now());
+        }
+        task.setUpdatedAt(LocalDateTime.now());
+        changeTaskRepository.updateById(task);
+
+        log.info("ChangeTask {} assigned to {} ({})", taskId, assignee, type);
+        return task;
+    }
+
+    /**
+     * 查询项目下的变更任务，支持按 assignee 和状态过滤。
+     *
+     * @param projectId 项目 ID
+     * @param assignee  被指派人（可选，null 表示不过滤）
+     * @param status    状态（可选，null 表示不过滤）
+     * @return 任务列表，按更新时间倒序
+     */
+    public List<ChangeTask> listTasks(String projectId, String assignee, String status) {
+        if (projectId == null || projectId.isBlank()) {
+            return List.of();
+        }
+        LambdaQueryWrapper<ChangeTask> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ChangeTask::getProjectId, projectId);
+        if (assignee != null && !assignee.isBlank()) {
+            wrapper.eq(ChangeTask::getAssignee, assignee);
+        }
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(ChangeTask::getStatus, status);
+        }
+        wrapper.orderByDesc(ChangeTask::getUpdatedAt)
+                .orderByDesc(ChangeTask::getCreatedAt);
+        return changeTaskRepository.selectList(wrapper);
     }
 
     // ==================== 内部辅助 ====================

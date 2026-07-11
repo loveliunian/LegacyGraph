@@ -82,36 +82,39 @@ public class JavaCodeAdapter implements ExtractionAdapter {
 
     @Override
     public ExtractionResult extract(ScanContext context, SourceAsset asset) {
-        try {
-            Path file = asset.getFile();
+        Path file = asset.getFile();
+        int structureNodeCount = 0;
 
+        // 结构提取独立 try-catch：JavaParser AST 遍历（findAll）偶发 RuntimeException 不应阻断后续提取
+        try {
             List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(file, asset.getCachedContent());
             List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
                     context.getProjectId(), context.getVersionId(), structures);
-            // 基于类结构与 import 构建 Package 节点及 BELONGS_TO / DEPENDS_ON 边
             graphBuilder.buildPackageGraph(
                     context.getProjectId(), context.getVersionId(),
                     packageExtractor.extract(structures));
+            structureNodeCount = structureNodes.size();
+        } catch (Exception e) {
+            log.warn("Failed to extract structure from {}: {}", asset.getRelativePath(), e.getMessage());
+        }
 
-            List<ApiFact> apiFacts = controllerExtractor.extractFromFile(file);
-            if (apiFacts.isEmpty()) {
-                return ExtractionResult.builder()
-                        .processedAssets(1)
-                        .nodeCount(structureNodes.size())
-                        .evidenceCount(structureNodes.size())
-                        .summary("Java controller: " + structureNodes.size() + " structure nodes, no APIs found")
-                        .build();
-            }
+        // API 提取独立 try-catch
+        List<ApiFact> apiFacts = List.of();
+        try {
+            apiFacts = controllerExtractor.extractFromFile(file);
+        } catch (Exception e) {
+            log.warn("Failed to extract API facts from {}: {}", asset.getRelativePath(), e.getMessage());
+        }
 
-            var nodes = graphBuilder.buildApiNodes(
-                    context.getProjectId(), context.getVersionId(),
-                    apiFacts, asset.getRelativePath());
+        List<GraphNode> apiNodes = apiFacts.isEmpty()
+                ? List.of()
+                : graphBuilder.buildApiNodes(context.getProjectId(), context.getVersionId(), apiFacts, asset.getRelativePath());
 
-            // 提取 Controller 方法到 Service/Mapper 的 CALLS 边
+        // SERVICE_CALL 提取和保存独立 try-catch：即使结构/API 提取失败，调用关系仍应保存
+        int callEdgeCount = 0;
+        try {
             List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(file.toFile(), asset.getCachedContent());
-            int callEdgeCount = 0;
             if (!calls.isEmpty()) {
-                // 保存 SERVICE_CALL 事实（供 JavaMemberCallResolver 二次解析使用）
                 factPersister.saveFacts(calls.stream()
                         .map(call -> FactPersister.FactDraft.builder()
                                 .projectId(context.getProjectId())
@@ -128,30 +131,24 @@ public class JavaCodeAdapter implements ExtractionAdapter {
                                 .status("EXTRACTED")
                                 .build())
                         .toList());
-                // 首次构建调用图（简单名匹配可能部分成功）
                 graphBuilder.buildServiceCallGraph(
                         context.getProjectId(), context.getVersionId(), calls);
                 callEdgeCount = (int) calls.stream()
                         .filter(c -> c.getTargetClass() != null)
                         .count();
             }
-
-            return ExtractionResult.builder()
-                    .processedAssets(1)
-                    .nodeCount(structureNodes.size() + nodes.size())
-                    .edgeCount(apiFacts.size() * 3 + callEdgeCount)
-                    .evidenceCount(structureNodes.size() + nodes.size())
-                    .summary(String.format("Java controller: %d structure nodes, %d APIs, %d calls extracted",
-                            structureNodes.size(), apiFacts.size(), callEdgeCount))
-                    .build();
-
-        } catch (IOException e) {
-            log.warn("JavaCodeAdapter failed to process {}: {}", asset.getRelativePath(), e.getMessage());
-            return ExtractionResult.builder()
-                    .processedAssets(1)
-                    .summary("Java controller failed: " + e.getMessage())
-                    .build();
+        } catch (Exception e) {
+            log.warn("Failed to extract service calls from {}: {}", asset.getRelativePath(), e.getMessage());
         }
+
+        return ExtractionResult.builder()
+                .processedAssets(1)
+                .nodeCount(structureNodeCount + apiNodes.size())
+                .edgeCount(apiFacts.size() * 3 + callEdgeCount)
+                .evidenceCount(structureNodeCount + apiNodes.size())
+                .summary(String.format("Java controller: %d structure nodes, %d APIs, %d calls extracted",
+                        structureNodeCount, apiFacts.size(), callEdgeCount))
+                .build();
     }
 
     @Override

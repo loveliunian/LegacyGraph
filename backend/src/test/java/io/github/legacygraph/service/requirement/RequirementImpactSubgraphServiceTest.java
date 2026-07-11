@@ -33,6 +33,12 @@ class RequirementImpactSubgraphServiceTest {
     @Mock
     private Neo4jGraphDao neo4jGraphDao;
 
+    @Mock
+    private RiskScorer riskScorer;
+
+    @Mock
+    private ImpactGraphWriter impactGraphWriter;
+
     private ImpactSubgraphService service;
 
     private static final String PROJECT_ID = "proj-001";
@@ -40,10 +46,15 @@ class RequirementImpactSubgraphServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ImpactSubgraphService(neo4jGraphDao);
+        service = new ImpactSubgraphService(neo4jGraphDao, riskScorer, impactGraphWriter);
         // 默认：findPathsDirected 返回空
         when(neo4jGraphDao.findPathsDirected(any(), any(), any(), anyList(), any(), anyInt(), anyInt()))
                 .thenReturn(List.of());
+        // 默认：riskScorer 返回固定分数
+        when(riskScorer.buildFactor(anyString(), anyInt(), anyString(), anyBoolean(),
+                anyDouble(), anyDouble()))
+                .thenReturn(new io.github.legacygraph.dto.requirement.RiskFactor());
+        when(riskScorer.score(any())).thenReturn(1.0);
     }
 
     private LinkedTarget target(String nodeId, String nodeKey, String nodeName, String nodeType) {

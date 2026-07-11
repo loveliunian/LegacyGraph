@@ -258,6 +258,17 @@ public class Neo4jGraphDao {
         writeRepo.setNodeProperty(nodeId, property, value);
     }
 
+    /**
+     * 通用写入 Cypher 执行（不返回结果集），供 service 层调用，避免直接依赖 Neo4j Driver。
+     * <p>委托给 {@link Neo4jWriteRepository#executeWriteQuery}。</p>
+     *
+     * @param cypher  Cypher 写入语句（SET / REMOVE / MERGE 等）
+     * @param params  Cypher 参数
+     */
+    public void executeWriteQuery(String cypher, Map<String, Object> params) {
+        writeRepo.executeWriteQuery(cypher, params);
+    }
+
     public void setEdgeProperty(String edgeId, String property, Object value) {
         writeRepo.setEdgeProperty(edgeId, property, value);
     }
@@ -565,6 +576,19 @@ public class Neo4jGraphDao {
     public GraphifyDeleteResult deleteGraphifyClaims(String projectId, String versionId) {
         long[] result = adminRepo.deleteGraphifyClaims(projectId, versionId);
         return new GraphifyDeleteResult(result[0], result[1]);
+    }
+
+    /**
+     * 克隆版本图谱：将旧版本的所有节点和边复制到新版本。
+     * 用于增量扫描前继承上一版本的完整图谱，确保新版本拥有全量数据。
+     *
+     * @param projectId     项目 ID
+     * @param fromVersionId 源版本 ID（上一成功版本）
+     * @param toVersionId   目标版本 ID（当前增量版本）
+     * @return 克隆的节点数 + 边数
+     */
+    public int cloneVersionGraph(String projectId, String fromVersionId, String toVersionId) {
+        return writeRepo.cloneVersionGraph(projectId, fromVersionId, toVersionId);
     }
 
     // ==================== Schema → SchemaRepository ====================

@@ -73,53 +73,59 @@ public class JavaServiceCallAdapter implements ExtractionAdapter {
 
     @Override
     public ExtractionResult extract(ScanContext context, SourceAsset asset) {
+        int structureNodeCount = 0;
+
+        // 结构提取独立 try-catch：JavaParser AST 遍历（findAll）偶发 RuntimeException 不应阻断后续提取
         try {
             List<JavaStructureExtractor.JavaClassInfo> structures = structureExtractor.extractFromFile(asset.getFile(), asset.getCachedContent());
             List<GraphNode> structureNodes = graphBuilder.buildJavaStructureGraph(
                     context.getProjectId(), context.getVersionId(), structures);
-            // 基于类结构与 import 构建 Package 节点及 BELONGS_TO / DEPENDS_ON 边
             graphBuilder.buildPackageGraph(
                     context.getProjectId(), context.getVersionId(),
                     packageExtractor.extract(structures));
-
-            List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(asset.getFile().toFile());
-            if (calls.isEmpty()) {
-                return ExtractionResult.builder()
-                        .processedAssets(1)
-                        .nodeCount(structureNodes.size())
-                        .evidenceCount(structureNodes.size())
-                        .summary("Java service: " + structureNodes.size() + " structure nodes, no calls")
-                        .build();
-            }
-            factPersister.saveFacts(calls.stream()
-                    .map(call -> FactPersister.FactDraft.builder()
-                            .projectId(context.getProjectId())
-                            .versionId(context.getVersionId())
-                            .sourceType("CODE_AST")
-                            .factType("SERVICE_CALL")
-                            .factKey(call.getCallerClass() + "." + call.getCallerMethod())
-                            .factName(call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod())
-                            .sourcePath(asset.getRelativePath())
-                            .startLine(call.getLineNumber())
-                            .endLine(call.getLineNumber())
-                            .data(call)
-                            .confidence(BigDecimal.ONE)
-                            .status("EXTRACTED")
-                            .build())
-                    .toList());
-            graphBuilder.buildServiceCallGraph(context.getProjectId(), context.getVersionId(), calls);
-            return ExtractionResult.builder()
-                    .processedAssets(1)
-                    .nodeCount(structureNodes.size())
-                    .edgeCount(calls.size())
-                    .evidenceCount(structureNodes.size() + calls.size())
-                    .summary("Java service: " + structureNodes.size() + " structure nodes, "
-                            + calls.size() + " calls")
-                    .build();
-        } catch (IOException e) {
-            log.warn("JavaServiceCallAdapter failed for {}: {}", asset.getRelativePath(), e.getMessage());
-            return ExtractionResult.builder().processedAssets(1).summary("Java service failed: " + e.getMessage()).build();
+            structureNodeCount = structureNodes.size();
+        } catch (Exception e) {
+            log.warn("Failed to extract structure from {}: {}", asset.getRelativePath(), e.getMessage());
         }
+
+        // SERVICE_CALL 提取和保存独立 try-catch：即使结构提取失败，调用关系仍应保存
+        int callEdgeCount = 0;
+        try {
+            List<ServiceCallExtractor.CallRelation> calls = callExtractor.extractFromFile(asset.getFile().toFile());
+            if (!calls.isEmpty()) {
+                factPersister.saveFacts(calls.stream()
+                        .map(call -> FactPersister.FactDraft.builder()
+                                .projectId(context.getProjectId())
+                                .versionId(context.getVersionId())
+                                .sourceType("CODE_AST")
+                                .factType("SERVICE_CALL")
+                                .factKey(call.getCallerClass() + "." + call.getCallerMethod())
+                                .factName(call.getCallerClass() + " -> " + call.getTargetClass() + "." + call.getTargetMethod())
+                                .sourcePath(asset.getRelativePath())
+                                .startLine(call.getLineNumber())
+                                .endLine(call.getLineNumber())
+                                .data(call)
+                                .confidence(BigDecimal.ONE)
+                                .status("EXTRACTED")
+                                .build())
+                        .toList());
+                graphBuilder.buildServiceCallGraph(context.getProjectId(), context.getVersionId(), calls);
+                callEdgeCount = (int) calls.stream()
+                        .filter(c -> c.getTargetClass() != null)
+                        .count();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract service calls from {}: {}", asset.getRelativePath(), e.getMessage());
+        }
+
+        return ExtractionResult.builder()
+                .processedAssets(1)
+                .nodeCount(structureNodeCount)
+                .edgeCount(callEdgeCount)
+                .evidenceCount(structureNodeCount + callEdgeCount)
+                .summary(String.format("Java service: %d structure nodes, %d calls extracted",
+                        structureNodeCount, callEdgeCount))
+                .build();
     }
 
     @Override

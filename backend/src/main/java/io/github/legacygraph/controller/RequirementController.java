@@ -6,7 +6,9 @@ import io.github.legacygraph.annotation.Log;
 import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.RequirementAnalysis;
 import io.github.legacygraph.dto.RequirementItemDTO;
+import io.github.legacygraph.dto.requirement.DataLineageResponse;
 import io.github.legacygraph.dto.requirement.ImpactResult;
+import io.github.legacygraph.dto.requirement.ItemPatchRequest;
 import io.github.legacygraph.dto.requirement.LinkedTarget;
 import io.github.legacygraph.entity.AcceptanceCriterion;
 import io.github.legacygraph.entity.Requirement;
@@ -16,10 +18,13 @@ import io.github.legacygraph.repository.AcceptanceCriterionRepository;
 import io.github.legacygraph.repository.RequirementItemRepository;
 import io.github.legacygraph.repository.RequirementRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
+import io.github.legacygraph.service.requirement.AcceptanceVerificationService;
 import io.github.legacygraph.service.requirement.ImpactSubgraphService;
 import io.github.legacygraph.service.requirement.RequirementExtractionService;
 import io.github.legacygraph.service.requirement.RequirementGraphBuilder;
+import io.github.legacygraph.service.requirement.RequirementDataLineageService;
 import io.github.legacygraph.service.requirement.RequirementLinkingService;
+import io.github.legacygraph.service.requirement.RequirementPatchService;
 import io.github.legacygraph.util.IdUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -46,30 +51,39 @@ public class RequirementController {
     private final RequirementGraphBuilder graphBuilder;
     private final RequirementLinkingService linkingService;
     private final ImpactSubgraphService impactService;
+    private final AcceptanceVerificationService acceptanceVerificationService;
+    private final RequirementPatchService patchService;
     private final RequirementRepository requirementRepository;
     private final RequirementItemRepository itemRepository;
     private final AcceptanceCriterionRepository criterionRepository;
     private final ScanVersionRepository scanVersionRepository;
     private final ObjectMapper objectMapper;
+    private final RequirementDataLineageService dataLineageService;
 
     public RequirementController(RequirementExtractionService extractionService,
                                  RequirementGraphBuilder graphBuilder,
                                  RequirementLinkingService linkingService,
                                  ImpactSubgraphService impactService,
+                                 AcceptanceVerificationService acceptanceVerificationService,
+                                 RequirementPatchService patchService,
                                  RequirementRepository requirementRepository,
                                  RequirementItemRepository itemRepository,
                                  AcceptanceCriterionRepository criterionRepository,
                                  ScanVersionRepository scanVersionRepository,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 RequirementDataLineageService dataLineageService) {
         this.extractionService = extractionService;
         this.graphBuilder = graphBuilder;
         this.linkingService = linkingService;
         this.impactService = impactService;
+        this.acceptanceVerificationService = acceptanceVerificationService;
+        this.patchService = patchService;
         this.requirementRepository = requirementRepository;
         this.itemRepository = itemRepository;
         this.criterionRepository = criterionRepository;
         this.scanVersionRepository = scanVersionRepository;
         this.objectMapper = objectMapper;
+        this.dataLineageService = dataLineageService;
     }
 
     @Log(value = "分析需求并构建图谱", type = Log.OperationType.CREATE)
@@ -164,8 +178,8 @@ public class RequirementController {
         // 1. 链接需求条目到图谱节点并创建 AFFECTS 边
         List<LinkedTarget> targets = linkingService.link(
                 projectId, versionId, requirementId, analysis);
-        // 2. 从链接目标出发提取影响子图
-        ImpactResult result = impactService.extract(projectId, versionId, targets);
+        // 2. 从链接目标出发提取影响子图（G-19：同时回写影响标记到 Neo4j 节点）
+        ImpactResult result = impactService.extract(projectId, versionId, requirementId, targets);
 
         log.info("Requirement impact analyzed: projectId={}, requirementId={}, targets={}, impactedNodes={}",
                 projectId, requirementId, targets.size(), result.getImpactedNodes().size());
@@ -244,6 +258,133 @@ public class RequirementController {
                 projectId, requirementId, buildResult.nodeIds().size(), buildResult.itemCount());
         return Result.success(new RequirementResponse(requirementId, analysis, buildResult.nodeIds(), buildResult.itemCount()));
     }
+
+    // ==================== G-22: 需求条目增量更新 ====================
+
+    @Log(value = "增量更新需求条目", type = Log.OperationType.UPDATE)
+    @PatchMapping("/requirements/{requirementId}/items/{itemCode}")
+    @Operation(summary = "增量更新单条需求条目",
+            description = "部分更新单条 RequirementItem（text / constraints / acceptanceCriteria），仅更新非 null 字段")
+    public Result<RequirementItem> patchItem(
+            @PathVariable String projectId,
+            @PathVariable String requirementId,
+            @PathVariable String itemCode,
+            @RequestBody ItemPatchRequest patch) {
+        RequirementItem item = patchService.patchItem(requirementId, itemCode, patch);
+        return Result.success(item);
+    }
+
+    @Log(value = "增量clarify需求条目", type = Log.OperationType.UPDATE)
+    @PostMapping("/requirements/{requirementId}/items/{itemCode}/clarify")
+    @Operation(summary = "增量clarify单条需求条目",
+            description = "对单条 RequirementItem 增量 clarify，将问答追加到条目文本（LLM 调用后续接入）")
+    public Result<RequirementItem> clarifyItem(
+            @PathVariable String projectId,
+            @PathVariable String requirementId,
+            @PathVariable String itemCode,
+            @RequestBody List<RequirementPatchService.QA> answers) {
+        RequirementItem item = patchService.clarifyItem(requirementId, itemCode, answers);
+        return Result.success(item);
+    }
+
+    // ==================== G-14: 验收条件闭环验证 ====================
+
+    @Log(value = "触发需求闭环验证", type = Log.OperationType.UPDATE)
+    @PostMapping("/requirements/{requirementId}/verify")
+    @Operation(summary = "触发需求闭环验证",
+            description = "按 verificationType 自动验证需求下所有验收条件，"
+                    + "AUTOMATIC/NONE 自动置 VERIFIED，MANUAL 保持 PENDING 等待人工勾选")
+    public Result<List<AcceptanceCriterion>> verifyRequirement(
+            @PathVariable String projectId,
+            @PathVariable String requirementId,
+            @RequestBody(required = false) VerifyRequest request) {
+        String verifier = request != null && request.getVerifier() != null
+                ? request.getVerifier() : "system";
+        List<AcceptanceCriterion> criteria =
+                acceptanceVerificationService.verifyByRequirement(requirementId, verifier);
+        return Result.success(criteria);
+    }
+
+    @Log(value = "验证单条验收条件", type = Log.OperationType.UPDATE)
+    @PostMapping("/acceptance-criteria/{criterionId}/verify")
+    @Operation(summary = "验证单条验收条件（人工勾选）",
+            description = "将单条验收条件标记为 VERIFIED，可附带验证备注与证据链接")
+    public Result<AcceptanceCriterion> verifySingle(
+            @PathVariable String projectId,
+            @PathVariable String criterionId,
+            @RequestBody(required = false) VerifySingleRequest request) {
+        String verifier = request != null && request.getVerifier() != null
+                ? request.getVerifier() : "anonymous";
+        String note = request != null ? request.getNote() : null;
+        String evidenceUrl = request != null ? request.getEvidenceUrl() : null;
+        AcceptanceCriterion ac =
+                acceptanceVerificationService.verifySingle(criterionId, verifier, note, evidenceUrl);
+        return Result.success(ac);
+    }
+
+    @Log(value = "豁免验收条件", type = Log.OperationType.UPDATE)
+    @PostMapping("/acceptance-criteria/{criterionId}/waive")
+    @Operation(summary = "豁免一条验收条件",
+            description = "将验收条件标记为 WAIVED，需提供豁免原因")
+    public Result<AcceptanceCriterion> waive(
+            @PathVariable String projectId,
+            @PathVariable String criterionId,
+            @RequestBody WaiveRequest request) {
+        AcceptanceCriterion ac =
+                acceptanceVerificationService.waive(criterionId, request.getVerifier(), request.getReason());
+        return Result.success(ac);
+    }
+
+    @Log(value = "标记验收失败", type = Log.OperationType.UPDATE)
+    @PostMapping("/acceptance-criteria/{criterionId}/fail")
+    @Operation(summary = "标记一条验收条件为 FAILED",
+            description = "将验收条件标记为 FAILED，需提供失败原因。"
+                    + "FAILED 不视为闭环，所属需求不会被推进到 DONE；"
+                    + "后续可通过 /verify 端点重新验证切换回 VERIFIED。")
+    public Result<AcceptanceCriterion> fail(
+            @PathVariable String projectId,
+            @PathVariable String criterionId,
+            @RequestBody WaiveRequest request) {
+        AcceptanceCriterion ac =
+                acceptanceVerificationService.fail(criterionId, request.getVerifier(), request.getReason());
+        return Result.success(ac);
+    }
+
+    @Log(value = "获取需求闭环报告", type = Log.OperationType.QUERY)
+    @GetMapping("/requirements/{requirementId}/closure-report")
+    @Operation(summary = "获取需求闭环报告",
+            description = "返回需求下所有条目与验收条件的验证状态明细及闭环统计")
+    public Result<Map<String, Object>> closureReport(
+            @PathVariable String projectId,
+            @PathVariable String requirementId) {
+        return Result.success(acceptanceVerificationService.closureReport(requirementId));
+    }
+
+    // ==================== G-16: 需求-表/字段反向溯源 ====================
+
+    @Log(value = "需求-表/字段反向溯源", type = Log.OperationType.QUERY)
+    @GetMapping("/requirements/{requirementId}/data-lineage")
+    @Operation(summary = "获取需求的数据血缘",
+            description = "从需求出发沿 AFFECTS 边找到目标节点，再反向追溯 CALLS/READS/WRITES/MAPS_TO/HAS_COLUMN "
+                    + "等边到达 Table/Column 节点，聚合为受影响表清单与汇总摘要")
+    public Result<DataLineageResponse> dataLineage(
+            @PathVariable String projectId,
+            @PathVariable String requirementId) {
+        Requirement req = requirementRepository.selectById(requirementId);
+        if (req == null) {
+            throw new IllegalArgumentException("需求不存在: " + requirementId);
+        }
+        String versionId = resolveLatestVersionId(projectId);
+        DataLineageResponse result = dataLineageService.traceDataLineage(projectId, versionId, requirementId);
+        log.info("Requirement data-lineage traced: projectId={}, requirementId={}, tables={}",
+                projectId, requirementId, result.getSummary().getTableCount());
+        return Result.success(result);
+    }
+
+    // ==================== G-17: 契约生成已迁出至 ContractController ====================
+    // 原 /requirements/{requirementId}/contract 端点已拆出到 ContractController
+    // （新路径 /contracts/requirements/{requirementId}）。
+    // 旧路径由 ContractLegacyRedirectController 兼容，标记为 @Deprecated。
 
     /**
      * 从数据库重建需求分析结果（用于影响分析接口）。
@@ -340,5 +481,29 @@ public class RequirementController {
     public static class ClarifyRequest {
         /** key=问题, value=回答 */
         private Map<String, String> answers;
+    }
+
+    @Data
+    public static class VerifyRequest {
+        /** 验证人 */
+        private String verifier;
+    }
+
+    @Data
+    public static class VerifySingleRequest {
+        /** 验证人 */
+        private String verifier;
+        /** 验证备注 */
+        private String note;
+        /** 证据链接 */
+        private String evidenceUrl;
+    }
+
+    @Data
+    public static class WaiveRequest {
+        /** 操作人 */
+        private String verifier;
+        /** 豁免原因 */
+        private String reason;
     }
 }

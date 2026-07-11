@@ -420,6 +420,12 @@ public class GraphBuilder {
 
             for (String readTable : tableResult.getReadTables()) {
                 addTableNodeIfAbsent(nodeBatch, seenNodeKeys, projectId, versionId, readTable);
+                // P1-2: SqlStatement→Table 使用 READS_DB（业务关键边）
+                edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                        sqlKey, readTable, EdgeType.READS_DB.name(),
+                        sqlKey + "->reads_db->" + readTable,
+                        edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.95), NodeStatus.CONFIRMED)));
+                // 同时保留通用 READS 边以兼容现有查询
                 edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
                         sqlKey, readTable, EdgeType.READS.name(),
                         sqlKey + "->reads->" + readTable,
@@ -428,6 +434,12 @@ public class GraphBuilder {
 
             for (String writeTable : tableResult.getWriteTables()) {
                 addTableNodeIfAbsent(nodeBatch, seenNodeKeys, projectId, versionId, writeTable);
+                // P1-2: SqlStatement→Table 使用 WRITES_DB（业务关键边）
+                edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                        sqlKey, writeTable, EdgeType.WRITES_DB.name(),
+                        sqlKey + "->writes_db->" + writeTable,
+                        edgeProps(SourceType.SQL_PARSE.name(), BigDecimal.valueOf(0.95), NodeStatus.CONFIRMED)));
+                // 同时保留通用 WRITES 边以兼容现有查询
                 edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
                         sqlKey, writeTable, EdgeType.WRITES.name(),
                         sqlKey + "->writes->" + writeTable,
@@ -821,6 +833,37 @@ public class GraphBuilder {
     }
 
     /**
+     * P1-1: 合并节点属性模板与调用方传入的 properties。
+     * <p>
+     * 策略：先填充模板属性（值为 null），再解析 existingPropertiesJson 覆盖到模板上，
+     * 确保核心节点类型的必备属性键始终存在，同时保留调用方传入的实际值。
+     * </p>
+     *
+     * @param nodeType            节点类型名称
+     * @param existingPropertiesJson 已有的 properties JSON（可为 null）
+     * @return 合并后的 properties JSON；非核心节点类型且无 existingPropertiesJson 时返回 null
+     */
+    private String mergeTemplateProperties(String nodeType, String existingPropertiesJson) {
+        Map<String, Object> template = NodeAttributeTemplates.requiredFor(nodeType);
+        if (template.isEmpty() && (existingPropertiesJson == null || existingPropertiesJson.isBlank())) {
+            return null;
+        }
+        // 以模板为基础，合并已有属性（已有值覆盖模板 null）
+        Map<String, Object> merged = new LinkedHashMap<>(template);
+        if (existingPropertiesJson != null && !existingPropertiesJson.isBlank()) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> existing = OBJECT_MAPPER.readValue(existingPropertiesJson, Map.class);
+                merged.putAll(existing);
+            } catch (Exception e) {
+                log.debug("Failed to parse existing properties for {}: {}", nodeType, e.getMessage());
+                // 解析失败时保留模板属性
+            }
+        }
+        return toJsonProperties(merged, nodeType);
+    }
+
+    /**
      * 启发式推断：根据列名模式推断引用的表名。
      * 模式：{table}_id, {table}Id, parent_id（自引用）
      */
@@ -963,6 +1006,7 @@ public class GraphBuilder {
      * 查找或创建节点（委托给 EvidenceGraphWriter）。
      * ⚠️ B-M3：本方法与 FrontendGraphBuilder/BusinessGraphBuilder 中的同名方法均为 thin wrapper，
      * 可进一步收敛为 Builder 直接调用 writer.upsertNode()。
+     * <p>P1-1：对五类核心节点（Controller/Service/Mapper/ApiEndpoint/Table）自动回填模板属性。</p>
      */
     private GraphNode findOrCreateNode(String projectId, String versionId,
             String nodeType, String nodeKey, String nodeName,
@@ -971,6 +1015,8 @@ public class GraphBuilder {
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status,
             String scanType, String className) {
+        // P1-1: 为核心节点类型生成模板属性
+        String templateProps = mergeTemplateProperties(nodeType, null);
         return writer.upsertNode(GraphNodeClaim.builder()
                 .projectId(projectId)
                 .versionId(versionId)
@@ -987,6 +1033,7 @@ public class GraphBuilder {
                 .status(status != null ? status.name() : null)
                 .scanType(scanType)
                 .className(className)
+                .properties(templateProps)
                 .build());
     }
 
@@ -1005,7 +1052,9 @@ public class GraphBuilder {
     }
 
     /**
-     * 查找或创建节点（带 properties）
+     * 查找或创建节点（带 properties）。
+     * <p>P1-1：properties 会与 {@link NodeAttributeTemplates} 模板属性合并，
+     * 确保核心节点类型的必备属性键不丢失（调用方传入的值优先）。</p>
      */
     private GraphNode findOrCreateNodeWithProperties(String projectId, String versionId,
             String nodeType, String nodeKey, String nodeName,
@@ -1014,6 +1063,8 @@ public class GraphBuilder {
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status,
             String scanType, String className, String properties) {
+        // P1-1: 合并模板属性与调用方传入的 properties
+        String mergedProps = mergeTemplateProperties(nodeType, properties);
         return writer.upsertNode(GraphNodeClaim.builder()
                 .projectId(projectId)
                 .versionId(versionId)
@@ -1030,7 +1081,7 @@ public class GraphBuilder {
                 .status(status != null ? status.name() : null)
                 .scanType(scanType)
                 .className(className)
-                .properties(properties)
+                .properties(mergedProps)
                 .build());
     }
 
@@ -2053,6 +2104,23 @@ public class GraphBuilder {
                     }
                 }
             }
+
+            // P1-3: 嵌套类 → 创建 OuterClass -CONTAINS-> InnerClass 边
+            if (classInfo.isNested() && classInfo.getOuterQualifiedName() != null) {
+                NodeType outerNodeType = inferNodeType(classInfo.getOuterQualifiedName());
+                GraphNode outerNode = neo4jGraphDao.findNode(projectId, versionId,
+                        outerNodeType.name(), classInfo.getOuterQualifiedName()).orElse(null);
+                if (outerNode != null && !outerNode.getId().equals(classNode.getId())) {
+                    createEdge(projectId, versionId,
+                            outerNode.getId(), classNode.getId(),
+                            EdgeType.CONTAINS.name(),
+                            classInfo.getOuterQualifiedName() + "->contains->" + classKey,
+                            SourceType.CODE_AST.name(),
+                            BigDecimal.ONE,
+                            NodeStatus.CONFIRMED
+                    );
+                }
+            }
         }
         return nodes;
     }
@@ -2088,10 +2156,12 @@ public class GraphBuilder {
 
             // 如果调用方和被调用方都存在，创建 CALLS 边
             if (callerNode != null && targetNode != null) {
-                String edgeKey = callerClassKey + "->calls->" + targetClassKey + "." + call.getTargetMethod();
+                // P1-2: 根据 edgeTargetKind 选择业务关键边类型
+                String edgeTypeStr = resolveCallEdgeType(call.getEdgeTargetKind(), targetNodeType);
+                String edgeKey = callerClassKey + "->" + edgeTypeStr.toLowerCase() + "->" + targetClassKey + "." + call.getTargetMethod();
                 createEdge(projectId, versionId,
                         callerNode.getId(), targetNode.getId(),
-                        EdgeType.CALLS.name(),
+                        edgeTypeStr,
                         edgeKey,
                         SourceType.CODE_AST.name(),
                         BigDecimal.ONE,
@@ -2233,6 +2303,34 @@ public class GraphBuilder {
             return NodeType.Mapper;
         }
         return NodeType.Service; // 默认作为服务类
+    }
+
+    /**
+     * P1-2: 根据调用目标类型选择业务关键边类型。
+     * <p>
+     * 优先使用 edgeTargetKind（由 ServiceCallExtractor 标注），
+     * 未标注时根据 targetNodeType 推断。
+     * </p>
+     *
+     * @param edgeTargetKind 调用目标类型（SERVICE_CALL / DATABASE_CALL / LOG_CALL / CONFIG_CALL / ENDPOINT_EXPOSE）
+     * @param targetNodeType 被调用方节点类型
+     * @return EdgeType 名称
+     */
+    private String resolveCallEdgeType(String edgeTargetKind, NodeType targetNodeType) {
+        if (edgeTargetKind != null && !edgeTargetKind.isBlank()) {
+            return switch (edgeTargetKind.toUpperCase()) {
+                case "DATABASE_CALL" -> EdgeType.CALLS_DB.name();
+                case "LOG_CALL" -> EdgeType.WRITES_LOG.name();
+                case "CONFIG_CALL" -> EdgeType.READS_CONFIG.name();
+                case "ENDPOINT_EXPOSE" -> EdgeType.EXPOSES_ENDPOINT.name();
+                default -> EdgeType.CALLS.name();
+            };
+        }
+        // 未标注时按目标节点类型推断
+        if (targetNodeType == NodeType.Mapper) {
+            return EdgeType.CALLS_DB.name();
+        }
+        return EdgeType.CALLS.name();
     }
 
     /**

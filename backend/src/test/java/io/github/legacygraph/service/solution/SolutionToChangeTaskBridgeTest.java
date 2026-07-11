@@ -6,7 +6,10 @@ import io.github.legacygraph.dto.solution.SolutionPlanStep;
 import io.github.legacygraph.entity.ChangeTask;
 import io.github.legacygraph.entity.Solution;
 import io.github.legacygraph.repository.SolutionRepository;
+import io.github.legacygraph.repository.SolutionStepRepository;
+import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.service.change.ChangeTaskService;
+import io.github.legacygraph.service.change.PatchComposer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +36,16 @@ class SolutionToChangeTaskBridgeTest {
     private SolutionRepository solutionRepository;
 
     @Mock
+    private SolutionStepRepository stepRepository;
+
+    @Mock
     private ChangeTaskService changeTaskService;
+
+    @Mock
+    private PatchComposer patchComposer;
+
+    @Mock
+    private CodeRepoRepository codeRepoRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -45,7 +57,8 @@ class SolutionToChangeTaskBridgeTest {
 
     @BeforeEach
     void setUp() {
-        bridge = new SolutionToChangeTaskBridge(solutionRepository, changeTaskService, objectMapper);
+        bridge = new SolutionToChangeTaskBridge(solutionRepository, stepRepository,
+                changeTaskService, objectMapper, patchComposer, codeRepoRepository);
     }
 
     private Solution approvedSolution() {

@@ -2,6 +2,7 @@ package io.github.legacygraph.service.document;
 
 import io.github.legacygraph.entity.DocumentElement;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.List;
  */
 @Slf4j
 @Service
+@Primary
 public class DefaultDocumentPartitionService implements DocumentPartitionService {
 
     private final List<DocumentPartitioner> partitioners;
@@ -30,6 +32,15 @@ public class DefaultDocumentPartitionService implements DocumentPartitionService
                 new WordPartitioner(),
                 new ExcelPartitioner(),
                 new PlainTextPartitioner());
+    }
+
+    /**
+     * 返回 {@code LEGACY}，标识此为旧实现，不参与 G-03 三层路由
+     * （{@link DocumentPartitionRouter} 仅路由 FAST/LAYOUT/OCR 层级）。
+     */
+    @Override
+    public String supportedTier() {
+        return "LEGACY";
     }
 
     @Override

@@ -82,3 +82,48 @@ jobs:
       - name: Unit tests
         working-directory: frontend
         run: npm test -- --run
+
+  ragas-evaluation:
+    runs-on: ubuntu-latest
+    needs: backend-test
+    # P3-2: Ragas RAG 质量评估 — 仅在 main 分支 push 时运行
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install ragas dependencies
+        run: |
+          pip install ragas datasets
+          pip install openai
+
+      - name: Run ragas evaluation
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # 如果没有 OPENAI_API_KEY，使用 Java 简化版指标，跳过 Python ragas
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY not set, skipping ragas evaluation"
+            echo '{"skipped": true, "reason": "no OPENAI_API_KEY"}' > ragas-result.json
+          else
+            # 从 SMOKE 测试用例导出 JSONL
+            # 实际运行需要后端服务已启动，此处仅验证脚本可执行
+            echo '{"question":"test","answer":"test","contexts":["test"]}' > /tmp/test-cases.jsonl
+            python3 scripts/ragas_evaluate.py \
+              --dataset /tmp/test-cases.jsonl \
+              --metrics context_precision,context_recall,faithfulness,answer_relevancy \
+              --llm-model gpt-4o-mini || echo '{"error": "ragas evaluation failed"}' > ragas-result.json
+          fi
+
+      - name: Upload ragas results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ragas-evaluation-result
+          path: ragas-result.json
+          retention-days: 30

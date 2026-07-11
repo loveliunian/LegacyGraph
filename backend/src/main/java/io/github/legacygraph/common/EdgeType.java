@@ -39,6 +39,17 @@ public enum EdgeType {
     DATA_FLOW("数据流"),
     REQUIRES_DOCUMENT("需要文档"),
 
+    // ========== 业务关键边（P1-2 补充） ==========
+    CALLS_DB("调用数据库"),
+    READS_DB("读取数据库"),
+    WRITES_DB("写入数据库"),
+    WRITES_LOG("写日志"),
+    READS_CONFIG("读配置"),
+    WRITES_CONFIG("写配置"),
+    EXPOSES_ENDPOINT("暴露接口"),
+    AUTHENTICATES_BY("认证方式"),
+    AUTHORIZES_BY("授权方式"),
+
     // ========== 变更闭环关系（增强版2：ChangeTask 管道） ==========
     AFFECTS("影响"),
     FIXED_BY("由...修复"),

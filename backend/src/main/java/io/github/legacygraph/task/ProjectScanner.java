@@ -597,6 +597,26 @@ public class ProjectScanner {
                 }
             }
 
+            // === 增量扫描：继承上一版本的完整图谱到当前版本 ===
+            // 确保新版本拥有全量节点和边，增量扫描只 MERGE 覆盖变更文件涉及的节点
+            if (incrementalChangedPaths != null && !incrementalChangedPaths.isEmpty()) {
+                try {
+                    ScanVersion lastSuccess = findLastSuccessVersion(projectId, versionId);
+                    if (lastSuccess != null) {
+                        log.info("Incremental scan: cloning graph from version {} to {} (projectId={})",
+                                lastSuccess.getId(), versionId, projectId);
+                        int cloned = neo4jGraphDao.cloneVersionGraph(
+                                projectId, lastSuccess.getId(), versionId);
+                        log.info("Incremental scan: cloned {} nodes+edges from version {} to {} (projectId={})",
+                                cloned, lastSuccess.getId(), versionId, projectId);
+                    } else {
+                        log.info("Incremental scan: no prior SUCCESS version found, skipping graph clone (projectId={})", projectId);
+                    }
+                } catch (Exception e) {
+                    log.warn("Incremental scan: graph clone failed, continuing with partial scan: {}", e.getMessage());
+                }
+            }
+
             int adapterCount = 0;
             if (shouldScanCode || shouldScanDocs) {
                 log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
@@ -2172,14 +2192,27 @@ public class ProjectScanner {
     }
 
     /**
+     * 查找项目上一条 SUCCESS 状态的扫描版本（排除当前版本）。
+     * 用于增量扫描时克隆上一版本的完整图谱。
+     */
+    private ScanVersion findLastSuccessVersion(String projectId, String currentVersionId) {
+        try {
+            LambdaQueryWrapper<ScanVersion> wrapper = new LambdaQueryWrapper<ScanVersion>()
+                    .eq(ScanVersion::getProjectId, projectId)
+                    .eq(ScanVersion::getScanStatus, "SUCCESS")
+                    .ne(ScanVersion::getId, currentVersionId)
+                    .orderByDesc(ScanVersion::getCreatedAt)
+                    .last("LIMIT 1");
+            return scanVersionRepository.selectOne(wrapper);
+        } catch (Exception e) {
+            log.warn("findLastSuccessVersion failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * 收集适配器候选文本文件内容，用于增量哈希比对。
-     * <p>
-     * 仅读取文本类文件（.java/.xml/.vue/.ts/.js/.md/.txt/.html 等）；
-     * 二进制文件（.pdf/.docx）跳过（始终视为变更，保证安全）。
-     * 文件路径使用相对路径（相对于项目根目录 baseDir）。
-     *
-     * @param baseDir 项目根目录
-     * @return 文件相对路径 → 文本内容
+     * 仅读取文本类文件，文件路径使用相对路径（相对于 baseDir）。
      */
     private Map<String, String> collectAdapterCandidateContents(String baseDir) {
         Map<String, String> pathToContent = new HashMap<>();

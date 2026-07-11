@@ -261,6 +261,41 @@ legacygraph:
   qa:
     graph-release-filter:
       enabled: true
+    # P0-1: RRF 混合检索默认开启
+    # 开启后多路召回结果通过 ReciprocalRankFusion 融合排序，提升 mAP@10
+    rrf-enabled: true
+    # P0-2: EvidenceVerifier NLI 评分试点
+    evidence-verifier:
+      mode: BOTH   # REGEX_ONLY | NLI_ONLY | BOTH
+      nli:
+        enabled: false  # NLI 服务未部署前保持 false，走正则兜底
+        endpoint: http://internal-hhem:8080/score
+        timeout-ms: 800
+        min-score: 0.55
+  # P0-3: 外部验证服务（OpenAPI 对比等）
+  # 默认关闭，开启后在 MEMBER_CALL_RESOLVE 与 DATABASE_SCAN 之间执行 EXTERNAL_VERIFY
+  external-verification:
+    enabled: false
+    timeout-seconds: 60
+    openapi:
+      enabled: true
+      tools: [spectral, oasdiff]
+  # P3-1: 图谱质量门禁配置（ScanFinalizationService 已集成）
+  scan:
+    quality-gate:
+      enabled: true
+      thresholds:
+        min-edge-node-ratio: 1.0
+        max-isolated-rate: 0.10
+        min-evidence-coverage: 0.95
+  # P3-2: Ragas Python 子进程评估（需安装 ragas + openai）
+  evaluation:
+    ragas:
+      python-enabled: false  # 默认关闭，CI 中有 OPENAI_API_KEY 时开启
+      python-executable: python3
+      script-path: scripts/ragas_evaluate.py
+      timeout-seconds: 120
+      llm-model: gpt-4o-mini
 
 legacy-graph:
   scan:

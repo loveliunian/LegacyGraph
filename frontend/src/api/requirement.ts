@@ -1,4 +1,4 @@
-import { post } from '@/utils/request'
+import { post, get } from '@/utils/request'
 
 /**
  * 需求分析领域类型定义
@@ -6,6 +6,7 @@ import { post } from '@/utils/request'
  *  - POST /lg/projects/{projectId}/requirements/analyze
  *  - POST /lg/projects/{projectId}/requirements
  *  - POST /lg/projects/{projectId}/requirements/{requirementId}/impact
+ *  - GET  /lg/projects/{projectId}/impact-viz/requirements/{requirementId}（G-20 影响可视化）
  */
 
 /** 单条结构化需求条目 */
@@ -129,6 +130,83 @@ export const requirementApi = {
     return post<SavedRequirement>(
       `/lg/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/clarify`,
       { answers }
+    )
+  },
+}
+
+// ==================== G-20: 需求影响可视化 ====================
+
+/** 可视化节点（对应后端 ImpactVisualizationData.VizNode） */
+export interface VizNode {
+  /** 节点 ID */
+  id: string
+  /** 节点显示名称 */
+  label: string
+  /** 节点类型（如 RequirementItem / Service / Table） */
+  type: string
+  /** 影响层级 L0~L4，用于着色 */
+  impactLevel: string
+  /** 风险分数 [0,1]，用于控制节点大小 */
+  riskScore: number
+  /** 距离变更起点的跳数 */
+  depth: number
+}
+
+/** 可视化边（对应后端 ImpactVisualizationData.VizEdge） */
+export interface VizEdge {
+  /** 起点节点 key */
+  source: string
+  /** 终点节点 key */
+  target: string
+  /** 关系类型（如 CALLS / READS / DATA_FLOW） */
+  relationType: string
+}
+
+/** 影响摘要统计（对应后端 ImpactVisualizationData.VizSummary） */
+export interface VizSummary {
+  /** 受影响节点总数 */
+  totalNodes: number
+  /** 按影响层级分组的节点数（key=L0/L1/L2/L3/L4） */
+  byLevel: Record<string, number>
+  /** 当前子图中的最大风险分数 */
+  maxRiskScore: number
+  /** 高风险节点名称列表 */
+  highRiskNodes: string[]
+}
+
+/** 影响可视化数据（对应后端 ImpactVisualizationData） */
+export interface ImpactVisualizationData {
+  nodes: VizNode[]
+  edges: VizEdge[]
+  summary: VizSummary
+}
+
+/**
+ * 需求影响可视化 API（G-20）
+ * 提供影响子图可视化数据与摘要统计查询
+ */
+export const impactVizApi = {
+  /**
+   * 获取需求影响可视化数据（节点 + 边 + 摘要）
+   * @param projectId 项目 ID
+   * @param requirementId 需求 ID
+   * @returns 影响可视化数据
+   */
+  getVisualization: (projectId: string, requirementId: string) => {
+    return get<ImpactVisualizationData>(
+      `/lg/projects/${encodeURIComponent(projectId)}/impact-viz/requirements/${encodeURIComponent(requirementId)}`
+    )
+  },
+
+  /**
+   * 获取需求影响摘要（简化统计）
+   * @param projectId 项目 ID
+   * @param requirementId 需求 ID
+   * @returns 影响摘要
+   */
+  getSummary: (projectId: string, requirementId: string) => {
+    return get<VizSummary>(
+      `/lg/projects/${encodeURIComponent(projectId)}/impact-viz/requirements/${encodeURIComponent(requirementId)}/summary`
     )
   },
 }

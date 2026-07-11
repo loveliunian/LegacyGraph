@@ -8,6 +8,8 @@ import io.github.legacygraph.dto.RequirementAnalysis;
 import io.github.legacygraph.dto.RequirementItemDTO;
 import io.github.legacygraph.dto.requirement.ImpactResult;
 import io.github.legacygraph.dto.requirement.LinkedTarget;
+import io.github.legacygraph.dto.solution.ApproveRequest;
+import io.github.legacygraph.dto.solution.RepairSuggestion;
 import io.github.legacygraph.dto.solution.SolutionPlan;
 import io.github.legacygraph.dto.solution.SolutionPlanStep;
 import io.github.legacygraph.dto.solution.SolutionVerificationResult;
@@ -27,8 +29,11 @@ import io.github.legacygraph.repository.SolutionStepRepository;
 import io.github.legacygraph.service.requirement.ImpactSubgraphService;
 import io.github.legacygraph.service.requirement.RequirementLinkingService;
 import io.github.legacygraph.service.solution.SolutionPlanner;
+import io.github.legacygraph.service.solution.SolutionRepairAdvisor;
 import io.github.legacygraph.service.solution.SolutionToChangeTaskBridge;
 import io.github.legacygraph.service.solution.SolutionVerifier;
+import io.github.legacygraph.service.solution.SolutionReviewService;
+import io.github.legacygraph.service.user.UserStoreService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
@@ -39,7 +44,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 方案生成与校验 Controller（Task 10）。
@@ -57,6 +64,7 @@ public class SolutionController {
 
     private final SolutionPlanner planner;
     private final SolutionVerifier verifier;
+    private final SolutionRepairAdvisor repairAdvisor;
     private final RequirementLinkingService linkingService;
     private final ImpactSubgraphService impactService;
     private final SolutionRepository solutionRepository;
@@ -66,10 +74,13 @@ public class SolutionController {
     private final AcceptanceCriterionRepository criterionRepository;
     private final ScanVersionRepository scanVersionRepository;
     private final SolutionToChangeTaskBridge solutionToChangeTaskBridge;
+    private final SolutionReviewService solutionReviewService;
     private final ObjectMapper objectMapper;
+    private final UserStoreService userStoreService;
 
     public SolutionController(SolutionPlanner planner,
                               SolutionVerifier verifier,
+                              SolutionRepairAdvisor repairAdvisor,
                               RequirementLinkingService linkingService,
                               ImpactSubgraphService impactService,
                               SolutionRepository solutionRepository,
@@ -79,9 +90,12 @@ public class SolutionController {
                               AcceptanceCriterionRepository criterionRepository,
                               ScanVersionRepository scanVersionRepository,
                               SolutionToChangeTaskBridge solutionToChangeTaskBridge,
-                              ObjectMapper objectMapper) {
+                              SolutionReviewService solutionReviewService,
+                              ObjectMapper objectMapper,
+                              UserStoreService userStoreService) {
         this.planner = planner;
         this.verifier = verifier;
+        this.repairAdvisor = repairAdvisor;
         this.linkingService = linkingService;
         this.impactService = impactService;
         this.solutionRepository = solutionRepository;
@@ -91,7 +105,9 @@ public class SolutionController {
         this.criterionRepository = criterionRepository;
         this.scanVersionRepository = scanVersionRepository;
         this.solutionToChangeTaskBridge = solutionToChangeTaskBridge;
+        this.solutionReviewService = solutionReviewService;
         this.objectMapper = objectMapper;
+        this.userStoreService = userStoreService;
     }
 
     @Log(value = "生成方案", type = Log.OperationType.CREATE)
@@ -117,8 +133,8 @@ public class SolutionController {
         // 1. 链接需求条目到图谱节点并创建 AFFECTS 边
         List<LinkedTarget> targets = linkingService.link(
                 projectId, versionId, requirementId, analysis);
-        // 2. 从链接目标出发提取影响子图
-        ImpactResult impactResult = impactService.extract(projectId, versionId, targets);
+        // 2. 从链接目标出发提取影响子图（G-19：同时回写影响标记到 Neo4j 节点）
+        ImpactResult impactResult = impactService.extract(projectId, versionId, requirementId, targets);
         // 3. 调用 LLM 生成方案计划
         SolutionPlan plan = planner.plan(projectId, versionId, analysis, impactResult);
 
@@ -232,12 +248,33 @@ public class SolutionController {
         // 10.6：根据校验结果更新 Solution.status
         String newStatus = result.isPassed() ? STATUS_READY_FOR_REVIEW : STATUS_NEEDS_INPUT;
         solution.setStatus(newStatus);
-        solution.setVerificationErrors(writeJsonSafe(result.getErrors()));
+
+        // G-23：校验失败时生成智能修复建议
+        List<RepairSuggestion> fixSuggestions = new ArrayList<>();
+        if (!result.isPassed() && result.getErrors() != null && !result.getErrors().isEmpty()) {
+            // 将错误码与描述组合为文本，供 advisor 按关键词匹配
+            List<String> errorTexts = new ArrayList<>();
+            for (SolutionVerificationResult.VerificationError err : result.getErrors()) {
+                errorTexts.add(err.getCode() + ": " + err.getMessage());
+            }
+            fixSuggestions = repairAdvisor.suggest(solution.getProjectId(), solution, errorTexts);
+            if (fixSuggestions == null) {
+                fixSuggestions = new ArrayList<>();
+            }
+            result.setFixSuggestions(fixSuggestions);
+        }
+
+        // 将 errors 与 fixSuggestions 一并写入 verification_errors JSON（fixSuggestions 作为子字段）
+        Map<String, Object> verificationData = new HashMap<>();
+        verificationData.put("errors", result.getErrors());
+        verificationData.put("fixSuggestions", fixSuggestions);
+        solution.setVerificationErrors(writeJsonSafe(verificationData));
+
         solution.setUpdatedAt(LocalDateTime.now());
         solutionRepository.updateById(solution);
 
-        log.info("Solution verified: solutionId={}, passed={}, status={}",
-                solutionId, result.isPassed(), newStatus);
+        log.info("Solution verified: solutionId={}, passed={}, status={}, fixSuggestions={}",
+                solutionId, result.isPassed(), newStatus, fixSuggestions.size());
         return Result.success(result);
     }
 
@@ -252,6 +289,58 @@ public class SolutionController {
         log.info("Solution bridged: projectId={}, solutionId={}, changeTaskId={}",
                 projectId, solutionId, task.getId());
         return Result.success(task);
+    }
+
+    @Log(value = "审批方案", type = Log.OperationType.UPDATE)
+    @PostMapping("/lg/solutions/{solutionId}/approve")
+    @Operation(summary = "审批方案",
+            description = "支持 APPROVE / APPROVE_WITH_REVISION / REJECT 三种决定，仅 READY_FOR_REVIEW 状态可审批。"
+                    + "当方案风险评估等级为 HIGH 时，必须由 LEAD/PM 角色审批，否则返回 403 HIGH_RISK_REQUIRES_LEAD。"
+                    + "角色校验由 UserStoreService.hasRole(reviewer, \"LEAD\", \"PM\") 统一处理（G-11 §13.4 强校验）。")
+    public Result<SolutionDetailResponse> approve(@PathVariable String solutionId,
+                                                    @RequestBody ApproveRequest request) {
+        try {
+            // 高风险方案必须由 LEAD/PM 角色审批（G-11 §13.4 强校验）
+            if (!userStoreService.hasRole(request.getReviewer(), "LEAD", "PM")) {
+                Solution pending = solutionRepository.selectById(solutionId);
+                if (pending != null && isHighRisk(pending.getRiskAssessmentJson())) {
+                    return Result.code(403, "HIGH_RISK_REQUIRES_LEAD");
+                }
+            }
+            Solution updated = solutionReviewService.approve(solutionId, request);
+            LambdaQueryWrapper<SolutionStep> stepWrapper = new LambdaQueryWrapper<>();
+            stepWrapper.eq(SolutionStep::getSolutionId, updated.getId())
+                    .orderByAsc(SolutionStep::getStepIndex);
+            List<SolutionStep> steps = stepRepository.selectList(stepWrapper);
+            return Result.success(toDetailResponse(updated, steps));
+        } catch (IllegalStateException e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @Log(value = "驳回方案", type = Log.OperationType.UPDATE)
+    @PostMapping("/lg/solutions/{solutionId}/reject")
+    @Operation(summary = "驳回方案", description = "必须填写驳回原因")
+    public Result<SolutionDetailResponse> reject(@PathVariable String solutionId,
+                                                  @RequestBody RejectRequest request) {
+        try {
+            Solution updated = solutionReviewService.reject(
+                    solutionId, request.getReviewer(), request.getReason());
+            LambdaQueryWrapper<SolutionStep> stepWrapper = new LambdaQueryWrapper<>();
+            stepWrapper.eq(SolutionStep::getSolutionId, updated.getId())
+                    .orderByAsc(SolutionStep::getStepIndex);
+            List<SolutionStep> steps = stepRepository.selectList(stepWrapper);
+            return Result.success(toDetailResponse(updated, steps));
+        } catch (IllegalStateException e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    @GetMapping("/lg/solutions/{solutionId}/audits")
+    @Operation(summary = "获取方案审批历史", description = "返回方案所有状态变更审计记录")
+    public Result<List<io.github.legacygraph.entity.SolutionAudit>> listAudits(
+            @PathVariable String solutionId) {
+        return Result.success(solutionReviewService.listAudits(solutionId));
     }
 
     // ==================== 辅助方法 ====================
@@ -344,6 +433,9 @@ public class SolutionController {
         resp.setStatus(solution.getStatus());
         resp.setSummary(solution.getSummary());
         resp.setVerificationErrors(readStringList(solution.getVerificationErrors()));
+        resp.setReviewer(solution.getReviewer());
+        resp.setReviewComment(solution.getReviewComment());
+        resp.setReviewedAt(solution.getReviewedAt());
         resp.setCreatedAt(solution.getCreatedAt());
         resp.setUpdatedAt(solution.getUpdatedAt());
 
@@ -388,6 +480,54 @@ public class SolutionController {
         }
     }
 
+    // ==================== 风险等级辅助（G-11） ====================
+    // reviewer 角色判定已迁移至 UserStoreService.hasRole(reviewer, "LEAD", "PM")
+    // （详见 service.user.UserStoreService 与 §13.4 强校验）
+
+    /**
+     * 解析 Solution.riskAssessmentJson，判定是否为 HIGH 风险。
+     * <p>JSON 结构容错：忽略外层嵌套（riskAssessmentJson 可能是 RiskAssessment 整体或
+     * 仅含 riskLevel 字段的子对象），任一字段值等于 "HIGH"（不区分大小写）即视为高风险。</p>
+     *
+     * @param riskAssessmentJson 风险评估 JSON 字符串
+     * @return 是否为 HIGH 风险
+     */
+    @SuppressWarnings("unchecked")
+    private boolean isHighRisk(String riskAssessmentJson) {
+        if (riskAssessmentJson == null || riskAssessmentJson.isBlank()) {
+            return false;
+        }
+        try {
+            Map<String, Object> root = objectMapper.readValue(riskAssessmentJson, Map.class);
+            Object level = findRiskLevel(root);
+            return level != null && "HIGH".equalsIgnoreCase(level.toString());
+        } catch (Exception e) {
+            log.warn("Failed to parse riskAssessmentJson: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object findRiskLevel(Map<String, Object> node) {
+        if (node == null) {
+            return null;
+        }
+        for (Map.Entry<String, Object> entry : node.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (key != null && ("riskLevel".equalsIgnoreCase(key) || "level".equalsIgnoreCase(key))) {
+                return value;
+            }
+            if (value instanceof Map) {
+                Object nested = findRiskLevel((Map<String, Object>) value);
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        }
+        return null;
+    }
+
     // ==================== 请求 / 响应 DTO ====================
 
     @Data
@@ -399,6 +539,13 @@ public class SolutionController {
 
     @Data
     @NoArgsConstructor
+    public static class RejectRequest {
+        private String reviewer;
+        private String reason;
+    }
+
+    @Data
+    @NoArgsConstructor
     public static class SolutionDetailResponse {
         private String solutionId;
         private String projectId;
@@ -406,6 +553,9 @@ public class SolutionController {
         private String status;
         private String summary;
         private List<String> verificationErrors;
+        private String reviewer;
+        private String reviewComment;
+        private LocalDateTime reviewedAt;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
         private List<StepDetail> steps;

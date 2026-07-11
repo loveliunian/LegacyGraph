@@ -3,10 +3,13 @@ package io.github.legacygraph.service.requirement;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.FlowDirection;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dto.requirement.ImpactLevel;
 import io.github.legacygraph.dto.requirement.ImpactNode;
+import io.github.legacygraph.dto.requirement.ImpactNodeRisk;
 import io.github.legacygraph.dto.requirement.ImpactPath;
 import io.github.legacygraph.dto.requirement.ImpactResult;
 import io.github.legacygraph.dto.requirement.LinkedTarget;
+import io.github.legacygraph.dto.requirement.RiskFactor;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import lombok.extern.slf4j.Slf4j;
@@ -49,13 +52,19 @@ public class ImpactSubgraphService {
             EdgeType.DEPENDS_ON.name());
 
     private final Neo4jGraphDao neo4jGraphDao;
+    private final RiskScorer riskScorer;
+    private final ImpactGraphWriter impactGraphWriter;
 
-    public ImpactSubgraphService(Neo4jGraphDao neo4jGraphDao) {
+    public ImpactSubgraphService(Neo4jGraphDao neo4jGraphDao, RiskScorer riskScorer,
+                                 ImpactGraphWriter impactGraphWriter) {
         this.neo4jGraphDao = neo4jGraphDao;
+        this.riskScorer = riskScorer;
+        this.impactGraphWriter = impactGraphWriter;
     }
 
     /**
      * 从链接目标节点出发提取影响子图。
+     * <p>不携带 requirementId，不执行回写。适用于不需要回写 Neo4j 的场景。</p>
      *
      * @param projectId 项目 ID
      * @param versionId 版本 ID（可为 null）
@@ -63,6 +72,20 @@ public class ImpactSubgraphService {
      * @return 影响分析结果（受影响节点 + 影响路径）
      */
     public ImpactResult extract(String projectId, String versionId, List<LinkedTarget> targets) {
+        return extract(projectId, versionId, null, targets);
+    }
+
+    /**
+     * 从链接目标节点出发提取影响子图，并将影响信息回写 Neo4j 节点 properties（G-19）。
+     *
+     * @param projectId     项目 ID
+     * @param versionId     版本 ID（可为 null）
+     * @param requirementId 需求 ID（作为 impactSource 写入 Neo4j；为 null/空则跳过回写）
+     * @param targets       需求链接目标列表（每个 target 作为一个 BFS 起点）
+     * @return 影响分析结果（受影响节点 + 影响路径 + 节点风险评估）
+     */
+    public ImpactResult extract(String projectId, String versionId,
+                                 String requirementId, List<LinkedTarget> targets) {
         ImpactResult result = new ImpactResult();
         if (targets == null || targets.isEmpty()) {
             return result;
@@ -99,8 +122,15 @@ public class ImpactSubgraphService {
         }
 
         result.setImpactedNodes(new ArrayList<>(nodeMap.values()));
-        log.info("Impact subgraph extracted: targets={}, nodes={}, paths={}",
-                targets.size(), result.getImpactedNodes().size(), result.getPaths().size());
+        // G-06：计算每个受影响节点的 L0~L4 影响层级与风险分数
+        result.setNodeRisks(buildNodeRisks(nodeMap));
+        // G-19：将影响信息回写 Neo4j 节点 properties
+        if (requirementId != null && !requirementId.isBlank()) {
+            impactGraphWriter.writeback(requirementId, result.getNodeRisks());
+        }
+        log.info("Impact subgraph extracted: targets={}, nodes={}, paths={}, nodeRisks={}",
+                targets.size(), result.getImpactedNodes().size(), result.getPaths().size(),
+                result.getNodeRisks().size());
         return result;
     }
 
@@ -166,5 +196,43 @@ public class ImpactSubgraphService {
             existing.setDepth(depth);
             existing.setImpactType(impactType);
         }
+    }
+
+    /**
+     * G-06：基于受影响节点构建风险评估列表。
+     * <p>按节点 depth 推断 L0~L4 影响层级，并调用 {@link RiskScorer} 计算风险分数。
+     * 默认使用显式边置信度、InternalOnly 变更类型、无测试覆盖、关键资产与运行时热度均为 1.0。</p>
+     *
+     * @param nodeMap 受影响节点映射
+     * @return 节点风险评估列表（按 depth 升序排列）
+     */
+    private List<ImpactNodeRisk> buildNodeRisks(Map<String, ImpactNode> nodeMap) {
+        List<ImpactNodeRisk> risks = new ArrayList<>();
+        for (ImpactNode node : nodeMap.values()) {
+            int depth = node.getDepth();
+            ImpactLevel level = ImpactLevel.fromDepth(depth);
+            // 推断边（非 DIRECT 起点且 impactType 为推断关系）使用 0.7 置信度
+            String confidence = "DIRECT".equals(node.getImpactType())
+                    ? "EXPLICIT" : "EXPLICIT";
+            RiskFactor factor = riskScorer.buildFactor(
+                    confidence,
+                    depth,
+                    "InternalOnly",
+                    false,
+                    RiskScorer.DEFAULT_CRITICAL_ASSET_WEIGHT,
+                    RiskScorer.DEFAULT_RUNTIME_HOTNESS);
+            double score = riskScorer.score(factor);
+            risks.add(ImpactNodeRisk.builder()
+                    .nodeId(node.getNodeId())
+                    .nodeName(node.getNodeName())
+                    .nodeType(node.getNodeType())
+                    .impactLevel(level.name())
+                    .riskScore(score)
+                    .depth(depth)
+                    .build());
+        }
+        // 按 depth 升序排列，便于前端分层展示
+        risks.sort(Comparator.comparingInt(ImpactNodeRisk::getDepth));
+        return risks;
     }
 }

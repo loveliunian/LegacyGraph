@@ -9,6 +9,7 @@ import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.QaTestCase;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.QaTestCaseRepository;
+import io.github.legacygraph.service.evaluation.RagasMetricsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,7 +46,7 @@ class DefaultQaEvaluationServiceTest {
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
-        service = new DefaultQaEvaluationService(qaAgent, qaTestCaseRepository, codeRepoRepository, objectMapper);
+        service = new DefaultQaEvaluationService(qaAgent, qaTestCaseRepository, codeRepoRepository, objectMapper, new RagasMetricsService());
         // 报告写到临时目录，避免污染用户 home
         ReflectionTestUtils.setField(service, "fallbackReportRoot",
                 System.getProperty("java.io.tmpdir") + "/legacygraph-qa-test");

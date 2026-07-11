@@ -10,10 +10,14 @@ import io.github.legacygraph.repository.AcceptanceCriterionRepository;
 import io.github.legacygraph.repository.RequirementItemRepository;
 import io.github.legacygraph.repository.RequirementRepository;
 import io.github.legacygraph.repository.ScanVersionRepository;
+import io.github.legacygraph.service.requirement.AcceptanceVerificationService;
+import io.github.legacygraph.service.requirement.ContractGeneratorService;
 import io.github.legacygraph.service.requirement.ImpactSubgraphService;
+import io.github.legacygraph.service.requirement.RequirementDataLineageService;
 import io.github.legacygraph.service.requirement.RequirementExtractionService;
 import io.github.legacygraph.service.requirement.RequirementGraphBuilder;
 import io.github.legacygraph.service.requirement.RequirementLinkingService;
+import io.github.legacygraph.service.requirement.RequirementPatchService;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -45,8 +49,12 @@ class RequirementControllerTest {
 
         RequirementController controller = new RequirementController(
                 extractionService, graphBuilder, linkingService, impactService,
+                mock(AcceptanceVerificationService.class),
+                mock(RequirementPatchService.class),
                 requirementRepository, itemRepository, criterionRepository,
-                scanVersionRepository, objectMapper);
+                scanVersionRepository, objectMapper,
+                mock(RequirementDataLineageService.class),
+                mock(ContractGeneratorService.class));
 
         // 原需求
         Requirement req = new Requirement();
@@ -113,8 +121,12 @@ class RequirementControllerTest {
 
         RequirementController controller = new RequirementController(
                 extractionService, graphBuilder, linkingService, impactService,
+                mock(AcceptanceVerificationService.class),
+                mock(RequirementPatchService.class),
                 requirementRepository, itemRepository, criterionRepository,
-                scanVersionRepository, objectMapper);
+                scanVersionRepository, objectMapper,
+                mock(RequirementDataLineageService.class),
+                mock(ContractGeneratorService.class));
 
         when(requirementRepository.selectById("non-existent")).thenReturn(null);
 

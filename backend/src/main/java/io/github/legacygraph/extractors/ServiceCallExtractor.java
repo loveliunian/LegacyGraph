@@ -423,6 +423,7 @@ public class ServiceCallExtractor {
         private String callerMethodSignature;  // 调用方完整签名 methodName(paramType1, paramType2)
         private String calledMethodSignature;  // 被调用方完整签名（如果能解析到）
         private String receiverExpression;  // P2-2：调用点接收者表达式原文（如 "mapper"、"this.service"），用于审计
+        private String edgeTargetKind;  // P1-2：调用目标类型 — SERVICE_CALL / DATABASE_CALL / LOG_CALL / CONFIG_CALL / ENDPOINT_EXPOSE
 
         public CallRelation(String callerClass, String callerMethod, String calledMethod) {
             this.callerClass = callerClass;
@@ -435,6 +436,7 @@ public class ServiceCallExtractor {
             this.callerMethodSignature = null;
             this.calledMethodSignature = null;
             this.receiverExpression = null;
+            this.edgeTargetKind = null;
         }
     }
 }

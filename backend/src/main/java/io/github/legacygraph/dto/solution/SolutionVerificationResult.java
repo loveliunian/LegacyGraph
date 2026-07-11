@@ -35,6 +35,9 @@ public class SolutionVerificationResult {
     /** 校验错误信息列表（不通过时非空） */
     private List<VerificationError> errors = new ArrayList<>();
 
+    /** 修复建议列表（G-23，校验不通过时由 SolutionRepairAdvisor 生成） */
+    private List<RepairSuggestion> fixSuggestions = new ArrayList<>();
+
     /**
      * 校验错误项 — 携带类型化错误码，便于前端按类型展示。
      */

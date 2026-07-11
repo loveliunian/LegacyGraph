@@ -36,7 +36,7 @@ public class HybridRetrievalService {
      * 关闭时（默认）走原 LinkedHashMap 去重逻辑（保持插入顺序，主查询优先）；
      * 开启时收集各路结果为 Ranking 列表，调用 ReciprocalRankFusionService.fuse。
      */
-    @Value("${legacygraph.qa.rrf-enabled:false}")
+    @Value("${legacygraph.qa.rrf-enabled:true}")
     private boolean rrfEnabled;
 
     /** 召回专用虚拟线程执行器 */

@@ -27,11 +27,17 @@ import io.github.legacygraph.repository.ScanVersionRepository;
 import io.github.legacygraph.repository.SolutionRepository;
 import io.github.legacygraph.repository.SolutionStepRepository;
 import io.github.legacygraph.service.change.ChangeTaskService;
+import io.github.legacygraph.service.requirement.AcceptanceVerificationService;
+import io.github.legacygraph.service.requirement.ContractGeneratorService;
 import io.github.legacygraph.service.requirement.ImpactSubgraphService;
+import io.github.legacygraph.service.requirement.RequirementDataLineageService;
 import io.github.legacygraph.service.requirement.RequirementExtractionService;
 import io.github.legacygraph.service.requirement.RequirementGraphBuilder;
 import io.github.legacygraph.service.requirement.RequirementLinkingService;
+import io.github.legacygraph.service.requirement.RequirementPatchService;
 import io.github.legacygraph.service.solution.SolutionPlanner;
+import io.github.legacygraph.service.solution.SolutionRepairAdvisor;
+import io.github.legacygraph.service.solution.SolutionReviewService;
 import io.github.legacygraph.service.solution.SolutionToChangeTaskBridge;
 import io.github.legacygraph.service.solution.SolutionVerifier;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -53,6 +59,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.atLeast;
@@ -71,6 +78,7 @@ import static org.mockito.Mockito.atLeast;
  * <p>使用纯 Mockito，不加载 Spring 上下文，mock 所有外部依赖（LLM、Neo4j、Repository）。</p>
  */
 @ExtendWith(MockitoExtension.class)
+@org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
 @DisplayName("需求→方案→验证链路集成测试")
 class RequirementToSolutionIntegrationTest {
 
@@ -87,9 +95,11 @@ class RequirementToSolutionIntegrationTest {
     // ===== SolutionController 依赖 =====
     @Mock private SolutionPlanner planner;
     @Mock private SolutionVerifier verifier;
+    @Mock private SolutionRepairAdvisor repairAdvisor;
     @Mock private SolutionRepository solutionRepository;
     @Mock private SolutionStepRepository stepRepository;
     @Mock private SolutionToChangeTaskBridge bridgeService;
+    @Mock private SolutionReviewService reviewService;
 
     private ObjectMapper objectMapper;
     private RequirementController requirementController;
@@ -115,13 +125,17 @@ class RequirementToSolutionIntegrationTest {
         objectMapper = new ObjectMapper();
         requirementController = new RequirementController(
                 extractionService, graphBuilder, linkingService, impactService,
+                mock(AcceptanceVerificationService.class),
+                mock(RequirementPatchService.class),
                 requirementRepository, itemRepository, criterionRepository,
-                scanVersionRepository, objectMapper);
+                scanVersionRepository, objectMapper,
+                mock(RequirementDataLineageService.class),
+                mock(ContractGeneratorService.class));
         solutionController = new SolutionController(
-                planner, verifier, linkingService, impactService,
+                planner, verifier, repairAdvisor, linkingService, impactService,
                 solutionRepository, stepRepository, requirementRepository,
                 itemRepository, criterionRepository, scanVersionRepository,
-                bridgeService, objectMapper);
+                bridgeService, reviewService, objectMapper);
 
         // 通用 mock：insert 时自动设置 ID（模拟 MyBatis-Plus 的 ASSIGN_UUID 行为）
         lenient().when(requirementRepository.insert(any(Requirement.class))).thenAnswer(inv -> {

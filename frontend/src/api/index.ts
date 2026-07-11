@@ -26,7 +26,7 @@ export type {
   GraphifyQualityResult,
   CrossRepoImpactChain,
 } from './graphify.api'
-export { requirementApi } from './requirement'
+export { requirementApi, impactVizApi } from './requirement'
 export type {
   RequirementItem,
   RequirementAnalysis,
@@ -34,6 +34,10 @@ export type {
   ImpactedNode,
   ImpactPath,
   ImpactAnalysis,
+  VizNode,
+  VizEdge,
+  VizSummary,
+  ImpactVisualizationData,
 } from './requirement'
 export { solutionApi } from './solution'
 export type {

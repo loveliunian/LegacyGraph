@@ -47,8 +47,10 @@ public class ChangeTaskController {
     /** 查看任务、影响子图、Patch、验证门禁 */
     @GetMapping
     @Operation(summary = "查询项目变更任务")
-    public Result<List<ChangeTask>> list(@RequestParam String projectId) {
-        return Result.success(changeTaskService.listTasks(projectId));
+    public Result<List<ChangeTask>> list(@RequestParam String projectId,
+                                          @RequestParam(required = false) String assignee,
+                                          @RequestParam(required = false) String status) {
+        return Result.success(changeTaskService.listTasks(projectId, assignee, status));
     }
 
     /** 查看任务、影响子图、Patch、验证门禁 */
@@ -114,6 +116,31 @@ public class ChangeTaskController {
         return Result.success(task);
     }
 
+    /** 领取任务 */
+    @Log(value = "领取变更任务", type = Log.OperationType.UPDATE)
+    @PostMapping("/{id}/claim")
+    @Operation(summary = "领取变更任务", description = "当前用户领取任务，仅 OPEN / IMPACT_READY 状态可领取")
+    public Result<ChangeTask> claim(@PathVariable String id,
+                                     @RequestBody ClaimRequest req) {
+        try {
+            ChangeTask task = changeTaskService.claimTask(id, req.getPrincipal());
+            return Result.success(task);
+        } catch (IllegalStateException e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /** 指派任务 */
+    @Log(value = "指派对更任务", type = Log.OperationType.UPDATE)
+    @PostMapping("/{id}/assign")
+    @Operation(summary = "指派对更任务", description = "将任务指派给指定用户/团队/角色")
+    public Result<ChangeTask> assign(@PathVariable String id,
+                                      @RequestBody AssignRequest req) {
+        ChangeTask task = changeTaskService.assignTask(
+                id, req.getAssignee(), req.getAssigneeType(), req.getDueAt());
+        return Result.success(task);
+    }
+
     @Data
     public static class CreateChangeTaskRequest {
         private String projectId;
@@ -144,5 +171,17 @@ public class ChangeTaskController {
         private String workingDir;
         /** 测试环境 dev/test/prod */
         private String environment;
+    }
+
+    @Data
+    public static class ClaimRequest {
+        private String principal;
+    }
+
+    @Data
+    public static class AssignRequest {
+        private String assignee;
+        private String assigneeType;
+        private java.time.LocalDateTime dueAt;
     }
 }

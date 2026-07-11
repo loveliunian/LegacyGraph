@@ -10,6 +10,8 @@ import io.github.legacygraph.repository.GraphReleaseRepository;
 import io.github.legacygraph.util.IdUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -28,6 +30,14 @@ import java.util.regex.Pattern;
  *   <li><b>答案声明匹配</b>：答案中的关键引用（实体名、文件路径、方法名）与证据匹配</li>
  * </ol>
  *
+ * <p>P0-2：声明匹配支持 NLI（自然语言推理）评分模式，通过
+ * {@code legacygraph.qa.evidence-verifier.mode} 配置：</p>
+ * <ul>
+ *   <li>{@code REGEX_ONLY}：仅正则匹配（默认行为）</li>
+ *   <li>{@code NLI_ONLY}：仅 NLI 评分</li>
+ *   <li>{@code BOTH}：正则 + NLI 双跑，任一通过即视为支撑</li>
+ * </ul>
+ *
  * <p>产出 {@link VerificationResult}，含 evidenceCoverage 和 evidenceReliability 两项核心指标。</p>
  */
 @Slf4j
@@ -37,6 +47,18 @@ public class EvidenceVerifier {
 
     private final Neo4jGraphDao neo4jGraphDao;
     private final GraphReleaseRepository graphReleaseRepository;
+
+    /** P0-2: NLI 客户端（可选，仅在 nli.enabled=true 时注入） */
+    @Autowired(required = false)
+    private NliClient nliClient;
+
+    /** P0-2: 验证模式 — REGEX_ONLY / NLI_ONLY / BOTH */
+    @Value("${legacygraph.qa.evidence-verifier.mode:REGEX_ONLY}")
+    private String verificationMode;
+
+    /** P0-2: NLI 最小支撑分数 */
+    @Value("${legacygraph.qa.evidence-verifier.nli.min-score:0.55}")
+    private double nliMinScore;
 
     /** 答案声明提取：文件路径（/path/to/File.java）、类名/方法名（CamelCase 标识符） */
     private static final Pattern FILE_PATH_PATTERN = Pattern.compile(
@@ -111,7 +133,7 @@ public class EvidenceVerifier {
         List<String> unmatchedClaims = new ArrayList<>();
 
         for (String claim : allClaims) {
-            if (isClaimSupported(claim, verifiedTitles, verifiedSourceFiles)) {
+            if (isClaimSupportedWithNli(claim, verifiedEvidences, verifiedTitles, verifiedSourceFiles)) {
                 matchedClaims.add(claim);
             } else {
                 unmatchedClaims.add(claim);
@@ -258,6 +280,91 @@ public class EvidenceVerifier {
         String claimLower = claim.toLowerCase();
         for (String title : verifiedTitles) {
             if (title != null && title.toLowerCase().contains(claimLower)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * P0-2: 带模式感知的声明支撑检查。
+     * <p>
+     * 根据 {@code verificationMode} 决定使用正则、NLI 还是双跑：
+     * <ul>
+     *   <li>{@code REGEX_ONLY}：仅正则匹配（NLI 不可用时也走此路径）</li>
+     *   <li>{@code NLI_ONLY}：仅 NLI 评分（NLI 不可用时降级到正则）</li>
+     *   <li>{@code BOTH}：正则 + NLI，任一通过即视为支撑</li>
+     * </ul>
+     * </p>
+     *
+     * @param claim            答案中提取的声明
+     * @param verifiedEvidences 通过校验的证据列表（用于 NLI premise）
+     * @param verifiedTitles    证据标题集合（正则匹配用）
+     * @param verifiedSourceFiles 证据源文件集合（正则匹配用）
+     * @return true 表示声明有证据支撑
+     */
+    private boolean isClaimSupportedWithNli(String claim,
+                                             List<EvidenceItem> verifiedEvidences,
+                                             Set<String> verifiedTitles,
+                                             Set<String> verifiedSourceFiles) {
+        boolean nliAvailable = nliClient != null && nliClient.isAvailable();
+        String mode = verificationMode != null ? verificationMode.toUpperCase() : "REGEX_ONLY";
+
+        boolean regexSupported = false;
+        boolean nliSupported = false;
+
+        // REGEX_ONLY 或 BOTH 模式下执行正则匹配
+        if ("REGEX_ONLY".equals(mode) || "BOTH".equals(mode)) {
+            regexSupported = isClaimSupported(claim, verifiedTitles, verifiedSourceFiles);
+        }
+
+        // NLI_ONLY 或 BOTH 模式下执行 NLI 评分（NLI 不可用时降级到正则）
+        if ("NLI_ONLY".equals(mode) || "BOTH".equals(mode)) {
+            if (nliAvailable) {
+                nliSupported = nliScoreClaim(claim, verifiedEvidences);
+            } else if ("NLI_ONLY".equals(mode)) {
+                // NLI 不可用时降级到正则
+                log.debug("NLI unavailable, fallback to regex for NLI_ONLY mode");
+                regexSupported = isClaimSupported(claim, verifiedTitles, verifiedSourceFiles);
+            }
+        }
+
+        // BOTH 模式：任一通过即可；REGEX_ONLY：仅正则；NLI_ONLY：仅 NLI（已降级处理）
+        if ("BOTH".equals(mode) && nliAvailable) {
+            return regexSupported || nliSupported;
+        }
+        return regexSupported || nliSupported;
+    }
+
+    /**
+     * P0-2: 使用 NLI 评分检查声明是否有证据支撑。
+     * <p>
+     * 遍历验证通过的证据，以证据的 excerpt/title 作为 premise，
+     * 声明作为 hypothesis，调用 NLI 服务评分。
+     * 任一证据的 NLI 分数 ≥ {@code nliMinScore} 即视为支撑。
+     * </p>
+     *
+     * @param claim            答案中提取的声明（hypothesis）
+     * @param verifiedEvidences 通过校验的证据列表（premise 来源）
+     * @return true 表示存在至少一条证据的 NLI 分数 ≥ 阈值
+     */
+    private boolean nliScoreClaim(String claim, List<EvidenceItem> verifiedEvidences) {
+        if (nliClient == null || verifiedEvidences == null || verifiedEvidences.isEmpty()) {
+            return false;
+        }
+        for (EvidenceItem ev : verifiedEvidences) {
+            // 优先用 excerpt 作为 premise，其次用 title
+            String premise = ev.getExcerpt();
+            if (premise == null || premise.isBlank()) {
+                premise = ev.getTitle();
+            }
+            if (premise == null || premise.isBlank()) {
+                continue;
+            }
+            double score = nliClient.score(premise, claim);
+            if (score >= nliMinScore) {
+                log.debug("NLI score passed: claim={}, score={}, threshold={}",
+                        claim, score, nliMinScore);
                 return true;
             }
         }

@@ -32,6 +32,7 @@ public class ScanController {
     private final ProjectScanner projectScanner;
     private final ScanPerformanceReportService scanPerformanceReportService;
     private final io.github.legacygraph.tenant.TenantQuotaManager quotaManager;
+    private final io.github.legacygraph.builder.NodeAttributeBackfillService nodeAttributeBackfillService;
 
     /**
      * 构造函数注入
@@ -40,11 +41,13 @@ public class ScanController {
      */
     public ScanController(ScanVersionService scanVersionService, ProjectScanner projectScanner,
                           ScanPerformanceReportService scanPerformanceReportService,
-                          io.github.legacygraph.tenant.TenantQuotaManager quotaManager) {
+                          io.github.legacygraph.tenant.TenantQuotaManager quotaManager,
+                          io.github.legacygraph.builder.NodeAttributeBackfillService nodeAttributeBackfillService) {
         this.scanVersionService = scanVersionService;
         this.projectScanner = projectScanner;
         this.scanPerformanceReportService = scanPerformanceReportService;
         this.quotaManager = quotaManager;
+        this.nodeAttributeBackfillService = nodeAttributeBackfillService;
     }
 
     /**
@@ -223,5 +226,18 @@ public class ScanController {
             @PathVariable String projectId,
             @PathVariable String versionId) {
         return Result.success(scanPerformanceReportService.generateMarkdown(projectId, versionId));
+    }
+
+    /**
+     * P1-1: 批量回填核心节点模板属性
+     * 为指定扫描版本下的 Controller/Service/Mapper/ApiEndpoint/Table 节点回填必备属性键
+     */
+    @PostMapping("/{versionId}/backfill-node-attributes")
+    @Operation(summary = "回填节点模板属性", description = "为指定扫描版本下五类核心节点批量回填 QA 检索必备属性键")
+    public Result<Map<String, Object>> backfillNodeAttributes(
+            @PathVariable String projectId,
+            @PathVariable String versionId) {
+        int count = nodeAttributeBackfillService.backfillAll(projectId, versionId);
+        return Result.success(Map.of("backfilledNodes", count));
     }
 }

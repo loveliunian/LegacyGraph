@@ -167,14 +167,19 @@
                     size="small"
                     text
                     @click="submitFeedback(idx, true)">
-                    👍 有帮助
+                    有帮助
                   </el-button>
                   <el-button
                     size="small"
                     text
                     @click="submitFeedback(idx, false)">
-                    👎 需改进
+                    需改进
                   </el-button>
+                  <AnswerFeedback
+                    :question="messages[idx - 1]?.content || ''"
+                    :answer-id="msg.messageId || ''"
+                    :claim-text="msg.content"
+                    class="inline-feedback" />
                 </div>
               </div>
             </div>
@@ -234,6 +239,7 @@ import { qaApi, type QaConversation, type EvidenceItem } from '@/api/qa.api'
 import { changeTaskApi } from '@/api/change-task.api'
 import { mapQaHistoryMessages } from './qaMessageMapper'
 import { ElMessage } from 'element-plus'
+import AnswerFeedback from '@/components/AnswerFeedback.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -947,6 +953,17 @@ onMounted(async () => {
 }
 
 .message-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.inline-feedback {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+}
   margin-top: 8px;
   display: flex;
   gap: 8px;

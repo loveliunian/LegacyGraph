@@ -1,6 +1,8 @@
 package io.github.legacygraph.service.scan;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.legacygraph.dto.source.SourceDelta;
+import io.github.legacygraph.dto.source.SourceDescriptor;
 import io.github.legacygraph.entity.FileSnapshot;
 import io.github.legacygraph.repository.FileSnapshotRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -87,29 +90,24 @@ public class FileChangeDetector {
             return;
         }
         // 批量 upsert：使用 PostgreSQL INSERT ... ON CONFLICT，将 1222 次往返压缩到 1 次
+        // 注意：lg_file_snapshot 表只有 6 列（id BIGSERIAL, project_id, file_path, file_hash, file_size, scanned_at），
+        // 没有 created_at/updated_at 列，id 为自增序列不可手动插入。
+        LocalDateTime now = LocalDateTime.now();
         List<Object[]> batchParams = new ArrayList<>(pathToContent.size());
         for (Map.Entry<String, String> entry : pathToContent.entrySet()) {
             String filePath = entry.getKey();
             String content = entry.getValue();
             String hash = computeHash(content);
             long size = content != null ? content.getBytes(StandardCharsets.UTF_8).length : 0L;
-            batchParams.add(new Object[]{projectId, filePath, hash, size, LocalDateTime.now()});
+            batchParams.add(new Object[]{projectId, filePath, hash, size, now});
         }
-        String sql = "INSERT INTO lg_file_snapshot (id, project_id, file_path, file_hash, file_size, scanned_at, created_at, updated_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+        String sql = "INSERT INTO lg_file_snapshot (project_id, file_path, file_hash, file_size, scanned_at) " +
+                "VALUES (?, ?, ?, ?, ?) " +
                 "ON CONFLICT (project_id, file_path) DO UPDATE SET " +
                 "file_hash = EXCLUDED.file_hash, file_size = EXCLUDED.file_size, " +
-                "scanned_at = EXCLUDED.scanned_at, updated_at = EXCLUDED.updated_at";
+                "scanned_at = EXCLUDED.scanned_at";
         try {
-            // 生成 UUID 并批量执行
-            List<Object[]> fullParams = new ArrayList<>(batchParams.size());
-            LocalDateTime now = LocalDateTime.now();
-            for (Object[] p : batchParams) {
-                fullParams.add(new Object[]{
-                    io.github.legacygraph.util.IdUtil.fastUUID(), p[0], p[1], p[2], p[3], p[4], now, now
-                });
-            }
-            jdbcTemplate.batchUpdate(sql, fullParams);
+            jdbcTemplate.batchUpdate(sql, batchParams);
             log.info("Recorded {} file snapshots for projectId={}", pathToContent.size(), projectId);
         } catch (Exception e) {
             log.warn("Batch upsert file snapshots failed, fallback to row-by-row: {}", e.getMessage());
@@ -178,6 +176,79 @@ public class FileChangeDetector {
                 .eq(FileSnapshot::getProjectId, projectId);
         int deleted = fileSnapshotRepository.delete(wrapper);
         log.info("Cleared {} file snapshots for projectId={}", deleted, projectId);
+    }
+
+    /**
+     * 检测文件重命名（G-05）。
+     * <p>
+     * 对比已存快照（旧文件列表）与当前文件列表，若旧路径消失且新路径出现且
+     * 两者的内容 SHA-256 哈希相同，则判定为重命名。
+     *
+     * @param projectId          项目 ID
+     * @param currentPathToContent 当前文件相对路径 → 文本内容
+     * @return 重命名条目列表；无重命名返回空列表
+     */
+    public List<SourceDelta.RenameEntry> detectRenames(String projectId,
+                                                       Map<String, String> currentPathToContent) {
+        if (projectId == null || currentPathToContent == null || currentPathToContent.isEmpty()) {
+            return Collections.emptyList();
+        }
+        // 加载旧快照（file_path → file_hash）
+        Map<String, String> oldHashes = loadStoredHashes(projectId);
+        // 计算当前文件哈希（file_path → file_hash）
+        Map<String, String> newHashes = new HashMap<>(currentPathToContent.size());
+        for (Map.Entry<String, String> entry : currentPathToContent.entrySet()) {
+            newHashes.put(entry.getKey(), computeHash(entry.getValue()));
+        }
+
+        // 旧路径集合与新路径集合
+        Set<String> oldPaths = oldHashes.keySet();
+        Set<String> newPaths = newHashes.keySet();
+
+        // 消失的路径（旧有新无）与出现的路径（新有旧无）
+        Set<String> disappeared = new HashSet<>(oldPaths);
+        disappeared.removeAll(newPaths);
+        Set<String> appeared = new HashSet<>(newPaths);
+        appeared.removeAll(oldPaths);
+        if (disappeared.isEmpty() || appeared.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 按内容哈希匹配：消失路径的哈希 → 出现路径的哈希
+        // 构建 hash → appeared paths 映射（同一哈希可能对应多个新文件）
+        Map<String, List<String>> hashToAppeared = new HashMap<>();
+        for (String newPath : appeared) {
+            String hash = newHashes.get(newPath);
+            if (hash != null) {
+                hashToAppeared.computeIfAbsent(hash, k -> new ArrayList<>()).add(newPath);
+            }
+        }
+
+        List<SourceDelta.RenameEntry> renames = new ArrayList<>();
+        for (String oldPath : disappeared) {
+            String hash = oldHashes.get(oldPath);
+            if (hash == null) {
+                continue;
+            }
+            List<String> matchedNewPaths = hashToAppeared.get(hash);
+            if (matchedNewPaths == null || matchedNewPaths.isEmpty()) {
+                continue;
+            }
+            // 取第一个匹配的新路径（同一哈希多对一时取首个）
+            String newPath = matchedNewPaths.remove(0);
+            SourceDescriptor descriptor = SourceDescriptor.builder()
+                    .projectId(projectId)
+                    .sourceType("CODE")
+                    .contentHash(hash)
+                    .build();
+            renames.add(SourceDelta.RenameEntry.builder()
+                    .beforePath(oldPath)
+                    .afterPath(newPath)
+                    .descriptor(descriptor)
+                    .build());
+        }
+        log.info("Detected {} renames for projectId={}", renames.size(), projectId);
+        return renames;
     }
 
     // ==================== 内部方法 ====================

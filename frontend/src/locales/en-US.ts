@@ -138,6 +138,9 @@ export default {
     promptTemplates: 'Prompt Templates',
     plugins: 'Plugin Management',
     requirementAnalysis: 'Requirement Analysis',
+    requirementImpact: 'Requirement Impact',
+    qaEvaluation: 'QA Evaluation',
+    qaCaseDetail: 'QA Case Detail',
     solutionReview: 'Solution Review'
   },
   dashboard: {

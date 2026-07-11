@@ -133,6 +133,9 @@ public class JavaMemberCallResolver {
         List<GraphEdge> candidateEdges = new ArrayList<>();
         int forwardResolved = 0;
         int reverseResolved = 0;
+        // P1-3: 记录未解析调用，用于事后补查和分析
+        List<CallRelationDto> unresolvedCalls = new ArrayList<>();
+        Map<String, Integer> unresolvedPerFile = new HashMap<>();
         for (Fact fact : facts) {
             try {
                 CallRelationDto call = parseCallRelation(fact);
@@ -166,10 +169,30 @@ public class JavaMemberCallResolver {
                 }
                 if (edge != null) {
                     candidateEdges.add(edge);
+                } else {
+                    // P1-3: 记录未解析调用
+                    unresolvedCalls.add(call);
+                    String file = call.sourcePath != null ? call.sourcePath : "unknown";
+                    unresolvedPerFile.merge(file, 1, Integer::sum);
                 }
             } catch (Exception e) {
                 log.debug("Member-call resolve skipped a fact (factId={}): {}", fact.getId(), e.getMessage());
             }
+        }
+
+        // P1-3: 未解析调用上限告警（每文件 > 50 时 WARN）
+        for (Map.Entry<String, Integer> entry : unresolvedPerFile.entrySet()) {
+            if (entry.getValue() > 50) {
+                log.warn("Unresolved calls exceeded 50 in file {}: {} unresolved (versionId={})",
+                        entry.getKey(), entry.getValue(), versionId);
+            }
+        }
+
+        // P1-3: 批量记录未解析调用事实，供事后补查
+        if (!unresolvedCalls.isEmpty()) {
+            recordUnresolvedCalls(projectId, versionId, unresolvedCalls);
+            log.info("Member-call resolve: {} unresolved calls recorded for versionId={}",
+                    unresolvedCalls.size(), versionId);
         }
 
         if (candidateEdges.isEmpty()) {
@@ -608,6 +631,50 @@ public class JavaMemberCallResolver {
     }
 
     /**
+     * P1-3: 批量记录未解析调用为 UNRESOLVED_CALL 事实，供事后补查和分析。
+     * <p>
+     * 每条记录包含：callerClass、callerMethod、targetClass（可能为空）、calledMethod、sourcePath。
+     * 事实状态为 UNRESOLVED，mappedToGraph=false，不建错边。
+     * </p>
+     */
+    private void recordUnresolvedCalls(String projectId, String versionId,
+                                        List<CallRelationDto> unresolvedCalls) {
+        List<Fact> facts = new ArrayList<>();
+        for (CallRelationDto call : unresolvedCalls) {
+            try {
+                Fact fact = new Fact();
+                fact.setId(IdUtil.fastUUID());
+                fact.setProjectId(projectId);
+                fact.setVersionId(versionId);
+                fact.setFactType("UNRESOLVED_CALL");
+                fact.setFactKey(call.callerClass + "." + call.callerMethod
+                        + "->" + (call.targetClass != null ? call.targetClass : "?")
+                        + "." + call.calledMethod);
+                fact.setFactName(call.calledMethod);
+                fact.setSourceType(SourceType.CODE_AST.name());
+                fact.setSourcePath(call.sourcePath);
+                fact.setContentSummary("Unresolved call: " + call.callerClass + "."
+                        + call.callerMethod + " -> "
+                        + (call.targetClass != null ? call.targetClass : "[unknown]")
+                        + "." + call.calledMethod);
+                fact.setNormalizedData(objectMapper.writeValueAsString(call));
+                fact.setConfidence(0.3);
+                fact.setStatus("UNRESOLVED");
+                fact.setMappedToGraph(false);
+                fact.setRelatedNodeCount(0);
+                fact.setCreatedAt(LocalDateTime.now());
+                fact.setUpdatedAt(LocalDateTime.now());
+                facts.add(fact);
+            } catch (Exception e) {
+                log.debug("Failed to record unresolved call: {}", e.getMessage());
+            }
+        }
+        if (!facts.isEmpty()) {
+            factRepository.insertBatch(facts);
+        }
+    }
+
+    /**
      * 二次解析 EXTENDS/IMPLEMENTS 边 —— 根据类节点 properties 中的继承信息，
      * 在全局类索引中查找父类/接口节点，补充首次解析时遗漏的跨文件继承边。
      */
@@ -768,5 +835,6 @@ public class JavaMemberCallResolver {
         private String callerMethodSignature;
         private String calledMethodSignature;
         private String receiverExpression;  // P2-2：调用点接收者表达式原文
+        private String edgeTargetKind;  // P1-2：调用目标类型
     }
 }

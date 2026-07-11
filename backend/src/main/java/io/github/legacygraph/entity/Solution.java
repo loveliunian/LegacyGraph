@@ -50,6 +50,15 @@ public class Solution {
     /** 关联的变更任务 ID（方案转执行后填充） */
     private String changeTaskId;
 
+    /** 最终评审人 */
+    private String reviewer;
+
+    /** 评审意见 */
+    private String reviewComment;
+
+    /** 最终评审时间 */
+    private LocalDateTime reviewedAt;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

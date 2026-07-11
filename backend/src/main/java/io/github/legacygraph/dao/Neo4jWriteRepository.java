@@ -7,9 +7,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
+import org.neo4j.driver.TransactionConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -30,6 +32,11 @@ public class Neo4jWriteRepository {
 
     /** 批量 MERGE 批次大小（避免单事务过大） */
     private static final int BATCH_MERGE_SIZE = 500;
+
+    /** Neo4j 写入事务超时时间：60 秒，防止网络抖动或服务端锁等待导致永久阻塞 */
+    private static final TransactionConfig WRITE_TX_CONFIG = TransactionConfig.builder()
+            .withTimeout(Duration.ofSeconds(60))
+            .build();
 
     public Neo4jWriteRepository(Driver neo4jDriver) {
         this.neo4jDriver = neo4jDriver;
@@ -117,6 +124,18 @@ public class Neo4jWriteRepository {
                 log.debug("Merged-created Neo4j node: type={}, key={}", label, node.getNodeKey());
             }
             return new NodeUpsert(merged, created);
+        }
+    }
+
+    /**
+     * 通用写入 Cypher 执行（不返回结果集），供 service 层调用，避免直接依赖 Neo4j Driver。
+     *
+     * @param cypher  Cypher 写入语句（SET / REMOVE / MERGE 等）
+     * @param params  Cypher 参数
+     */
+    public void executeWriteQuery(String cypher, Map<String, Object> params) {
+        try (Session session = neo4jDriver.session()) {
+            session.run(cypher, params != null ? params : Map.of());
         }
     }
 
@@ -591,12 +610,14 @@ public class Neo4jWriteRepository {
                     "n.updatedAt = row.updatedAt " +
                     "RETURN count(n) AS cnt", label);
 
-            Result result = session.run(cypher, Map.of("rows", rows));
-            if (result.hasNext()) {
-                return (int) result.next().get("cnt").asLong();
-            }
+            return session.executeWrite(tx -> {
+                Result result = tx.run(cypher, Map.of("rows", rows));
+                if (result.hasNext()) {
+                    return (int) result.next().get("cnt").asLong();
+                }
+                return 0;
+            }, WRITE_TX_CONFIG);
         }
-        return 0;
     }
 
     private int mergeEdgesBatchForType(String edgeType, List<GraphEdge> edges) {
@@ -650,12 +671,14 @@ public class Neo4jWriteRepository {
                     "r.updatedAt = row.updatedAt " +
                     "RETURN count(r) AS cnt", edgeType);
 
-            Result result = session.run(cypher, Map.of("rows", rows));
-            if (result.hasNext()) {
-                return (int) result.next().get("cnt").asLong();
-            }
+            return session.executeWrite(tx -> {
+                Result result = tx.run(cypher, Map.of("rows", rows));
+                if (result.hasNext()) {
+                    return (int) result.next().get("cnt").asLong();
+                }
+                return 0;
+            }, WRITE_TX_CONFIG);
         }
-        return 0;
     }
 
     /**
@@ -729,5 +752,95 @@ public class Neo4jWriteRepository {
                     sourceNodeId, targetNodeId, e.getMessage());
             return -1;
         }
+    }
+
+    /**
+     * 克隆版本图谱：将旧版本的所有节点和边复制到新版本。
+     * 用于增量扫描前继承上一版本的完整图谱，确保新版本拥有全量数据。
+     * 节点按 (projectId, toVersionId, nodeKey) MERGE 避免重复，边同理。
+     *
+     * @param projectId     项目 ID
+     * @param fromVersionId 源版本 ID（上一成功版本）
+     * @param toVersionId   目标版本 ID（当前增量版本）
+     * @return 克隆的节点数 + 边数
+     */
+    public int cloneVersionGraph(String projectId, String fromVersionId, String toVersionId) {
+        long clonedNodes = 0;
+        long clonedEdges = 0;
+        String normFrom = normalizeId(fromVersionId);
+        String normTo = normalizeId(toVersionId);
+
+        try (Session session = neo4jDriver.session()) {
+            // 1. 查询旧版本的所有 nodeType（作为 label）
+            List<String> labels = new ArrayList<>();
+            Result labelResult = session.run(
+                    "MATCH (n {projectId: $projectId, versionId: $fromVersionId}) " +
+                            "WHERE n.nodeType IS NOT NULL " +
+                            "RETURN DISTINCT n.nodeType AS label",
+                    Map.of("projectId", projectId, "fromVersionId", normFrom));
+            while (labelResult.hasNext()) {
+                labels.add(labelResult.next().get("label").asString());
+            }
+            log.info("Clone graph: found {} node types to clone (projectId={}, from={})",
+                    labels.size(), projectId, normFrom);
+
+            // 2. 对每种 label，批量复制节点
+            for (String label : labels) {
+                String safeLabel = CypherCatalog.safeIdentifier(label, "nodeType");
+                String cypher = String.format(
+                        "MATCH (n:%s {projectId: $projectId, versionId: $fromVersionId}) " +
+                                "WITH n " +
+                                "MERGE (m:%s {projectId: $projectId, versionId: $toVersionId, nodeKey: n.nodeKey}) " +
+                                "ON CREATE SET m = n, m.versionId = $toVersionId, m.id = randomUUID(), " +
+                                "m.createdAt = datetime(), m.updatedAt = datetime() " +
+                                "RETURN count(m) AS cnt",
+                        safeLabel, safeLabel);
+                Result result = session.run(cypher, Map.of(
+                        "projectId", projectId,
+                        "fromVersionId", normFrom,
+                        "toVersionId", normTo));
+                if (result.hasNext()) {
+                    clonedNodes += result.next().get("cnt").asLong();
+                }
+            }
+
+            // 3. 查询旧版本的所有 edgeType
+            List<String> edgeTypes = new ArrayList<>();
+            Result edgeTypeResult = session.run(
+                    "MATCH ()-[r {projectId: $projectId, versionId: $fromVersionId}]->() " +
+                            "WHERE r.edgeType IS NOT NULL " +
+                            "RETURN DISTINCT r.edgeType AS edgeType",
+                    Map.of("projectId", projectId, "fromVersionId", normFrom));
+            while (edgeTypeResult.hasNext()) {
+                edgeTypes.add(edgeTypeResult.next().get("edgeType").asString());
+            }
+            log.info("Clone graph: found {} edge types to clone (projectId={}, from={})",
+                    edgeTypes.size(), projectId, normFrom);
+
+            // 4. 对每种 edgeType，批量复制边
+            for (String edgeType : edgeTypes) {
+                String safeType = CypherCatalog.safeIdentifier(edgeType, "edgeType");
+                String cypher = String.format(
+                        "MATCH (a {projectId: $projectId, versionId: $fromVersionId})-[r:%s]->(b {projectId: $projectId, versionId: $fromVersionId}) " +
+                                "WITH a.nodeKey AS fromKey, b.nodeKey AS toKey, properties(r) AS props " +
+                                "MATCH (a2 {projectId: $projectId, versionId: $toVersionId, nodeKey: fromKey}) " +
+                                "MATCH (b2 {projectId: $projectId, versionId: $toVersionId, nodeKey: toKey}) " +
+                                "MERGE (a2)-[r2:%s {projectId: $projectId, versionId: $toVersionId, edgeKey: props.edgeKey}]->(b2) " +
+                                "ON CREATE SET r2 = props, r2.versionId = $toVersionId, r2.id = randomUUID() " +
+                                "RETURN count(r2) AS cnt",
+                        safeType, safeType);
+                Result result = session.run(cypher, Map.of(
+                        "projectId", projectId,
+                        "fromVersionId", normFrom,
+                        "toVersionId", normTo));
+                if (result.hasNext()) {
+                    clonedEdges += result.next().get("cnt").asLong();
+                }
+            }
+        }
+
+        log.info("Clone graph completed: {} nodes, {} edges (projectId={}, from={}, to={})",
+                clonedNodes, clonedEdges, projectId, normFrom, normTo);
+        return (int) (clonedNodes + clonedEdges);
     }
 }

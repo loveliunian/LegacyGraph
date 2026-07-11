@@ -142,6 +142,9 @@ export default {
     promptTemplates: '提示词管理',
     plugins: '插件管理',
     requirementAnalysis: '需求分析',
+    requirementImpact: '需求影响',
+    qaEvaluation: 'QA 评测',
+    qaCaseDetail: 'QA 用例详情',
     solutionReview: '方案评审'
   },
   dashboard: {

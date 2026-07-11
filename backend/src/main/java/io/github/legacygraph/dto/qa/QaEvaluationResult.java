@@ -1,5 +1,6 @@
 package io.github.legacygraph.dto.qa;
 
+import io.github.legacygraph.dto.evaluation.RagasReport;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -83,5 +84,8 @@ public class QaEvaluationResult {
 
         /** 响应耗时 ms */
         private long responseTimeMs;
+
+        /** Ragas 指标报告（contextPrecision / contextRecall / faithfulness / answerRelevancy） */
+        private RagasReport ragasReport;
     }
 }

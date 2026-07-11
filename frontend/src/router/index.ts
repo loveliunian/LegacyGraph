@@ -268,6 +268,24 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'menu.requirementAnalysis' }
           },
           {
+            path: 'requirements/impact',
+            name: 'RequirementImpact',
+            component: () => import('@/views/requirement/RequirementImpactView.vue'),
+            meta: { title: 'menu.requirementImpact' }
+          },
+          {
+            path: 'qa-eval',
+            name: 'QaEvaluation',
+            component: () => import('@/views/QaEvaluationView.vue'),
+            meta: { title: 'menu.qaEvaluation' }
+          },
+          {
+            path: 'qa-cases/:caseId',
+            name: 'QaCaseDetail',
+            component: () => import('@/views/QaCaseDetailView.vue'),
+            meta: { title: 'menu.qaCaseDetail' }
+          },
+          {
             path: 'solutions/:solutionId?',
             name: 'SolutionReview',
             component: () => import('@/views/solution/SolutionReview.vue'),

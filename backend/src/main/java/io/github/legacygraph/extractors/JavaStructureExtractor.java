@@ -6,7 +6,9 @@ import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ParserConfiguration.LanguageLevel;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,6 +20,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * Java source structure extractor.
@@ -89,7 +93,21 @@ public class JavaStructureExtractor {
             imports.add(imp.getNameAsString());
         }
 
-        for (ClassOrInterfaceDeclaration clazz : cu.findAll(ClassOrInterfaceDeclaration.class)) {
+        List<ClassOrInterfaceDeclaration> allClasses;
+        try {
+            allClasses = cu.findAll(ClassOrInterfaceDeclaration.class);
+        } catch (RuntimeException e) {
+            log.warn("findAll(ClassOrInterfaceDeclaration) failed for {} ({}), falling back to top-level types only",
+                    javaFile, e.getMessage());
+            allClasses = new ArrayList<>();
+            for (var type : cu.getTypes()) {
+                if (type instanceof ClassOrInterfaceDeclaration cid) {
+                    allClasses.add(cid);
+                }
+            }
+        }
+
+        for (ClassOrInterfaceDeclaration clazz : allClasses) {
             String className = clazz.getNameAsString();
             String qualifiedName = clazz.getFullyQualifiedName()
                     .orElse(packageName.isBlank() ? className : packageName + "." + className);
@@ -103,34 +121,201 @@ public class JavaStructureExtractor {
                 implementedTypes.add(impl.getNameAsString());
             }
 
-            JavaClassInfo classInfo = new JavaClassInfo(
-                    className,
-                    packageName,
-                    qualifiedName,
-                    clazz.isInterface() ? "INTERFACE" : "CLASS",
-                    javaFile.toString(),
-                    clazz.getBegin().map(p -> p.line).orElse(null),
-                    clazz.getEnd().map(p -> p.line).orElse(null),
-                    new ArrayList<>(),
-                    extendedTypes,
-                    implementedTypes,
-                    imports
-            );
-
-            for (MethodDeclaration method : clazz.getMethods()) {
-                String methodName = method.getNameAsString();
-                String methodSignature = MethodSignatureSupport.build(method);
-                classInfo.getMethods().add(new JavaMethodInfo(
-                        methodName,
-                        qualifiedName + "." + methodSignature,
-                        method.getBegin().map(p -> p.line).orElse(null),
-                        method.getEnd().map(p -> p.line).orElse(null)
-                ));
+            // P1-3: 检测内部类 — 判断是否有父 ClassOrInterfaceDeclaration
+            boolean isNested = clazz.getParentNode()
+                    .flatMap(p -> java.util.Optional.of(p instanceof ClassOrInterfaceDeclaration))
+                    .orElse(false);
+            String outerQualifiedName = null;
+            if (isNested) {
+                // 提取外层类的 FQN
+                var parent = clazz.getParentNode();
+                while (parent.isPresent() && !(parent.get() instanceof ClassOrInterfaceDeclaration)) {
+                    parent = parent.get().getParentNode();
+                }
+                if (parent.isPresent() && parent.get() instanceof ClassOrInterfaceDeclaration outer) {
+                    outerQualifiedName = outer.getFullyQualifiedName().orElse(null);
+                }
             }
+
+            JavaClassInfo classInfo = new JavaClassInfo();
+            classInfo.setClassName(className);
+            classInfo.setPackageName(packageName);
+            classInfo.setQualifiedName(qualifiedName);
+            classInfo.setKind(clazz.isInterface() ? "INTERFACE" : "CLASS");
+            classInfo.setSourcePath(javaFile.toString());
+            classInfo.setStartLine(clazz.getBegin().map(p -> p.line).orElse(null));
+            classInfo.setEndLine(clazz.getEnd().map(p -> p.line).orElse(null));
+            classInfo.setMethods(new ArrayList<>());
+            classInfo.setExtendedTypes(extendedTypes);
+            classInfo.setImplementedTypes(implementedTypes);
+            classInfo.setImports(imports);
+            classInfo.setNested(isNested);
+            classInfo.setOuterQualifiedName(outerQualifiedName);
+
+            // 收集已声明的方法名，避免 Lombok 虚拟方法重复
+            Set<String> declaredMethodNames = new HashSet<>();
+            try {
+                for (MethodDeclaration method : clazz.getMethods()) {
+                    String methodName = method.getNameAsString();
+                    String methodSignature = MethodSignatureSupport.build(method);
+                    classInfo.getMethods().add(new JavaMethodInfo(
+                            methodName,
+                            qualifiedName + "." + methodSignature,
+                            method.getBegin().map(p -> p.line).orElse(null),
+                            method.getEnd().map(p -> p.line).orElse(null)
+                    ));
+                    declaredMethodNames.add(methodName);
+                }
+            } catch (RuntimeException e) {
+                log.warn("getMethods() failed for class {} in {}: {}", className, javaFile, e.getMessage());
+            }
+
+            // P1-3: Lombok 虚拟方法生成
+            try {
+                generateLombokVirtualMethods(clazz, qualifiedName, classInfo, declaredMethodNames);
+            } catch (RuntimeException e) {
+                log.warn("generateLombokVirtualMethods failed for class {} in {}: {}", className, javaFile, e.getMessage());
+            }
+
             classes.add(classInfo);
         }
 
         return classes;
+    }
+
+    /**
+     * P1-3: 检测 Lombok 注解并为 @Data/@Getter/@Setter/@Builder 生成虚拟方法节点。
+     * <p>
+     * Lombok 在编译期生成的方法不会出现在 AST 中，导致 Method 节点缺失，
+     * 影响调用链解析。此处通过注解检测合成对应方法。
+     * </p>
+     * <ul>
+     *   <li>@Data / @Getter → getXxx() 方法</li>
+     *   <li>@Data / @Setter → setXxx(xxx) 方法</li>
+     *   <li>@Builder → builder() 静态方法 + Builder 内部类</li>
+     *   <li>@ToString → toString() 方法</li>
+     *   <li>@EqualsAndHashCode → equals() / hashCode() 方法</li>
+     * </ul>
+     */
+    private void generateLombokVirtualMethods(ClassOrInterfaceDeclaration clazz,
+                                               String qualifiedName,
+                                               JavaClassInfo classInfo,
+                                               Set<String> declaredMethodNames) {
+        boolean hasData = hasAnnotation(clazz, "Data");
+        boolean hasGetter = hasData || hasAnnotation(clazz, "Getter");
+        boolean hasSetter = hasData || hasAnnotation(clazz, "Setter");
+        boolean hasBuilder = hasAnnotation(clazz, "Builder");
+        boolean hasToString = hasData || hasAnnotation(clazz, "ToString");
+        boolean hasEquals = hasData || hasAnnotation(clazz, "EqualsAndHashCode");
+
+        if (!hasGetter && !hasSetter && !hasBuilder && !hasToString && !hasEquals) {
+            return;
+        }
+
+        int virtualLine = clazz.getBegin().map(p -> p.line).orElse(0);
+
+        // 遍历字段生成 getter/setter
+        for (FieldDeclaration field : clazz.getFields()) {
+            for (VariableDeclarator var : field.getVariables()) {
+                String fieldName = var.getNameAsString();
+                String fieldType = var.getTypeAsString();
+
+                // getter: getFieldName() 或 isFieldName()（boolean 类型）
+                if (hasGetter) {
+                    String getterName = isBooleanType(fieldType)
+                            ? "is" + capitalize(fieldName)
+                            : "get" + capitalize(fieldName);
+                    if (!declaredMethodNames.contains(getterName)) {
+                        classInfo.getMethods().add(new JavaMethodInfo(
+                                getterName,
+                                qualifiedName + "." + getterName + "()",
+                                virtualLine, virtualLine
+                        ));
+                        declaredMethodNames.add(getterName);
+                    }
+                }
+
+                // setter: setFieldName(fieldType)
+                if (hasSetter) {
+                    String setterName = "set" + capitalize(fieldName);
+                    if (!declaredMethodNames.contains(setterName)) {
+                        String paramType = simplifyType(fieldType);
+                        classInfo.getMethods().add(new JavaMethodInfo(
+                                setterName,
+                                qualifiedName + "." + setterName + "(" + paramType + ")",
+                                virtualLine, virtualLine
+                        ));
+                        declaredMethodNames.add(setterName);
+                    }
+                }
+            }
+        }
+
+        // builder() 静态方法
+        if (hasBuilder && !declaredMethodNames.contains("builder")) {
+            classInfo.getMethods().add(new JavaMethodInfo(
+                    "builder",
+                    qualifiedName + ".builder()",
+                    virtualLine, virtualLine
+            ));
+            declaredMethodNames.add("builder");
+        }
+
+        // toString()
+        if (hasToString && !declaredMethodNames.contains("toString")) {
+            classInfo.getMethods().add(new JavaMethodInfo(
+                    "toString",
+                    qualifiedName + ".toString()",
+                    virtualLine, virtualLine
+            ));
+            declaredMethodNames.add("toString");
+        }
+
+        // equals(Object) / hashCode()
+        if (hasEquals) {
+            if (!declaredMethodNames.contains("equals")) {
+                classInfo.getMethods().add(new JavaMethodInfo(
+                        "equals",
+                        qualifiedName + ".equals(Object)",
+                        virtualLine, virtualLine
+                ));
+                declaredMethodNames.add("equals");
+            }
+            if (!declaredMethodNames.contains("hashCode")) {
+                classInfo.getMethods().add(new JavaMethodInfo(
+                        "hashCode",
+                        qualifiedName + ".hashCode()",
+                        virtualLine, virtualLine
+                ));
+                declaredMethodNames.add("hashCode");
+            }
+        }
+    }
+
+    private boolean hasAnnotation(ClassOrInterfaceDeclaration clazz, String annotationName) {
+        return clazz.getAnnotations().stream()
+                .anyMatch(a -> {
+                    String name = a.getNameAsString();
+                    return name.equals(annotationName)
+                            || name.equals("lombok." + annotationName)
+                            || name.equals("lombok.experimental." + annotationName);
+                });
+    }
+
+    private boolean isBooleanType(String type) {
+        return "boolean".equals(type) || "Boolean".equals(type);
+    }
+
+    private String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private String simplifyType(String type) {
+        // 去泛型
+        int idx = type.indexOf('<');
+        if (idx > 0) return type.substring(0, idx);
+        return type;
     }
 
     /**
@@ -167,6 +352,10 @@ public class JavaStructureExtractor {
         private List<String> implementedTypes = new ArrayList<>();
         /** 当前文件 import 语句列表（全名，如 com.foo.bar.Baz 或 com.foo.bar.*）— 用于包级 DEPENDS_ON 接线 */
         private List<String> imports = new ArrayList<>();
+        /** P1-3: 是否为嵌套类（内部类） */
+        private boolean nested = false;
+        /** P1-3: 外层类的全限定名（仅 nested=true 时有值） */
+        private String outerQualifiedName;
     }
 
     @Data
