@@ -81,8 +81,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, markRaw, watch, type Component } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, markRaw, onUnmounted, watch, type Component } from 'vue'
+import { useRoute, onBeforeRouteLeave } from 'vue-router'
 import {
   DataBoard,
   FolderOpened,
@@ -115,6 +115,16 @@ watch(projectId, (id) => {
     projectStore.fetchCurrentProject()
   }
 }, { immediate: true })
+
+// L-27: 离开项目详情页时停止所有轮询，避免后台持续请求
+onBeforeRouteLeave(() => {
+  taskStore.stopAllPolling()
+})
+
+// L-27: 组件卸载时也停止轮询（兜底）
+onUnmounted(() => {
+  taskStore.stopAllPolling()
+})
 
 const runningTasksCount = computed(() => taskStore.runningTasks.length)
 

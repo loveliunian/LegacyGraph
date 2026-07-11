@@ -3,6 +3,7 @@ package io.github.legacygraph.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -30,7 +31,16 @@ public class DbConnection {
 
     private String username;
 
+    /** 旧密码列：脱敏后的值，仅用于前端回显，不用于真实连接 */
     private String password;
+
+    /** AES-GCM 加密后的密码密文（Base64(IV+ciphertext)），连接时解密使用 */
+    @JsonIgnore
+    private String passwordCipher;
+
+    /** KMS 密钥 ID（生产环境），本地模式为 NULL */
+    @JsonIgnore
+    private String passwordKmsKeyId;
 
     private Boolean readonly;
 

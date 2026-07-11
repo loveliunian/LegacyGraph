@@ -159,6 +159,7 @@ public class ServiceCallExtractor {
                             }
 
                             // P0.1c：优先使用 SymbolSolver 解析接收者类型
+                            // L-08: 保留 FQN（全限定名），不再截取简单名，提高 CALLS 边消歧准确率
                             String resolvedType = null;
                             if (sourceRoot != null) {
                                 try {
@@ -170,11 +171,7 @@ public class ServiceCallExtractor {
                                         if (genericIdx > 0) {
                                             typeName = typeName.substring(0, genericIdx);
                                         }
-                                        // 取简单类名
-                                        int dotIdx = typeName.lastIndexOf('.');
-                                        if (dotIdx > 0) {
-                                            typeName = typeName.substring(dotIdx + 1);
-                                        }
+                                        // L-08: 保留 FQN，不截取简单名
                                         resolvedType = typeName;
                                     }
                                 } catch (Exception e) {
@@ -195,6 +192,7 @@ public class ServiceCallExtractor {
                         });
 
                         // P0.1c：当 SymbolSolver 可用时，尝试解析被调用方法的声明类（处理链式调用、继承方法等）
+                        // L-08: 保留 FQN，不截取简单名
                         if (sourceRoot != null && rel.getTargetClass() == null) {
                             try {
                                 ResolvedMethodDeclaration rmd = methodCall.resolve();
@@ -203,10 +201,7 @@ public class ServiceCallExtractor {
                                 if (genericIdx > 0) {
                                     declaringType = declaringType.substring(0, genericIdx);
                                 }
-                                int dotIdx = declaringType.lastIndexOf('.');
-                                if (dotIdx > 0) {
-                                    declaringType = declaringType.substring(dotIdx + 1);
-                                }
+                                // L-08: 保留 FQN，不截取简单名
                                 rel.setTargetClass(declaringType);
                                 rel.setTargetMethod(calledMethod);
                             } catch (Exception e) {

@@ -95,6 +95,9 @@ public class ProjectScanner {
     private final AdapterExecutionService adapterExecutionService;
     private final GraphifyRunner graphifyRunner;
     private final GraphifyImportService graphifyImportService;
+    /** L-06: 扫描检查点仓库（pause/resume 断点恢复） */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.repository.ScanCheckpointRepository scanCheckpointRepository;
     /** 证据写入事务执行器：扫描结束时需 flush 剩余证据 */
     private io.github.legacygraph.builder.PgEvidenceTxExecutor pgEvidenceTxExecutor;
     private ScanScopeResolver scanScopeResolver;
@@ -110,12 +113,28 @@ public class ProjectScanner {
     /** 成员调用二次扫描解析器（可选）：ADAPTER_SCAN 后对全局图谱解析 Service→Mapper 等 CALLS 边 */
     private io.github.legacygraph.builder.JavaMemberCallResolver javaMemberCallResolver;
 
+    /** 密码加解密服务（可选）：L-01 修复 DB 密码脱敏 bug，用可逆加密替代不可逆脱敏 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.security.SecretCipher secretCipher;
+
     /** 外部工具对照校验服务（可选）：MEMBER_CALL_RESOLVE 后对图谱做外部工具交叉验证 */
     private io.github.legacygraph.verification.ExternalVerificationService externalVerificationService;
 
     /** 外部验证开关（默认关闭），开启后在 MEMBER_CALL_RESOLVE 与 DATABASE_SCAN 之间执行 EXTERNAL_VERIFY */
     @org.springframework.beans.factory.annotation.Value("${legacygraph.external-verification.enabled:false}")
     private boolean externalVerificationEnabled;
+
+    /** L-02: DB 自动发现 — 文件遍历最大深度 */
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.scan.discover.db.max-depth:5}")
+    private int dbDiscoverMaxDepth;
+
+    /** L-02: DB 自动发现 — 最多处理的配置文件数 */
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.scan.discover.db.max-configs:10}")
+    private int dbDiscoverMaxConfigs;
+
+    /** L-02: 子路径检测 — 目录遍历最大深度 */
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.scan.discover.path.max-depth:3}")
+    private int pathDiscoverMaxDepth;
 
     /** 图谱/报告缓存失效器（可选）：重新扫描前清空旧图谱只读缓存，避免读到陈旧数据 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -154,6 +173,10 @@ public class ProjectScanner {
     // M13修复：添加时间戳 Map，用于清理过期取消标记（24小时后自动清理）
     private final ConcurrentHashMap<String, Long> cancelledVersionsTimestamp = new ConcurrentHashMap<>();
 
+    // L-06: pause 状态机独立于 cancel — pause 可恢复，cancel 不可恢复
+    private final ConcurrentHashMap<String, Boolean> pausedVersions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> pausedVersionsTimestamp = new ConcurrentHashMap<>();
+
     /** 请求取消指定版本的扫描（由 Controller 调用） */
     public void requestCancel(String versionId) {
         cancelledVersions.put(versionId, true);
@@ -178,6 +201,100 @@ public class ProjectScanner {
     /** 清除取消标记（扫描启动时调用） */
     private void clearCancel(String versionId) {
         cancelledVersions.remove(versionId);
+    }
+
+    // L-06: pause/resume 状态机
+
+    /** 请求暂停指定版本的扫描（由 Controller 调用） */
+    public void requestPause(String versionId) {
+        pausedVersions.put(versionId, true);
+        pausedVersionsTimestamp.put(versionId, System.currentTimeMillis());
+        log.info("Pause requested for versionId={}", versionId);
+    }
+
+    /** 恢复暂停的扫描 */
+    public void resumeScan(String versionId) {
+        pausedVersions.remove(versionId);
+        pausedVersionsTimestamp.remove(versionId);
+        log.info("Resume requested for versionId={}", versionId);
+    }
+
+    /** 检查是否已暂停 */
+    private boolean isPaused(String versionId) {
+        return pausedVersions.getOrDefault(versionId, false);
+    }
+
+    /** 检查是否已暂停或已取消 */
+    private boolean isPausedOrCancelled(String versionId) {
+        return isPaused(versionId) || isCancelled(versionId);
+    }
+
+    /** 清除暂停标记 */
+    private void clearPause(String versionId) {
+        pausedVersions.remove(versionId);
+        pausedVersionsTimestamp.remove(versionId);
+    }
+
+    // L-06: 检查点持久化方法
+
+    /** 保存检查点（每完成一个 file/index 后调用） */
+    private void saveCheckpoint(String versionId, String phase, int lastFileIndex,
+                                 String lastFilePath, int processedFiles) {
+        if (scanCheckpointRepository == null) return;
+        try {
+            // UPSERT: 按 (versionId, phase) 唯一索引合并
+            io.github.legacygraph.entity.ScanCheckpoint existing = scanCheckpointRepository
+                    .lambdaQuery()
+                    .eq(io.github.legacygraph.entity.ScanCheckpoint::getVersionId, versionId)
+                    .eq(io.github.legacygraph.entity.ScanCheckpoint::getPhase, phase)
+                    .one();
+            if (existing != null) {
+                existing.setLastFileIndex(lastFileIndex);
+                existing.setLastFilePath(lastFilePath);
+                existing.setProcessedFiles(processedFiles);
+                existing.setUpdatedAt(java.time.LocalDateTime.now());
+                scanCheckpointRepository.updateById(existing);
+            } else {
+                io.github.legacygraph.entity.ScanCheckpoint cp = new io.github.legacygraph.entity.ScanCheckpoint();
+                cp.setVersionId(versionId);
+                cp.setPhase(phase);
+                cp.setLastFileIndex(lastFileIndex);
+                cp.setLastFilePath(lastFilePath);
+                cp.setProcessedFiles(processedFiles);
+                cp.setUpdatedAt(java.time.LocalDateTime.now());
+                scanCheckpointRepository.insert(cp);
+            }
+        } catch (Exception e) {
+            log.debug("saveCheckpoint failed versionId={} phase={}: {}", versionId, phase, e.getMessage());
+        }
+    }
+
+    /** 获取检查点（resume 时调用，返回上次处理到的位置） */
+    public io.github.legacygraph.entity.ScanCheckpoint getCheckpoint(String versionId, String phase) {
+        if (scanCheckpointRepository == null) return null;
+        try {
+            return scanCheckpointRepository
+                    .lambdaQuery()
+                    .eq(io.github.legacygraph.entity.ScanCheckpoint::getVersionId, versionId)
+                    .eq(io.github.legacygraph.entity.ScanCheckpoint::getPhase, phase)
+                    .one();
+        } catch (Exception e) {
+            log.debug("getCheckpoint failed versionId={} phase={}: {}", versionId, phase, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 清除指定版本的所有检查点（扫描完成后调用） */
+    public void clearCheckpoints(String versionId) {
+        if (scanCheckpointRepository == null) return;
+        try {
+            com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<io.github.legacygraph.entity.ScanCheckpoint> wrapper =
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<io.github.legacygraph.entity.ScanCheckpoint>()
+                            .eq(io.github.legacygraph.entity.ScanCheckpoint::getVersionId, versionId);
+            scanCheckpointRepository.delete(wrapper);
+        } catch (Exception e) {
+            log.debug("clearCheckpoints failed versionId={}: {}", versionId, e.getMessage());
+        }
     }
 
     /** 后端项目标志文件 */
@@ -361,6 +478,12 @@ public class ProjectScanner {
      */
     private void runScanBody(String projectId, String versionId, String baseDir, ScanVersion version) {
         try {
+            // L-07: 扫描开始前显式确保 Neo4j 约束和索引存在（含复合唯一约束）
+            try {
+                neo4jGraphDao.ensureIndexesAndConstraints();
+            } catch (Exception e) {
+                log.warn("Failed to ensure Neo4j indexes/constraints at scan start: {}", e.getMessage());
+            }
             // 清除上一版本残留的 affected 标记（重扫同一 versionId 时避免旧标记残留）
             if (blastRadiusAnalyzer != null) {
                 try {
@@ -1117,6 +1240,26 @@ public class ProjectScanner {
             version.setTaskFailed(taskFailed);
             version.setCurrentStage(stage);
             version.setStatsUpdatedAt(LocalDateTime.now());
+
+            // L-14: 聚合项目维度累积统计（取该项目最新版本的最大节点/边/事实数作为累积值）
+            try {
+                List<ScanVersion> projectVersions = scanVersionRepository.lambdaQuery()
+                        .eq(ScanVersion::getProjectId, projectId)
+                        .orderByDesc(ScanVersion::getCreatedAt)
+                        .list();
+                long cumNodes = 0, cumEdges = 0, cumFacts = 0;
+                for (ScanVersion v : projectVersions) {
+                    if (v.getNodeCount() != null && v.getNodeCount() > cumNodes) cumNodes = v.getNodeCount();
+                    if (v.getEdgeCount() != null && v.getEdgeCount() > cumEdges) cumEdges = v.getEdgeCount();
+                    if (v.getFactCount() != null && v.getFactCount() > cumFacts) cumFacts = v.getFactCount();
+                }
+                version.setCumulativeNodeCount(cumNodes);
+                version.setCumulativeEdgeCount(cumEdges);
+                version.setCumulativeFactCount(cumFacts);
+                version.setCumulativeUpdatedAt(LocalDateTime.now());
+            } catch (Exception ex) {
+                log.warn("Snapshot: cumulative stats failed projectId={}: {}", projectId, ex.getMessage());
+            }
         } catch (Exception e) {
             log.warn("applyStatsSnapshot unexpected failure versionId={}: {}", versionId, e.getMessage());
         }
@@ -1237,7 +1380,7 @@ public class ProjectScanner {
             // 查找配置文件（M8 修复：try-with-resources 关闭 Stream）
             log.info("Scan still running: projectId={}, phase=DB_DISCOVERY, detail=walking for config files", projectId);
             List<Path> allConfigFiles;
-            try (java.util.stream.Stream<Path> stream = Files.walk(basePath, 5)) {  // L9 修复：限制深度 5 层
+            try (java.util.stream.Stream<Path> stream = Files.walk(basePath, dbDiscoverMaxDepth)) {
                 allConfigFiles = stream
                         .filter(Files::isRegularFile)
                         .filter(p -> {
@@ -1245,17 +1388,17 @@ public class ProjectScanner {
                             return (name.startsWith("application") || name.startsWith("application-"))
                                     && (name.endsWith(".yml") || name.endsWith(".yaml") || name.endsWith(".properties"));
                         })
-                        .sorted((a, b) -> a.getFileName().toString().compareTo(b.getFileName().toString()))  // L13 修复：先排序再 limit
+                        .sorted((a, b) -> a.getFileName().toString().compareTo(b.getFileName().toString()))
                         .collect(Collectors.toList());
             }
 
             // 记录实际发现的总数（截断前）
             int discoveredCount = allConfigFiles.size();
-            List<Path> configFiles = allConfigFiles.stream().limit(10).collect(Collectors.toList());
-            
+            List<Path> configFiles = allConfigFiles.stream().limit(dbDiscoverMaxConfigs).collect(Collectors.toList());
+
             if (discoveredCount > configFiles.size()) {
-                log.info("DB discovery: found {} config files, processing {} (limited to 10)",
-                        discoveredCount, configFiles.size());
+                log.info("DB discovery: found {} config files, processing {} (limited to {})",
+                        discoveredCount, configFiles.size(), dbDiscoverMaxConfigs);
             }
 
             Set<String> discoveredUrls = new HashSet<>(); // 本次扫描去重
@@ -1302,9 +1445,11 @@ public class ProjectScanner {
                                 existing.setDbType(dbType);
                                 existing.setSchemaName(schema);
                                 existing.setUsername(dbConfig.getOrDefault("username", existing.getUsername()));
-                                // M9修复: 密码脱敏，仅保留前2位和后2位
-                                String rawPwd = dbConfig.getOrDefault("password", existing.getPassword());
-                                existing.setPassword(maskPassword(rawPwd));
+                                // L-01 修复：密码可逆加密存储到 passwordCipher，password 列仅存脱敏值用于回显
+                                String rawPwd = dbConfig.getOrDefault("password", "");
+                                if (!rawPwd.isEmpty()) {
+                                    encryptPassword(existing, rawPwd);
+                                }
                                 existing.setConnectionName(autoDbName(dbConfig, configFile));
                                 existing.setUpdatedAt(LocalDateTime.now());
                                 dbConnectionRepository.updateById(existing);
@@ -1320,9 +1465,9 @@ public class ProjectScanner {
                                 conn.setDatabaseName(database);
                                 conn.setSchemaName(schema);
                                 conn.setUsername(dbConfig.getOrDefault("username", ""));
-                                // M9修复: 密码脱敏
+                                // L-01 修复：密码可逆加密存储到 passwordCipher，password 列仅存脱敏值用于回显
                                 String rawPwd = dbConfig.getOrDefault("password", "");
-                                conn.setPassword(maskPassword(rawPwd));
+                                encryptPassword(conn, rawPwd);
                                 conn.setStatus("READY");
                                 conn.setSource("AUTO_DISCOVERED");
                                 conn.setCreatedBy("auto-discovery");
@@ -1380,19 +1525,54 @@ public class ProjectScanner {
     }
 
     /**
-     /**
-      * M9: 密码脱敏，仅保留前2位和后2位，中间用 *** 替代。
-      * 短密码（≤4位）全部替换为 ***。
-      */
-     private String maskPassword(String password) {
-         if (password == null || password.isEmpty()) {
-             return "";
-         }
-         if (password.length() <= 4) {
-             return "***";
-         }
-         return password.substring(0, 2) + "***" + password.substring(password.length() - 2);
-     }
+     * L-01: 加密密码并设置到 DbConnection。
+     * 将明文密码 AES-GCM 加密后存入 passwordCipher，password 列仅存脱敏值用于前端回显。
+     * 当 SecretCipher 不可用时降级为旧的有损脱敏（保持向后兼容）。
+     */
+    private void encryptPassword(DbConnection conn, String rawPassword) {
+        if (rawPassword == null || rawPassword.isEmpty()) {
+            conn.setPassword("");
+            return;
+        }
+        if (secretCipher != null) {
+            conn.setPasswordCipher(secretCipher.encrypt(rawPassword));
+            conn.setPassword(secretCipher.mask(rawPassword));
+        } else {
+            // 降级：旧的有损脱敏（SecretCipher 未注入时）
+            conn.setPassword(maskPasswordLegacy(rawPassword));
+        }
+    }
+
+    /**
+     * L-01: 解密密码，用于创建数据源连接。
+     * 优先从 passwordCipher 解密；若 passwordCipher 为空（旧数据），降级使用 password 列。
+     */
+    private String resolvePassword(DbConnection conn) {
+        if (conn == null) return "";
+        if (secretCipher != null && conn.getPasswordCipher() != null && !conn.getPasswordCipher().isEmpty()) {
+            try {
+                return secretCipher.decrypt(conn.getPasswordCipher());
+            } catch (Exception e) {
+                log.warn("Failed to decrypt password for connection {}: {}", conn.getId(), e.getMessage());
+                // 降级到 password 列（可能无法连接，但至少不 NPE）
+            }
+        }
+        // 旧数据降级：password 列可能是脱敏值（无法连接）或明文（手动创建的旧数据）
+        return conn.getPassword() != null ? conn.getPassword() : "";
+    }
+
+    /**
+     * 旧版密码脱敏（有损），仅作为 SecretCipher 不可用时的降级。
+     */
+    private String maskPasswordLegacy(String password) {
+        if (password == null || password.isEmpty()) {
+            return "";
+        }
+        if (password.length() <= 4) {
+            return "***";
+        }
+        return password.substring(0, 2) + "***" + password.substring(password.length() - 2);
+    }
 
      /**
       * 解析 Spring 配置中的占位符（如 ${DB_URL:default}）。
@@ -1614,13 +1794,15 @@ public class ProjectScanner {
                     return ".";
                 }
             }
-            // 检查一级子目录
-            try (var dirs = Files.list(rootPath)) {
-                for (Path dir : dirs.toList()) {
-                    if (!Files.isDirectory(dir)) continue;
+            // L-02: 检查子目录（深度可配，默认 3 层）
+            try (var dirs = Files.walk(rootPath, pathDiscoverMaxDepth)) {
+                for (Path dir : dirs.filter(Files::isDirectory).toList()) {
+                    if (dir.equals(rootPath)) continue;
                     for (String indicator : indicators) {
                         if (Files.exists(dir.resolve(indicator))) {
-                            return dir.getFileName().toString();
+                            // 返回相对于 rootPath 的路径
+                            Path relative = rootPath.relativize(dir);
+                            return relative.toString();
                         }
                     }
                 }
@@ -1820,9 +2002,8 @@ public class ProjectScanner {
         String url = buildJdbcUrl(conn);
         dataSource.setUrl(url);
         dataSource.setUsername(conn.getUsername());
-        // M9修复: 连接时使用原始密码（已在扫描时脱敏存储，此处需要真实值连接）
-        // 实际连接密码应从安全配置或加密存储获取，此处暂时保留原逻辑
-        dataSource.setPassword(conn.getPassword() != null ? conn.getPassword() : "");
+        // L-01 修复：从 passwordCipher 解密获取真实密码，降级使用 password 列
+        dataSource.setPassword(resolvePassword(conn));
         // 修复：CompletableFuture.runAsync() 使用 ForkJoinPool.commonPool()，
         // 其线程的上下文类加载器可能无法访问 Spring Boot fat jar 的 BOOT-INF/lib/，
         // 导致 DriverManagerDataSource.setDriverClassName() 内部的 Class.forName() 失败。

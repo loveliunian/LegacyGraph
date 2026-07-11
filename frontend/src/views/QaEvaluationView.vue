@@ -14,6 +14,7 @@
           placeholder="按问题/意图搜索"
           @input="applyClientFilter" />
         <button @click="loadAll">刷新</button>
+        <button class="ragas-btn" @click="openRagasEval">Ragas 评估</button>
       </div>
     </div>
 
@@ -121,6 +122,10 @@
             <th>证据精度</th>
             <th>关键词覆盖</th>
             <th>拒答准确率</th>
+            <th>Ragas 上下文精度</th>
+            <th>Ragas 上下文召回</th>
+            <th>Ragas 忠实度</th>
+            <th>Ragas 相关性</th>
             <th>门禁</th>
           </tr>
         </thead>
@@ -134,10 +139,14 @@
             <td>{{ pct(r.evidencePrecision) }}</td>
             <td>{{ pct(r.requiredKeywordCoverage) }}</td>
             <td>{{ pct(r.abstentionAccuracy) }}</td>
+            <td>{{ pct(r.ragasContextPrecision) }}</td>
+            <td>{{ pct(r.ragasContextRecall) }}</td>
+            <td>{{ pct(r.ragasFaithfulness) }}</td>
+            <td>{{ pct(r.ragasAnswerRelevancy) }}</td>
             <td><span :class="r.passed ? 'pass' : 'fail'">{{ r.passed ? '通过' : '未通过' }}</span></td>
           </tr>
           <tr v-if="!evalRuns.length">
-            <td colspan="9" class="empty">暂无评测运行记录</td>
+            <td colspan="13" class="empty">暂无评测运行记录</td>
           </tr>
         </tbody>
       </table>
@@ -242,6 +251,78 @@
         </div>
       </div>
     </div>
+
+    <!-- G-10: Ragas 评估模态框 -->
+    <div v-if="showRagasEval" class="modal-mask" @click.self="closeRagasEval">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Ragas 指标评估</h3>
+          <button class="close-btn" @click="closeRagasEval">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="ragas-form">
+            <label class="form-label">
+              <span>问题</span>
+              <textarea v-model="ragasForm.question" rows="2" placeholder="用户问题" />
+            </label>
+            <label class="form-label">
+              <span>回答</span>
+              <textarea v-model="ragasForm.answer" rows="3" placeholder="实际回答" />
+            </label>
+            <label class="form-label">
+              <span>检索上下文（每行一条）</span>
+              <textarea v-model="ragasForm.contextsText" rows="4" placeholder="每行一条检索上下文片段" />
+            </label>
+            <label class="form-label">
+              <span>期望实体（逗号分隔）</span>
+              <input v-model="ragasForm.entitiesText" placeholder="TableA, ColumnB, ServiceC" />
+            </label>
+            <label class="form-label">
+              <span>期望关键词（逗号分隔）</span>
+              <input v-model="ragasForm.keywordsText" placeholder="关键词1, 关键词2" />
+            </label>
+          </div>
+          <div v-if="ragasResult" class="ragas-result">
+            <h4>Ragas 指标结果</h4>
+            <div class="ragas-metrics">
+              <div class="metric-card">
+                <span class="metric-label">上下文精度</span>
+                <span class="metric-value" :class="ragasResult.contextPrecision >= 0.7 ? 'pass' : 'fail'">
+                  {{ pct(ragasResult.contextPrecision) }}
+                </span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">上下文召回</span>
+                <span class="metric-value" :class="ragasResult.contextRecall >= 0.7 ? 'pass' : 'fail'">
+                  {{ pct(ragasResult.contextRecall) }}
+                </span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">答案忠实度</span>
+                <span class="metric-value" :class="ragasResult.faithfulness >= 0.7 ? 'pass' : 'fail'">
+                  {{ pct(ragasResult.faithfulness) }}
+                </span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">答案相关性</span>
+                <span class="metric-value" :class="ragasResult.answerRelevancy >= 0.7 ? 'pass' : 'fail'">
+                  {{ pct(ragasResult.answerRelevancy) }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="bulk-actions-row">
+            <button @click="closeRagasEval">关闭</button>
+            <button
+              class="primary-btn"
+              :disabled="ragasSubmitting || !ragasForm.question.trim()"
+              @click="submitRagasEval">
+              {{ ragasSubmitting ? '评估中...' : '开始评估' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -270,7 +351,19 @@ interface QaEvaluationResult {
   evidencePrecision: number
   requiredKeywordCoverage: number
   abstentionAccuracy: number
+  ragasContextPrecision?: number
+  ragasContextRecall?: number
+  ragasFaithfulness?: number
+  ragasAnswerRelevancy?: number
   passed: boolean
+}
+
+interface RagasReport {
+  contextPrecision: number
+  contextRecall: number
+  faithfulness: number
+  answerRelevancy: number
+  details?: Record<string, string>
 }
 
 const route = useRoute()
@@ -422,6 +515,69 @@ const logBulkSummary = () => {
   console.info(`[QaEvaluation bulk] submitted ${ok}/${total} feedback (${bulkType.value})`)
 }
 
+// ==================== G-10: Ragas 评估 ====================
+const showRagasEval = ref(false)
+const ragasSubmitting = ref(false)
+const ragasResult = ref<RagasReport | null>(null)
+const ragasForm = ref({
+  question: '',
+  answer: '',
+  contextsText: '',
+  entitiesText: '',
+  keywordsText: ''
+})
+
+const openRagasEval = () => {
+  ragasResult.value = null
+  ragasForm.value = { question: '', answer: '', contextsText: '', entitiesText: '', keywordsText: '' }
+  // 如果有选中的用例，预填问题
+  if (selectedIds.value.size === 1) {
+    const id = Array.from(selectedIds.value)[0]
+    const c = cases.value.find((x) => x.id === id)
+    if (c) {
+      ragasForm.value.question = c.question || ''
+      ragasForm.value.entitiesText = (c.expectedEntities || []).join(', ')
+      ragasForm.value.keywordsText = (c.expectedKeywords || []).join(', ')
+    }
+  }
+  showRagasEval.value = true
+}
+
+const closeRagasEval = () => {
+  if (ragasSubmitting.value) return
+  showRagasEval.value = false
+}
+
+const submitRagasEval = async () => {
+  if (ragasSubmitting.value || !ragasForm.value.question.trim()) return
+  ragasSubmitting.value = true
+  ragasResult.value = null
+  try {
+    const body = {
+      question: ragasForm.value.question,
+      answer: ragasForm.value.answer,
+      retrievedContexts: ragasForm.value.contextsText
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+      expectedEntities: ragasForm.value.entitiesText
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+      expectedKeywords: ragasForm.value.keywordsText
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+    }
+    const res = await post(`/lg/projects/${projectId.value}/qa/ragas-evaluate`, body)
+    ragasResult.value = res || null
+  } catch (err: any) {
+    console.error('[Ragas eval] failed:', err)
+  } finally {
+    ragasSubmitting.value = false
+  }
+}
+
 // ==================== 多选辅助 ====================
 const toggleSelect = (id: string) => {
   const next = new Set(selectedIds.value)
@@ -450,7 +606,7 @@ const clearSelection = () => {
   selectedIds.value = new Set()
 }
 
-const pct = (v: number) => (v == null ? '-' : (v * 100).toFixed(1) + '%')
+const pct = (v: number | undefined | null) => (v == null ? '-' : (v * 100).toFixed(1) + '%')
 
 onMounted(loadAll)
 </script>
@@ -512,4 +668,18 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .bulk-target-row { display: flex; justify-content: space-between; padding: 6px 8px; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
 .bulk-status { font-weight: 600; }
 .bulk-actions-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+/* G-10: Ragas 评估 */
+.ragas-btn { background: #722ed1; color: #fff; border-color: #722ed1; }
+.ragas-btn:hover { opacity: 0.85; }
+.ragas-form { display: flex; flex-direction: column; gap: 10px; }
+.form-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.form-label span { font-weight: 600; color: #555; }
+.form-label textarea, .form-label input { padding: 6px 8px; border: 1px solid #d9d9d9; border-radius: 4px; font-family: inherit; font-size: 13px; resize: vertical; }
+.ragas-result { margin-top: 16px; padding: 12px; background: #f9f0ff; border-radius: 4px; }
+.ragas-result h4 { margin: 0 0 10px 0; font-size: 14px; }
+.ragas-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.metric-card { display: flex; flex-direction: column; align-items: center; padding: 10px; background: #fff; border: 1px solid #e8e8e8; border-radius: 4px; }
+.metric-label { font-size: 12px; color: #666; margin-bottom: 4px; }
+.metric-value { font-size: 18px; font-weight: 700; }
 </style>

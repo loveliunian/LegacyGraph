@@ -146,11 +146,18 @@ public class JavaStructureExtractor {
             classInfo.setStartLine(clazz.getBegin().map(p -> p.line).orElse(null));
             classInfo.setEndLine(clazz.getEnd().map(p -> p.line).orElse(null));
             classInfo.setMethods(new ArrayList<>());
+            classInfo.setFields(new ArrayList<>());
             classInfo.setExtendedTypes(extendedTypes);
             classInfo.setImplementedTypes(implementedTypes);
             classInfo.setImports(imports);
             classInfo.setNested(isNested);
             classInfo.setOuterQualifiedName(outerQualifiedName);
+            // L-09: 提取类级注解用于 inferNodeType 优先判定
+            if (!clazz.getAnnotations().isEmpty()) {
+                classInfo.setAnnotations(clazz.getAnnotations().stream()
+                        .map(a -> a.getNameAsString())
+                        .collect(java.util.stream.Collectors.toList()));
+            }
 
             // 收集已声明的方法名，避免 Lombok 虚拟方法重复
             Set<String> declaredMethodNames = new HashSet<>();
@@ -158,16 +165,55 @@ public class JavaStructureExtractor {
                 for (MethodDeclaration method : clazz.getMethods()) {
                     String methodName = method.getNameAsString();
                     String methodSignature = MethodSignatureSupport.build(method);
-                    classInfo.getMethods().add(new JavaMethodInfo(
+                    JavaMethodInfo methodInfo = new JavaMethodInfo(
                             methodName,
                             qualifiedName + "." + methodSignature,
                             method.getBegin().map(p -> p.line).orElse(null),
                             method.getEnd().map(p -> p.line).orElse(null)
-                    ));
+                    );
+                    // L-10: 提取方法注解和 synchronized 修饰符用于并发属性
+                    if (!method.getAnnotations().isEmpty()) {
+                        List<String> annos = method.getAnnotations().stream()
+                                .map(a -> a.getNameAsString())
+                                .collect(java.util.stream.Collectors.toList());
+                        methodInfo.setAnnotations(annos);
+                    }
+                    methodInfo.setSynchronizedModifier(
+                            method.getModifiers().stream()
+                                    .anyMatch(m -> m.getKeyword() == com.github.javaparser.ast.Modifier.Keyword.SYNCHRONIZED));
+                    classInfo.getMethods().add(methodInfo);
                     declaredMethodNames.add(methodName);
                 }
             } catch (RuntimeException e) {
                 log.warn("getMethods() failed for class {} in {}: {}", className, javaFile, e.getMessage());
+            }
+
+            // L-12: 抽取字段声明（含字段级注解 @Value/@Autowired/@ConfigurationProperties/@Resource 等），
+            // 供 GraphBuilder 按注解分类入图为 ConfigItem / Dependency / FeatureFlag 节点
+            try {
+                for (FieldDeclaration field : clazz.getFields()) {
+                    // 字段级注解挂在 FieldDeclaration 上（多个变量共享同一组注解）
+                    List<String> fieldAnnotations = new ArrayList<>();
+                    if (!field.getAnnotations().isEmpty()) {
+                        fieldAnnotations = field.getAnnotations().stream()
+                                .map(a -> a.getNameAsString())
+                                .collect(java.util.stream.Collectors.toList());
+                    }
+                    Integer fieldStart = field.getBegin().map(p -> p.line).orElse(null);
+                    Integer fieldEnd = field.getEnd().map(p -> p.line).orElse(null);
+                    // 一个字段声明可能声明多个变量（如 private String a, b;），逐个收集
+                    for (VariableDeclarator var : field.getVariables()) {
+                        classInfo.getFields().add(new JavaFieldInfo(
+                                var.getNameAsString(),
+                                var.getTypeAsString(),
+                                fieldAnnotations,
+                                fieldStart,
+                                fieldEnd
+                        ));
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.warn("getFields() failed for class {} in {}: {}", className, javaFile, e.getMessage());
             }
 
             // P1-3: Lombok 虚拟方法生成
@@ -346,6 +392,8 @@ public class JavaStructureExtractor {
         private Integer startLine;
         private Integer endLine;
         private List<JavaMethodInfo> methods = new ArrayList<>();
+        /** L-12: 类的字段列表（含字段级注解，用于入图为 ConfigItem/Dependency/FeatureFlag 节点） */
+        private List<JavaFieldInfo> fields = new ArrayList<>();
         /** extends 的父类简单名列表 */
         private List<String> extendedTypes = new ArrayList<>();
         /** implements 的接口简单名列表 */
@@ -356,14 +404,43 @@ public class JavaStructureExtractor {
         private boolean nested = false;
         /** P1-3: 外层类的全限定名（仅 nested=true 时有值） */
         private String outerQualifiedName;
+        /** L-09: 类级注解名称列表（如 RestController, Service, Mapper），用于 inferNodeType 优先判定 */
+        private List<String> annotations = new ArrayList<>();
     }
 
     @Data
     @NoArgsConstructor
-    @AllArgsConstructor
     public static class JavaMethodInfo {
         private String methodName;
         private String qualifiedName;
+        private Integer startLine;
+        private Integer endLine;
+        /** L-10: 方法上的注解名称列表（如 Transactional, Async, Cacheable, Lock） */
+        private List<String> annotations;
+        /** L-10: 是否有 synchronized 关键字 */
+        private boolean synchronizedModifier;
+
+        public JavaMethodInfo(String methodName, String qualifiedName, Integer startLine, Integer endLine) {
+            this.methodName = methodName;
+            this.qualifiedName = qualifiedName;
+            this.startLine = startLine;
+            this.endLine = endLine;
+        }
+    }
+
+    /**
+     * L-12: Java 字段信息 DTO。
+     * <p>承载字段名、类型与字段级注解（如 @Value / @Autowired / @ConfigurationProperties / @Resource），
+     * 供 GraphBuilder 按注解分类入图为 ConfigItem / Dependency / FeatureFlag 节点。</p>
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class JavaFieldInfo {
+        private String fieldName;
+        private String fieldType;
+        /** 字段级注解简单名列表（如 Value, Autowired, Resource, ConfigurationProperties） */
+        private List<String> annotations;
         private Integer startLine;
         private Integer endLine;
     }

@@ -659,8 +659,8 @@ public class Neo4jQueryRepository {
         if (fromKey == null || fromKey.isBlank() || toKey == null || toKey.isBlank()) {
             return List.of();
         }
-        int depth = Math.max(1, Math.min(4, maxDepth));
-        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        int depth = Math.max(1, Math.min(8, maxDepth));
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 500);
 
         // 关系类型白名单校验 + 拼接；空列表 → 裸 *1..depth（全类型）
         StringBuilder relSpec = new StringBuilder();
@@ -778,8 +778,8 @@ public class Neo4jQueryRepository {
         if (startNodeKey == null || startNodeKey.isBlank()) {
             return List.of();
         }
-        int depth = Math.max(1, Math.min(4, maxDepth));
-        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 100);
+        int depth = Math.max(1, Math.min(8, maxDepth));
+        int safeLimit = limit <= 0 ? 20 : Math.min(limit, 500);
 
         // relSpec 拼接（复用 findPaths 逻辑）
         StringBuilder relSpec = new StringBuilder();

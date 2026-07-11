@@ -237,11 +237,18 @@ public class JavaMemberCallResolver {
             return null; // 缺失，跳过
         }
         GraphNode targetClassNode;
+        boolean ambiguousMatch = false;
         if (candidates.size() > 1) {
             // 同名多类消歧：同包优先 → 语义关联
             targetClassNode = disambiguateClassCandidates(candidates, call.callerClass);
             if (targetClassNode == null) {
                 return null; // 无法消歧，跳过
+            }
+            // L-08: 检查是否为同名歧义匹配（disambiguateClassCandidates 返回了首个候选但仍有多个同名候选）
+            String resolvedSimple = simpleName(targetClassNode.getNodeKey());
+            if (resolvedSimple != null) {
+                ambiguousMatch = candidates.stream()
+                        .allMatch(c -> resolvedSimple.equals(simpleName(c.getNodeKey())));
             }
         } else {
             targetClassNode = candidates.get(0);
@@ -264,7 +271,7 @@ public class JavaMemberCallResolver {
             return null; // 已存在
         }
 
-        return buildEdgePOJO(projectId, versionId, fromNode, toNode);
+        return buildEdgePOJO(projectId, versionId, fromNode, toNode, ambiguousMatch);
     }
 
     /**
@@ -371,12 +378,13 @@ public class JavaMemberCallResolver {
         if (filtered.size() == 1) return filtered.get(0);
         if (filtered.isEmpty()) filtered = new ArrayList<>(candidates);
 
-        // 同名歧义守卫：所有候选简单名完全相同时，语义消歧无意义，判定为歧义
+        // L-08: 同名歧义守卫改为不丢弃 — 所有候选简单名完全相同时，
+        // 返回首个同包候选（不再 return null），由 resolveOne 标记 PENDING_CONFIRM
         String firstSimple = simpleName(filtered.get(0).getNodeKey());
         if (firstSimple != null) {
             boolean allSameName = filtered.stream()
                     .allMatch(c -> firstSimple.equals(simpleName(c.getNodeKey())));
-            if (allSameName) return null;
+            if (allSameName) return filtered.get(0); // L-08: 不再 bail out，返回首个候选
         }
 
         // 2. 语义关联消歧：根据类名的共享词根推断调用意图
@@ -601,6 +609,14 @@ public class JavaMemberCallResolver {
     }
 
     private GraphEdge buildEdgePOJO(String projectId, String versionId, GraphNode fromNode, GraphNode toNode) {
+        return buildEdgePOJO(projectId, versionId, fromNode, toNode, false);
+    }
+
+    /**
+     * L-08: 当 ambiguousMatch=true 时，创建 PENDING_CONFIRM 边（confidence=0.7），
+     * 而非丢弃边。这些边可在评审台中人工确认。
+     */
+    private GraphEdge buildEdgePOJO(String projectId, String versionId, GraphNode fromNode, GraphNode toNode, boolean ambiguousMatch) {
         GraphEdge edge = new GraphEdge();
         edge.setId(IdUtil.fastUUID());
         edge.setProjectId(projectId);
@@ -610,8 +626,13 @@ public class JavaMemberCallResolver {
         edge.setEdgeType(EdgeType.CALLS.name());
         edge.setEdgeKey(fromNode.getNodeKey() + "->calls->" + toNode.getNodeKey());
         edge.setSourceType(SourceType.CODE_AST.name());
-        edge.setConfidence(BigDecimal.ONE); // 接收方类型来自字段声明，源码显式 = EXTRACTED 档
-        edge.setStatus(NodeStatus.CONFIRMED.name());
+        if (ambiguousMatch) {
+            edge.setConfidence(new BigDecimal("0.7"));
+            edge.setStatus(NodeStatus.PENDING_CONFIRM.name());
+        } else {
+            edge.setConfidence(BigDecimal.ONE);
+            edge.setStatus(NodeStatus.CONFIRMED.name());
+        }
         edge.setCreatedAt(LocalDateTime.now());
         edge.setUpdatedAt(LocalDateTime.now());
         return edge;

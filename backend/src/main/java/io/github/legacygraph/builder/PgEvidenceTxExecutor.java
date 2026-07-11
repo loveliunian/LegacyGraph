@@ -1,15 +1,20 @@
 package io.github.legacygraph.builder;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * PG 证据写入事务执行器（批量模式）。
@@ -24,6 +29,9 @@ import java.util.concurrent.TimeUnit;
  * 无界队列会让证据写入闭包（强引用 GraphNode/GraphEdge/Evidence）无限堆积直至 OOM。
  * 改为有界队列后，队列满时对生产者施加背压（阻塞入队 + 超时丢弃，不降级同步写），
  * 使建图线程自然减速，把内存占用限制在可控范围。</p>
+ *
+ * <p><b>L-04：</b>新增 {@link #flushBlocking()} 用于扫描末段强制 drain，
+ * Prometheus 指标 {@code legacygraph_evidence_queue_depth} / {@code legacygraph_evidence_degraded_writes_total}。</p>
  */
 @Slf4j
 @Component
@@ -39,11 +47,22 @@ public class PgEvidenceTxExecutor {
     private static final int WORKER_COUNT = 2;
     /** 内存高水位阈值：JVM 堆使用率超过此值时跳过当前批次（不降级同步写） */
     private static final double MEMORY_HIGH_WATERMARK = 0.85;
+    /** L-04: flushBlocking 最长等待时间 */
+    private static final long FLUSH_BLOCKING_TIMEOUT_MS = 30_000;
 
     private final LinkedBlockingQueue<Runnable> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
     private final List<Thread> workers = new ArrayList<>();
     private final PlatformTransactionManager txManager;
     private final TransactionTemplate txTemplate;
+
+    /** L-04: 降级写入计数器（队列满超时丢弃 + 内存高水位跳批） */
+    private final AtomicLong degradedWritesCount = new AtomicLong(0);
+
+    /** L-04: Micrometer 指标注册（可选，测试环境可能无） */
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry;
+
+    private Counter degradedWritesCounter;
 
     public PgEvidenceTxExecutor() {
         this(null);
@@ -56,6 +75,19 @@ public class PgEvidenceTxExecutor {
         for (int i = 0; i < WORKER_COUNT; i++) {
             Thread t = Thread.ofVirtual().name("pg-evidence-batcher-" + i).start(this::workerLoop);
             workers.add(t);
+        }
+    }
+
+    @PostConstruct
+    void initMetrics() {
+        if (meterRegistry != null) {
+            // L-04: 队列深度 Gauge
+            meterRegistry.gauge("legacygraph_evidence_queue_depth", queue, LinkedBlockingQueue::size);
+            // L-04: 降级写入计数器
+            degradedWritesCounter = Counter.builder("legacygraph_evidence_degraded_writes_total")
+                    .description("Evidence writes skipped due to queue full or high memory watermark")
+                    .register(meterRegistry);
+            log.info("PgEvidenceTxExecutor metrics registered: queue_depth gauge + degraded_writes counter");
         }
     }
 
@@ -73,6 +105,8 @@ public class PgEvidenceTxExecutor {
                     if (isMemoryHigh()) {
                         log.warn("内存水位超过 {}，跳过当前批次（{} 条），不降级同步写",
                                 MEMORY_HIGH_WATERMARK, batch.size());
+                        degradedWritesCount.addAndGet(batch.size());
+                        incrementDegradedCounter(batch.size());
                         batch.clear();
                         continue;
                     }
@@ -108,6 +142,12 @@ public class PgEvidenceTxExecutor {
         return (double) used / max > MEMORY_HIGH_WATERMARK;
     }
 
+    private void incrementDegradedCounter(long count) {
+        if (degradedWritesCounter != null) {
+            degradedWritesCounter.increment(count);
+        }
+    }
+
     @PreDestroy
     public void shutdown() {
         for (Thread t : workers) {
@@ -123,10 +163,14 @@ public class PgEvidenceTxExecutor {
         try {
             if (!queue.offer(pgWrite, OFFER_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                 log.warn("Evidence queue full after {}ms wait, skip (no sync write)", OFFER_TIMEOUT_MS);
+                degradedWritesCount.incrementAndGet();
+                incrementDegradedCounter(1);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("Evidence enqueue interrupted, skip (no sync write)");
+            degradedWritesCount.incrementAndGet();
+            incrementDegradedCounter(1);
         }
     }
 
@@ -156,5 +200,35 @@ public class PgEvidenceTxExecutor {
         if (!remaining.isEmpty()) {
             try { executeBatch(remaining); } catch (Exception e) { log.error("Flush failed: {}", e.getMessage()); }
         }
+    }
+
+    /**
+     * L-04: 阻塞式 flush — 等待队列排空 + worker 处理完在途批次，用于扫描末段强制 drain。
+     * <p>最多等待 {@value #FLUSH_BLOCKING_TIMEOUT_MS}ms，超时后强制 drain 并告警。</p>
+     */
+    public void flushBlocking() {
+        long deadline = System.currentTimeMillis() + FLUSH_BLOCKING_TIMEOUT_MS;
+        // 1. 等待队列排空（worker 持续消费）
+        while (!queue.isEmpty() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        if (!queue.isEmpty()) {
+            log.warn("flushBlocking: queue still has {} items after {}ms timeout, forcing drain",
+                    queue.size(), FLUSH_BLOCKING_TIMEOUT_MS);
+        }
+        // 2. 强制 drain 剩余项
+        flush();
+        // 3. 等待在途批次完成（FLUSH_INTERVAL_MS + buffer）
+        try {
+            Thread.sleep(FLUSH_INTERVAL_MS + 200);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        log.info("flushBlocking complete: degradedWritesCount={}", degradedWritesCount.get());
     }
 }

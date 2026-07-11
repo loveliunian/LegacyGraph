@@ -91,7 +91,7 @@
 
 <script setup lang="ts">
 
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { graphApi } from '@/api'  // Phase 3-2: 逐步迁移到此 API module
@@ -153,6 +153,8 @@ async function createReview(row: any) {
   }
 }
 
+// L-26: 版本切换时重新加载
+watch(() => props.versionId, () => { if (props.versionId) loadDrift() })
 onMounted(() => { preloadDicts(['drift_type']); loadDrift() })
 </script>
 

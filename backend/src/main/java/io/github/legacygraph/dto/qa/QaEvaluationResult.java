@@ -41,6 +41,15 @@ public class QaEvaluationResult {
     /** 是否通过门禁 */
     private boolean passed;
 
+    /** G-10: 聚合 Ragas 指标 — 上下文精确度（0~1） */
+    private double ragasContextPrecision;
+    /** G-10: 聚合 Ragas 指标 — 上下文召回率（0~1） */
+    private double ragasContextRecall;
+    /** G-10: 聚合 Ragas 指标 — 答案忠实度（0~1） */
+    private double ragasFaithfulness;
+    /** G-10: 聚合 Ragas 指标 — 答案相关性（0~1） */
+    private double ragasAnswerRelevancy;
+
     /** 未通过原因（passed=false 时填充） */
     private List<String> failureReasons = new ArrayList<>();
 

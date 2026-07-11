@@ -1,126 +1,170 @@
 package io.github.legacygraph.service.source;
 
-import io.github.legacygraph.entity.SourceSnapshotEntity;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dto.source.SourceDescriptor;
+import io.github.legacygraph.entity.SourceSnapshot;
 import io.github.legacygraph.repository.SourceSnapshotRepository;
-import io.github.legacygraph.util.IdUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * 源快照服务（G-02）。
+ * G-02: SourceSnapshotService — 资料源不可变快照服务。
  * <p>
- * 管理不可变 SourceSnapshot 父表的生命周期：每次扫描由 SourceConnector 产出一条新快照，
- * 通过 {@code parentSnapshotId} 自动串联上一个快照构成版本链。提供最新快照查询、
- * 按扫描版本查询以及内容变更判定（基于 contentHash 比对）能力。
+ * 在扫描版本启动时为所有发现的资料源创建不可变快照，记录"扫描时看到了什么"。
+ * 快照写入后不可修改，仅可查询。用于：
  * </p>
+ * <ul>
+ *   <li>版本间 diff：对比两次扫描的资料源差异</li>
+ *   <li>审计追溯：回溯某次扫描使用了哪些代码/文档/数据库</li>
+ *   <li>增量扫描辅助：与 {@link io.github.legacygraph.service.scan.FileChangeDetector} 互补</li>
+ * </ul>
  */
 @Slf4j
 @Service
 public class SourceSnapshotService {
 
-    /** 新建快照的默认状态 */
-    private static final String STATUS_ACTIVE = "ACTIVE";
+    private final SourceSnapshotRepository sourceSnapshotRepository;
+    private final ObjectMapper objectMapper;
 
-    private final SourceSnapshotRepository snapshotRepository;
-
-    public SourceSnapshotService(SourceSnapshotRepository snapshotRepository) {
-        this.snapshotRepository = snapshotRepository;
+    @Autowired
+    public SourceSnapshotService(SourceSnapshotRepository sourceSnapshotRepository,
+                                  ObjectMapper objectMapper) {
+        this.sourceSnapshotRepository = sourceSnapshotRepository;
+        this.objectMapper = objectMapper;
     }
 
     /**
-     * 创建一条不可变源快照。
-     * <p>
-     * 自动查找该 (projectId, sourceType, sourceId) 的上一个最新快照，
-     * 将其 ID 写入 {@code parentSnapshotId} 构成版本链。
-     *
-     * @param projectId     项目 ID
-     * @param sourceType    源类型（CODE / DOC / DB / RUN / EXTERNAL）
-     * @param sourceId      源 ID
-     * @param sourceUri     源 URI
-     * @param contentHash   内容哈希（SHA-256）
-     * @param scanVersionId 扫描版本 ID
-     * @param mimeType      MIME 类型
-     * @param sizeBytes     字节大小
-     * @param aclHash       ACL 哈希
-     * @return 已持久化的快照实体
-     */
-    public SourceSnapshotEntity createSnapshot(String projectId, String sourceType, String sourceId,
-                                               String sourceUri, String contentHash, String scanVersionId,
-                                               String mimeType, long sizeBytes, String aclHash) {
-        // 查找上一个最新快照，作为父快照
-        SourceSnapshotEntity parent = findLatest(projectId, sourceType, sourceId);
-
-        SourceSnapshotEntity snapshot = new SourceSnapshotEntity();
-        snapshot.setId(IdUtil.fastUUID());
-        snapshot.setProjectId(projectId);
-        snapshot.setSourceType(sourceType);
-        snapshot.setSourceId(sourceId);
-        snapshot.setSourceUri(sourceUri);
-        snapshot.setContentHash(contentHash);
-        snapshot.setParentSnapshotId(parent == null ? null : parent.getId());
-        snapshot.setScanVersionId(scanVersionId);
-        snapshot.setMimeType(mimeType);
-        snapshot.setSizeBytes(sizeBytes);
-        snapshot.setAclHash(aclHash);
-        snapshot.setStatus(STATUS_ACTIVE);
-        snapshot.setCreatedAt(LocalDateTime.now());
-
-        snapshotRepository.insert(snapshot);
-        log.info("已创建源快照：projectId={}, sourceType={}, sourceId={}, snapshotId={}, parentId={}",
-                projectId, sourceType, sourceId, snapshot.getId(), snapshot.getParentSnapshotId());
-        return snapshot;
-    }
-
-    /**
-     * 查找指定源的最新快照（按创建时间倒序取第一条）。
-     *
-     * @param projectId  项目 ID
-     * @param sourceType 源类型
-     * @param sourceId   源 ID
-     * @return 最新快照，无记录时返回 null
-     */
-    public SourceSnapshotEntity findLatest(String projectId, String sourceType, String sourceId) {
-        return snapshotRepository.lambdaQuery()
-                .eq(SourceSnapshotEntity::getProjectId, projectId)
-                .eq(SourceSnapshotEntity::getSourceType, sourceType)
-                .eq(SourceSnapshotEntity::getSourceId, sourceId)
-                .orderByDesc(SourceSnapshotEntity::getCreatedAt)
-                .last("LIMIT 1")
-                .one();
-    }
-
-    /**
-     * 按扫描版本查找全部快照。
-     *
-     * @param scanVersionId 扫描版本 ID
-     * @return 该扫描版本下的快照列表
-     */
-    public List<SourceSnapshotEntity> findByScanVersion(String scanVersionId) {
-        return snapshotRepository.lambdaQuery()
-                .eq(SourceSnapshotEntity::getScanVersionId, scanVersionId)
-                .orderByDesc(SourceSnapshotEntity::getCreatedAt)
-                .list();
-    }
-
-    /**
-     * 判断指定源的内容是否发生变化（基于 contentHash 比对）。
-     * <p>
-     * 无历史快照视为已变化（新增源）；哈希一致视为未变化。
+     * 为扫描版本创建资料源快照（批量）。
+     * <p>快照不可变：同一 versionId 重复调用时跳过已存在的快照。</p>
      *
      * @param projectId   项目 ID
-     * @param sourceType  源类型
-     * @param sourceId    源 ID
-     * @param contentHash 当前内容哈希
-     * @return true 表示内容已变化（需重新扫描），false 表示未变化
+     * @param versionId   扫描版本 ID
+     * @param descriptors 资料源描述符列表
+     * @return 实际写入的快照数
      */
-    public boolean hasChanged(String projectId, String sourceType, String sourceId, String contentHash) {
-        SourceSnapshotEntity latest = findLatest(projectId, sourceType, sourceId);
-        if (latest == null) {
-            return true;
+    public int createSnapshots(String projectId, String versionId, List<SourceDescriptor> descriptors) {
+        if (projectId == null || versionId == null || descriptors == null || descriptors.isEmpty()) {
+            return 0;
         }
-        return !contentHash.equals(latest.getContentHash());
+        // 检查是否已有快照（不可变：已存在则跳过）
+        long existing = countSnapshots(projectId, versionId);
+        if (existing > 0) {
+            log.info("SourceSnapshot already exists for projectId={}, versionId={} ({}), skip",
+                    projectId, versionId, existing);
+            return 0;
+        }
+        int created = 0;
+        LocalDateTime now = LocalDateTime.now();
+        for (SourceDescriptor descriptor : descriptors) {
+            try {
+                SourceSnapshot snapshot = SourceSnapshot.builder()
+                        .projectId(projectId)
+                        .versionId(versionId)
+                        .sourceType(descriptor.getSourceType() != null ? descriptor.getSourceType() : "UNKNOWN")
+                        .descriptorJson(serializeDescriptor(descriptor))
+                        .contentHash(descriptor.getContentHash())
+                        .contentSize(parseSize(descriptor.getSize()))
+                        .snapshotTime(now)
+                        .createdAt(now)
+                        .build();
+                sourceSnapshotRepository.insert(snapshot);
+                created++;
+            } catch (Exception e) {
+                log.warn("Failed to create source snapshot: projectId={}, sourceType={}, err={}",
+                        projectId, descriptor.getSourceType(), e.getMessage());
+            }
+        }
+        log.info("Created {} source snapshots for projectId={}, versionId={}", created, projectId, versionId);
+        return created;
+    }
+
+    /**
+     * 查询扫描版本的资料源快照列表。
+     *
+     * @param projectId 项目 ID
+     * @param versionId 扫描版本 ID
+     * @return 快照列表（按 sourceType 排序）
+     */
+    public List<SourceSnapshot> getSnapshots(String projectId, String versionId) {
+        if (projectId == null || versionId == null) {
+            return Collections.emptyList();
+        }
+        LambdaQueryWrapper<SourceSnapshot> wrapper = new LambdaQueryWrapper<SourceSnapshot>()
+                .eq(SourceSnapshot::getProjectId, projectId)
+                .eq(SourceSnapshot::getVersionId, versionId)
+                .orderByAsc(SourceSnapshot::getSourceType);
+        return sourceSnapshotRepository.selectList(wrapper);
+    }
+
+    /**
+     * 按资料源类型查询快照。
+     */
+    public List<SourceSnapshot> getSnapshotsByType(String projectId, String versionId, String sourceType) {
+        if (projectId == null || versionId == null || sourceType == null) {
+            return Collections.emptyList();
+        }
+        LambdaQueryWrapper<SourceSnapshot> wrapper = new LambdaQueryWrapper<SourceSnapshot>()
+                .eq(SourceSnapshot::getProjectId, projectId)
+                .eq(SourceSnapshot::getVersionId, versionId)
+                .eq(SourceSnapshot::getSourceType, sourceType)
+                .orderByAsc(SourceSnapshot::getSnapshotTime);
+        return sourceSnapshotRepository.selectList(wrapper);
+    }
+
+    /**
+     * 统计扫描版本的快照数。
+     */
+    public long countSnapshots(String projectId, String versionId) {
+        if (projectId == null || versionId == null) {
+            return 0;
+        }
+        LambdaQueryWrapper<SourceSnapshot> wrapper = new LambdaQueryWrapper<SourceSnapshot>()
+                .eq(SourceSnapshot::getProjectId, projectId)
+                .eq(SourceSnapshot::getVersionId, versionId);
+        return sourceSnapshotRepository.selectCount(wrapper);
+    }
+
+    /**
+     * 反序列化快照中的 SourceDescriptor。
+     */
+    public SourceDescriptor deserializeSnapshot(SourceSnapshot snapshot) {
+        if (snapshot == null || snapshot.getDescriptorJson() == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(snapshot.getDescriptorJson(), SourceDescriptor.class);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to deserialize SourceDescriptor: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    // ==================== 内部方法 ====================
+
+    private String serializeDescriptor(SourceDescriptor descriptor) {
+        try {
+            return objectMapper.writeValueAsString(descriptor);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize SourceDescriptor: {}", e.getMessage());
+            return "{}";
+        }
+    }
+
+    private Long parseSize(String size) {
+        if (size == null || size.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(size.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

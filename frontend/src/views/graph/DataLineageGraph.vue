@@ -245,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Tickets, Share, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { graphApi } from '@/api'
@@ -587,6 +587,80 @@ async function selectTable(id: string) {
       ElMessage.error('加载血缘数据失败')
     }
   }
+}
+
+// L-23: 模式切换时重新过滤血缘数据（upstream/downstream/lineage）
+watch(viewMode, () => {
+  if (!selectedTable.value) return
+  const selected = getSelectedTable()
+  if (selected) {
+    applyViewModeFilter()
+  }
+})
+
+/**
+ * L-23: 根据 viewMode 过滤血缘数据。
+ * - lineage: 显示完整血缘（上游+下游）
+ * - downstream: 仅显示下游影响（选中表为 source 的边及其可达路径）
+ * - upstream: 仅显示上游来源（选中表为 target 的边及其可达路径）
+ */
+function applyViewModeFilter() {
+  const selected = getSelectedTable()
+  if (!selected || !selected.id) return
+  const selectedId = selected.id
+  const allNodes = lineageData.value.nodes
+  const allEdges = lineageData.value.edges
+
+  if (viewMode.value === 'lineage') {
+    // 完整血缘：不过滤
+    convertToVueFlow()
+    return
+  }
+
+  // 按方向过滤边
+  const filteredEdges = allEdges.filter(e => {
+    if (viewMode.value === 'downstream') {
+      return e.source === selectedId || isReachable(e.target, selectedId, allEdges, 'downstream')
+    } else if (viewMode.value === 'upstream') {
+      return e.target === selectedId || isReachable(e.source, selectedId, allEdges, 'upstream')
+    }
+    return true
+  })
+
+  // 收集过滤后边涉及的节点
+  const nodeIds = new Set<string>([selectedId])
+  filteredEdges.forEach(e => {
+    nodeIds.add(e.source)
+    nodeIds.add(e.target)
+  })
+  const filteredNodes = allNodes.filter(n => nodeIds.has(n.id))
+
+  // 临时替换 lineageData 并重新转换
+  const originalData = lineageData.value
+  lineageData.value = { nodes: filteredNodes, edges: filteredEdges }
+  convertToVueFlow()
+  lineageData.value = originalData // 恢复完整数据，下次切换模式时可重新过滤
+}
+
+/** 判断 nodeId 是否可从 selectedId 沿指定方向到达 */
+function isReachable(nodeId: string, selectedId: string, edges: any[], direction: 'upstream' | 'downstream'): boolean {
+  const visited = new Set<string>()
+  const queue = [selectedId]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    if (visited.has(current)) continue
+    visited.add(current)
+    for (const e of edges) {
+      if (direction === 'downstream' && e.source === current && !visited.has(e.target)) {
+        if (e.target === nodeId) return true
+        queue.push(e.target)
+      } else if (direction === 'upstream' && e.target === current && !visited.has(e.source)) {
+        if (e.source === nodeId) return true
+        queue.push(e.source)
+      }
+    }
+  }
+  return false
 }
 
 async function refreshGraph() {

@@ -209,10 +209,19 @@
             />
             <div class="input-actions">
               <span class="char-count">{{ inputText.length }}/500</span>
+              <!-- L-25: 流式生成中显示 stop 按钮 -->
               <el-button
+                v-if="thinking"
+                type="danger"
+                @click="handleStopStream"
+              >
+                <el-icon><VideoPause /></el-icon>
+                停止
+              </el-button>
+              <el-button
+                v-else
                 type="primary"
-                :disabled="!inputText.trim() || thinking"
-                :loading="thinking"
+                :disabled="!inputText.trim()"
                 @click="handleSend"
               >
                 <el-icon><Promotion /></el-icon>
@@ -232,9 +241,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, ArrowLeft, ArrowRight, Fold } from '@element-plus/icons-vue'
+import { ChatDotRound, User, Cpu, Promotion, Plus, Delete, ArrowLeft, ArrowRight, Fold, VideoPause } from '@element-plus/icons-vue'
 import { qaApi, type QaConversation, type EvidenceItem } from '@/api/qa.api'
 import { changeTaskApi } from '@/api/change-task.api'
 import { mapQaHistoryMessages } from './qaMessageMapper'
@@ -266,6 +275,24 @@ const streamingEvidences = ref<EvidenceItem[]>([])
 const streamingImpact = ref<any>(null)
 const chatContainer = ref<HTMLElement>()
 const currentStreamController = ref<AbortController | null>(null)
+
+// L-27: 提取流中断逻辑，统一在 stop / abort / onUnmounted 调用，避免用户在流式中离开页面导致 SSE 连接泄漏
+function abortCurrentStream() {
+  if (currentStreamController.value) {
+    try {
+      currentStreamController.value.abort()
+    } catch (e) {
+      // abort 抛错不影响后续清理
+    }
+    currentStreamController.value = null
+  }
+}
+
+onUnmounted(() => {
+  // L-27: 组件卸载时立即中断进行中的 SSE 流，防止 SSE 连接在路由切换后继续持有与读取响应
+  abortCurrentStream()
+  thinking.value = false
+})
 
 const exampleQuestions = [
   '这个项目用了哪些数据库表？',
@@ -433,6 +460,29 @@ const handleSend = async () => {
   }
 }
 
+/**
+ * L-25: 停止流式生成 — 中断当前 fetch 请求，保留已生成的部分内容。
+ */
+const handleStopStream = () => {
+  // L-27: 走统一 abort 入口
+  abortCurrentStream()
+  // 保留已流式生成的部分内容作为消息
+  const partialContent = streamingContent.value.trim()
+  if (partialContent) {
+    messages.value.push({
+      role: 'assistant',
+      content: partialContent + '\n\n_（已停止生成）_',
+      evidences: streamingEvidences.value,
+      conversationId: currentConversationId.value || undefined,
+    })
+  }
+  streamingContent.value = ''
+  streamingEvidences.value = []
+  streamingImpact.value = null
+  thinking.value = false
+  scrollToBottom()
+}
+
 const clearChat = () => {
   messages.value = []
   currentConversationId.value = null
@@ -440,10 +490,8 @@ const clearChat = () => {
 
 const createNewConversation = async () => {
   try {
-    if (currentStreamController.value) {
-      currentStreamController.value.abort()
-      currentStreamController.value = null
-    }
+    // L-27: 走统一 abort 入口
+    abortCurrentStream()
     thinking.value = false
     const conv = await qaApi.createConversation(projectId)
     if (conv?.id) {
@@ -464,10 +512,8 @@ const switchConversation = async (convId: string) => {
   try {
     if (currentConversationId.value === convId) return
 
-    if (currentStreamController.value) {
-      currentStreamController.value.abort()
-      currentStreamController.value = null
-    }
+    // L-27: 走统一 abort 入口
+    abortCurrentStream()
     thinking.value = false
     currentConversationId.value = convId
     streamingContent.value = ''

@@ -39,4 +39,15 @@ public class FileSnapshot {
 
     /** 快照记录时间 */
     private LocalDateTime scannedAt;
+
+    /** L-05: 抽取器版本（变化时触发 LOGIC_RESCAN） */
+    private String extractorVersion;
+    /** L-05: 嵌入模型名称（变化时触发 LOGIC_RESCAN） */
+    private String embeddingModel;
+    /** L-05: 图谱本体版本（变化时触发 LOGIC_RESCAN） */
+    private String graphOntologyVersion;
+    /** L-05: 变更类型 ADDED/MODIFIED/DELETED/RENAMED/LOGIC_RESCAN */
+    private String changeType;
+    /** L-05: 最后可见时间（RENAMED 后旧节点清退用） */
+    private LocalDateTime lastSeenAt;
 }

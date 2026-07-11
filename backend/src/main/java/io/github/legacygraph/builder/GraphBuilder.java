@@ -3,6 +3,7 @@ package io.github.legacygraph.builder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeStatus;
+import io.github.legacygraph.concurrency.ConcurrencyPropertyExtractor;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dao.Neo4jGraphDao;
@@ -1999,7 +2000,7 @@ public class GraphBuilder {
             if (classInfo.getQualifiedName() == null || classInfo.getQualifiedName().isBlank()) {
                 continue;
             }
-            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName());
+            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName(), classInfo.getAnnotations());
             String classKey = classInfo.getQualifiedName();
             String inheritProps = buildInheritProperties(classInfo);
 
@@ -2039,6 +2040,11 @@ public class GraphBuilder {
                         mProps.put("status", NodeStatus.CONFIRMED.name());
                         mProps.put("scanType", "CODE_SCAN");
                         mProps.put("className", classInfo.getQualifiedName());
+                        // L-10: Method 并发属性回填（transactional/async/cacheable/lockType/synchronized）
+                        Map<String, Object> concurrencyProps = ConcurrencyPropertyExtractor.extract(methodInfo);
+                        if (!concurrencyProps.isEmpty()) {
+                            mProps.putAll(concurrencyProps);
+                        }
                         nodeBatch.add(new Neo4jWriteRepository.BatchNodeUpsert(
                                 NodeType.Method.name(), methodKey, methodInfo.getMethodName(), mProps));
                         seenNodeKeys.add(methodKey);
@@ -2046,6 +2052,46 @@ public class GraphBuilder {
                     edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
                             classKey, methodKey, EdgeType.CONTAINS.name(),
                             classKey + "->contains->" + methodKey,
+                            edgeProps(SourceType.CODE_AST.name(), BigDecimal.ONE, NodeStatus.CONFIRMED)));
+                }
+            }
+
+            // L-12: 按字段注解分类入图 —— ConfigItem / Dependency / FeatureFlag 节点
+            if (classInfo.getFields() != null) {
+                for (JavaStructureExtractor.JavaFieldInfo fieldInfo : classInfo.getFields()) {
+                    if (fieldInfo.getFieldName() == null || fieldInfo.getFieldName().isBlank()) {
+                        continue;
+                    }
+                    // 按字段注解推断节点类型，无匹配注解的字段不入图（避免普通业务字段泛滥成节点）
+                    NodeType fieldNodeType = inferFieldNodeType(fieldInfo.getAnnotations());
+                    if (fieldNodeType == null) {
+                        continue;
+                    }
+                    // 字段节点 key 使用 类FQN#字段名 格式，避免与类/方法节点 key 冲突
+                    String fieldKey = classKey + "#" + fieldInfo.getFieldName();
+                    if (!seenNodeKeys.contains(fieldKey)) {
+                        Map<String, Object> fProps = new HashMap<>();
+                        fProps.put("displayName", fieldInfo.getFieldName());
+                        fProps.put("sourceType", SourceType.CODE_AST.name());
+                        fProps.put("sourcePath", classInfo.getSourcePath());
+                        fProps.put("startLine", fieldInfo.getStartLine());
+                        fProps.put("endLine", fieldInfo.getEndLine());
+                        fProps.put("confidence", 1.0);
+                        fProps.put("status", NodeStatus.CONFIRMED.name());
+                        fProps.put("scanType", "CODE_SCAN");
+                        fProps.put("className", classInfo.getQualifiedName());
+                        fProps.put("fieldName", fieldInfo.getFieldName());
+                        fProps.put("fieldType", fieldInfo.getFieldType());
+                        if (fieldInfo.getAnnotations() != null && !fieldInfo.getAnnotations().isEmpty()) {
+                            fProps.put("annotations", String.join(",", fieldInfo.getAnnotations()));
+                        }
+                        nodeBatch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                                fieldNodeType.name(), fieldKey, fieldInfo.getFieldName(), fProps));
+                        seenNodeKeys.add(fieldKey);
+                    }
+                    edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                            classKey, fieldKey, EdgeType.CONTAINS.name(),
+                            classKey + "->contains->" + fieldKey,
                             edgeProps(SourceType.CODE_AST.name(), BigDecimal.ONE, NodeStatus.CONFIRMED)));
                 }
             }
@@ -2063,7 +2109,7 @@ public class GraphBuilder {
             if (classInfo.getQualifiedName() == null || classInfo.getQualifiedName().isBlank()) {
                 continue;
             }
-            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName());
+            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName(), classInfo.getAnnotations());
             String classKey = classInfo.getQualifiedName();
             GraphNode classNode = neo4jGraphDao.findNode(projectId, versionId,
                     classNodeType.name(), classKey).orElse(null);
@@ -2287,22 +2333,88 @@ public class GraphBuilder {
     }
 
     /**
-     * 根据类名推断节点类型
+     * L-09: 根据注解 + 类名推断节点类型（注解优先，避免包路径污染）。
+     *
+     * @param className   类的全限定名（可为 null）
+     * @param annotations 类级注解名称列表（如 RestController, Service, Mapper），可为 null
      */
-    private NodeType inferNodeType(String className) {
-        if (className == null || className.isEmpty()) {
-            return NodeType.Service; // 默认作为服务类
+    private NodeType inferNodeType(String className, List<String> annotations) {
+        // 1. 注解优先判定
+        if (annotations != null && !annotations.isEmpty()) {
+            for (String anno : annotations) {
+                String simple = anno.contains(".") ? anno.substring(anno.lastIndexOf('.') + 1) : anno;
+                switch (simple) {
+                    case "RestController", "Controller" -> { return NodeType.Controller; }
+                    case "Service" -> { return NodeType.Service; }
+                    case "Mapper", "Repository" -> { return NodeType.Mapper; }
+                    case "Configuration", "ConfigProperties" -> { return NodeType.ConfigItem; }
+                    case "Component" -> { return NodeType.Service; }
+                    case "Scheduled" -> { return NodeType.ScheduledJob; }
+                    default -> { /* 继续检查下一个注解 */ }
+                }
+            }
         }
-        if (className.contains("Controller") || className.contains("controller")) {
+        // 2. 没有匹配注解 → 按简单名（最后一个点之后的 token）匹配，避免子串污染
+        if (className == null || className.isEmpty()) {
+            return NodeType.Unknown;
+        }
+        String simpleName = className.contains(".")
+                ? className.substring(className.lastIndexOf('.') + 1)
+                : className;
+        if (simpleName.endsWith("Controller")) {
             return NodeType.Controller;
         }
-        if (className.contains("Service") || className.contains("service")) {
+        if (simpleName.endsWith("Service") || simpleName.endsWith("ServiceImpl")) {
             return NodeType.Service;
         }
-        if (className.contains("Mapper") || className.contains("mapper") || className.contains("Dao") || className.contains("dao")) {
+        if (simpleName.endsWith("Mapper") || simpleName.endsWith("Dao") || simpleName.endsWith("DAO")) {
             return NodeType.Mapper;
         }
-        return NodeType.Service; // 默认作为服务类
+        if (simpleName.endsWith("Config") || simpleName.endsWith("Configuration") || simpleName.endsWith("Properties")) {
+            return NodeType.ConfigItem;
+        }
+        // 3. 默认归为 Unknown（不再默认 Service，避免 QA 被误导）
+        return NodeType.Unknown;
+    }
+
+    /**
+     * L-09: 仅按类名推断（向后兼容，无注解时使用）。
+     */
+    private NodeType inferNodeType(String className) {
+        return inferNodeType(className, null);
+    }
+
+    /**
+     * L-12: 按字段级注解推断字段节点类型。
+     * <p>分类规则：</p>
+     * <ul>
+     *   <li>@Value / @ConfigurationProperties → ConfigItem（外部配置注入）</li>
+     *   <li>@Autowired / @Resource → Dependency（Spring 依赖注入）</li>
+     *   <li>@FeatureFlag / @Toggle → FeatureFlag（特性开关）</li>
+     * </ul>
+     * <p>无匹配注解返回 null，表示该字段不入图（避免普通业务字段泛滥成节点）。</p>
+     *
+     * @param annotations 字段级注解简单名列表（可为 null）
+     * @return 节点类型；无匹配时返回 null
+     */
+    private NodeType inferFieldNodeType(List<String> annotations) {
+        if (annotations == null || annotations.isEmpty()) {
+            return null;
+        }
+        for (String anno : annotations) {
+            if (anno == null || anno.isBlank()) {
+                continue;
+            }
+            // 取注解简单名（去包前缀）
+            String simple = anno.contains(".") ? anno.substring(anno.lastIndexOf('.') + 1) : anno;
+            switch (simple) {
+                case "Value", "ConfigurationProperties" -> { return NodeType.ConfigItem; }
+                case "Autowired", "Resource" -> { return NodeType.Dependency; }
+                case "FeatureFlag", "Toggle" -> { return NodeType.FeatureFlag; }
+                default -> { /* 继续检查下一个注解 */ }
+            }
+        }
+        return null;
     }
 
     /**

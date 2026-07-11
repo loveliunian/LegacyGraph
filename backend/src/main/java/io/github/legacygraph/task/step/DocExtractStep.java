@@ -9,8 +9,10 @@ import io.github.legacygraph.dto.DocumentChunk;
 import io.github.legacygraph.entity.Document;
 import io.github.legacygraph.entity.DocumentElement;
 import io.github.legacygraph.entity.Fact;
+import io.github.legacygraph.entity.ParseFailure;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.repository.DocumentRepository;
+import io.github.legacygraph.repository.ParseFailureRepository;
 import io.github.legacygraph.service.document.DocumentPartitionService;
 import io.github.legacygraph.service.document.StructureAwareChunkService;
 import io.github.legacygraph.service.scan.DocumentContentService;
@@ -54,6 +56,10 @@ public class DocExtractStep implements AiScanStepExecutor {
     private static final int DOC_CHUNK_OVERLAP = 400;
     /** 超过此大小的文档才分段，中间大小直接截断（性价比：分段 LLM 耗时 vs 覆盖内容） */
     private static final int DOC_CHUNK_THRESHOLD = 16000;
+    /** L-03: 大文档分片阈值（字符数），超过此值走分片策略 */
+    private static final int SHARD_THRESHOLD = 500_000;
+    /** L-03: 分片大小（字符数，≤50KB），每片独立抽取后合并 */
+    private static final int SHARD_SIZE_CHARS = 50_000;
     /** 扫描产物目录（docs/legacygraph/），其中的文档是扫描自身产出，不应再次进入 AI_DOC_EXTRACT */
     private static final String SCAN_ARTIFACT_DIR = "docs/legacygraph/";
 
@@ -72,6 +78,10 @@ public class DocExtractStep implements AiScanStepExecutor {
     /** 向量语义去重可用模型（bge-m3 @ Ollama）；未配置时降级为精确+子串去重，永不劣化 */
     @Autowired(required = false)
     private EmbeddingModel embeddingModel;
+
+    /** L-03: 解析失败日志仓库（记录分片/shard 级失败，用于后续重试和治理） */
+    @Autowired(required = false)
+    private ParseFailureRepository parseFailureRepository;
 
     /** Feature Flag：结构感知切块开关（spec 5.4），关闭时走旧 DocumentContentService 路径 */
     @Value("${legacygraph.document.partition.enabled:true}")
@@ -186,15 +196,10 @@ public class DocExtractStep implements AiScanStepExecutor {
                         doc.setUpdatedAt(java.time.LocalDateTime.now());
                         try { documentRepository.updateById(doc); } catch (Exception e) { log.warn("Failed to update doc: {}", doc.getId(), e); }
                         support.markExtractFailed(projectId, versionId, filePath, "DOC_EXTRACT", "empty content");
+                        logParseFailure(projectId, versionId, doc, 0, 1, 0, 0, "EMPTY_CONTENT", "无法读取文档内容");
                         return;
                     }
-                    // 向量化：support 内部已用专用有界线程池 + 内存水位背压，这里直接委托
-                    // #20 修复：大文档（>20KB）延迟到 LLM 抽取完成后再向量化，避免 embedding 与 LLM 并发导致 OOM
-                    // spec 5.4：partitionEnabled 时走结构感知切块路径，否则走旧 vectorizeContent 路径
-                    boolean deferVectorize = content.length() > 20000;
-                    if (!deferVectorize) {
-                        vectorizeDocument(projectId, versionId, doc, content);
-                    }
+                    // L-03: 严格串行 — LLM 抽取完成后再向量化（所有文档统一，不再提前向量化）
                     try {
                         // 内存保护：堆快满时跳过 LLM 调用，避免 OOM 中断扫描
                         if (!AiScanStepSupport.isMemoryHealthy()) {
@@ -204,13 +209,18 @@ public class DocExtractStep implements AiScanStepExecutor {
                             doc.setErrorMessage("Low memory, skipped");
                             doc.setUpdatedAt(java.time.LocalDateTime.now());
                             try { documentRepository.updateById(doc); } catch (Exception ignored) {}
+                            logParseFailure(projectId, versionId, doc, 0, 1, 0, content.length(), "OOM", "Low memory, skipped");
                             return;
                         }
                         // A3：大文档分段并行抽取再合并，既全覆盖又并发提速。
                         // 小文档（≤ DOC_CONTENT_LIMIT）保持原路径——单次 LLM 调用。
+                        // L-03：超大文档（>500KB）先分片再分块，避免单次加载过大内容导致 OOM
                         DocUnderstandingAgent.BusinessFactExtraction extraction;
                         ChunkExtractionResult chunkExtraction = null;
-                        if (content.length() <= DOC_CHUNK_THRESHOLD) {
+                        if (content.length() > SHARD_THRESHOLD) {
+                            chunkExtraction = extractFromShardsWithCoverage(projectId, versionId, doc, content);
+                            extraction = chunkExtraction.extraction();
+                        } else if (content.length() <= DOC_CHUNK_THRESHOLD) {
                             extraction = support.cachedExtract("doc",
                                     support.truncate(content, DOC_CONTENT_LIMIT), () -> {
                                 agentCallCounter.increment();
@@ -252,10 +262,8 @@ public class DocExtractStep implements AiScanStepExecutor {
                         } else {
                             support.markExtractFailed(projectId, versionId, filePath, "DOC_EXTRACT", doc.getErrorMessage());
                         }
-                        // #20 修复：大文档延迟向量化——LLM 抽取完成后内存释放，再提交向量化
-                        if (deferVectorize) {
-                            vectorizeDocument(projectId, versionId, doc, content);
-                        }
+                        // L-03: LLM 抽取完成后向量化（严格串行，所有文档统一）
+                        vectorizeDocument(projectId, versionId, doc, content);
                         // 更新进度（每 5 个文件写一次 DB，减少写入频率）
                         int done = processedCount.incrementAndGet();
                         if (done % 5 == 0 || done == totalDocs) {
@@ -268,6 +276,7 @@ public class DocExtractStep implements AiScanStepExecutor {
                         doc.setErrorMessage("OOM: " + oom.getMessage());
                         doc.setUpdatedAt(java.time.LocalDateTime.now());
                         try { documentRepository.updateById(doc); } catch (Exception ignored) {}
+                        logParseFailure(projectId, versionId, doc, 0, 1, 0, content.length(), "OOM", oom.getMessage());
                     } catch (Exception e) {
                         log.warn("Doc extract failed for doc {}: {}", doc.getId(), e.getMessage());
                         doc.setParseStatus("FAILED");
@@ -279,6 +288,7 @@ public class DocExtractStep implements AiScanStepExecutor {
                             log.warn("Failed to update doc status to FAILED: {}", doc.getId(), updateEx);
                         }
                         support.markExtractFailed(projectId, versionId, filePath, "DOC_EXTRACT", e.getMessage());
+                        logParseFailure(projectId, versionId, doc, 0, 1, 0, content.length(), "LLM_ERROR", e.getMessage());
                     }
                 }, support.getDocExtractExecutor()));
             }
@@ -981,6 +991,108 @@ public class DocExtractStep implements AiScanStepExecutor {
         } catch (Exception e) {
             log.debug("countGraphEdges failed: {}", e.getMessage());
             return 0;
+        }
+    }
+
+    /**
+     * L-03: 超大文档（>500KB）分片抽取。
+     * <p>将文档按 {@value #SHARD_SIZE_CHARS} 字符分片，每片独立走
+     * {@link #extractFromChunksWithCoverage}（内部再分块调 LLM），最后合并所有分片结果。
+     * 失败的分片记录到 {@code lg_parse_failure} 表，不影响其他分片。</p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 版本 ID
+     * @param doc       文档实体
+     * @param content   完整文档内容（长度 > {@value #SHARD_THRESHOLD}）
+     * @return 合并后的抽取结果与覆盖度
+     */
+    private ChunkExtractionResult extractFromShardsWithCoverage(String projectId, String versionId,
+                                                                 Document doc, String content) {
+        int contentLen = content.length();
+        int totalShards = (contentLen + SHARD_SIZE_CHARS - 1) / SHARD_SIZE_CHARS;
+        log.info("AI_DOC_EXTRACT sharding: doc={}, contentLen={}, shards={}, shardSize={}",
+                doc.getDocName(), contentLen, totalShards, SHARD_SIZE_CHARS);
+
+        List<DocUnderstandingAgent.BusinessFactExtraction> shardResults = new ArrayList<>();
+        int successfulShards = 0;
+
+        for (int i = 0; i < totalShards; i++) {
+            int shardStart = i * SHARD_SIZE_CHARS;
+            int shardEnd = Math.min(shardStart + SHARD_SIZE_CHARS, contentLen);
+            String shardContent = content.substring(shardStart, shardEnd);
+
+            // 内存保护：分片处理前检查内存水位
+            if (!AiScanStepSupport.isMemoryHealthy()) {
+                log.warn("Shard {}/{} skipped (low memory) for doc {}", i, totalShards, doc.getId());
+                logParseFailure(projectId, versionId, doc, i, totalShards, shardStart, shardEnd,
+                        "OOM", "Low memory, shard skipped");
+                continue;
+            }
+
+            try {
+                ChunkExtractionResult shardResult = extractFromChunksWithCoverage(projectId, doc, shardContent);
+                if (shardResult.extraction() != null) {
+                    shardResults.add(shardResult.extraction());
+                    successfulShards++;
+                } else {
+                    logParseFailure(projectId, versionId, doc, i, totalShards, shardStart, shardEnd,
+                            "LLM_ERROR", "Shard extraction returned null");
+                }
+            } catch (OutOfMemoryError oom) {
+                log.warn("Shard {}/{} OOM for doc {}, skipping", i, totalShards, doc.getId());
+                logParseFailure(projectId, versionId, doc, i, totalShards, shardStart, shardEnd,
+                        "OOM", oom.getMessage());
+            } catch (Exception e) {
+                log.warn("Shard {}/{} failed for doc {}: {}", i, totalShards, doc.getId(), e.getMessage());
+                logParseFailure(projectId, versionId, doc, i, totalShards, shardStart, shardEnd,
+                        "SHARD_ERROR", e.getMessage());
+            }
+        }
+
+        DocUnderstandingAgent.BusinessFactExtraction merged = mergeExtractions(shardResults);
+        log.info("AI_DOC_EXTRACT sharding complete: doc={}, successfulShards={}/{}",
+                doc.getDocName(), successfulShards, totalShards);
+        return new ChunkExtractionResult(merged, totalShards, successfulShards);
+    }
+
+    /**
+     * L-03: 记录解析失败到 {@code lg_parse_failure} 表。
+     * <p>失败记录用于后续重试和治理分析。写入失败时仅 warn 不抛异常，不影响扫描主流程。</p>
+     *
+     * @param projectId    项目 ID
+     * @param versionId    版本 ID
+     * @param doc          文档实体
+     * @param shardIndex   分片序号（从 0 开始，非分片文档传 0）
+     * @param shardTotal   总分片数（非分片文档传 1）
+     * @param charStart    失败片段在原文中的起始字符位置
+     * @param charEnd      失败片段在原文中的结束字符位置
+     * @param failureType  失败类型：OOM/LLM_ERROR/READ_ERROR/EMPTY_CONTENT/SHARD_ERROR/OTHER
+     * @param errorMessage 错误消息（超 2000 字符自动截断）
+     */
+    private void logParseFailure(String projectId, String versionId, Document doc,
+                                  int shardIndex, int shardTotal, int charStart, int charEnd,
+                                  String failureType, String errorMessage) {
+        if (parseFailureRepository == null) {
+            log.debug("ParseFailureRepository not available, skip logging: doc={}, type={}", doc.getId(), failureType);
+            return;
+        }
+        try {
+            ParseFailure pf = new ParseFailure();
+            pf.setProjectId(projectId);
+            pf.setVersionId(versionId);
+            pf.setDocumentId(doc.getId());
+            pf.setFilePath(doc.getFilePath());
+            pf.setShardIndex(shardIndex);
+            pf.setShardTotal(shardTotal);
+            pf.setCharStart(charStart);
+            pf.setCharEnd(charEnd);
+            pf.setFailureType(failureType);
+            pf.setErrorMessage(errorMessage != null && errorMessage.length() > 2000
+                    ? errorMessage.substring(0, 2000) : errorMessage);
+            pf.setCreatedAt(java.time.LocalDateTime.now());
+            parseFailureRepository.insert(pf);
+        } catch (Exception e) {
+            log.warn("Failed to log parse failure for doc {}: {}", doc.getId(), e.getMessage());
         }
     }
 }

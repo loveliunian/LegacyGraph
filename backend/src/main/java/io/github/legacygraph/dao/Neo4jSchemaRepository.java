@@ -20,17 +20,24 @@ public class Neo4jSchemaRepository {
         this.neo4jDriver = neo4jDriver;
     }
 
-    /** 创建约束（服务启动时初始化）。覆盖 NodeType 全部类型，避免新增类型遗漏索引导致全标签扫描。 */
+    /**
+     * 创建约束（服务启动时初始化）。覆盖 NodeType 全部类型，避免新增类型遗漏索引导致全标签扫描。
+     * L-07: 新增 (projectId, versionId, nodeKey) 复合唯一约束，杜绝跨 adapter 重复节点。
+     */
     public void createConstraints() {
         try (Session session = neo4jDriver.session()) {
             for (NodeType type : NodeType.values()) {
                 String label = CypherCatalog.safeIdentifier(type.name(), "nodeType");
-                String cypher = String.format(
+                // 基础：id 唯一约束
+                session.run(String.format(
                         "CREATE CONSTRAINT %s_id_key IF NOT EXISTS FOR (n:%s) REQUIRE n.id IS UNIQUE",
-                        label.toLowerCase(), label);
-                session.run(cypher);
+                        label.toLowerCase(), label));
+                // L-07: 复合唯一约束 (projectId, versionId, nodeKey)
+                session.run(String.format(
+                        "CREATE CONSTRAINT %s_composite_key IF NOT EXISTS FOR (n:%s) REQUIRE (n.projectId, n.versionId, n.nodeKey) IS UNIQUE",
+                        label.toLowerCase(), label));
             }
-            log.info("Created Neo4j constraints for {} node types", NodeType.values().length);
+            log.info("Created Neo4j constraints (id UNIQUE + composite key UNIQUE) for {} node types", NodeType.values().length);
         }
     }
 

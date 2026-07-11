@@ -83,6 +83,10 @@ public class SourceController {
     private final DocumentExtractor documentExtractor;  // L3 修复：注入 Bean
     private final java.util.concurrent.ExecutorService documentProcessingExecutor;  // M1修复：文档异步处理
 
+    /** L-01: 密码加解密服务（可选），用于手动创建/更新连接时加密密码 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.security.SecretCipher secretCipher;
+
     /** 最大文件大小限制：100MB */
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -719,7 +723,16 @@ public class SourceController {
         db.setDatabaseName(request.getDatabaseName());
         db.setSchemaName(request.getSchemaName());
         db.setUsername(request.getUsername());
-        db.setPassword(request.getPassword());
+        // L-01 修复：密码加密存储，password 列仅存脱敏值
+        String rawPwd = request.getPassword();
+        if (rawPwd != null && !rawPwd.isEmpty()) {
+            if (secretCipher != null) {
+                db.setPasswordCipher(secretCipher.encrypt(rawPwd));
+                db.setPassword(secretCipher.mask(rawPwd));
+            } else {
+                db.setPassword(rawPwd);
+            }
+        }
         db.setReadonly(request.getReadonly() != null ? request.getReadonly() : false);
         db.setIncludeTables(request.getIncludeTables());
         db.setExcludeTables(request.getExcludeTables());
@@ -767,7 +780,16 @@ public class SourceController {
         db.setDatabaseName(request.getDatabaseName());
         db.setSchemaName(request.getSchemaName());
         db.setUsername(request.getUsername());
-        db.setPassword(request.getPassword());
+        // L-01 修复：密码加密存储，password 列仅存脱敏值
+        String rawPwd = request.getPassword();
+        if (rawPwd != null && !rawPwd.isEmpty()) {
+            if (secretCipher != null) {
+                db.setPasswordCipher(secretCipher.encrypt(rawPwd));
+                db.setPassword(secretCipher.mask(rawPwd));
+            } else {
+                db.setPassword(rawPwd);
+            }
+        }
         db.setReadonly(request.getReadonly());
         db.setIncludeTables(request.getIncludeTables());
         db.setExcludeTables(request.getExcludeTables());
@@ -833,7 +855,8 @@ public class SourceController {
         try {
             // 尝试建立真实连接（S8 修复：try-with-resources 防止连接泄漏）
             String url = buildJdbcUrl(db);
-            try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, db.getUsername(), db.getPassword())) {
+            String password = resolveDbPassword(db);
+            try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, db.getUsername(), password)) {
                 // 连接成功
             }
             result.put("success", true);
@@ -880,7 +903,7 @@ public class SourceController {
             int tableCount = 0;
 
             // 连接并扫描表信息
-            try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, db.getUsername(), db.getPassword())) {
+            try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, db.getUsername(), resolveDbPassword(db))) {
                 java.sql.DatabaseMetaData metaData = conn.getMetaData();
                 String[] types = {"TABLE"};
                 // MySQL/MariaDB 用 catalog（数据库名），PostgreSQL 用 schema
@@ -946,6 +969,22 @@ public class SourceController {
                     host, port, dbName);
             default -> throw new IllegalArgumentException("不支持的数据库类型: " + dbType);
         };
+    }
+
+    /**
+     * L-01: 解密数据库连接密码。
+     * 优先从 passwordCipher 解密；降级使用 password 列（旧数据）。
+     */
+    private String resolveDbPassword(DbConnection db) {
+        if (db == null) return "";
+        if (secretCipher != null && db.getPasswordCipher() != null && !db.getPasswordCipher().isEmpty()) {
+            try {
+                return secretCipher.decrypt(db.getPasswordCipher());
+            } catch (Exception e) {
+                log.warn("Failed to decrypt password for connection {}: {}", db.getId(), e.getMessage());
+            }
+        }
+        return db.getPassword() != null ? db.getPassword() : "";
     }
 
     // ==================== 文档资料 ====================

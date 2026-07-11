@@ -46,7 +46,7 @@
             <el-option
               v-for="v in versions"
               :key="v.id"
-              :label="`${v.versionNo} - ${v.branchName || ''}`"
+              :label="formatVersionLabel(v)"
               :value="v.id"
             />
           </el-select>
@@ -59,7 +59,7 @@
             <el-option
               v-for="v in versions"
               :key="v.id"
-              :label="`${v.versionNo} - ${v.branchName || ''}`"
+              :label="formatVersionLabel(v)"
               :value="v.id"
             />
           </el-select>
@@ -205,7 +205,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { graphApi } from '@/api'
-import type { DiffResult, ScanVersion } from '@/types'
+import { loadScanVersions, type ScanVersion } from '@/utils/versionsCache'
+import { formatVersionLabel } from '@/utils/formatVersionLabel'
+import type { DiffResult } from '@/types'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -220,10 +222,8 @@ const form = reactive({
 })
 
 async function loadVersions() {
-  try {
-    const res = await graphApi.getScanVersions(projectId)
-    versions.value = res?.data?.list || res?.list || []
-  } catch { /* ignore */ }
+  // L-19: 使用共享缓存加载版本列表，扫描完成时自动失效
+  await loadScanVersions(projectId, versions)
 }
 
 async function handleDiff() {

@@ -478,6 +478,70 @@ public class Neo4jProjectionRepository {
         }
     }
 
+    /**
+     * L-16: 查询从指定节点集合出发的所有出边（不要求 to 在集合内）。
+     * <p>用于 BFS 调用链展开，替代 queryEdges(..., 200) 全表拉取。</p>
+     *
+     * @return 每行包含 {id, type, source, target, toType, toName, toDisplayName, toConfidence, toStatus, toSourcePath}
+     */
+    public List<Map<String, Object>> queryOutgoingEdges(String projectId, String versionId,
+                                                         Collection<String> sourceNodeIds) {
+        if (sourceNodeIds == null || sourceNodeIds.isEmpty()) return List.of();
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (from)-[r]->(to) " +
+                "WHERE r.projectId = $projectId " +
+                "AND from.id IN $sourceNodeIds " +
+                "AND r.versionId = $versionId " +
+                "RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target, " +
+                "to.nodeType AS toType, to.nodeName AS toName, to.displayName AS toDisplayName, " +
+                "to.confidence AS toConfidence, to.status AS toStatus, to.sourcePath AS toSourcePath";
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", normalizeId(versionId));
+            params.put("sourceNodeIds", new ArrayList<>(sourceNodeIds));
+
+            Result result = session.run(cypher, params);
+            List<Map<String, Object>> edges = new ArrayList<>();
+            while (result.hasNext()) {
+                edges.add(result.next().asMap());
+            }
+            return edges;
+        }
+    }
+
+    /**
+     * L-16: 查询指向指定节点集合的所有入边（不要求 from 在集合内）。
+     * <p>用于反向 BFS（如表影响分析的上游追溯），替代 queryEdges(..., 500) 全表拉取。</p>
+     *
+     * @return 每行包含 {id, type, source, target, fromType, fromName, fromDisplayName, fromConfidence, fromStatus, fromSourcePath}
+     */
+    public List<Map<String, Object>> queryIncomingEdges(String projectId, String versionId,
+                                                         Collection<String> targetNodeIds) {
+        if (targetNodeIds == null || targetNodeIds.isEmpty()) return List.of();
+        try (Session session = neo4jDriver.session()) {
+            String cypher =
+                "MATCH (from)-[r]->(to) " +
+                "WHERE r.projectId = $projectId " +
+                "AND to.id IN $targetNodeIds " +
+                "AND r.versionId = $versionId " +
+                "RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target, " +
+                "from.nodeType AS fromType, from.nodeName AS fromName, from.displayName AS fromDisplayName, " +
+                "from.confidence AS fromConfidence, from.status AS fromStatus, from.sourcePath AS fromSourcePath";
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("versionId", normalizeId(versionId));
+            params.put("targetNodeIds", new ArrayList<>(targetNodeIds));
+
+            Result result = session.run(cypher, params);
+            List<Map<String, Object>> edges = new ArrayList<>();
+            while (result.hasNext()) {
+                edges.add(result.next().asMap());
+            }
+            return edges;
+        }
+    }
+
     // ==================== 图谱质量评估查询 ====================
 
     /**

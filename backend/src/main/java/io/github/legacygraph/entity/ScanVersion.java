@@ -45,6 +45,14 @@ public class ScanVersion {
     private String currentStage;
     /** 统计快照回写时间 */
     private LocalDateTime statsUpdatedAt;
+    /** L-14: 项目维度累积节点数 */
+    private Long cumulativeNodeCount;
+    /** L-14: 项目维度累积边数 */
+    private Long cumulativeEdgeCount;
+    /** L-14: 项目维度累积事实数 */
+    private Long cumulativeFactCount;
+    /** L-14: 累积统计更新时间 */
+    private LocalDateTime cumulativeUpdatedAt;
 
     /** AI 增强状态：PENDING/RUNNING/COMPLETED/FAILED/SKIPPED */
     private String aiEnrichmentStatus;

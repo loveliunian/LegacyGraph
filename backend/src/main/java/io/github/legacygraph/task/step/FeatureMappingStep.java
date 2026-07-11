@@ -195,12 +195,15 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             int ruleObjectMappings = 0;
             int ruleDomainMappings = 0;
             int ruleFeatureCandidates = 0;
+            int ruleProcessApiMappings = 0;
             if (businessGraphBuilder != null) {
                 try {
                     ruleFeatureMappings = businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
                     ruleObjectMappings = businessGraphBuilder.mapBusinessObjectsToTables(projectId, versionId);
                     ruleDomainMappings = businessGraphBuilder.mapBusinessDomainsToCode(projectId, versionId);
                     ruleFeatureCandidates = businessGraphBuilder.mergeCrossLanguageFeatures(projectId, versionId);
+                    // L-11: 补建 IMPLEMENTS 边（BusinessProcess → ApiEndpoint），此前为死代码从未调用
+                    ruleProcessApiMappings = businessGraphBuilder.mapBusinessProcessesToApis(projectId, versionId);
                 } catch (Exception e) {
                     log.warn("Rule-based mapping failed as supplement: {}", e.getMessage());
                 } finally {
@@ -213,7 +216,8 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                     + "规则映射补充：Feature→Page/API " + ruleFeatureMappings + " 条，"
                     + "业务对象技术映射 " + ruleObjectMappings + " 条，"
                     + "业务域技术映射 " + ruleDomainMappings + " 条，"
-                    + "跨语言 Feature 待确认候选 " + ruleFeatureCandidates + " 组";
+                    + "跨语言 Feature 待确认候选 " + ruleFeatureCandidates + " 组，"
+                    + "流程→API 实现映射 " + ruleProcessApiMappings + " 条";
             support.completeTask(task, summary, null);
             return StepExecutionResult.builder().success(true).message(summary)
                     .processedCount(totalPersisted.get()).build();

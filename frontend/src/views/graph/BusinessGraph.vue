@@ -275,7 +275,9 @@ async function loadGraph(domain = '') {
   if (!projectId.value || !currentVersion.value) return
   loading.value = true
   try {
-    const data = await graphApi.getBusinessView(projectId.value, currentVersion.value, domain)
+    // L-24: 传递 view 参数（ai/raw），让后端根据视图类型返回不同数据
+    const viewParam = showAiView.value ? 'ai' : 'raw'
+    const data = await graphApi.getBusinessView(projectId.value, currentVersion.value, domain, viewParam)
     const nodes = Array.isArray(data?.nodes) ? data.nodes : []
     const edges = Array.isArray(data?.edges) ? data.edges : []
 
@@ -380,6 +382,8 @@ const handleDomainClick = (data: any) => {
 const toggleAiView = () => {
   showAiView.value = !showAiView.value
   ElMessage.success(showAiView.value ? '已切换到AI归纳视图' : '已切换到原始视图')
+  // L-24: 切换视图后重新加载数据
+  loadGraph(selectedDomain.value)
 }
 
 const generateTestCases = () => {

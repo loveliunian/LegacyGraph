@@ -540,6 +540,18 @@ public class Neo4jGraphDao {
         return projectionRepo.queryEdgesForNodesByProject(projectId, nodeIds);
     }
 
+    /** L-16: 查询从指定节点集合出发的所有出边（不要求 to 在集合内），用于 BFS 调用链展开 */
+    public List<Map<String, Object>> queryOutgoingEdges(String projectId, String versionId,
+                                                         Collection<String> sourceNodeIds) {
+        return projectionRepo.queryOutgoingEdges(projectId, versionId, sourceNodeIds);
+    }
+
+    /** L-16: 查询指向指定节点集合的所有入边（不要求 from 在集合内），用于反向 BFS */
+    public List<Map<String, Object>> queryIncomingEdges(String projectId, String versionId,
+                                                         Collection<String> targetNodeIds) {
+        return projectionRepo.queryIncomingEdges(projectId, versionId, targetNodeIds);
+    }
+
     /**
      * 通用只读 Cypher 查询委托，避免 service 层直接依赖 Neo4j Driver。
      *

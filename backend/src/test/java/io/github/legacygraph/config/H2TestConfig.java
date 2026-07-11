@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -87,11 +88,14 @@ public class H2TestConfig {
     public GraphQueryService graphQueryService() {
         GraphQueryService service = mock(GraphQueryService.class);
         when(service.getApiCallChain(anyString(), anyString(), anyString())).thenReturn(List.of());
+        when(service.getApiCallChain(anyString(), anyString(), anyString(), any())).thenReturn(List.of());
         when(service.getTableImpact(anyString(), anyString(), anyString())).thenReturn(List.of());
         when(service.getTablesNodes(anyString(), anyString())).thenReturn(List.of());
         when(service.getFeatureView(anyString(), anyString(), anyString())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
         when(service.getBusinessView(anyString(), anyString(), anyString())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
         when(service.getUnifiedGraph(anyString(), any(), any())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
+        when(service.getUnifiedGraph(anyString(), any(), any(), any(), anyInt())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
+        when(service.getUnifiedGraph(anyString(), any(), any(), any(), anyInt(), anyBoolean())).thenReturn(Map.of("nodes", List.of(), "edges", List.of()));
         when(service.getDriftQueue(anyString(), anyString())).thenReturn(Map.of(
                 "items", List.of(),
                 "summary", Map.of("staticOnly", 0L, "runtimeOnly", 0L, "docOnly", 0L, "lowConfidence", 0L)

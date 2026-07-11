@@ -194,6 +194,15 @@ springdoc:
 
 # LegacyGraph 自定义配置
 legacygraph:
+  # L-01: 密码加解密主密钥（Base64 编码的 32 字节 AES-256 密钥）
+  # 生产环境必须配置！未配置时自动生成临时密钥（重启后旧密文不可解密）
+  # 生成方式：openssl rand -base64 32
+  secret:
+    master-key: ""
+  # L-16: API 调用链 BFS 最大深度（默认 12，上限 12）
+  graph:
+    api-chain:
+      max-depth: 12
   document:
     partition:
       # Feature Flag：结构感知切块开关（spec 5.4）

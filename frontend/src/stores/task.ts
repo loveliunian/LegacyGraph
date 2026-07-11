@@ -2,6 +2,10 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ScanTask } from '@/types'
 import { scanApi } from '@/api'
+import { clearVersionsCache } from '@/utils/versionsCache'
+
+/** L-27: 扫描终态 — 出现这些 status 时停止轮询 */
+const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'CANCELLED', 'COMPLETED']
 
 export const useTaskStore = defineStore('task', () => {
   const runningTasks = ref<ScanTask[]>([])
@@ -43,10 +47,13 @@ export const useTaskStore = defineStore('task', () => {
       try {
         const result = await scanApi.progress(projectId, taskId) as any
         updateTaskProgress(taskId, result.progress, result.stage)
-        
-        if (result.progress >= 100) {
+
+        // L-27: 终态停止轮询（SUCCESS/FAILED/CANCELLED/COMPLETED），不再仅依赖 progress >= 100
+        if (TERMINAL_STATUSES.includes(result.status)) {
           stopPolling(taskId)
           removeRunningTask(taskId)
+          // L-19: 扫描完成时主动清除版本缓存，使前端页面立即获取最新数据
+          clearVersionsCache(projectId)
           return
         }
       } catch (error) {

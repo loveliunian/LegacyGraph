@@ -32,6 +32,10 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class SourceService {
 
+    /** L-01: 密码加解密服务（可选） */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.service.security.SecretCipher secretCipher;
+
     private final CodeRepoRepository codeRepoRepository;
     private final DbConnectionRepository dbConnectionRepository;
     private final DocumentRepository documentRepository;
@@ -159,7 +163,7 @@ public class SourceService {
         Map<String, Object> result = new HashMap<>();
         result.put("success", false);
         String url = buildJdbcUrl(conn);
-        try (Connection c = DriverManager.getConnection(url, conn.getUsername(), conn.getPassword())) {
+        try (Connection c = DriverManager.getConnection(url, conn.getUsername(), resolveDbPassword(conn))) {
             result.put("success", true);
             result.put("message", "连接成功 — " + c.getMetaData().getDatabaseProductName());
         } catch (Exception e) {
@@ -167,6 +171,21 @@ public class SourceService {
             log.warn("DB connection test failed: {}", url, e);
         }
         return result;
+    }
+
+    /**
+     * L-01: 解密数据库连接密码。
+     */
+    private String resolveDbPassword(DbConnection conn) {
+        if (conn == null) return "";
+        if (secretCipher != null && conn.getPasswordCipher() != null && !conn.getPasswordCipher().isEmpty()) {
+            try {
+                return secretCipher.decrypt(conn.getPasswordCipher());
+            } catch (Exception e) {
+                log.warn("Failed to decrypt password for connection {}: {}", conn.getId(), e.getMessage());
+            }
+        }
+        return conn.getPassword() != null ? conn.getPassword() : "";
     }
 
     private String buildJdbcUrl(DbConnection conn) {

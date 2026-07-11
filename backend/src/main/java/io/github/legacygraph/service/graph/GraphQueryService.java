@@ -83,14 +83,27 @@ public class GraphQueryService {
      */
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> getApiCallChain(String projectId, String versionId, String apiKey) {
-        String key = graphKey(versionId, "api-chain", projectId, apiKey);
-        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
-                () -> getApiCallChainUncached(projectId, versionId, apiKey));
+        return getApiCallChain(projectId, versionId, apiKey, null);
     }
 
-    private List<Map<String, Object>> getApiCallChainUncached(String projectId, String versionId, String apiKey) {
+    /**
+     * L-16: 支持 maxDepth 参数的调用链查询。
+     *
+     * @param maxDepth 调用方显式传入的深度限制（null 使用配置默认值，内部 clamp ≤ 12）
+     */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> getApiCallChain(String projectId, String versionId, String apiKey,
+                                                      Integer maxDepth) {
+        String key = graphKey(versionId, "api-chain", projectId, apiKey,
+                maxDepth != null ? String.valueOf(maxDepth) : "default");
+        return cacheService.getOrLoad(key, List.class, GRAPH_CACHE_TTL,
+                () -> getApiCallChainUncached(projectId, versionId, apiKey, maxDepth));
+    }
+
+    private List<Map<String, Object>> getApiCallChainUncached(String projectId, String versionId,
+                                                               String apiKey, Integer maxDepth) {
         // Phase 2.6: 委托 GraphPathReadModel（通过 Neo4jGraphDao，不直接持有 Driver）
-        GraphPathReadModel.PathChain chain = pathReadModel.getApiCallChain(projectId, versionId, apiKey);
+        GraphPathReadModel.PathChain chain = pathReadModel.getApiCallChain(projectId, versionId, apiKey, maxDepth);
         if (chain == null || chain.nodes == null || chain.nodes.isEmpty()) {
             return List.of();
         }
@@ -329,6 +342,82 @@ public class GraphQueryService {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence, String statusFilter) {
+        return getUnifiedGraph(versionId, minConfidence, statusFilter, null, 0, false);
+    }
+
+    /**
+     * L-15: 支持游标分页的统一图谱查询。
+     * <p>当 limit > 0 时走分页路径（queryNodesWindow + queryEdgesForNodes），
+     * 返回 {nodes, edges, cursor, hasMore, totalNodes, totalEdges}；
+     * 当 limit == 0 时走全量路径（向后兼容），额外补充 totalNodes/totalEdges。</p>
+     *
+     * @param cursor       游标（首次传 null）
+     * @param limit        每页最大节点数（0 表示全量，>0 启用分页）
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence, String statusFilter,
+                                                String cursor, int limit) {
+        return getUnifiedGraphInternal(versionId, minConfidence, statusFilter, cursor, limit);
+    }
+
+    /**
+     * L-13: 支持 releaseFilter 的统一图谱查询。
+     * <p>当 releaseFilter=true 时，仅返回通过 QA gate 且 RELEASED_IN 关联的节点；
+     * 默认 false 向后兼容。实现方式：查到完整图谱后，按节点 status 过滤掉
+     * QA gate 未通过的节点（status=REJECTED 的节点不返回）。</p>
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getUnifiedGraph(String versionId, Double minConfidence, String statusFilter,
+                                                String cursor, int limit, boolean releaseFilter) {
+        Map<String, Object> result = getUnifiedGraphInternal(versionId, minConfidence, statusFilter, cursor, limit);
+        if (releaseFilter && result != null) {
+            // L-13: releaseFilter=true 时，过滤掉 REJECTED 状态的节点及其关联边
+            List<Map<String, Object>> nodes = (List<Map<String, Object>>) result.get("nodes");
+            if (nodes != null && !nodes.isEmpty()) {
+                java.util.Set<String> acceptedNodeIds = new java.util.HashSet<>();
+                for (Map<String, Object> node : nodes) {
+                    String status = (String) node.get("status");
+                    if (!"REJECTED".equals(status)) {
+                        acceptedNodeIds.add((String) node.get("id"));
+                    }
+                }
+                List<Map<String, Object>> filteredNodes = new java.util.ArrayList<>();
+                for (Map<String, Object> node : nodes) {
+                    if (acceptedNodeIds.contains(node.get("id"))) {
+                        filteredNodes.add(node);
+                    }
+                }
+                result.put("nodes", filteredNodes);
+                result.put("nodeCount", filteredNodes.size());
+
+                List<Map<String, Object>> edges = (List<Map<String, Object>>) result.get("edges");
+                if (edges != null && !edges.isEmpty()) {
+                    List<Map<String, Object>> filteredEdges = new java.util.ArrayList<>();
+                    for (Map<String, Object> edge : edges) {
+                        if (acceptedNodeIds.contains(edge.get("source"))
+                                && acceptedNodeIds.contains(edge.get("target"))) {
+                            filteredEdges.add(edge);
+                        }
+                    }
+                    result.put("edges", filteredEdges);
+                    result.put("edgeCount", filteredEdges.size());
+                }
+                result.put("releaseFiltered", true);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * L-15: 5 参数版本 — 当 limit > 0 走分页，否则走全量缓存路径。
+     * 此方法包含原有的缓存逻辑和全量查询回源逻辑。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getUnifiedGraphInternal(String versionId, Double minConfidence, String statusFilter,
+                                                         String cursor, int limit) {
+        if (limit > 0) {
+            return getUnifiedGraphPaginated(versionId, minConfidence, statusFilter, cursor, limit);
+        }
         // 不缓存空结果 — 扫描过程中访问会缓存空图，导致扫描完成后仍返回空数据
         String key = graphKey(versionId, "unified",
                 String.valueOf(minConfidence), String.valueOf(statusFilter));
@@ -354,6 +443,93 @@ public class GraphQueryService {
             cacheService.put(key, fresh, GRAPH_CACHE_TTL);
         }
         return fresh;
+    }
+
+    /**
+     * L-15: 分页路径 — 使用 queryNodesWindow + queryEdgesForNodes，避免万级节点 OOM。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getUnifiedGraphPaginated(String versionId, Double minConfidence,
+                                                          String statusFilter, String cursor, int limit) {
+        int effectiveLimit = Math.min(limit, 2000); // 单页上限 2000 节点
+        String nv = normalizeVersionId(versionId);
+
+        // 从 scanVersionRepository 获取 projectId
+        ScanVersion version = scanVersionRepository.lambdaQuery()
+                .eq(ScanVersion::getId, versionId)
+                .one();
+        if (version == null) {
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("versionId", versionId);
+            errorResult.put("emptyReasons", List.of("版本不存在"));
+            return errorResult;
+        }
+        String projectId = version.getProjectId();
+
+        String effectiveStatus = (statusFilter != null && !statusFilter.isBlank()) ? statusFilter : null;
+
+        // 游标分页查询节点（多取一条判断 hasMore）
+        List<Map<String, Object>> nodes = neo4jGraphDao.queryNodesWindow(
+                projectId, nv, null, null, effectiveStatus, minConfidence, cursor, effectiveLimit + 1);
+
+        boolean hasMore = nodes.size() > effectiveLimit;
+        if (hasMore) nodes = nodes.subList(0, effectiveLimit);
+
+        String nextCursor = null;
+        if (hasMore && !nodes.isEmpty()) {
+            nextCursor = (String) nodes.get(nodes.size() - 1).get("nodeKey");
+        }
+
+        // 查询这批节点关联的边
+        List<String> nodeIds = nodes.stream()
+                .map(n -> (String) n.get("id"))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        List<Map<String, Object>> edges = nodeIds.isEmpty()
+                ? List.of()
+                : neo4jGraphDao.queryEdgesForNodes(projectId, nv, nodeIds);
+
+        // 为 edges 添加 label 字段
+        edges.forEach(edge -> {
+            String edgeType = (String) edge.get("type");
+            edge.put("label", getEdgeLabel(edgeType));
+        });
+
+        long totalNodes = neo4jGraphDao.countNodes(projectId, nv, effectiveStatus);
+        long totalEdges = neo4jGraphDao.countEdges(projectId, nv, effectiveStatus);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("versionId", versionId);
+        result.put("statusFilter", statusFilter);
+        result.put("nodes", nodes);
+        result.put("edges", edges);
+        result.put("nodeCount", nodes.size());
+        result.put("edgeCount", edges.size());
+        // L-15: 分页元数据
+        result.put("cursor", nextCursor);
+        result.put("hasMore", hasMore);
+        result.put("totalNodes", totalNodes);
+        result.put("totalEdges", totalEdges);
+
+        // 空视图时返回结构化原因
+        if (nodes.isEmpty()) {
+            List<String> reasons = new ArrayList<>();
+            try {
+                neo4jGraphDao.countNodes(projectId, nv, null);
+            } catch (Exception neo4jEx) {
+                reasons.add("Neo4j 不可达: " + neo4jEx.getMessage());
+            }
+            long totalCount = neo4jGraphDao.countNodes(projectId, nv, null);
+            if (totalCount == 0) {
+                reasons.add("该版本尚未扫描或扫描未生成图谱数据");
+            } else {
+                reasons.add("有 " + totalCount + " 个节点但未匹配当前过滤条件（置信度>=" + minConfidence +
+                        (statusFilter != null ? ", 状态=" + statusFilter : "") + "）");
+            }
+            result.put("emptyReasons", reasons);
+        }
+
+        return result;
     }
 
     private Map<String, Object> getUnifiedGraphUncached(String versionId, Double minConfidence, String statusFilter) {

@@ -28,6 +28,7 @@ public enum NodeType {
     Index("数据库索引"),
     Column("数据库字段"),
     ConfigItem("配置项"),
+    FeatureFlag("特性开关"),
     ScheduledJob("定时任务"),
     MQConsumer("消息消费者"),
     MQTopic("消息主题"),
@@ -36,6 +37,7 @@ public enum NodeType {
     Assertion("断言"),
     Evidence("证据"),
     User("用户"),
+    Unknown("未分类"),
 
     // ========== 代码包（架构依赖链路） ==========
     Package("代码包"),

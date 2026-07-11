@@ -5,6 +5,7 @@ import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.util.IdUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -22,14 +23,33 @@ public class GraphPathReadModel {
 
     private final Neo4jGraphDao neo4jGraphDao;
 
+    /** L-16: API 调用链 BFS 最大深度，默认 12（可配 legacygraph.graph.api-chain.max-depth） */
+    @Value("${legacygraph.graph.api-chain.max-depth:12}")
+    private int apiChainMaxDepth;
+
+    /** L-16: API 调用链 BFS 每跳最大节点数，防止爆炸式扩展 */
+    private static final int API_CHAIN_PER_DEPTH_LIMIT = 500;
+
     public GraphPathReadModel(Neo4jGraphDao neo4jGraphDao) {
         this.neo4jGraphDao = neo4jGraphDao;
     }
 
-    /** API 调用链 */
-    public PathChain getApiCallChain(String projectId, String versionId, String apiKey) {
+    /**
+     * API 调用链 — L-16: 使用 BFS 邻居展开替代全表 queryEdges(..., 200)。
+     *
+     * @param projectId  项目 ID
+     * @param versionId  扫描版本 ID
+     * @param apiKey     API 节点的 nodeKey 或 nodeName
+     * @param maxDepth   调用方显式传入的深度限制（null 时使用配置默认值，内部 clamp ≤ 12）
+     */
+    public PathChain getApiCallChain(String projectId, String versionId, String apiKey, Integer maxDepth) {
         // Neo4j 存储 versionId 无连字符，需规范化
         String normalizedVersionId = IdUtil.normalizeId(versionId);
+
+        // L-16: 深度可配，caller 显式传参时 clamp ≤ 12
+        int effectiveDepth = maxDepth != null
+                ? Math.max(1, Math.min(maxDepth, 12))
+                : Math.max(1, Math.min(apiChainMaxDepth, 12));
 
         PathChain chain = new PathChain();
         chain.nodes = new ArrayList<>();
@@ -41,30 +61,55 @@ public class GraphPathReadModel {
         chain.startNodeId = apiNode.get().getId();
         chain.nodes.add(toInfo(apiNode.get()));
 
-        // 扫描该版本所有边，构建从 API 出发的下游路径
-        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, normalizedVersionId, null, null, 200);
+        // L-16: BFS 邻居展开 — 每跳只查询 frontier 的出边，不拉全表
         Set<String> visited = new HashSet<>();
         visited.add(apiNode.get().getId());
 
-        for (int depth = 0; depth < 8; depth++) {
+        for (int depth = 0; depth < effectiveDepth; depth++) {
+            // 查询当前 frontier 的所有出边
+            List<Map<String, Object>> outgoingEdges = neo4jGraphDao.queryOutgoingEdges(
+                    projectId, normalizedVersionId, visited);
+
+            if (outgoingEdges.isEmpty()) {
+                break; // 没有更多出边，提前终止
+            }
+
             List<String> nextIds = new ArrayList<>();
-            for (GraphEdge edge : allEdges) {
-                if (visited.contains(edge.getFromNodeId()) && !visited.contains(edge.getToNodeId())) {
-                    nextIds.add(edge.getToNodeId());
-                    visited.add(edge.getToNodeId());
-                    // 记录边信息，保持调用链路完整
-                    chain.edges.add(toEdgeInfo(edge));
+            for (Map<String, Object> edge : outgoingEdges) {
+                String targetId = (String) edge.get("target");
+                if (targetId != null && !visited.contains(targetId)) {
+                    nextIds.add(targetId);
+                    visited.add(targetId);
+                    // 记录边信息
+                    chain.edges.add(toEdgeInfoFromMap(edge));
                 }
             }
-            // 批量加载本跳所有节点，替代逐条 findNodeById
-            if (!nextIds.isEmpty()) {
-                List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(nextIds);
-                for (GraphNode n : nodes) {
-                    chain.nodes.add(toInfo(n));
+
+            // 从 edge Map 中直接构建节点信息（无需额外查 Neo4j）
+            for (Map<String, Object> edge : outgoingEdges) {
+                String targetId = (String) edge.get("target");
+                if (targetId != null && nextIds.contains(targetId)) {
+                    chain.nodes.add(toNodeInfoFromEdgeMap(edge));
                 }
+            }
+
+            // 防爆炸：如果本跳节点数过多，截断
+            if (visited.size() > effectiveDepth * API_CHAIN_PER_DEPTH_LIMIT) {
+                log.warn("API call chain BFS exceeded node limit at depth {}: {} nodes visited (versionId={})",
+                        depth, visited.size(), versionId);
+                break;
             }
         }
         return chain;
+    }
+
+    /**
+     * @deprecated 使用 {@link #getApiCallChain(String, String, String, Integer)} 替代。
+     * 保留向后兼容：不传 maxDepth，使用配置默认值。
+     */
+    @Deprecated
+    public PathChain getApiCallChain(String projectId, String versionId, String apiKey) {
+        return getApiCallChain(projectId, versionId, apiKey, null);
     }
 
     /** 表影响范围 */
@@ -86,109 +131,146 @@ public class GraphPathReadModel {
         chain.startNodeId = target.get().getId();
         chain.nodes.add(toInfo(target.get()));
 
-        // 加载所有边
-        List<GraphEdge> allEdges = neo4jGraphDao.queryEdges(projectId, normalizedVersionId, null, null, 500);
+        // L-16: 反向 BFS 使用 queryIncomingEdges 替代 queryEdges(..., 500)
         Set<String> visited = new HashSet<>();
         visited.add(target.get().getId());
 
         // 反向遍历：谁依赖/引用这个表（上游：SqlStatement←Method←ApiEndpoint）
-        // 同时记录经过的边
         for (int depth = 0; depth < 6; depth++) {
-            List<String> prevIds = new ArrayList<>();
-            for (GraphEdge edge : allEdges) {
-                if (visited.contains(edge.getToNodeId()) && !visited.contains(edge.getFromNodeId())) {
-                    prevIds.add(edge.getFromNodeId());
-                    visited.add(edge.getFromNodeId());
-                    // 记录边：上游节点→当前节点
-                    chain.edges.add(toEdgeInfo(edge));
+            List<Map<String, Object>> incomingEdges = neo4jGraphDao.queryIncomingEdges(
+                    projectId, normalizedVersionId, visited);
+
+            if (incomingEdges.isEmpty()) break;
+
+            Set<String> newNodes = new LinkedHashSet<>();
+            for (Map<String, Object> edge : incomingEdges) {
+                String sourceId = (String) edge.get("source");
+                if (sourceId != null && !visited.contains(sourceId)) {
+                    newNodes.add(sourceId);
+                    visited.add(sourceId);
+                    chain.edges.add(toEdgeInfoFromMap(edge));
                 }
             }
-            if (!prevIds.isEmpty()) {
-                List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(prevIds);
-                for (GraphNode n : nodes) {
-                    chain.nodes.add(toInfo(n));
+
+            for (Map<String, Object> edge : incomingEdges) {
+                String sourceId = (String) edge.get("source");
+                if (sourceId != null && newNodes.contains(sourceId)) {
+                    chain.nodes.add(toNodeInfoFromIncomingEdgeMap(edge));
                 }
             }
+
+            if (newNodes.isEmpty()) break;
         }
 
         // 正向遍历：查找关联表（通过 REFERENCES / JOINS 边，当前表→引用表）
         Set<String> relatedVisited = new HashSet<>(visited);
         for (int depth = 0; depth < 3; depth++) {
-            List<String> relatedIds = new ArrayList<>();
-            for (GraphEdge edge : allEdges) {
-                String edgeType = edge.getEdgeType();
-                // 从已访问节点出发的正向边（fromNodeId 已访问，toNodeId 未访问）
-                if (relatedVisited.contains(edge.getFromNodeId()) && !relatedVisited.contains(edge.getToNodeId())) {
-                    // 收集 Table 类型的关联节点（REFERENCES/JOINS）
-                    if ("REFERENCES".equalsIgnoreCase(edgeType) || "JOINS".equalsIgnoreCase(edgeType)) {
-                        relatedIds.add(edge.getToNodeId());
-                        relatedVisited.add(edge.getToNodeId());
-                        // 记录边
-                        chain.edges.add(toEdgeInfo(edge));
-                    }
-                    // 补充：SqlStatement 通过 READS/WRITES 访问的表（SQL-mediated 隐式关联）
-                    else if ("READS".equalsIgnoreCase(edgeType) || "WRITES".equalsIgnoreCase(edgeType)) {
-                        // 如果当前已访问节点是 SqlStatement，则收集它访问的 Table
-                        relatedIds.add(edge.getToNodeId());
-                        relatedVisited.add(edge.getToNodeId());
-                        chain.edges.add(toEdgeInfo(edge));
-                    }
+            List<Map<String, Object>> outgoingEdges = neo4jGraphDao.queryOutgoingEdges(
+                    projectId, normalizedVersionId, relatedVisited);
+
+            if (outgoingEdges.isEmpty()) break;
+
+            Set<String> relatedIds = new LinkedHashSet<>();
+            for (Map<String, Object> edge : outgoingEdges) {
+                String edgeType = (String) edge.get("type");
+                String targetId = (String) edge.get("target");
+                if (relatedVisited.contains(targetId)) continue;
+
+                // 收集 Table 类型的关联节点（REFERENCES/JOINS）
+                if ("REFERENCES".equalsIgnoreCase(edgeType) || "JOINS".equalsIgnoreCase(edgeType)) {
+                    relatedIds.add(targetId);
+                    relatedVisited.add(targetId);
+                    chain.edges.add(toEdgeInfoFromMap(edge));
                 }
-                // 反向：其他表通过 REFERENCES 引用当前表（即当前表是被引用方）
-                if (relatedVisited.contains(edge.getToNodeId()) && !relatedVisited.contains(edge.getFromNodeId())) {
-                    if ("REFERENCES".equalsIgnoreCase(edgeType)) {
-                        relatedIds.add(edge.getFromNodeId());
-                        relatedVisited.add(edge.getFromNodeId());
-                        // 记录边
-                        chain.edges.add(toEdgeInfo(edge));
-                    }
+                // SqlStatement 通过 READS/WRITES 访问的表
+                else if ("READS".equalsIgnoreCase(edgeType) || "WRITES".equalsIgnoreCase(edgeType)) {
+                    relatedIds.add(targetId);
+                    relatedVisited.add(targetId);
+                    chain.edges.add(toEdgeInfoFromMap(edge));
                 }
             }
-            if (!relatedIds.isEmpty()) {
-                List<GraphNode> nodes = neo4jGraphDao.findNodesByIds(relatedIds);
-                for (GraphNode n : nodes) {
-                    chain.nodes.add(toInfo(n));
+
+            // 反向：其他表通过 REFERENCES 引用当前表
+            List<Map<String, Object>> incomingEdges = neo4jGraphDao.queryIncomingEdges(
+                    projectId, normalizedVersionId, relatedVisited);
+            for (Map<String, Object> edge : incomingEdges) {
+                String edgeType = (String) edge.get("type");
+                String sourceId = (String) edge.get("source");
+                if (relatedVisited.contains(sourceId)) continue;
+                if ("REFERENCES".equalsIgnoreCase(edgeType)) {
+                    relatedIds.add(sourceId);
+                    relatedVisited.add(sourceId);
+                    chain.edges.add(toEdgeInfoFromMap(edge));
                 }
             }
+
+            for (Map<String, Object> edge : outgoingEdges) {
+                String targetId = (String) edge.get("target");
+                if (targetId != null && relatedIds.contains(targetId)) {
+                    chain.nodes.add(toNodeInfoFromEdgeMap(edge));
+                }
+            }
+            for (Map<String, Object> edge : incomingEdges) {
+                String sourceId = (String) edge.get("source");
+                if (sourceId != null && relatedIds.contains(sourceId)) {
+                    chain.nodes.add(toNodeInfoFromIncomingEdgeMap(edge));
+                }
+            }
+
+            if (relatedIds.isEmpty()) break;
         }
 
         // 补充：如果反向遍历没有找到上游（SqlStatement 缺失），尝试通过共享访问推断隐式关联
-        // 查找所有访问过当前表的 SqlStatement，然后收集它们访问的其他表
         if (chain.nodes.size() <= 1) {
             log.debug("Table {} has minimal upstream impact, attempting implicit association inference", tableName);
-            Set<String> implicitTableIds = new HashSet<>();
-            
-            // 找到所有通过 READS/WRITES 访问当前表的 SqlStatement
-            Set<String> sqlStatementIds = new HashSet<>();
-            for (GraphEdge edge : allEdges) {
-                if (("READS".equalsIgnoreCase(edge.getEdgeType()) || "WRITES".equalsIgnoreCase(edge.getEdgeType()))
-                        && target.get().getId().equals(edge.getToNodeId())) {
-                    sqlStatementIds.add(edge.getFromNodeId());
-                }
-            }
-            
-            // 收集这些 SqlStatement 访问的其他表
-            for (GraphEdge edge : allEdges) {
-                if (("READS".equalsIgnoreCase(edge.getEdgeType()) || "WRITES".equalsIgnoreCase(edge.getEdgeType()))
-                        && sqlStatementIds.contains(edge.getFromNodeId())
-                        && !target.get().getId().equals(edge.getToNodeId())) {
-                    implicitTableIds.add(edge.getToNodeId());
-                }
-            }
-            
-            // 添加隐式关联的表
-            if (!implicitTableIds.isEmpty()) {
-                List<GraphNode> implicitTables = neo4jGraphDao.findNodesByIds(new ArrayList<>(implicitTableIds));
-                for (GraphNode n : implicitTables) {
-                    if ("Table".equals(n.getNodeType()) && !relatedVisited.contains(n.getId())) {
-                        chain.nodes.add(toInfo(n));
-                        relatedVisited.add(n.getId());
-                    }
-                }
-            }
+            inferImplicitTableAssociations(projectId, normalizedVersionId, target.get(), chain, relatedVisited);
         }
 
         return chain;
+    }
+
+    /**
+     * 隐式表关联推断：查找所有访问过当前表的 SqlStatement，然后收集它们访问的其他表。
+     */
+    private void inferImplicitTableAssociations(String projectId, String versionId,
+                                                  GraphNode target, PathChain chain,
+                                                  Set<String> relatedVisited) {
+        // 找到所有通过 READS/WRITES 访问当前表的 SqlStatement
+        Set<String> sqlStatementIds = new HashSet<>();
+        List<Map<String, Object>> incomingEdges = neo4jGraphDao.queryIncomingEdges(
+                projectId, versionId, Set.of(target.getId()));
+        for (Map<String, Object> edge : incomingEdges) {
+            String edgeType = (String) edge.get("type");
+            if ("READS".equalsIgnoreCase(edgeType) || "WRITES".equalsIgnoreCase(edgeType)) {
+                sqlStatementIds.add((String) edge.get("source"));
+            }
+        }
+
+        if (sqlStatementIds.isEmpty()) return;
+
+        // 收集这些 SqlStatement 访问的其他表
+        List<Map<String, Object>> outgoingEdges = neo4jGraphDao.queryOutgoingEdges(
+                projectId, versionId, sqlStatementIds);
+        Set<String> implicitTableIds = new HashSet<>();
+        for (Map<String, Object> edge : outgoingEdges) {
+            String edgeType = (String) edge.get("type");
+            String targetId = (String) edge.get("target");
+            if (("READS".equalsIgnoreCase(edgeType) || "WRITES".equalsIgnoreCase(edgeType))
+                    && !target.getId().equals(targetId)) {
+                implicitTableIds.add(targetId);
+            }
+        }
+
+        // 添加隐式关联的表
+        if (!implicitTableIds.isEmpty()) {
+            List<GraphNode> implicitTables = neo4jGraphDao.findNodesByIds(new ArrayList<>(implicitTableIds));
+            for (GraphNode n : implicitTables) {
+                if ("Table".equals(n.getNodeType()) && !relatedVisited.contains(n.getId())) {
+                    chain.nodes.add(toInfo(n));
+                    relatedVisited.add(n.getId());
+                }
+            }
+        }
     }
 
     private NodeInfo toInfo(GraphNode node) {
@@ -198,9 +280,56 @@ public class GraphPathReadModel {
                 node.getStatus());
     }
 
+    /** L-16: 从 queryOutgoingEdges 的 Map 构建目标节点信息 */
+    private NodeInfo toNodeInfoFromEdgeMap(Map<String, Object> edge) {
+        String id = (String) edge.get("target");
+        String type = (String) edge.get("toType");
+        String name = (String) edge.get("toName");
+        String displayName = (String) edge.get("toDisplayName");
+        String sourcePath = (String) edge.get("toSourcePath");
+        Object confObj = edge.get("toConfidence");
+        double confidence = 1.0;
+        if (confObj instanceof BigDecimal) {
+            confidence = ((BigDecimal) confObj).doubleValue();
+        } else if (confObj instanceof Number) {
+            confidence = ((Number) confObj).doubleValue();
+        }
+        String status = (String) edge.get("toStatus");
+        return new NodeInfo(id, type != null ? type : "Unknown",
+                name != null ? name : "", displayName, sourcePath, confidence, status);
+    }
+
+    /** L-16: 从 queryIncomingEdges 的 Map 构建源节点信息 */
+    private NodeInfo toNodeInfoFromIncomingEdgeMap(Map<String, Object> edge) {
+        String id = (String) edge.get("source");
+        String type = (String) edge.get("fromType");
+        String name = (String) edge.get("fromName");
+        String displayName = (String) edge.get("fromDisplayName");
+        String sourcePath = (String) edge.get("fromSourcePath");
+        Object confObj = edge.get("fromConfidence");
+        double confidence = 1.0;
+        if (confObj instanceof BigDecimal) {
+            confidence = ((BigDecimal) confObj).doubleValue();
+        } else if (confObj instanceof Number) {
+            confidence = ((Number) confObj).doubleValue();
+        }
+        String status = (String) edge.get("fromStatus");
+        return new NodeInfo(id, type != null ? type : "Unknown",
+                name != null ? name : "", displayName, sourcePath, confidence, status);
+    }
+
     private EdgeInfo toEdgeInfo(GraphEdge edge) {
         return new EdgeInfo(edge.getId(), edge.getEdgeType(),
                 edge.getFromNodeId(), edge.getToNodeId());
+    }
+
+    /** L-16: 从 queryOutgoingEdges/queryIncomingEdges 的 Map 构建边信息 */
+    private EdgeInfo toEdgeInfoFromMap(Map<String, Object> edge) {
+        String id = (String) edge.get("id");
+        String type = (String) edge.get("type");
+        String source = (String) edge.get("source");
+        String target = (String) edge.get("target");
+        return new EdgeInfo(id, type, source, target);
     }
 
     // ==================== DTO ====================

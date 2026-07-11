@@ -148,8 +148,9 @@ const emit = defineEmits<{
 }>()
 
 const vueFlowRef = ref()
-// @ts-expect-error - getZoom missing in new Vue Flow; use getViewport instead
-const { fitView, zoomIn, zoomOut, setCenter, getZoom } = useVueFlow()
+// L-18: Vue Flow setCenter 签名为 (x, y, options?: { zoom?: number })，无需 @ts-expect-error
+// L-18: 移除不存在的 getZoom 和未使用的 zoomIn/zoomOut
+const { fitView, setCenter } = useVueFlow()
 
 const nodeTypes = {
   custom: markRaw(CustomNode) as any
@@ -374,8 +375,8 @@ function centerView() {
   if (visibleNodes.value.length > 0) {
     const centerX = visibleNodes.value.reduce((sum, node) => sum + (node.position?.x || 0), 0) / visibleNodes.value.length
     const centerY = visibleNodes.value.reduce((sum, node) => sum + (node.position?.y || 0), 0) / visibleNodes.value.length
-    // @ts-expect-error - Vue Flow: setCenter signature changed
-    setCenter(centerX + 90, centerY + 30, 1)
+    // L-18: setCenter 第三个参数为 options 对象 { zoom?: number }
+    setCenter(centerX + 90, centerY + 30, { zoom: 1 })
   }
 }
 
@@ -540,9 +541,50 @@ function exportGraph() {
 onMounted(() => {
   setTimeout(() => {
     if (totalNodesCount.value < 1000) {
+      // L-18: fitView 改为 await + setTimeout(50ms) 再触发一次，修复"居中不立即生效"
       fitView()
+      setTimeout(() => fitView(), 50)
     }
   }, 200)
+})
+
+/**
+ * L-22: 定位到指定节点 — 滚动视口到节点位置并高亮 1.5s。
+ * 通过 defineExpose 暴露给父组件，替代旧 CustomEvent 方案。
+ */
+function locateNode(nodeId: string) {
+  const node = visibleNodes.value.find(n => n.id === nodeId)
+  if (!node || !node.position) {
+    return
+  }
+  // L-18: setCenter 第三个参数为 options 对象 { zoom?: number }
+  setCenter(node.position.x + 90, node.position.y + 30, { zoom: 1 })
+  // 高亮节点：临时添加 highlight 样式
+  const el = document.querySelector(`[data-id="${nodeId}"]`) as HTMLElement | null
+  if (el) {
+    el.style.transition = 'box-shadow 0.3s ease'
+    el.style.boxShadow = '0 0 0 3px #409eff, 0 4px 12px rgba(64, 158, 255, 0.4)'
+    setTimeout(() => {
+      if (el) el.style.boxShadow = ''
+    }, 1500)
+  }
+}
+
+/**
+ * L-21: 自动布局 — 节点加载后调用，使图谱首次打开即呈现有结构的布局。
+ */
+function runAutoLayout() {
+  if (visibleNodes.value.length === 0) return
+  applyLayout(currentLayout.value)
+}
+
+// L-22: 暴露方法给父组件
+defineExpose({
+  locateNode,
+  runAutoLayout,
+  applyLayout,
+  centerView,
+  fitView
 })
 
 onUnmounted(() => {

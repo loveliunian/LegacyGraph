@@ -83,8 +83,10 @@ public class GraphQueryController {
             @Parameter(description = "扫描版本ID", required = true)
             @RequestParam(required = false) String versionId,
             @Parameter(description = "API接口路径或方法签名", required = true)
-            @RequestParam String api) {
-        List<Map<String, Object>> result = graphQueryService.getApiCallChain(projectId, versionId, api);
+            @RequestParam String api,
+            @Parameter(description = "L-16: BFS 最大深度（默认 12，上限 12）")
+            @RequestParam(value = "max-depth", required = false) Integer maxDepth) {
+        List<Map<String, Object>> result = graphQueryService.getApiCallChain(projectId, versionId, api, maxDepth);
         return Result.success(result);
     }
 
@@ -211,7 +213,7 @@ public class GraphQueryController {
      * @return 统一图谱数据，包含所有节点和边
      */
     @GetMapping("/graph/unified")
-    @Operation(summary = "获取统一图谱全量数据", description = "查询指定扫描版本的所有节点和边，支持按置信度和状态过滤")
+    @Operation(summary = "获取统一图谱全量数据", description = "查询指定扫描版本的所有节点和边，支持按置信度和状态过滤。L-15: 支持游标分页（cursor/limit）。L-13: 支持 releaseFilter 过滤")
     public Result<Map<String, Object>> getUnifiedGraph(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -221,12 +223,19 @@ public class GraphQueryController {
             @RequestParam(defaultValue = "0.0") Double minConfidence,
             @Parameter(description = "状态过滤：CONFIRMED/PENDING_CONFIRM/REJECTED", required = false)
             @RequestParam(required = false) String statusFilter,
+            @Parameter(description = "L-15: 游标分页（首次传 null）")
+            @RequestParam(required = false) String cursor,
+            @Parameter(description = "L-15: 每页最大节点数（0=全量，>0 启用分页）")
+            @RequestParam(defaultValue = "0") int limit,
+            @Parameter(description = "L-13: 是否按 Release 过滤（true=仅返回通过 QA gate 的 release 节点）")
+            @RequestParam(defaultValue = "false") boolean releaseFilter,
             jakarta.servlet.http.HttpServletRequest request) {
         // 兼容前端 ?params[versionId]=xxx 嵌套格式
         if (versionId == null || versionId.isBlank()) {
             versionId = request.getParameter("params[versionId]");
         }
-        Map<String, Object> result = graphQueryService.getUnifiedGraph(versionId, minConfidence, statusFilter);
+        Map<String, Object> result = graphQueryService.getUnifiedGraph(
+                versionId, minConfidence, statusFilter, cursor, limit, releaseFilter);
         return Result.success(result);
     }
 

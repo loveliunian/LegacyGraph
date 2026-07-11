@@ -251,6 +251,85 @@ public class FileChangeDetector {
         return renames;
     }
 
+    /**
+     * L-05: 检测需要逻辑重扫的文件。
+     * <p>当 extractor_version / embedding_model / graph_ontology_version 发生变化时，
+     * 即使文件内容哈希未变，也需要重新执行抽取/嵌入/建图。</p>
+     *
+     * @param projectId           项目 ID
+     * @param pathToContent       当前文件路径 → 内容
+     * @param currentExtractorVersion  当前抽取器版本
+     * @param currentEmbeddingModel    当前嵌入模型名称
+     * @param currentOntologyVersion   当前图谱本体版本
+     * @return 需要 LOGIC_RESCAN 的文件路径列表
+     */
+    public List<String> detectLogicRescan(String projectId, Map<String, String> pathToContent,
+                                           String currentExtractorVersion, String currentEmbeddingModel,
+                                           String currentOntologyVersion) {
+        if (projectId == null || pathToContent == null || pathToContent.isEmpty()) {
+            return Collections.emptyList();
+        }
+        // 加载已有快照并检查版本元数据
+        LambdaQueryWrapper<FileSnapshot> wrapper = new LambdaQueryWrapper<FileSnapshot>()
+                .eq(FileSnapshot::getProjectId, projectId);
+        List<FileSnapshot> snapshots = fileSnapshotRepository.selectList(wrapper);
+        Map<String, FileSnapshot> pathToSnapshot = new HashMap<>(snapshots.size());
+        for (FileSnapshot s : snapshots) {
+            pathToSnapshot.put(s.getFilePath(), s);
+        }
+
+        List<String> logicRescanFiles = new ArrayList<>();
+        for (String filePath : pathToContent.keySet()) {
+            FileSnapshot snap = pathToSnapshot.get(filePath);
+            if (snap == null) {
+                continue; // 新文件，不是 LOGIC_RESCAN
+            }
+            boolean versionChanged = false;
+            if (currentExtractorVersion != null && !currentExtractorVersion.equals(snap.getExtractorVersion())) {
+                versionChanged = true;
+            }
+            if (currentEmbeddingModel != null && !currentEmbeddingModel.equals(snap.getEmbeddingModel())) {
+                versionChanged = true;
+            }
+            if (currentOntologyVersion != null && !currentOntologyVersion.equals(snap.getGraphOntologyVersion())) {
+                versionChanged = true;
+            }
+            if (versionChanged) {
+                logicRescanFiles.add(filePath);
+            }
+        }
+        if (!logicRescanFiles.isEmpty()) {
+            log.info("Detected {} files needing LOGIC_RESCAN for projectId={}",
+                    logicRescanFiles.size(), projectId);
+        }
+        return logicRescanFiles;
+    }
+
+    /**
+     * L-05: 更新文件快照的版本元数据（扫描完成后调用）。
+     */
+    public void updateSnapshotVersions(String projectId, String filePath,
+                                        String extractorVersion, String embeddingModel,
+                                        String ontologyVersion) {
+        if (projectId == null || filePath == null) return;
+        try {
+            LambdaQueryWrapper<FileSnapshot> wrapper = new LambdaQueryWrapper<FileSnapshot>()
+                    .eq(FileSnapshot::getProjectId, projectId)
+                    .eq(FileSnapshot::getFilePath, filePath);
+            FileSnapshot existing = fileSnapshotRepository.selectOne(wrapper);
+            if (existing != null) {
+                existing.setExtractorVersion(extractorVersion);
+                existing.setEmbeddingModel(embeddingModel);
+                existing.setGraphOntologyVersion(ontologyVersion);
+                existing.setLastSeenAt(LocalDateTime.now());
+                fileSnapshotRepository.updateById(existing);
+            }
+        } catch (Exception e) {
+            log.debug("updateSnapshotVersions failed: projectId={}, filePath={}: {}",
+                    projectId, filePath, e.getMessage());
+        }
+    }
+
     // ==================== 内部方法 ====================
 
     /** 加载项目所有已存快照：file_path → file_hash */

@@ -54,10 +54,10 @@ class GraphQueryServiceTest {
     @Test
     void testGetApiCallChain_DelegatesToReadModel() {
         var chain = new GraphPathReadModel.PathChain(); chain.nodes = List.of();
-        when(pathReadModel.getApiCallChain(anyString(), anyString(), anyString())).thenReturn(chain);
+        when(pathReadModel.getApiCallChain(anyString(), anyString(), anyString(), any())).thenReturn(chain);
         List<Map<String, Object>> result = graphQueryService.getApiCallChain("p1", "v1", "GET /api/test");
         assertNotNull(result);
-        verify(pathReadModel).getApiCallChain("p1", "v1", "GET /api/test");
+        verify(pathReadModel).getApiCallChain("p1", "v1", "GET /api/test", null);
     }
 
     @Test

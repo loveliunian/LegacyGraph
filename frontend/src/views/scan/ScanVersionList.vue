@@ -124,6 +124,50 @@
             class="text-gray">-</span>
         </template>
       </el-table-column>
+      <!-- L-13: QA Gate 列 -->
+      <el-table-column
+        label="QA Gate"
+        width="100"
+        align="center">
+        <template #default="{ row }">
+          <el-tag
+            v-if="row.qaGateStatus === 'PASSED'"
+            type="success"
+            size="small">PASSED</el-tag>
+          <el-tag
+            v-else-if="row.qaGateStatus === 'FAILED'"
+            type="danger"
+            size="small">FAILED</el-tag>
+          <el-tag
+            v-else
+            type="info"
+            size="small">NOT_RUN</el-tag>
+        </template>
+      </el-table-column>
+      <!-- L-14: 项目维度累积统计（应用累积节点/边/事实，不被本次扫描删节点影响） -->
+      <el-table-column
+        label="项目累积"
+        width="150">
+        <template #default="{ row }">
+          <div
+            v-if="row.cumulativeNodeCount || row.cumulativeEdgeCount || row.cumulativeFactCount"
+            class="cumulative-stats"
+            :title="row.cumulativeUpdatedAt ? `更新于 ${formatTime(row.cumulativeUpdatedAt)}` : ''">
+            <span class="stat-line">
+              <em class="stat-num">{{ formatNumber(row.cumulativeNodeCount) }}</em> 节点
+            </span>
+            <span class="stat-line">
+              <em class="stat-num">{{ formatNumber(row.cumulativeEdgeCount) }}</em> 关系
+            </span>
+            <span class="stat-line">
+              <em class="stat-num">{{ formatNumber(row.cumulativeFactCount) }}</em> 事实
+            </span>
+          </div>
+          <span
+            v-else
+            class="text-gray">-</span>
+        </template>
+      </el-table-column>
       <el-table-column
         label="耗时"
         width="90"
@@ -452,6 +496,7 @@ import dayjs from 'dayjs'
 import { t } from '@/locales'
 import { scanApi } from '@/api'
 import { preloadDicts, dictLabel } from '@/utils/dict'
+import { clearVersionsCache } from '@/utils/versionsCache'
 import CreateScan from '@/views/scan/CreateScan.vue'
 
 const route = useRoute()
@@ -527,6 +572,12 @@ const formatPhaseDuration = (startedAt?: string, finishedAt?: string) => {
   return formatDuration(seconds)
 }
 
+// L-14: 数字千分位格式化（用于累积统计列展示）
+const formatNumber = (n?: number | null): string => {
+  if (n === null || n === undefined || Number.isNaN(n)) return '0'
+  return n.toLocaleString('en-US')
+}
+
 // 解析 scanType JSON，返回扫描类型数组
 const parseScanTypes = (scanType: string): string[] => {
   if (!scanType) return []
@@ -576,6 +627,8 @@ const goToCreate = () => {
 
 const onCreated = () => {
   createDialogVisible.value = false
+  // L-19: 新建扫描版本后清除缓存，避免新版本被 TTL 窗口期内的旧缓存遮挡
+  clearVersionsCache(projectId)
   loadVersionList()
 }
 
@@ -690,6 +743,8 @@ const deleteVersion = async (row: any) => {
       type: 'warning'
     })
     await scanApi.delete(projectId, row.id)
+    // L-19: 删除成功后主动清除版本缓存，避免依赖 TTL 过期导致残留数据
+    clearVersionsCache(projectId)
     ElMessage.success('版本已删除')
     await loadVersionList()
   } catch {
@@ -952,6 +1007,20 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 2px;
   line-height: 1.4;
+}
+
+/* L-14: 项目累积统计，与图谱统计列同款紧凑布局，但用辅助色区分 */
+.cumulative-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
+  color: #909399;
+}
+
+.cumulative-stats .stat-num {
+  color: #606266;
+  font-weight: 500;
 }
 
 .stat-line {

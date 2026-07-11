@@ -247,8 +247,8 @@ export const graphApi = {
    * @param domain 业务域名称
    * @returns 业务视图数据，包含节点和边
    */
-  getBusinessView: (projectId: string, versionId: string, domain: string) => {
-    return get(`/lg/projects/${encodeURIComponent(projectId)}/graph/business-view`, { versionId, domain })
+  getBusinessView: (projectId: string, versionId: string, domain: string, view?: string) => {
+    return get(`/lg/projects/${encodeURIComponent(projectId)}/graph/business-view`, { versionId, domain, view })
   },
 
   /**

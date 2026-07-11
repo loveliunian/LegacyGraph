@@ -92,6 +92,7 @@
           </el-alert>
 
           <GraphViewerOptimized
+            ref="graphViewerRef"
             :nodes="filteredNodesForTemplate"
             :edges="filteredEdgesForTemplate"
             height="calc(100vh - 255px)"
@@ -350,7 +351,7 @@
 <script setup lang="ts">
 // ⚠️ TODO F-H7: 本组件 915 行，混入图谱加载/过滤/状态管理/节点定位。
 // 建议提取 composable useUnifiedGraph + 子组件 GraphFilters / NodeLocator
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
@@ -404,6 +405,9 @@ const evidenceDrawerVisible = ref(false)
 const nodeEvidence = ref<Evidence[]>([])
 const versions = ref<ScanVersion[]>([])
 const emptyReasons = ref<string[] | null>(null)
+
+// L-21/L-22: GraphViewerOptimized 组件引用，用于调用 locateNode 和 runAutoLayout
+const graphViewerRef = ref<InstanceType<typeof GraphViewerOptimized> | null>(null)
 
 const nodeTypes = [
   { value: 'BusinessDomain', label: '业务域', color: '#67c23a' },
@@ -616,12 +620,10 @@ async function loadGraph(versionId: string) {
     const data: any = await graphApi.getUnifiedGraph(projectId.value, versionId, minConfidence.value)
 
     // 转换节点格式为 VueFlow 格式
+    // L-21: 移除 Math.random() 随机布点，不设置 position，
+    //       由 GraphViewerOptimized.processNodes 提供网格 fallback，加载后调用 runAutoLayout
     internalNodes.value = (data.nodes || []).map((node: GraphNodeData) => ({
       id: node.id,
-      position: {
-        x: Math.random() * 800,
-        y: Math.random() * 600
-      },
       data: {
         ...node,
         label: node.label
@@ -646,6 +648,10 @@ async function loadGraph(versionId: string) {
       ElMessage.warning('图谱数据为空，详见诊断信息')
     } else {
       ElMessage.success(`已加载 ${data.nodeCount || 0} 节点, ${data.edgeCount || 0} 关系`)
+      // L-21: 节点加载后自动布局，使首次打开即呈现有结构的图
+      nextTick(() => {
+        setTimeout(() => graphViewerRef.value?.runAutoLayout(), 100)
+      })
     }
   } catch (error) {
     console.error('加载图谱失败', error)
@@ -783,15 +789,9 @@ async function viewEvidence() {
 
 function locateNode() {
   if (selectedNode.value) {
-    // 触发图谱聚焦到当前选中节点
-    emitFocusNode(selectedNode.value.id)
+    // L-22: 通过 ref 直接调用 GraphViewerOptimized.locateNode，替代旧 CustomEvent 方案
+    graphViewerRef.value?.locateNode(selectedNode.value.id)
   }
-}
-
-function emitFocusNode(nodeId: string) {
-  // 通过自定义事件通知图谱容器聚焦到指定节点
-  const event = new CustomEvent('graph-focus-node', { detail: { nodeId } })
-  window.dispatchEvent(event)
 }
 
 onMounted(async () => {

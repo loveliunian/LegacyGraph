@@ -1,8 +1,25 @@
 <template>
   <div class="evidence-workbench">
     <div class="workbench-header">
-      <h2>证据工作台</h2>
-      <p class="desc">处理差异和风险：切片路径、漂移队列、证据审核</p>
+      <div class="header-row">
+        <div>
+          <h2>证据工作台</h2>
+          <p class="desc">处理差异和风险：切片路径、漂移队列、证据审核</p>
+        </div>
+        <!-- L-26: 版本选择器 -->
+        <el-select
+          v-model="currentVersion"
+          placeholder="选择版本"
+          style="width: 240px;"
+          @change="onVersionChange">
+          <el-option
+            v-for="v in versions"
+            :key="v.id"
+            :label="formatVersionLabel(v)"
+            :value="v.id"
+          />
+        </el-select>
+      </div>
     </div>
 
     <el-tabs
@@ -41,7 +58,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { graphApi } from '@/api'
+import { loadScanVersions, type ScanVersion } from '@/utils/versionsCache'
+import { formatVersionLabel } from '@/utils/formatVersionLabel'
 import FeatureSliceWorkbench from './FeatureSliceWorkbench.vue'
 import DriftQueue from './DriftQueue.vue'
 import QualityPanel from './QualityPanel.vue'
@@ -50,16 +68,19 @@ const route = useRoute()
 const projectId = route.params.projectId as string
 const activeTab = ref('slice')
 const currentVersion = ref('')
-const versions = ref<any[]>([])
+const versions = ref<ScanVersion[]>([])
 
+// L-19: 使用共享缓存加载版本列表
 async function loadVersions() {
-  try {
-    const res: any = await graphApi.getScanVersions(projectId)
-    versions.value = Array.isArray(res) ? res : (res?.list || [])
-    if (versions.value.length > 0 && !currentVersion.value) {
-      currentVersion.value = versions.value[0].id
-    }
-  } catch { /* ignore */ }
+  await loadScanVersions(projectId, versions)
+  if (versions.value.length > 0 && !currentVersion.value) {
+    currentVersion.value = versions.value[0].id
+  }
+}
+
+// L-26: 版本切换时子组件通过 watch(props.versionId) 自动重新加载
+function onVersionChange() {
+  // 子组件已绑定 :version-id="currentVersion"，切换后 watch 自动触发
 }
 
 onMounted(() => { loadVersions() })
@@ -74,6 +95,11 @@ onMounted(() => { loadVersions() })
 }
 .workbench-header {
   margin-bottom: 16px;
+}
+.workbench-header .header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 .workbench-header h2 {
   margin: 0 0 4px 0;

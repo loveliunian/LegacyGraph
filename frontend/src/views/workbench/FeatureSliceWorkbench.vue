@@ -117,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { graphApi } from '@/api'
 
@@ -186,6 +186,8 @@ function riskTagType(r: string) {
   return 'success'
 }
 
+// L-26: 版本切换时重新加载
+watch(() => props.versionId, () => { if (props.versionId) refreshSlices() })
 onMounted(() => { refreshSlices() })
 </script>
 
