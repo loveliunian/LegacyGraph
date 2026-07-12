@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  * 调用外部 OCR 服务提取文本。
  * </p>
  * <p>
- * 当前为占位实现：OCR 服务地址通过 {@code legacygraph.parse.ocr.endpoint} 配置，
+ * 当前为占位实现：OCR 服务地址通过 {@code legacygraph.ocr.endpoint} 配置，
  * 未配置时返回空字符串并记录 WARN 日志。未来接入真实 OCR 服务（如 Tesseract / 云 OCR API）。
  * </p>
  */
@@ -19,10 +19,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class OcrParsingStrategy implements DocumentParsingStrategy {
 
-    @Value("${legacygraph.parse.ocr.endpoint:}")
+    @Value("${legacygraph.ocr.endpoint:}")
     private String ocrEndpoint;
 
-    @Value("${legacygraph.parse.ocr.enabled:false}")
+    @Value("${legacygraph.ocr.enabled:false}")
     private boolean ocrEnabled;
 
     @Override

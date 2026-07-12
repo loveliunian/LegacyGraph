@@ -47,11 +47,11 @@ public class TestExecutionScheduler {
     private final AtomicInteger activeTasks = new AtomicInteger(0);
 
     // 测试环境 base URL（可通过配置覆盖，见 doc §ValidationGateRunner 与现有测试执行链的衔接）
-    @Value("${legacy-graph.test.base-url.dev:http://localhost:8080}")
+    @Value("${legacygraph.test.base-url.dev:http://localhost:8080}")
     private String devBaseUrl;
-    @Value("${legacy-graph.test.base-url.test:http://localhost:8080}")
+    @Value("${legacygraph.test.base-url.test:http://localhost:8080}")
     private String testBaseUrl;
-    @Value("${legacy-graph.test.base-url.prod:http://localhost:8080}")
+    @Value("${legacygraph.test.base-url.prod:http://localhost:8080}")
     private String prodBaseUrl;
 
     @Autowired

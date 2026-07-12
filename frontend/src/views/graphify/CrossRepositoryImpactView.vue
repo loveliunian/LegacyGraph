@@ -8,6 +8,8 @@
       <p class="header-desc">展示跨仓库之间的依赖链路和影响传播路径</p>
     </div>
 
+    <el-tabs v-model="activeTab" class="cross-repo-tabs">
+      <el-tab-pane label="影响链路" name="chains">
     <el-card shadow="hover" class="filter-card">
       <template #header>
         <div class="card-header">
@@ -139,6 +141,103 @@
         </el-steps>
       </div>
     </el-drawer>
+      </el-tab-pane>
+
+      <!-- H26: 差异对比 Tab -->
+      <el-tab-pane label="差异对比" name="diff">
+        <el-card shadow="hover" class="diff-card">
+          <template #header>
+            <div class="card-header">
+              <span>Graphify vs LegacyGraph 节点对齐</span>
+              <el-button
+                type="primary"
+                size="small"
+                :loading="diffLoading"
+                @click="loadDiff">
+                <el-icon><Refresh /></el-icon>
+                对比
+              </el-button>
+            </div>
+          </template>
+          <el-form :inline="true" style="margin-bottom: 12px">
+            <el-form-item label="Graph JSON 路径">
+              <el-input
+                v-model="diffGraphJsonPath"
+                placeholder="/path/to/graphify-graph.json"
+                style="width: 400px" />
+            </el-form-item>
+            <el-form-item label="版本 ID">
+              <el-input
+                v-model="diffVersionId"
+                placeholder="可选"
+                style="width: 200px" />
+            </el-form-item>
+          </el-form>
+
+          <el-empty v-if="!diffReport" description="点击对比按钮开始差异分析" />
+
+          <template v-else>
+            <el-row :gutter="16">
+              <el-col :span="6">
+                <div class="diff-stat">
+                  <div class="diff-stat-label">对齐率</div>
+                  <div class="diff-stat-value primary">
+                    {{ (diffReport.alignmentRate * 100).toFixed(1) }}%
+                  </div>
+                </div>
+              </el-col>
+              <el-col :span="6">
+                <div class="diff-stat">
+                  <div class="diff-stat-label">Graphify 节点</div>
+                  <div class="diff-stat-value">{{ diffReport.totalInGraphify }}</div>
+                </div>
+              </el-col>
+              <el-col :span="6">
+                <div class="diff-stat">
+                  <div class="diff-stat-label">Legacy 节点</div>
+                  <div class="diff-stat-value">{{ diffReport.totalInLegacy }}</div>
+                </div>
+              </el-col>
+              <el-col :span="6">
+                <div class="diff-stat">
+                  <div class="diff-stat-label">已匹配</div>
+                  <div class="diff-stat-value success">{{ diffReport.matched }}</div>
+                </div>
+              </el-col>
+            </el-row>
+
+            <el-row :gutter="16" style="margin-top: 16px">
+              <el-col :span="12">
+                <h4 class="diff-section-title">Graphify 缺失（Legacy 有）</h4>
+                <el-table
+                  :data="diffReport.missingInGraphify"
+                  border
+                  stripe
+                  max-height="400"
+                  empty-text="无缺失">
+                  <el-table-column prop="nodeKey" label="nodeKey" width="200" show-overflow-tooltip />
+                  <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+                  <el-table-column prop="type" label="类型" width="120" />
+                </el-table>
+              </el-col>
+              <el-col :span="12">
+                <h4 class="diff-section-title">Legacy 缺失（Graphify 有）</h4>
+                <el-table
+                  :data="diffReport.missingInLegacy"
+                  border
+                  stripe
+                  max-height="400"
+                  empty-text="无缺失">
+                  <el-table-column prop="nodeKey" label="nodeKey" width="200" show-overflow-tooltip />
+                  <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+                  <el-table-column prop="type" label="类型" width="120" />
+                </el-table>
+              </el-col>
+            </el-row>
+          </template>
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -148,7 +247,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Share, Refresh } from '@element-plus/icons-vue'
 import { graphifyApi } from '@/api/graphify.api'
-import type { CrossRepoImpactChain } from '@/api/graphify.api'
+import type { CrossRepoImpactChain, CrossRepoDiffReport } from '@/api/graphify.api'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
@@ -160,6 +259,13 @@ const filterSourceRepo = ref('')
 const filterTargetRepo = ref('')
 const detailDrawerVisible = ref(false)
 const selectedChain = ref<CrossRepoImpactChain | null>(null)
+
+// H26: 差异对比 Tab 状态
+const activeTab = ref('chains')
+const diffLoading = ref(false)
+const diffReport = ref<CrossRepoDiffReport | null>(null)
+const diffGraphJsonPath = ref('')
+const diffVersionId = ref('')
 
 const filteredChains = computed(() => {
   return chains.value.filter((c) => {
@@ -212,6 +318,28 @@ async function loadImpactChains() {
 onMounted(() => {
   loadImpactChains()
 })
+
+// H26: 加载差异对比
+async function loadDiff() {
+  if (!diffGraphJsonPath.value) {
+    ElMessage.warning('请输入 Graph JSON 路径')
+    return
+  }
+  diffLoading.value = true
+  try {
+    const res: any = await graphifyApi.getCrossRepoDiff(
+      projectId,
+      diffGraphJsonPath.value,
+      diffVersionId.value || undefined
+    )
+    diffReport.value = res?.data || res
+  } catch (err) {
+    console.error('加载差异对比失败:', err)
+    ElMessage.error('加载差异对比失败')
+  } finally {
+    diffLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -278,5 +406,49 @@ onMounted(() => {
 
 .chain-detail {
   padding: 16px;
+}
+
+/* H26: 差异对比样式 */
+.cross-repo-tabs {
+  margin-top: 16px;
+}
+
+.diff-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.diff-stat {
+  text-align: center;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.diff-stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.diff-stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.diff-stat-value.primary {
+  color: #409eff;
+}
+
+.diff-stat-value.success {
+  color: #67c23a;
+}
+
+.diff-section-title {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #606266;
 }
 </style>

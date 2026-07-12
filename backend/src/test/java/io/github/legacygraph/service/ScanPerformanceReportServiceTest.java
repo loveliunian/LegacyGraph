@@ -2,6 +2,7 @@ package io.github.legacygraph.service;
 
 import io.github.legacygraph.service.report.ScanPerformanceReportService;
 
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
 import io.github.legacygraph.repository.ScanTaskRepository;
@@ -38,7 +39,7 @@ class ScanPerformanceReportServiceTest {
 
         ScanTask adapterTask = new ScanTask();
         adapterTask.setTaskType("ADAPTER_SCAN");
-        adapterTask.setTaskStatus("SUCCESS");
+        adapterTask.setTaskStatus(ScanTaskStatus.SUCCESS.name());
         adapterTask.setTotalItems(20);
         adapterTask.setProcessedItems(20);
         adapterTask.setStartedAt(LocalDateTime.of(2026, 7, 3, 10, 0));
@@ -46,7 +47,7 @@ class ScanPerformanceReportServiceTest {
 
         ScanTask aiTask = new ScanTask();
         aiTask.setTaskType("AI_ORCHESTRATION");
-        aiTask.setTaskStatus("WARNING");
+        aiTask.setTaskStatus(ScanTaskStatus.WARNING.name());
         aiTask.setOutputSummary("AI skipped");
         aiTask.setStartedAt(LocalDateTime.of(2026, 7, 3, 10, 1));
         aiTask.setFinishedAt(LocalDateTime.of(2026, 7, 3, 10, 2));

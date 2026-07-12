@@ -39,14 +39,17 @@ public class AiScanConfig {
     /** G8 业务编排：Feature → 代码映射（mapFeaturesToCode） */
     private boolean featureToCodeMapping = true;
 
-    /** G8 业务编排：BusinessProcess → BusinessDomain 归类（评估 §4 真空区 1，默认关） */
-    private boolean processToDomain = false;
+    /** G8 业务编排：BusinessProcess → BusinessDomain 归类（评估 §4 真空区 1，H06 默认开） */
+    private boolean processToDomain = true;
 
     /** G8 业务编排：BusinessObject → Mapper（IMPLEMENTED_BY 边，评估 §4 真空区 2 拆分） */
     private boolean objectToMapperMapping = true;
 
-    /** G8 业务编排：BusinessRule → 代码层 Rule 节点（评估 §4 真空区 3，默认关） */
-    private boolean ruleToRuleMapping = false;
+    /** G8 业务编排：BusinessRule → 代码层 Rule 节点（评估 §4 真空区 3，H06 默认开） */
+    private boolean ruleToRuleMapping = true;
+
+    /** H27: LLM 语义归类开关（独立于 processToDomain 规则映射，默认 ON） */
+    private boolean llmProcessDomainClassification = true;
 
     /**
      * 从 scanScope JSON 文本解析；解析失败返回默认（关闭 AI）配置。
@@ -59,7 +62,7 @@ public class AiScanConfig {
      * 从 scanScope JSON 文本解析，以 {@code defaults} 作为基线。
      *
      * <p>开关优先级：scanScope 中显式指定的字段 &gt; 后端配置项默认值（defaults）。
-     * 这样"是否启用 AI 编排"可由后端 {@code legacy-graph.ai.*} 配置统一控制，
+     * 这样"是否启用 AI 编排"可由后端 {@code legacygraph.ai.*} 配置统一控制，
      * 单次扫描请求仍可在 scanScope 中覆盖。解析失败时回退到 defaults。</p>
      */
     public static AiScanConfig fromScanScope(String scanScopeJson, ObjectMapper objectMapper,
@@ -77,6 +80,7 @@ public class AiScanConfig {
         config.setProcessToDomain(base.isProcessToDomain());
         config.setObjectToMapperMapping(base.isObjectToMapperMapping());
         config.setRuleToRuleMapping(base.isRuleToRuleMapping());
+        config.setLlmProcessDomainClassification(base.isLlmProcessDomainClassification());
 
         if (scanScopeJson == null || scanScopeJson.isBlank()) {
             return config;
@@ -120,6 +124,11 @@ public class AiScanConfig {
             }
             if (node.hasNonNull("ruleToRuleMapping")) {
                 config.setRuleToRuleMapping(node.get("ruleToRuleMapping").asBoolean(config.isRuleToRuleMapping()));
+            }
+            // H27: LLM 语义归类开关（独立于规则映射 processToDomain）
+            if (node.hasNonNull("llmProcessDomainClassification")) {
+                config.setLlmProcessDomainClassification(node.get("llmProcessDomainClassification")
+                        .asBoolean(config.isLlmProcessDomainClassification()));
             }
         } catch (Exception e) {
             log.warn("Failed to parse AI scan config from scanScope, using defaults: {}", e.getMessage());

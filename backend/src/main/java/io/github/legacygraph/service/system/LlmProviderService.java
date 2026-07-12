@@ -35,8 +35,8 @@ public class LlmProviderService {
 
     private final LlmProviderRepository llmProviderRepository;
 
-    /** B-S4：LLM 调用超时（秒），激活 application.yml 中 legacy-graph.ai.llm-timeout 配置 */
-    @Value("${legacy-graph.ai.llm-timeout:120}")
+    /** B-S4：LLM 调用超时（秒），激活 application.yml 中 legacygraph.ai.llm-timeout 配置 */
+    @Value("${legacygraph.ai.llm-timeout:120}")
     private long llmTimeoutSeconds;
 
     /** 匹配 ${VAR} 或 ${VAR:default} 占位符 */

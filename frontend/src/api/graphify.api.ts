@@ -87,6 +87,16 @@ export interface CrossRepoImpactChain {
   impactLevel: 'HIGH' | 'MEDIUM' | 'LOW'
 }
 
+// H26: 跨仓库差异对比结果
+export interface CrossRepoDiffReport {
+  alignmentRate: number
+  totalInGraphify: number
+  totalInLegacy: number
+  matched: number
+  missingInGraphify: Array<{ nodeKey: string; name: string; type: string }>
+  missingInLegacy: Array<{ nodeKey: string; name: string; type: string }>
+}
+
 export const graphifyApi = {
   importGraph(projectId: string, versionId: string, data: GraphifyImportRequest) {
     return post(`/lg/projects/${projectId}/scan-versions/${versionId}/graphify/import`, data)
@@ -123,5 +133,11 @@ export const graphifyApi = {
   },
   getCrossRepoImpact(projectId: string, versionId?: string) {
     return get(`/lg/projects/${projectId}/graphify/cross-repo-impact`, versionId ? { versionId } : {})
+  },
+  // H26: 跨仓库差异对比
+  getCrossRepoDiff(projectId: string, graphJsonPath: string, versionId?: string) {
+    const params: Record<string, string> = { graphJsonPath }
+    if (versionId) params.versionId = versionId
+    return get(`/lg/projects/${projectId}/graphify/cross-repo-impact/diff`, params)
   },
 }

@@ -61,7 +61,7 @@ public class ScanArtifactPublisher {
     private final CommunityDetectionService communityDetectionService;
 
     /** 当项目根目录无法解析（无 repo / 路径非法）时的回退目录 */
-    @Value("${legacy-graph.reports.local-dir:${user.home}/.legacygraph/reports}")
+    @Value("${legacygraph.reports.local-dir:${user.home}/.legacygraph/reports}")
     private String fallbackReportRoot;
 
     public ScanArtifactPublisher(CodeRepoRepository codeRepoRepository,

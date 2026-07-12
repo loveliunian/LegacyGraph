@@ -151,6 +151,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             AtomicInteger totalMappings = new AtomicInteger(0);
             AtomicInteger totalPersisted = new AtomicInteger(0);
             AtomicInteger batches = new AtomicInteger(0);
+            AtomicInteger failedBatches = new AtomicInteger(0);  // H17: 追踪失败批次数
             List<CompletableFuture<Void>> batchFutures = new ArrayList<>();
             for (int i = 0; i < features.size(); i += dynamicBatchSize) {
                 List<GraphNode> batch = features.subList(i,
@@ -186,6 +187,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                                 b, mappingCount, persisted);
                     } catch (Exception e) {
                         log.warn("AI feature mapping batch {} failed: {}", batches.get() + 1, e.getMessage());
+                        failedBatches.incrementAndGet();  // H17: 追踪失败批次，最终上报 WARNING
                     }
                 }, support.getDocExtractExecutor()));
             }
@@ -197,7 +199,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             int ruleDomainMappings = 0;
             int ruleFeatureCandidates = 0;
             int ruleProcessApiMappings = 0;
-            int ruleProcessDomainMappings = 0;
+            // H27: ruleProcessDomainMappings 已移除，由 BusinessProcessToDomainStep（LLM 归类）替代
             int ruleObjectMapperMappings = 0;
             int ruleRuleMappings = 0;
             if (businessGraphBuilder != null) {
@@ -219,15 +221,12 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                         if (config.isProcessToApiMapping()) {
                             ruleProcessApiMappings = businessGraphBuilder.mapBusinessProcessesToApis(projectId, versionId);
                         }
-                        // 评估 §4 矩阵真空区 1/2/3 — 默认开关由 AiScanConfig 控制
-                        if (config.isProcessToDomain()) {
-                            ruleProcessDomainMappings = businessGraphBuilder.mapBusinessProcessesToDomains(projectId, versionId);
-                        }
+                        // H27: processToDomain 规则映射已删除，由 BusinessProcessToDomainStep（LLM 归类）替代
                         if (config.isObjectToMapperMapping()) {
-                            ruleObjectMapperMappings = businessGraphBuilder.mapBusinessObjectsToMappers(projectId, versionId);
+                            ruleObjectMapperMappings = businessGraphBuilder.mapBusinessObjectsToMappers(projectId, versionId, ctx.isIncremental());
                         }
                         if (config.isRuleToRuleMapping()) {
-                            ruleRuleMappings = businessGraphBuilder.mapBusinessRulesToRuleNodes(projectId, versionId);
+                            ruleRuleMappings = businessGraphBuilder.mapBusinessRulesToRuleNodes(projectId, versionId, ctx.isIncremental());
                         }
                     }
                 } catch (Exception e) {
@@ -237,6 +236,7 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                 }
             }
 
+            int failed = failedBatches.get();
             String summary = "AI 生成功能映射 " + totalMappings.get() + " 条（" + batches.get()
                     + " 批），落地 Feature→Page/API 边 " + totalPersisted.get() + " 条；"
                     + "规则映射补充：Feature→Page/API " + ruleFeatureMappings + " 条，"
@@ -244,11 +244,15 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                     + "业务域技术映射 " + ruleDomainMappings + " 条，"
                     + "跨语言 Feature 待确认候选 " + ruleFeatureCandidates + " 组，"
                     + "流程→API 实现映射 " + ruleProcessApiMappings + " 条，"
-                    + "流程→业务域 " + ruleProcessDomainMappings + " 条，"
                     + "业务对象→Mapper " + ruleObjectMapperMappings + " 条，"
-                    + "业务规则→规则类 " + ruleRuleMappings + " 条";
+                    + "业务规则→规则类 " + ruleRuleMappings + " 条"
+                    + (failed > 0 ? "；" + failed + " 批 LLM 调用失败（已跳过）" : "");
+            // H17: 有批次失败时 summary 以 ⚠ 开头，让 completeTask 上报 WARNING 子任务状态
+            if (failed > 0) {
+                summary = "⚠ " + summary;
+            }
             support.completeTask(task, summary, null);
-            return StepExecutionResult.builder().success(true).message(summary)
+            return StepExecutionResult.builder().success(true).warning(failed > 0).message(summary)
                     .processedCount(totalPersisted.get()).build();
         } catch (Exception e) {
             log.error("AI_FEATURE_MAPPING failed: versionId={}", versionId, e);

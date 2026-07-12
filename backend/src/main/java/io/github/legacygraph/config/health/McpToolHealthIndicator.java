@@ -20,7 +20,7 @@ public class McpToolHealthIndicator implements HealthIndicator {
 
     private final ToolHealthService toolHealthService;
 
-    @Value("${legacy-graph.health.default-project-id:default}")
+    @Value("${legacygraph.health.default-project-id:default}")
     private String defaultProjectId;
 
     @Override

@@ -1,5 +1,6 @@
 package io.github.legacygraph.repository;
 
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.entity.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -223,7 +224,7 @@ class RepositoryTest {
         entity.setVersionId(sv.getId());  // 必填字段
         entity.setTaskType("CODE_SCAN");
         entity.setTaskName("代码扫描任务");
-        entity.setTaskStatus("PENDING");
+        entity.setTaskStatus(ScanTaskStatus.PENDING.name());
         entity.setCreatedAt(LocalDateTime.now());
         entity.setUpdatedAt(LocalDateTime.now());
 
@@ -231,7 +232,7 @@ class RepositoryTest {
         ScanTask found = scanTaskRepository.selectById(entity.getId());
         assertThat(found.getTaskType()).isEqualTo("CODE_SCAN");
 
-        found.setTaskStatus("COMPLETED");
+        found.setTaskStatus(ScanTaskStatus.COMPLETED.name());
         scanTaskRepository.updateById(found);
         assertThat(scanTaskRepository.selectById(found.getId()).getTaskStatus()).isEqualTo("COMPLETED");
     }

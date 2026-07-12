@@ -13,7 +13,7 @@ import java.util.Set;
 /**
  * CLI 工具适配器 Spring 配置 —— 负责创建 CliProcessRunner 和 CliCommandPolicy Bean。
  *
- * <p>工作目录白名单从配置 {@code legacy-graph.tool.cli.work-dir-whitelist} 读取，
+ * <p>工作目录白名单从配置 {@code legacygraph.tool.cli.work-dir-whitelist} 读取，
  * 默认为空列表（允许所有目录，测试友好模式）。
  */
 @Configuration(proxyBeanMethods = false)
@@ -23,7 +23,7 @@ public class CliToolConfig {
      * 工作目录白名单列表（从 YAML 配置读取）。
      * 每个条目是一个允许执行 CLI 命令的目录路径。
      */
-    @Value("${legacy-graph.tool.cli.work-dir-whitelist:#{T(java.util.Collections).emptyList()}}")
+    @Value("${legacygraph.tool.cli.work-dir-whitelist:#{T(java.util.Collections).emptyList()}}")
     private List<String> workDirWhitelist;
 
     /**

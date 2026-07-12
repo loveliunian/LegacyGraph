@@ -301,7 +301,9 @@ public class DocExtractStep implements AiScanStepExecutor {
                     versionId, totalFacts, docs.size());
             String summary = buildDocExtractSummary(totalFacts, docs.size(), partialDocumentCount.get());
             support.completeTask(task, summary, null);
-            return StepExecutionResult.builder().success(true).message(summary)
+            // H17: 部分文档失败时标记 warning，让调用方感知部分失败
+            boolean hasWarning = partialDocumentCount.get() > 0;
+            return StepExecutionResult.builder().success(true).warning(hasWarning).message(summary)
                     .processedCount(totalFacts).build();
         } catch (Exception e) {
             log.error("AI_DOC_EXTRACT failed: versionId={}", versionId, e);

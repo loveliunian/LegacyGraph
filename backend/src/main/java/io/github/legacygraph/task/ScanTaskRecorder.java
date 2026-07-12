@@ -1,6 +1,7 @@
 package io.github.legacygraph.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.repository.ScanTaskRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,7 @@ public class ScanTaskRecorder {
         task.setVersionId(versionId);
         task.setTaskType(taskType);
         task.setTaskName(taskName);
-        task.setTaskStatus("RUNNING");
+        task.setTaskStatus(ScanTaskStatus.RUNNING.name());
         task.setStartedAt(LocalDateTime.now());
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
@@ -66,7 +67,7 @@ public class ScanTaskRecorder {
             task.setOutputSummary("\"" + summary.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
         }
         task.setErrorMessage(error);
-        task.setTaskStatus(error == null ? "SUCCESS" : "FAILED");
+        task.setTaskStatus(error == null ? ScanTaskStatus.SUCCESS.name() : ScanTaskStatus.FAILED.name());
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);
@@ -97,13 +98,13 @@ public class ScanTaskRecorder {
         }
         task.setErrorMessage(error);
         String finalStatus = terminalStatus != null ? terminalStatus
-                : (error == null ? "SUCCESS" : "FAILED");
+                : (error == null ? ScanTaskStatus.SUCCESS.name() : ScanTaskStatus.FAILED.name());
         task.setTaskStatus(finalStatus);
         task.setFinishedAt(LocalDateTime.now());
 
         // 修复进度百分比：SUCCESS/WARNING 时强制 processedItems = totalItems
         // 解决"83%显示已完成""60%显示已完成"等问题（截断前总数 > 实际处理数）
-        if ("SUCCESS".equals(finalStatus) || "WARNING".equals(finalStatus)) {
+        if (ScanTaskStatus.SUCCESS.name().equals(finalStatus) || ScanTaskStatus.WARNING.name().equals(finalStatus)) {
             Integer total = task.getTotalItems();
             if (total != null && total > 0) {
                 task.setProcessedItems(total);

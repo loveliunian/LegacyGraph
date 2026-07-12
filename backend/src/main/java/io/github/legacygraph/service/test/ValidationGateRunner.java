@@ -45,8 +45,8 @@ public class ValidationGateRunner {
     public ValidationGateRunner(ValidationGateRepository validationGateRepository,
                                 TestExecutionScheduler testExecutionScheduler,
                                 TestResultRepository testResultRepository,
-                                @Value("${legacy-graph.test.gate-result-timeout-ms:300000}") long resultWaitTimeoutMs,
-                                @Value("${legacy-graph.test.gate-result-poll-ms:1000}") long resultPollIntervalMs,
+                                @Value("${legacygraph.test.gate-result-timeout-ms:300000}") long resultWaitTimeoutMs,
+                                @Value("${legacygraph.test.gate-result-poll-ms:1000}") long resultPollIntervalMs,
                                 TransactionTemplate transactionTemplate) {
         this.validationGateRepository = validationGateRepository;
         this.testExecutionScheduler = testExecutionScheduler;
@@ -137,7 +137,10 @@ public class ValidationGateRunner {
             log.info("Gate {} has no command, treated as PASS (skipped)", gate.getGateType());
             return true;
         }
-        ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", command);
+        // H05: RCE 修复 — 白名单校验 + ProcessBuilder 替换 /bin/sh -c，杜绝命令注入
+        List<String> cmd = GateCommandWhitelist.parseAndValidate(command);
+        log.info("Gate {} executing command: {}", gate.getGateType(), String.join(" ", cmd));
+        ProcessBuilder pb = new ProcessBuilder(cmd);
         if (context != null && context.getWorkingDir() != null) {
             pb.directory(new java.io.File(context.getWorkingDir()));
         }

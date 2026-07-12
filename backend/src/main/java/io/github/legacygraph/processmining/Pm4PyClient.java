@@ -39,13 +39,13 @@ public class Pm4PyClient {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${legacy-graph.pm4py.python-path:python3}")
+    @Value("${legacygraph.pm4py.python-path:python3}")
     private String pythonPath;
 
-    @Value("${legacy-graph.pm4py.script-path:scripts/pm4py_conformance.py}")
+    @Value("${legacygraph.pm4py.script-path:scripts/pm4py_conformance.py}")
     private String scriptPath;
 
-    @Value("${legacy-graph.pm4py.timeout-seconds:60}")
+    @Value("${legacygraph.pm4py.timeout-seconds:60}")
     private int timeoutSeconds;
 
     /**

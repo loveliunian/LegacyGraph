@@ -1,6 +1,7 @@
 package io.github.legacygraph.task.step;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.dto.DocumentChunk;
 import io.github.legacygraph.dto.claim.KnowledgeClaimDraft;
@@ -204,7 +205,7 @@ public class AiScanStepSupport {
         task.setVersionId(versionId);
         task.setTaskType(taskType);
         task.setTaskName(taskName);
-        task.setTaskStatus("RUNNING");
+        task.setTaskStatus(ScanTaskStatus.RUNNING.name());
         task.setStartedAt(LocalDateTime.now());
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
@@ -215,15 +216,15 @@ public class AiScanStepSupport {
     public void completeTask(ScanTask task, String summary, String error) {
         String terminalStatus;
         if (error != null) {
-            terminalStatus = "FAILED";
+            terminalStatus = ScanTaskStatus.FAILED.name();
         } else if (summary != null && summary.startsWith("⚠")) {
-            terminalStatus = "WARNING";
+            terminalStatus = ScanTaskStatus.WARNING.name();
         } else {
-            terminalStatus = "SUCCESS";
+            terminalStatus = ScanTaskStatus.SUCCESS.name();
         }
         if (scanTaskRecorder != null) {
             scanTaskRecorder.completeTask(task, summary, error,
-                    "SUCCESS".equals(terminalStatus) ? null : terminalStatus);
+                    ScanTaskStatus.SUCCESS.name().equals(terminalStatus) ? null : terminalStatus);
             return;
         }
         // fallback: 测试环境

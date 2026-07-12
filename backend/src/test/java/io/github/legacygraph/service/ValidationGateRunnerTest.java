@@ -65,7 +65,8 @@ class ValidationGateRunnerTest {
 
     @Test
     void staticGate_zeroExit_passes() {
-        ValidationGate g = gate("STATIC", "exit 0");
+        // 用白名单内的 python3 binary 跑 exit(0)；H05 RCE 修复后只允许白名单 binary
+        ValidationGate g = gate("STATIC", "python3 -c \"exit(0)\"");
         ValidationGate result = runner.runGate(g, ValidationGateRunner.GateContext.builder().build());
         assertEquals("PASSED", result.getResult());
         assertNotNull(result.getFinishedAt());
@@ -73,7 +74,8 @@ class ValidationGateRunnerTest {
 
     @Test
     void staticGate_nonZeroExit_fails() {
-        ValidationGate g = gate("STATIC", "exit 3");
+        // 反斜杠转义引号；触发 python3 子进程，exit(3) 返回 3
+        ValidationGate g = gate("STATIC", "python3 -c exit\\(3\\)");
         ValidationGate result = runner.runGate(g, ValidationGateRunner.GateContext.builder().build());
         assertEquals("FAILED", result.getResult());
     }

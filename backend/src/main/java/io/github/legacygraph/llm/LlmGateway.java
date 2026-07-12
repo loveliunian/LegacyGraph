@@ -415,7 +415,7 @@ public class LlmGateway {
      * <p>
      * B-S4：用 {@link RetryTemplate} 包裹真实调用（3 次尝试，2s 固定退避）。因本方法为同类内部私有调用，
      * {@code @Retryable} 注解会因 AOP 代理失效，故采用编程式重试。底层 HTTP 超时由
-     * {@code legacy-graph.ai.llm-timeout} 在 {@code LlmProviderService#createChatModel} 处注入。
+     * {@code legacygraph.ai.llm-timeout} 在 {@code LlmProviderService#createChatModel} 处注入。
      */
     private ChatResponse invokeModel(String prompt) {
         LlmProvider provider = llmProviderService.getActiveDefault();

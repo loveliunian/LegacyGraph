@@ -41,7 +41,7 @@ public class WikiGenerateJob {
     private final ReportRepository reportRepository;
     private final Neo4jGraphDao neo4jGraphDao;
 
-    @Value("${legacy-graph.reports.local-dir:${user.home}/.legacygraph/reports}")
+    @Value("${legacygraph.reports.local-dir:${user.home}/.legacygraph/reports}")
     private String reportsLocalDir;
 
     /** Wiki 报告类型标识 */

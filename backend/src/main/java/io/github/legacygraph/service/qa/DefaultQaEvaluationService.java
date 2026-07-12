@@ -51,7 +51,7 @@ public class DefaultQaEvaluationService implements QaEvaluationService {
     private static final String DOCS_SUBDIR = "docs/legacygraph";
 
     /** 当项目根目录无法解析时的回退目录 */
-    @Value("${legacy-graph.reports.local-dir:${user.home}/.legacygraph/reports}")
+    @Value("${legacygraph.reports.local-dir:${user.home}/.legacygraph/reports}")
     private String fallbackReportRoot;
 
     @Override

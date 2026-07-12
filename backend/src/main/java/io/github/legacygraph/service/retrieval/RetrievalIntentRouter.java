@@ -20,7 +20,7 @@ import java.util.*;
  * </ul>
  */
 @Slf4j
-@Service
+@Service("legacyRetrievalIntentRouter")
 public class RetrievalIntentRouter {
 
     /**

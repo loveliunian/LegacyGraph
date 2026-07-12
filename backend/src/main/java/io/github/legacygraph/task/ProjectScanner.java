@@ -1,6 +1,7 @@
 package io.github.legacygraph.task;
 
 import io.github.legacygraph.agent.DbSchemaAnalysisAgent;
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.builder.FrontendGraphBuilder;
 import io.github.legacygraph.builder.GraphBuilder;
 import io.github.legacygraph.dao.Neo4jGraphDao;
@@ -113,6 +114,9 @@ public class ProjectScanner {
     /** 成员调用二次扫描解析器（可选）：ADAPTER_SCAN 后对全局图谱解析 Service→Mapper 等 CALLS 边 */
     private io.github.legacygraph.builder.JavaMemberCallResolver javaMemberCallResolver;
 
+    /** 接口→实现 CALLS 边扩展器（可选）：MEMBER_CALL_RESOLVE 后把 interface 级 CALLS 边下钻到 impl.method */
+    private io.github.legacygraph.builder.InterfaceImplCallExpander interfaceImplCallExpander;
+
     /** 密码加解密服务（可选）：L-01 修复 DB 密码脱敏 bug，用可逆加密替代不可逆脱敏 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.github.legacygraph.service.security.SecretCipher secretCipher;
@@ -164,12 +168,12 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired
     private io.github.legacygraph.service.scan.ScanLockService scanLockService;
 
-    /** 扫描后 AI 编排默认开关（legacy-graph.ai.*），scanScope 未显式指定时生效 */
-    @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.enable-default:true}")
+    /** 扫描后 AI 编排默认开关（legacygraph.ai.*），scanScope 未显式指定时生效 */
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.ai.enable-default:true}")
     private boolean aiEnableDefault;
-    @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.auto-generate-test-case-default:false}")
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.ai.auto-generate-test-case-default:false}")
     private boolean aiAutoGenerateTestCaseDefault;
-    @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.min-confidence-default:0.6}")
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.ai.min-confidence-default:0.6}")
     private double aiMinConfidenceDefault;
 
     /** 取消注册表：Controller 写入 signal，runScanBody 检查点读取。ConcurrentHashMap 保证多线程安全 */
@@ -288,6 +292,12 @@ public class ProjectScanner {
         }
     }
 
+    /** H16: 检查某阶段是否已完成（checkpoint lastFileIndex=-1 为完成哨兵值） */
+    private boolean isPhaseCompleted(String versionId, String phase) {
+        io.github.legacygraph.entity.ScanCheckpoint cp = getCheckpoint(versionId, phase);
+        return cp != null && cp.getLastFileIndex() != null && cp.getLastFileIndex() == -1;
+    }
+
     /** 清除指定版本的所有检查点（扫描完成后调用） */
     public void clearCheckpoints(String versionId) {
         if (scanCheckpointRepository == null) return;
@@ -399,6 +409,11 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setJavaMemberCallResolver(io.github.legacygraph.builder.JavaMemberCallResolver javaMemberCallResolver) {
         this.javaMemberCallResolver = javaMemberCallResolver;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setInterfaceImplCallExpander(io.github.legacygraph.builder.InterfaceImplCallExpander interfaceImplCallExpander) {
+        this.interfaceImplCallExpander = interfaceImplCallExpander;
     }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -767,7 +782,9 @@ public class ProjectScanner {
             }
 
             int adapterCount = 0;
-            if (shouldScanCode || shouldScanDocs) {
+            if (isPhaseCompleted(versionId, "ADAPTER_SCAN")) {
+                log.info("Phase ADAPTER_SCAN already completed (checkpoint H16), skipping");
+            } else if (shouldScanCode || shouldScanDocs) {
                 log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
                         projectId, versionId);
                 // S1-T3: 保存 ADAPTER_SCAN 阶段检查点
@@ -776,6 +793,8 @@ public class ProjectScanner {
                 adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan, incrementalChangedPaths);
                 completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
                 log.info("Adapter registry scan processed {} assets", adapterCount);
+                // H16: 标记 ADAPTER_SCAN 阶段完成（lastFileIndex=-1 为完成哨兵值，续扫时据此跳过）
+                saveCheckpoint(versionId, "ADAPTER_SCAN", -1, null, adapterCount);
 
                 // 目录级扫描：BusinessDomain 从包结构推断
                 try {
@@ -833,6 +852,19 @@ public class ProjectScanner {
                     completeTask(resolveTask, "resolved " + resolved + " member-call edges", null);
                     log.info("Scan still running: projectId={}, versionId={}, phase=MEMBER_CALL_RESOLVE, detail=resolved {} call edges",
                             projectId, versionId, resolved);
+
+                    // H02: 接口→实现 CALLS 边下钻 — resolveMemberCalls 产出 interface 级 CALLS 边后，
+                    // 按 IMPLEMENTS 边扩展到所有 impl.method（单 impl→CONFIRMED，多 impl→PENDING_CONFIRM）
+                    if (interfaceImplCallExpander != null) {
+                        try {
+                            int expanded = interfaceImplCallExpander.expandCallEdgesForInterfaceImpl(projectId, versionId);
+                            log.info("Scan still running: projectId={}, versionId={}, phase=MEMBER_CALL_EXPAND, detail=expanded {} interface→impl CALLS edges",
+                                    projectId, versionId, expanded);
+                        } catch (Exception ex) {
+                            log.warn("Interface→impl call expansion failed (non-blocking): versionId={}, err={}",
+                                    versionId, ex.getMessage());
+                        }
+                    }
                 } catch (Exception e) {
                     log.warn("Member-call resolution failed (non-blocking): versionId={}, err={}", versionId, e.getMessage());
                     completeTask(resolveTask, "failed: " + e.getMessage(), e.getMessage());
@@ -1084,6 +1116,8 @@ public class ProjectScanner {
                 }
                 log.info("Scan still running: projectId={}, versionId={}, taskType=AI_ORCHESTRATION, detail=completed",
                         projectId, versionId);
+                // H16: 标记 AI_ORCHESTRATION 阶段完成
+                saveCheckpoint(versionId, "AI_ORCHESTRATION", -1, null, 0);
             } catch (Exception aiEx) {
                 // AI 编排失败不应使整个扫描失败
                 log.error("AI orchestration failed (scan still SUCCESS): versionId={}", versionId, aiEx);
@@ -2207,7 +2241,7 @@ public class ProjectScanner {
 
             // 并发处理：Semaphore 限流防止连接池耗尽（虚拟线程 I/O 阻塞时自动切换）
             // HikariCP max pool=20，这里限制并发数为 16 留 4 给其他扫描阶段
-            int maxConcurrency = Math.max(1, Integer.getInteger("legacy-graph.scan.adapter-concurrency", 16));
+            int maxConcurrency = Math.max(1, Integer.getInteger("legacygraph.scan.adapter-concurrency", 16));
             java.util.concurrent.Semaphore semaphore = new java.util.concurrent.Semaphore(maxConcurrency);
             java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
             try {
@@ -2557,7 +2591,7 @@ public class ProjectScanner {
         task.setVersionId(versionId);
         task.setTaskType(taskType);
         task.setTaskName(taskName);
-        task.setTaskStatus("RUNNING");
+        task.setTaskStatus(ScanTaskStatus.RUNNING.name());
         task.setStartedAt(LocalDateTime.now());
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
@@ -2584,7 +2618,7 @@ public class ProjectScanner {
             task.setOutputSummary("\"" + summary.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
         }
         task.setErrorMessage(error);
-        task.setTaskStatus(terminalStatus != null ? terminalStatus : (error == null ? "SUCCESS" : "FAILED"));
+        task.setTaskStatus(terminalStatus != null ? terminalStatus : (error == null ? ScanTaskStatus.SUCCESS.name() : ScanTaskStatus.FAILED.name()));
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         scanTaskRepository.updateById(task);
@@ -2661,6 +2695,9 @@ public class ProjectScanner {
                 graphCacheInvalidator.invalidateProjectOverview(projectId);
             }
             ScanVersion version = scanVersionRepository.getById(versionId);
+            // H16: 记录续扫前状态，便于追踪是 PAUSED 恢复还是 FAILED 重试
+            String prevStatus = version != null ? version.getScanStatus() : "unknown";
+            log.info("Resume scan context: versionId={}, previousStatus={}", versionId, prevStatus);
             if (version != null) {
                 version.setScanStatus("RUNNING");
                 scanVersionRepository.updateById(version);

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.github.legacygraph.common.ScanTaskStatus;
 import org.junit.jupiter.api.*;
 
 import java.time.LocalDateTime;
@@ -173,7 +174,7 @@ class EntitySerializationTest {
         entity.setVersionId("sv-uuid-001");
         entity.setTaskType("DOC_PARSE");
         entity.setTaskName("文档解析任务");
-        entity.setTaskStatus("COMPLETED");
+        entity.setTaskStatus(ScanTaskStatus.COMPLETED.name());
         entity.setRetryCount(0);
         entity.setCreatedAt(LocalDateTime.now());
         entity.setUpdatedAt(LocalDateTime.now());

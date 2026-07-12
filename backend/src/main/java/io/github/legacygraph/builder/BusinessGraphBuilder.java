@@ -1091,71 +1091,11 @@ public class BusinessGraphBuilder {
 
     // ========================================================================
     // 评估 §4 矩阵真空区 1/2/3 — 评估报告 v2 任务 M1.a/M1.b/M1.c
+    //
+    // H27: 真空区 1（BusinessProcess → BusinessDomain）已由独立的
+    // BusinessProcessToDomainStep（LLM 批量归类）替代，本类的规则映射方法已删除。
+    // 真空区 2/3 仍保留在本类中。
     // ========================================================================
-
-    /**
-     * 真空区 1 — BusinessProcess → BusinessDomain 归类（IN_DOMAIN 边）。
-     *
-     * <p>评估 §3.2.3 第 1 条指出：因 LLM 输出 Process 没有 domain 字段，BusinessGraphBuilder.buildBusinessGraph
-     * 主动不建边。本方法用术语相似度（TerminologyService）做归类决策，阈值 0.7 才写 IN_DOMAIN 边；
-     * 低于阈值记入日志（人工复核候选），边不建。</p>
-     *
-     * <p>默认开关关（评估说"有意为之"），由产品负责人手动开启。</p>
-     *
-     * @return 写入的边数
-     */
-    public int mapBusinessProcessesToDomains(String projectId, String versionId) {
-        List<GraphNode> processes = safeList(neo4jGraphDao.queryNodes(
-                projectId, versionId, NodeType.BusinessProcess.name(), null, null, null, 0));
-        List<GraphNode> domains = safeList(neo4jGraphDao.queryNodes(
-                projectId, versionId, NodeType.BusinessDomain.name(), null, null, null, 0));
-        if (processes.isEmpty() || domains.isEmpty()) {
-            log.info("Skip process→domain mapping: need both process and domain nodes (p={}, d={})",
-                    processes.size(), domains.size());
-            return 0;
-        }
-        final double THRESHOLD = 0.7;
-        List<GraphEdge> edges = new ArrayList<>();
-        int belowThreshold = 0;
-        for (GraphNode process : processes) {
-            String procName = normalizeSearchName(process);
-            if (procName.isBlank()) continue;
-            GraphNode bestDomain = null;
-            double bestScore = 0.0;
-            for (GraphNode domain : domains) {
-                String domName = normalizeSearchName(domain);
-                if (domName.isBlank()) continue;
-                double score = terminologyService.calculateSimilarity(procName, domName);
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestDomain = domain;
-                }
-            }
-            if (bestDomain == null) continue;
-            if (bestScore >= THRESHOLD) {
-                NodeStatus status = bestScore >= 0.85 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM;
-                edges.add(buildEdgePOJO(projectId, versionId,
-                        process.getId(), bestDomain.getId(),
-                        "IN_DOMAIN",
-                        process.getNodeKey() + "->in_domain->" + bestDomain.getNodeKey(),
-                        SourceType.AI_INFERENCE.name(),
-                        BigDecimal.valueOf(bestScore),
-                        status));
-            } else {
-                belowThreshold++;
-                log.debug("Process→Domain below threshold: {} → {} (score={:.3f} < {})",
-                        process.getNodeKey(), bestDomain.getNodeKey(), bestScore, THRESHOLD);
-            }
-        }
-        if (edges.isEmpty()) {
-            log.info("Mapped process→domain: 0 edges ({} below-threshold skipped)", belowThreshold);
-            return 0;
-        }
-        int total = neo4jGraphDao.mergeEdgesBatch(edges);
-        log.info("Mapped process→domain: {} edges ({} below-threshold skipped, threshold={})",
-                total, belowThreshold, THRESHOLD);
-        return total;
-    }
 
     /**
      * 真空区 2 拆分 — BusinessObject → Mapper（IMPLEMENTED_BY 边）。
@@ -1167,9 +1107,12 @@ public class BusinessGraphBuilder {
      *
      * @return 写入的边数
      */
-    public int mapBusinessObjectsToMappers(String projectId, String versionId) {
-        List<GraphNode> businessObjects = safeList(neo4jGraphDao.queryNodes(
-                projectId, versionId, NodeType.BusinessObject.name(), null, null, null, 0));
+    @Transactional
+    public int mapBusinessObjectsToMappers(String projectId, String versionId, boolean incremental) {
+        // H20: 增量模式下源节点只查 affected，目标节点全量查询
+        List<GraphNode> businessObjects = safeList(incremental
+                ? neo4jGraphDao.queryAffectedNodes(projectId, versionId, NodeType.BusinessObject.name())
+                : neo4jGraphDao.queryNodes(projectId, versionId, NodeType.BusinessObject.name(), null, null, null, 0));
         List<GraphNode> mappers = safeList(neo4jGraphDao.queryNodes(
                 projectId, versionId, NodeType.Mapper.name(), null, null, null, 0));
         if (businessObjects.isEmpty() || mappers.isEmpty()) {
@@ -1178,10 +1121,13 @@ public class BusinessGraphBuilder {
             return 0;
         }
         final double THRESHOLD = 0.7;
+        final int TOP_N = 3;  // H13: 每个 businessObject 最多取 top-3 mapper，防止 god-node
         List<GraphEdge> edges = new ArrayList<>();
         for (GraphNode obj : businessObjects) {
             String objName = normalizeSearchName(obj);
             if (objName.isBlank()) continue;
+            // H13: 收集当前 businessObject 的所有候选边，按 confidence 降序取 top-3
+            List<GraphEdge> perObjEdges = new ArrayList<>();
             // Mapper 接口名约定：XxxMapper，去掉 "Mapper" 后缀做匹配
             for (GraphNode mapper : mappers) {
                 String mapperName = normalizeSearchName(mapper);
@@ -1192,7 +1138,7 @@ public class BusinessGraphBuilder {
                 double score = terminologyService.calculateSimilarity(objName, coreName);
                 if (score >= THRESHOLD) {
                     NodeStatus status = score >= 0.85 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM;
-                    edges.add(buildEdgePOJO(projectId, versionId,
+                    perObjEdges.add(buildEdgePOJO(projectId, versionId,
                             obj.getId(), mapper.getId(),
                             EdgeType.IMPLEMENTED_BY.name(),
                             obj.getNodeKey() + "->implemented_by_mapper->" + mapper.getNodeKey(),
@@ -1201,6 +1147,11 @@ public class BusinessGraphBuilder {
                             status));
                 }
             }
+            // H13: top-N=3 截断
+            perObjEdges.stream()
+                    .sorted((a, b) -> b.getConfidence().compareTo(a.getConfidence()))
+                    .limit(TOP_N)
+                    .forEach(edges::add);
         }
         if (edges.isEmpty()) {
             log.info("Mapped business-object→mapper: 0 edges (no matches)");
@@ -1223,9 +1174,12 @@ public class BusinessGraphBuilder {
      *
      * @return 写入的边数
      */
-    public int mapBusinessRulesToRuleNodes(String projectId, String versionId) {
-        List<GraphNode> rules = safeList(neo4jGraphDao.queryNodes(
-                projectId, versionId, NodeType.BusinessRule.name(), null, null, null, 0));
+    @Transactional
+    public int mapBusinessRulesToRuleNodes(String projectId, String versionId, boolean incremental) {
+        // H20: 增量模式下源节点只查 affected，目标节点（Service）全量查询后过滤
+        List<GraphNode> rules = safeList(incremental
+                ? neo4jGraphDao.queryAffectedNodes(projectId, versionId, NodeType.BusinessRule.name())
+                : neo4jGraphDao.queryNodes(projectId, versionId, NodeType.BusinessRule.name(), null, null, null, 0));
         if (rules.isEmpty()) {
             log.info("Skip business-rule mapping: no business rules found");
             return 0;
@@ -1249,17 +1203,19 @@ public class BusinessGraphBuilder {
             return 0;
         }
         final double THRESHOLD = 0.65;
+        final int TOP_N = 3;  // H13: 每个 businessRule 最多取 top-3 实现类
         List<GraphEdge> edges = new ArrayList<>();
         for (GraphNode rule : rules) {
             String ruleName = normalizeSearchName(rule);
             if (ruleName.isBlank()) continue;
+            List<GraphEdge> perRuleEdges = new ArrayList<>();
             for (GraphNode impl : ruleImplementations) {
                 String implName = normalizeSearchName(impl);
                 if (implName.isBlank()) continue;
                 double score = terminologyService.calculateSimilarity(ruleName, implName);
                 if (score >= THRESHOLD) {
                     NodeStatus status = score >= 0.85 ? NodeStatus.CONFIRMED : NodeStatus.PENDING_CONFIRM;
-                    edges.add(buildEdgePOJO(projectId, versionId,
+                    perRuleEdges.add(buildEdgePOJO(projectId, versionId,
                             rule.getId(), impl.getId(),
                             EdgeType.IMPLEMENTED_BY.name(),
                             rule.getNodeKey() + "->implemented_by_rule->" + impl.getNodeKey(),
@@ -1268,6 +1224,11 @@ public class BusinessGraphBuilder {
                             status));
                 }
             }
+            // H13: top-N=3 截断
+            perRuleEdges.stream()
+                    .sorted((a, b) -> b.getConfidence().compareTo(a.getConfidence()))
+                    .limit(TOP_N)
+                    .forEach(edges::add);
         }
         if (edges.isEmpty()) {
             log.info("Mapped business-rule→rule-node: 0 edges (no matches)");

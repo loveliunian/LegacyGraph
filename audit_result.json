@@ -1,0 +1,4873 @@
+{
+  "backend_count": 283,
+  "backend_dedup_count": 283,
+  "frontend_all_count": 234,
+  "frontend_dedup_count": 228,
+  "a_class_count": 0,
+  "b_class_count": 55,
+  "backend": [
+    {
+      "method": "GET",
+      "path": "/agents/runs/history",
+      "norm_path": "/agents/runs/history",
+      "controller": "AgentRunController",
+      "func": "history",
+      "file": "AgentRunController.java",
+      "line": 22
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/list",
+      "norm_path": "/lg/audit/list",
+      "controller": "AuditLogController",
+      "func": "list",
+      "file": "AuditLogController.java",
+      "line": 29
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/{id}",
+      "norm_path": "/lg/audit/{var}",
+      "controller": "AuditLogController",
+      "func": "getById",
+      "file": "AuditLogController.java",
+      "line": 46
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/audit/{id}",
+      "norm_path": "/lg/audit/{var}",
+      "controller": "AuditLogController",
+      "func": "delete",
+      "file": "AuditLogController.java",
+      "line": 54
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/audit/clear",
+      "norm_path": "/lg/audit/clear",
+      "controller": "AuditLogController",
+      "func": "clear",
+      "file": "AuditLogController.java",
+      "line": 66
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/stats/count",
+      "norm_path": "/lg/audit/stats/count",
+      "controller": "AuditLogController",
+      "func": "",
+      "file": "AuditLogController.java",
+      "line": 74
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/{id}/download",
+      "norm_path": "/lg/audit/{var}/download",
+      "controller": "AuditLogController",
+      "func": "",
+      "file": "AuditLogController.java",
+      "line": 85
+    },
+    {
+      "method": "POST",
+      "path": "/lg/auth/login",
+      "norm_path": "/lg/auth/login",
+      "controller": "AuthController",
+      "func": "login",
+      "file": "AuthController.java",
+      "line": 68
+    },
+    {
+      "method": "POST",
+      "path": "/lg/auth/logout",
+      "norm_path": "/lg/auth/logout",
+      "controller": "AuthController",
+      "func": "logout",
+      "file": "AuthController.java",
+      "line": 146
+    },
+    {
+      "method": "GET",
+      "path": "/lg/auth/me",
+      "norm_path": "/lg/auth/me",
+      "controller": "AuthController",
+      "func": "",
+      "file": "AuthController.java",
+      "line": 164
+    },
+    {
+      "method": "POST",
+      "path": "/lg/auth/refresh",
+      "norm_path": "/lg/auth/refresh",
+      "controller": "AuthController",
+      "func": "refreshToken",
+      "file": "AuthController.java",
+      "line": 217
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks",
+      "norm_path": "/change-tasks",
+      "controller": "ChangeTaskController",
+      "func": "create",
+      "file": "ChangeTaskController.java",
+      "line": 38
+    },
+    {
+      "method": "GET",
+      "path": "/change-tasks",
+      "norm_path": "/change-tasks",
+      "controller": "ChangeTaskController",
+      "func": "list",
+      "file": "ChangeTaskController.java",
+      "line": 48
+    },
+    {
+      "method": "GET",
+      "path": "/change-tasks/{id}",
+      "norm_path": "/change-tasks/{var}",
+      "controller": "ChangeTaskController",
+      "func": "get",
+      "file": "ChangeTaskController.java",
+      "line": 57
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/impact",
+      "norm_path": "/change-tasks/{var}/impact",
+      "controller": "ChangeTaskController",
+      "func": "refreshImpact",
+      "file": "ChangeTaskController.java",
+      "line": 65
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/generate-patch",
+      "norm_path": "/change-tasks/{var}/generate-patch",
+      "controller": "ChangeTaskController",
+      "func": "generatePatch",
+      "file": "ChangeTaskController.java",
+      "line": 73
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/register-gates",
+      "norm_path": "/change-tasks/{var}/register-gates",
+      "controller": "ChangeTaskController",
+      "func": "registerGates",
+      "file": "ChangeTaskController.java",
+      "line": 81
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/run-validation",
+      "norm_path": "/change-tasks/{var}/run-validation",
+      "controller": "ChangeTaskController",
+      "func": "runValidation",
+      "file": "ChangeTaskController.java",
+      "line": 89
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/create-pr",
+      "norm_path": "/change-tasks/{var}/create-pr",
+      "controller": "ChangeTaskController",
+      "func": "createPr",
+      "file": "ChangeTaskController.java",
+      "line": 101
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/merge",
+      "norm_path": "/change-tasks/{var}/merge",
+      "controller": "ChangeTaskController",
+      "func": "merge",
+      "file": "ChangeTaskController.java",
+      "line": 112
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/claim",
+      "norm_path": "/change-tasks/{var}/claim",
+      "controller": "ChangeTaskController",
+      "func": "claim",
+      "file": "ChangeTaskController.java",
+      "line": 121
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{id}/assign",
+      "norm_path": "/change-tasks/{var}/assign",
+      "controller": "ChangeTaskController",
+      "func": "assign",
+      "file": "ChangeTaskController.java",
+      "line": 135
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/understanding/tool-health",
+      "norm_path": "/lg/projects/{var}/understanding/tool-health",
+      "controller": "CodeUnderstandingController",
+      "func": "getToolHealth",
+      "file": "CodeUnderstandingController.java",
+      "line": 39
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/understanding/reports",
+      "norm_path": "/lg/projects/{var}/understanding/reports",
+      "controller": "CodeUnderstandingController",
+      "func": "createReport",
+      "file": "CodeUnderstandingController.java",
+      "line": 68
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/understanding/reports/{taskId}",
+      "norm_path": "/lg/projects/{var}/understanding/reports/{var}",
+      "controller": "CodeUnderstandingController",
+      "func": "getReport",
+      "file": "CodeUnderstandingController.java",
+      "line": 131
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/understanding/reports/{taskId}/download",
+      "norm_path": "/lg/projects/{var}/understanding/reports/{var}/download",
+      "controller": "CodeUnderstandingController",
+      "func": "downloadReport",
+      "file": "CodeUnderstandingController.java",
+      "line": 145
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/contracts/requirements/{requirementId}",
+      "norm_path": "/lg/projects/{var}/contracts/requirements/{var}",
+      "controller": "ContractController",
+      "func": "generateContract",
+      "file": "ContractController.java",
+      "line": 45
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/contract",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/contract",
+      "controller": "ContractLegacyRedirectController",
+      "func": "legacyGenerate",
+      "file": "ContractLegacyRedirectController.java",
+      "line": 40
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/cpg",
+      "norm_path": "/lg/projects/{var}/cpg",
+      "controller": "CpgController",
+      "func": "buildCpg",
+      "file": "CpgController.java",
+      "line": 39
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/cross-repo-impact",
+      "norm_path": "/lg/projects/{var}/graphify/cross-repo-impact",
+      "controller": "CrossRepoImpactController",
+      "func": "",
+      "file": "CrossRepoImpactController.java",
+      "line": 38
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/cross-repo-impact/diff",
+      "norm_path": "/lg/projects/{var}/graphify/cross-repo-impact/diff",
+      "controller": "CrossRepoImpactController",
+      "func": "",
+      "file": "CrossRepoImpactController.java",
+      "line": 62
+    },
+    {
+      "method": "POST",
+      "path": "/qa/ask/stream",
+      "norm_path": "/qa/ask/stream",
+      "controller": "EnhancedQaController",
+      "func": "askStream",
+      "file": "EnhancedQaController.java",
+      "line": 47
+    },
+    {
+      "method": "POST",
+      "path": "/qa/conversations",
+      "norm_path": "/qa/conversations",
+      "controller": "EnhancedQaController",
+      "func": "createConversation",
+      "file": "EnhancedQaController.java",
+      "line": 116
+    },
+    {
+      "method": "GET",
+      "path": "/qa/conversations",
+      "norm_path": "/qa/conversations",
+      "controller": "EnhancedQaController",
+      "func": "listConversations",
+      "file": "EnhancedQaController.java",
+      "line": 126
+    },
+    {
+      "method": "GET",
+      "path": "/qa/conversations/{conversationId}/messages",
+      "norm_path": "/qa/conversations/{var}/messages",
+      "controller": "EnhancedQaController",
+      "func": "getMessages",
+      "file": "EnhancedQaController.java",
+      "line": 135
+    },
+    {
+      "method": "DELETE",
+      "path": "/qa/conversations/{conversationId}",
+      "norm_path": "/qa/conversations/{var}",
+      "controller": "EnhancedQaController",
+      "func": "deleteConversation",
+      "file": "EnhancedQaController.java",
+      "line": 144
+    },
+    {
+      "method": "POST",
+      "path": "/qa/feedback",
+      "norm_path": "/qa/feedback",
+      "controller": "EnhancedQaController",
+      "func": "submitFeedback",
+      "file": "EnhancedQaController.java",
+      "line": 153
+    },
+    {
+      "method": "GET",
+      "path": "/lg/evidence-conflicts",
+      "norm_path": "/lg/evidence-conflicts",
+      "controller": "EvidenceConflictController",
+      "func": "list",
+      "file": "EvidenceConflictController.java",
+      "line": 25
+    },
+    {
+      "method": "POST",
+      "path": "/lg/evidence-conflicts/{id}/resolve",
+      "norm_path": "/lg/evidence-conflicts/{var}/resolve",
+      "controller": "EvidenceConflictController",
+      "func": "resolve",
+      "file": "EvidenceConflictController.java",
+      "line": 31
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/facts",
+      "norm_path": "/lg/projects/{var}/facts",
+      "controller": "FactController",
+      "func": "listFacts",
+      "file": "FactController.java",
+      "line": 73
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/facts/{id}",
+      "norm_path": "/lg/projects/{var}/facts/{var}",
+      "controller": "FactController",
+      "func": "getFact",
+      "file": "FactController.java",
+      "line": 113
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/facts/{id}/related-nodes",
+      "norm_path": "/lg/projects/{var}/facts/{var}/related-nodes",
+      "controller": "FactController",
+      "func": "getRelatedNodes",
+      "file": "FactController.java",
+      "line": 124
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/evidence",
+      "norm_path": "/lg/projects/{var}/evidence",
+      "controller": "FactController",
+      "func": "searchEvidence",
+      "file": "FactController.java",
+      "line": 170
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/evidence/by-node/{nodeId}",
+      "norm_path": "/lg/projects/{var}/evidence/by-node/{var}",
+      "controller": "FactController",
+      "func": "getEvidenceByNodeId",
+      "file": "FactController.java",
+      "line": 211
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/evidence/{id}",
+      "norm_path": "/lg/projects/{var}/evidence/{var}",
+      "controller": "FactController",
+      "func": "getEvidence",
+      "file": "FactController.java",
+      "line": 243
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/evidence/{id}/related",
+      "norm_path": "/lg/projects/{var}/evidence/{var}/related",
+      "controller": "FactController",
+      "func": "getRelatedNodesForEvidence",
+      "file": "FactController.java",
+      "line": 254
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/extract/facts/code",
+      "norm_path": "/lg/projects/{var}/extract/facts/code",
+      "controller": "FactController",
+      "func": "extractCodeFacts",
+      "file": "FactController.java",
+      "line": 270
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/extract/facts/doc",
+      "norm_path": "/lg/projects/{var}/extract/facts/doc",
+      "controller": "FactController",
+      "func": "",
+      "file": "FactController.java",
+      "line": 283
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/facts/manual",
+      "norm_path": "/lg/projects/{var}/facts/manual",
+      "controller": "FactController",
+      "func": "",
+      "file": "FactController.java",
+      "line": 321
+    },
+    {
+      "method": "GET",
+      "path": "/lg/graph/diff",
+      "norm_path": "/lg/graph/diff",
+      "controller": "GraphDiffController",
+      "func": "diff",
+      "file": "GraphDiffController.java",
+      "line": 22
+    },
+    {
+      "method": "POST",
+      "path": "/qa/ask",
+      "norm_path": "/qa/ask",
+      "controller": "GraphQaController",
+      "func": "ask",
+      "file": "GraphQaController.java",
+      "line": 30
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/api-chain",
+      "norm_path": "/lg/projects/{var}/graph/api-chain",
+      "controller": "GraphQueryController",
+      "func": "getApiChain",
+      "file": "GraphQueryController.java",
+      "line": 78
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/table-impact",
+      "norm_path": "/lg/projects/{var}/graph/table-impact",
+      "controller": "GraphQueryController",
+      "func": "getTableImpact",
+      "file": "GraphQueryController.java",
+      "line": 101
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/tables",
+      "norm_path": "/lg/projects/{var}/graph/tables",
+      "controller": "GraphQueryController",
+      "func": "getTablesNodes",
+      "file": "GraphQueryController.java",
+      "line": 118
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/feature-view",
+      "norm_path": "/lg/projects/{var}/graph/feature-view",
+      "controller": "GraphQueryController",
+      "func": "getFeatureView",
+      "file": "GraphQueryController.java",
+      "line": 137
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/business-view",
+      "norm_path": "/lg/projects/{var}/graph/business-view",
+      "controller": "GraphQueryController",
+      "func": "getBusinessView",
+      "file": "GraphQueryController.java",
+      "line": 158
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/merge/candidates",
+      "norm_path": "/lg/projects/{var}/graph/merge/candidates",
+      "controller": "GraphQueryController",
+      "func": "decideMerge",
+      "file": "GraphQueryController.java",
+      "line": 173
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graph/merge/decide",
+      "norm_path": "/lg/projects/{var}/graph/merge/decide",
+      "controller": "GraphQueryController",
+      "func": "decideMerge",
+      "file": "GraphQueryController.java",
+      "line": 182
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graph/merge/execute",
+      "norm_path": "/lg/projects/{var}/graph/merge/execute",
+      "controller": "GraphQueryController",
+      "func": "executeMerge",
+      "file": "GraphQueryController.java",
+      "line": 196
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/unified",
+      "norm_path": "/lg/projects/{var}/graph/unified",
+      "controller": "GraphQueryController",
+      "func": "getUnifiedGraph",
+      "file": "GraphQueryController.java",
+      "line": 215
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/summary",
+      "norm_path": "/lg/projects/{var}/graph/summary",
+      "controller": "GraphQueryController",
+      "func": "getGraphSummary",
+      "file": "GraphQueryController.java",
+      "line": 245
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/window",
+      "norm_path": "/lg/projects/{var}/graph/window",
+      "controller": "GraphQueryController",
+      "func": "getGraphWindow",
+      "file": "GraphQueryController.java",
+      "line": 256
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/nodes/{nodeId}/neighborhood",
+      "norm_path": "/lg/projects/{var}/graph/nodes/{var}/neighborhood",
+      "controller": "GraphQueryController",
+      "func": "getNodeNeighborhood",
+      "file": "GraphQueryController.java",
+      "line": 274
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/feature-slices",
+      "norm_path": "/lg/projects/{var}/graph/feature-slices",
+      "controller": "GraphQueryController",
+      "func": "getFeatureSlices",
+      "file": "GraphQueryController.java",
+      "line": 290
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/feature-slices/{sliceId}",
+      "norm_path": "/lg/projects/{var}/graph/feature-slices/{var}",
+      "controller": "GraphQueryController",
+      "func": "getFeatureSliceDetail",
+      "file": "GraphQueryController.java",
+      "line": 301
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/quality",
+      "norm_path": "/lg/projects/{var}/graph/quality",
+      "controller": "GraphQueryController",
+      "func": "getGraphQualityReport",
+      "file": "GraphQueryController.java",
+      "line": 312
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/drift-queue",
+      "norm_path": "/lg/projects/{var}/graph/drift-queue",
+      "controller": "GraphQueryController",
+      "func": "getDriftQueue",
+      "file": "GraphQueryController.java",
+      "line": 328
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graph/api-endpoints",
+      "norm_path": "/lg/projects/{var}/graph/api-endpoints",
+      "controller": "GraphQueryController",
+      "func": "getApiEndpoints",
+      "file": "GraphQueryController.java",
+      "line": 339
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/scan-versions",
+      "norm_path": "/lg/projects/{var}/scan-versions",
+      "controller": "GraphQueryController",
+      "func": "getScanVersions",
+      "file": "GraphQueryController.java",
+      "line": 357
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graphify/analyze",
+      "norm_path": "/lg/projects/{var}/graphify/analyze",
+      "controller": "GraphifyController",
+      "func": "",
+      "file": "GraphifyController.java",
+      "line": 42
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/graphify/import",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/graphify/import",
+      "controller": "GraphifyController",
+      "func": "",
+      "file": "GraphifyController.java",
+      "line": 93
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/graphify/run",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/graphify/run",
+      "controller": "GraphifyController",
+      "func": "",
+      "file": "GraphifyController.java",
+      "line": 116
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/status",
+      "norm_path": "/lg/projects/{var}/graphify/status",
+      "controller": "GraphifyController",
+      "func": "getStatus",
+      "file": "GraphifyController.java",
+      "line": 181
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/quality",
+      "norm_path": "/lg/projects/{var}/graphify/quality",
+      "controller": "GraphifyController",
+      "func": "getQuality",
+      "file": "GraphifyController.java",
+      "line": 201
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/audit",
+      "norm_path": "/lg/projects/{var}/graphify/audit",
+      "controller": "GraphifyController",
+      "func": "",
+      "file": "GraphifyController.java",
+      "line": 216
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/diff/{oldVersionId}/{newVersionId}",
+      "norm_path": "/lg/projects/{var}/graphify/diff/{var}/{var}",
+      "controller": "GraphifyDiffController",
+      "func": "diff",
+      "file": "GraphifyDiffController.java",
+      "line": 32
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graphify/jobs",
+      "norm_path": "/lg/projects/{var}/graphify/jobs",
+      "controller": "GraphifyJobController",
+      "func": "createJob",
+      "file": "GraphifyJobController.java",
+      "line": 37
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/jobs",
+      "norm_path": "/lg/projects/{var}/graphify/jobs",
+      "controller": "GraphifyJobController",
+      "func": "listJobs",
+      "file": "GraphifyJobController.java",
+      "line": 58
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/graphify/jobs/{jobId}",
+      "norm_path": "/lg/projects/{var}/graphify/jobs/{var}",
+      "controller": "GraphifyJobController",
+      "func": "getJob",
+      "file": "GraphifyJobController.java",
+      "line": 71
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graphify/jobs/{jobId}/retry",
+      "norm_path": "/lg/projects/{var}/graphify/jobs/{var}/retry",
+      "controller": "GraphifyJobController",
+      "func": "retryJob",
+      "file": "GraphifyJobController.java",
+      "line": 86
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graphify/jobs/{jobId}/cancel",
+      "norm_path": "/lg/projects/{var}/graphify/jobs/{var}/cancel",
+      "controller": "GraphifyJobController",
+      "func": "cancelJob",
+      "file": "GraphifyJobController.java",
+      "line": 103
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graphify/jobs/{jobId}/rollback",
+      "norm_path": "/lg/projects/{var}/graphify/jobs/{var}/rollback",
+      "controller": "GraphifyJobController",
+      "func": "",
+      "file": "GraphifyJobController.java",
+      "line": 120
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/graphify/questions",
+      "norm_path": "/lg/projects/{var}/graphify/questions",
+      "controller": "GraphifyQuestionController",
+      "func": "askQuestion",
+      "file": "GraphifyQuestionController.java",
+      "line": 36
+    },
+    {
+      "method": "GET",
+      "path": "/lg/graph/impacted-nodes",
+      "norm_path": "/lg/graph/impacted-nodes",
+      "controller": "ImpactGraphController",
+      "func": "getImpactedNodes",
+      "file": "ImpactGraphController.java",
+      "line": 40
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/impact-viz/requirements/{requirementId}",
+      "norm_path": "/lg/projects/{var}/impact-viz/requirements/{var}",
+      "controller": "ImpactVisualizationController",
+      "func": "getVisualization",
+      "file": "ImpactVisualizationController.java",
+      "line": 65
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/impact-viz/requirements/{requirementId}/summary",
+      "norm_path": "/lg/projects/{var}/impact-viz/requirements/{var}/summary",
+      "controller": "ImpactVisualizationController",
+      "func": "",
+      "file": "ImpactVisualizationController.java",
+      "line": 91
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/knowledge/claims",
+      "norm_path": "/lg/projects/{var}/knowledge/claims",
+      "controller": "KnowledgeController",
+      "func": "listClaims",
+      "file": "KnowledgeController.java",
+      "line": 53
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/knowledge/claims/{id}",
+      "norm_path": "/lg/projects/{var}/knowledge/claims/{var}",
+      "controller": "KnowledgeController",
+      "func": "getClaim",
+      "file": "KnowledgeController.java",
+      "line": 86
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/knowledge/gaps",
+      "norm_path": "/lg/projects/{var}/knowledge/gaps",
+      "controller": "KnowledgeController",
+      "func": "listGaps",
+      "file": "KnowledgeController.java",
+      "line": 104
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/knowledge/gaps/{id}/resolve",
+      "norm_path": "/lg/projects/{var}/knowledge/gaps/{var}/resolve",
+      "controller": "KnowledgeController",
+      "func": "resolveGap",
+      "file": "KnowledgeController.java",
+      "line": 136
+    },
+    {
+      "method": "POST",
+      "path": "/agents/run",
+      "norm_path": "/agents/run",
+      "controller": "LlmAgentController",
+      "func": "runAgent",
+      "file": "LlmAgentController.java",
+      "line": 91
+    },
+    {
+      "method": "POST",
+      "path": "/agents/tests/generate",
+      "norm_path": "/agents/tests/generate",
+      "controller": "LlmAgentController",
+      "func": "generateTests",
+      "file": "LlmAgentController.java",
+      "line": 123
+    },
+    {
+      "method": "POST",
+      "path": "/agents/review/suggest",
+      "norm_path": "/agents/review/suggest",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 135
+    },
+    {
+      "method": "POST",
+      "path": "/agents/sql/analyze",
+      "norm_path": "/agents/sql/analyze",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 147
+    },
+    {
+      "method": "POST",
+      "path": "/agents/tests/analyze-failure",
+      "norm_path": "/agents/tests/analyze-failure",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 159
+    },
+    {
+      "method": "POST",
+      "path": "/agents/report/insights",
+      "norm_path": "/agents/report/insights",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 170
+    },
+    {
+      "method": "POST",
+      "path": "/agents/refactor/suggest",
+      "norm_path": "/agents/refactor/suggest",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 181
+    },
+    {
+      "method": "POST",
+      "path": "/agents/change/impact",
+      "norm_path": "/agents/change/impact",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 189
+    },
+    {
+      "method": "POST",
+      "path": "/agents/migration/convert",
+      "norm_path": "/agents/migration/convert",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 197
+    },
+    {
+      "method": "POST",
+      "path": "/agents/pr/describe",
+      "norm_path": "/agents/pr/describe",
+      "controller": "LlmAgentController",
+      "func": "",
+      "file": "LlmAgentController.java",
+      "line": 205
+    },
+    {
+      "method": "GET",
+      "path": "/llm/providers",
+      "norm_path": "/llm/providers",
+      "controller": "LlmProviderController",
+      "func": "listAll",
+      "file": "LlmProviderController.java",
+      "line": 33
+    },
+    {
+      "method": "GET",
+      "path": "/llm/providers/{providerCode}",
+      "norm_path": "/llm/providers/{var}",
+      "controller": "LlmProviderController",
+      "func": "getByCode",
+      "file": "LlmProviderController.java",
+      "line": 42
+    },
+    {
+      "method": "GET",
+      "path": "/llm/providers/default",
+      "norm_path": "/llm/providers/default",
+      "controller": "LlmProviderController",
+      "func": "getDefault",
+      "file": "LlmProviderController.java",
+      "line": 57
+    },
+    {
+      "method": "POST",
+      "path": "/llm/providers",
+      "norm_path": "/llm/providers",
+      "controller": "LlmProviderController",
+      "func": "save",
+      "file": "LlmProviderController.java",
+      "line": 71
+    },
+    {
+      "method": "PUT",
+      "path": "/llm/providers/{providerCode}/set-default",
+      "norm_path": "/llm/providers/{var}/set-default",
+      "controller": "LlmProviderController",
+      "func": "setDefault",
+      "file": "LlmProviderController.java",
+      "line": 82
+    },
+    {
+      "method": "PUT",
+      "path": "/llm/providers/{providerCode}/toggle-active",
+      "norm_path": "/llm/providers/{var}/toggle-active",
+      "controller": "LlmProviderController",
+      "func": "toggleActive",
+      "file": "LlmProviderController.java",
+      "line": 95
+    },
+    {
+      "method": "DELETE",
+      "path": "/llm/providers/{providerCode}",
+      "norm_path": "/llm/providers/{var}",
+      "controller": "LlmProviderController",
+      "func": "delete",
+      "file": "LlmProviderController.java",
+      "line": 110
+    },
+    {
+      "method": "POST",
+      "path": "/llm/providers/{providerCode}/test",
+      "norm_path": "/llm/providers/{var}/test",
+      "controller": "LlmProviderController",
+      "func": "testProvider",
+      "file": "LlmProviderController.java",
+      "line": 125
+    },
+    {
+      "method": "GET",
+      "path": "/lg/notifications/recent",
+      "norm_path": "/lg/notifications/recent",
+      "controller": "NotificationController",
+      "func": "getRecent",
+      "file": "NotificationController.java",
+      "line": 23
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/notifications/{id}/read",
+      "norm_path": "/lg/notifications/{var}/read",
+      "controller": "NotificationController",
+      "func": "markRead",
+      "file": "NotificationController.java",
+      "line": 33
+    },
+    {
+      "method": "GET",
+      "path": "/lg/notifications/stream",
+      "norm_path": "/lg/notifications/stream",
+      "controller": "NotificationController",
+      "func": "stream",
+      "file": "NotificationController.java",
+      "line": 42
+    },
+    {
+      "method": "GET",
+      "path": "/lg/plugins",
+      "norm_path": "/lg/plugins",
+      "controller": "PluginController",
+      "func": "list",
+      "file": "PluginController.java",
+      "line": 40
+    },
+    {
+      "method": "GET",
+      "path": "/lg/plugins/{id}",
+      "norm_path": "/lg/plugins/{var}",
+      "controller": "PluginController",
+      "func": "get",
+      "file": "PluginController.java",
+      "line": 51
+    },
+    {
+      "method": "POST",
+      "path": "/lg/plugins/register",
+      "norm_path": "/lg/plugins/register",
+      "controller": "PluginController",
+      "func": "register",
+      "file": "PluginController.java",
+      "line": 60
+    },
+    {
+      "method": "POST",
+      "path": "/lg/plugins/{id}/enable",
+      "norm_path": "/lg/plugins/{var}/enable",
+      "controller": "PluginController",
+      "func": "enable",
+      "file": "PluginController.java",
+      "line": 69
+    },
+    {
+      "method": "POST",
+      "path": "/lg/plugins/{id}/disable",
+      "norm_path": "/lg/plugins/{var}/disable",
+      "controller": "PluginController",
+      "func": "disable",
+      "file": "PluginController.java",
+      "line": 79
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/process-mining/conformance",
+      "norm_path": "/lg/projects/{var}/process-mining/conformance",
+      "controller": "ProcessMiningController",
+      "func": "",
+      "file": "ProcessMiningController.java",
+      "line": 32
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/process-mining/availability",
+      "norm_path": "/lg/projects/{var}/process-mining/availability",
+      "controller": "ProcessMiningController",
+      "func": "",
+      "file": "ProcessMiningController.java",
+      "line": 58
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects",
+      "norm_path": "/lg/projects",
+      "controller": "ProjectController",
+      "func": "create",
+      "file": "ProjectController.java",
+      "line": 42
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects",
+      "norm_path": "/lg/projects",
+      "controller": "ProjectController",
+      "func": "list",
+      "file": "ProjectController.java",
+      "line": 59
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{id}",
+      "norm_path": "/lg/projects/{var}",
+      "controller": "ProjectController",
+      "func": "get",
+      "file": "ProjectController.java",
+      "line": 72
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{id}",
+      "norm_path": "/lg/projects/{var}",
+      "controller": "ProjectController",
+      "func": "delete",
+      "file": "ProjectController.java",
+      "line": 93
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/overview",
+      "norm_path": "/lg/projects/{var}/overview",
+      "controller": "ProjectOverviewController",
+      "func": "getOverview",
+      "file": "ProjectOverviewController.java",
+      "line": 24
+    },
+    {
+      "method": "GET",
+      "path": "/lg/admin/prompts/list",
+      "norm_path": "/lg/admin/prompts/list",
+      "controller": "PromptTemplateController",
+      "func": "list",
+      "file": "PromptTemplateController.java",
+      "line": 29
+    },
+    {
+      "method": "GET",
+      "path": "/lg/admin/prompts/active",
+      "norm_path": "/lg/admin/prompts/active",
+      "controller": "PromptTemplateController",
+      "func": "listActive",
+      "file": "PromptTemplateController.java",
+      "line": 41
+    },
+    {
+      "method": "GET",
+      "path": "/lg/admin/prompts/{id}",
+      "norm_path": "/lg/admin/prompts/{var}",
+      "controller": "PromptTemplateController",
+      "func": "getById",
+      "file": "PromptTemplateController.java",
+      "line": 48
+    },
+    {
+      "method": "POST",
+      "path": "/lg/admin/prompts",
+      "norm_path": "/lg/admin/prompts",
+      "controller": "PromptTemplateController",
+      "func": "create",
+      "file": "PromptTemplateController.java",
+      "line": 61
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/admin/prompts/{id}",
+      "norm_path": "/lg/admin/prompts/{var}",
+      "controller": "PromptTemplateController",
+      "func": "update",
+      "file": "PromptTemplateController.java",
+      "line": 77
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/admin/prompts/{id}/toggle",
+      "norm_path": "/lg/admin/prompts/{var}/toggle",
+      "controller": "PromptTemplateController",
+      "func": "toggleActive",
+      "file": "PromptTemplateController.java",
+      "line": 92
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/admin/prompts/{id}",
+      "norm_path": "/lg/admin/prompts/{var}",
+      "controller": "PromptTemplateController",
+      "func": "delete",
+      "file": "PromptTemplateController.java",
+      "line": 105
+    },
+    {
+      "method": "POST",
+      "path": "/lg/admin/prompts/cache/refresh",
+      "norm_path": "/lg/admin/prompts/cache/refresh",
+      "controller": "PromptTemplateController",
+      "func": "refreshCache",
+      "file": "PromptTemplateController.java",
+      "line": 118
+    },
+    {
+      "method": "GET",
+      "path": "/lg/qa/audit",
+      "norm_path": "/lg/qa/audit",
+      "controller": "QaAdminController",
+      "func": "listAuditLogs",
+      "file": "QaAdminController.java",
+      "line": 45
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/qa/cases",
+      "norm_path": "/lg/projects/{var}/qa/cases",
+      "controller": "QaEvaluationController",
+      "func": "listCases",
+      "file": "QaEvaluationController.java",
+      "line": 69
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/qa/cases/{caseId}",
+      "norm_path": "/lg/projects/{var}/qa/cases/{var}",
+      "controller": "QaEvaluationController",
+      "func": "getCase",
+      "file": "QaEvaluationController.java",
+      "line": 90
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/qa/eval-runs",
+      "norm_path": "/lg/projects/{var}/qa/eval-runs",
+      "controller": "QaEvaluationController",
+      "func": "listEvalRuns",
+      "file": "QaEvaluationController.java",
+      "line": 112
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/qa/eval-runs",
+      "norm_path": "/lg/projects/{var}/qa/eval-runs",
+      "controller": "QaEvaluationController",
+      "func": "saveEvalRun",
+      "file": "QaEvaluationController.java",
+      "line": 157
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/qa/feedback",
+      "norm_path": "/lg/projects/{var}/qa/feedback",
+      "controller": "QaEvaluationController",
+      "func": "submitFeedback",
+      "file": "QaEvaluationController.java",
+      "line": 178
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/qa/ragas-evaluate",
+      "norm_path": "/lg/projects/{var}/qa/ragas-evaluate",
+      "controller": "QaEvaluationController",
+      "func": "ragasEvaluate",
+      "file": "QaEvaluationController.java",
+      "line": 200
+    },
+    {
+      "method": "POST",
+      "path": "/lg/qa/feedback",
+      "norm_path": "/lg/qa/feedback",
+      "controller": "QaFeedbackController",
+      "func": "submitFeedback",
+      "file": "QaFeedbackController.java",
+      "line": 42
+    },
+    {
+      "method": "GET",
+      "path": "/lg/quota/{projectId}",
+      "norm_path": "/lg/quota/{var}",
+      "controller": "QuotaController",
+      "func": "getQuota",
+      "file": "QuotaController.java",
+      "line": 28
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/reports/list",
+      "norm_path": "/lg/projects/{var}/reports/list",
+      "controller": "ReportController",
+      "func": "listReports",
+      "file": "ReportController.java",
+      "line": 36
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{projectId}/reports/{reportId}",
+      "norm_path": "/lg/projects/{var}/reports/{var}",
+      "controller": "ReportController",
+      "func": "deleteReport",
+      "file": "ReportController.java",
+      "line": 43
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reports/migration-readiness/generate",
+      "norm_path": "/lg/projects/{var}/reports/migration-readiness/generate",
+      "controller": "ReportController",
+      "func": "generateMigrationReport",
+      "file": "ReportController.java",
+      "line": 52
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reports/confidence-trend/generate",
+      "norm_path": "/lg/projects/{var}/reports/confidence-trend/generate",
+      "controller": "ReportController",
+      "func": "generateConfidenceTrend",
+      "file": "ReportController.java",
+      "line": 59
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reports/test-coverage/generate",
+      "norm_path": "/lg/projects/{var}/reports/test-coverage/generate",
+      "controller": "ReportController",
+      "func": "generateTestCoverage",
+      "file": "ReportController.java",
+      "line": 69
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reports/graph-quality/generate",
+      "norm_path": "/lg/projects/{var}/reports/graph-quality/generate",
+      "controller": "ReportController",
+      "func": "generateGraphQuality",
+      "file": "ReportController.java",
+      "line": 79
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/reports/graph-metrics",
+      "norm_path": "/lg/projects/{var}/reports/graph-metrics",
+      "controller": "ReportController",
+      "func": "getGraphMetrics",
+      "file": "ReportController.java",
+      "line": 89
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/reports/insights",
+      "norm_path": "/lg/projects/{var}/reports/insights",
+      "controller": "ReportController",
+      "func": "getReportInsights",
+      "file": "ReportController.java",
+      "line": 99
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/reports/{reportId}/download",
+      "norm_path": "/lg/projects/{var}/reports/{var}/download",
+      "controller": "ReportController",
+      "func": "",
+      "file": "ReportController.java",
+      "line": 109
+    },
+    {
+      "method": "GET",
+      "path": "/reports/migration/{projectId}",
+      "norm_path": "/reports/migration/{var}",
+      "controller": "ReportExportController",
+      "func": "exportMigrationReport",
+      "file": "ReportExportController.java",
+      "line": 33
+    },
+    {
+      "method": "GET",
+      "path": "/reports/confidence/{projectId}/{versionId}",
+      "norm_path": "/reports/confidence/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportConfidenceReport",
+      "file": "ReportExportController.java",
+      "line": 48
+    },
+    {
+      "method": "GET",
+      "path": "/reports/test-coverage/{projectId}/{versionId}",
+      "norm_path": "/reports/test-coverage/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportTestCoverageReport",
+      "file": "ReportExportController.java",
+      "line": 64
+    },
+    {
+      "method": "GET",
+      "path": "/reports/graph-quality/{projectId}/{versionId}",
+      "norm_path": "/reports/graph-quality/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportGraphQualityReport",
+      "file": "ReportExportController.java",
+      "line": 80
+    },
+    {
+      "method": "GET",
+      "path": "/reports/feature-slice/{projectId}/{sliceId}",
+      "norm_path": "/reports/feature-slice/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportFeatureSliceReport",
+      "file": "ReportExportController.java",
+      "line": 97
+    },
+    {
+      "method": "GET",
+      "path": "/reports/change-task/{projectId}/{taskId}",
+      "norm_path": "/reports/change-task/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportChangeTaskReport",
+      "file": "ReportExportController.java",
+      "line": 112
+    },
+    {
+      "method": "GET",
+      "path": "/reports/scan-research/{projectId}/{versionId}",
+      "norm_path": "/reports/scan-research/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportScanResearchReport",
+      "file": "ReportExportController.java",
+      "line": 127
+    },
+    {
+      "method": "GET",
+      "path": "/reports/system-overview/{projectId}/{versionId}",
+      "norm_path": "/reports/system-overview/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportSystemOverviewReport",
+      "file": "ReportExportController.java",
+      "line": 143
+    },
+    {
+      "method": "GET",
+      "path": "/reports/code-understanding/{projectId}/{versionId}",
+      "norm_path": "/reports/code-understanding/{var}/{var}",
+      "controller": "ReportExportController",
+      "func": "exportCodeUnderstandingReport",
+      "file": "ReportExportController.java",
+      "line": 162
+    },
+    {
+      "method": "GET",
+      "path": "/reports/formats",
+      "norm_path": "/reports/formats",
+      "controller": "ReportExportController",
+      "func": "",
+      "file": "ReportExportController.java",
+      "line": 177
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/requirements/analyze",
+      "norm_path": "/lg/projects/{var}/requirements/analyze",
+      "controller": "RequirementController",
+      "func": "analyze",
+      "file": "RequirementController.java",
+      "line": 90
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/requirements",
+      "norm_path": "/lg/projects/{var}/requirements",
+      "controller": "RequirementController",
+      "func": "save",
+      "file": "RequirementController.java",
+      "line": 110
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/impact",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/impact",
+      "controller": "RequirementController",
+      "func": "impact",
+      "file": "RequirementController.java",
+      "line": 165
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/clarify",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/clarify",
+      "controller": "RequirementController",
+      "func": "clarify",
+      "file": "RequirementController.java",
+      "line": 190
+    },
+    {
+      "method": "PATCH",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/items/{itemCode}",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/items/{var}",
+      "controller": "RequirementController",
+      "func": "patchItem",
+      "file": "RequirementController.java",
+      "line": 265
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/items/{itemCode}/clarify",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/items/{var}/clarify",
+      "controller": "RequirementController",
+      "func": "clarifyItem",
+      "file": "RequirementController.java",
+      "line": 278
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/verify",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/verify",
+      "controller": "RequirementController",
+      "func": "verifyRequirement",
+      "file": "RequirementController.java",
+      "line": 293
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/acceptance-criteria/{criterionId}/verify",
+      "norm_path": "/lg/projects/{var}/acceptance-criteria/{var}/verify",
+      "controller": "RequirementController",
+      "func": "verifySingle",
+      "file": "RequirementController.java",
+      "line": 309
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/acceptance-criteria/{criterionId}/waive",
+      "norm_path": "/lg/projects/{var}/acceptance-criteria/{var}/waive",
+      "controller": "RequirementController",
+      "func": "waive",
+      "file": "RequirementController.java",
+      "line": 326
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/acceptance-criteria/{criterionId}/fail",
+      "norm_path": "/lg/projects/{var}/acceptance-criteria/{var}/fail",
+      "controller": "RequirementController",
+      "func": "fail",
+      "file": "RequirementController.java",
+      "line": 339
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/closure-report",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/closure-report",
+      "controller": "RequirementController",
+      "func": "closureReport",
+      "file": "RequirementController.java",
+      "line": 354
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/requirements/{requirementId}/data-lineage",
+      "norm_path": "/lg/projects/{var}/requirements/{var}/data-lineage",
+      "controller": "RequirementController",
+      "func": "dataLineage",
+      "file": "RequirementController.java",
+      "line": 366
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/reviews",
+      "norm_path": "/lg/projects/{var}/reviews",
+      "controller": "ReviewController",
+      "func": "listPendingReviews",
+      "file": "ReviewController.java",
+      "line": 64
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reviews",
+      "norm_path": "/lg/projects/{var}/reviews",
+      "controller": "ReviewController",
+      "func": "createReview",
+      "file": "ReviewController.java",
+      "line": 103
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/reviews/history",
+      "norm_path": "/lg/projects/{var}/reviews/history",
+      "controller": "ReviewController",
+      "func": "listReviewHistory",
+      "file": "ReviewController.java",
+      "line": 145
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/reviews/{id}",
+      "norm_path": "/lg/projects/{var}/reviews/{var}",
+      "controller": "ReviewController",
+      "func": "getReviewDetail",
+      "file": "ReviewController.java",
+      "line": 179
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reviews/confirm",
+      "norm_path": "/lg/projects/{var}/reviews/confirm",
+      "controller": "ReviewController",
+      "func": "confirmReview",
+      "file": "ReviewController.java",
+      "line": 190
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reviews/reject",
+      "norm_path": "/lg/projects/{var}/reviews/reject",
+      "controller": "ReviewController",
+      "func": "rejectReview",
+      "file": "ReviewController.java",
+      "line": 246
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/reviews/batch-confirm",
+      "norm_path": "/lg/projects/{var}/reviews/batch-confirm",
+      "controller": "ReviewController",
+      "func": "batchConfirm",
+      "file": "ReviewController.java",
+      "line": 302
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions",
+      "norm_path": "/lg/projects/{var}/scan-versions",
+      "controller": "ScanController",
+      "func": "create",
+      "file": "ScanController.java",
+      "line": 63
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/progress",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/progress",
+      "controller": "ScanController",
+      "func": "progress",
+      "file": "ScanController.java",
+      "line": 89
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/start",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/start",
+      "controller": "ScanController",
+      "func": "start",
+      "file": "ScanController.java",
+      "line": 106
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/pause",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/pause",
+      "controller": "ScanController",
+      "func": "pause",
+      "file": "ScanController.java",
+      "line": 132
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/cancel",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/cancel",
+      "controller": "ScanController",
+      "func": "cancel",
+      "file": "ScanController.java",
+      "line": 151
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/resume",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/resume",
+      "controller": "ScanController",
+      "func": "resume",
+      "file": "ScanController.java",
+      "line": 171
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}",
+      "controller": "ScanController",
+      "func": "deleteVersion",
+      "file": "ScanController.java",
+      "line": 200
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/logs",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/logs",
+      "controller": "ScanController",
+      "func": "getLogs",
+      "file": "ScanController.java",
+      "line": 220
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/performance-report",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/performance-report",
+      "controller": "ScanController",
+      "func": "performanceReport",
+      "file": "ScanController.java",
+      "line": 232
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/scan-versions/{versionId}/backfill-node-attributes",
+      "norm_path": "/lg/projects/{var}/scan-versions/{var}/backfill-node-attributes",
+      "controller": "ScanController",
+      "func": "backfillNodeAttributes",
+      "file": "ScanController.java",
+      "line": 244
+    },
+    {
+      "method": "POST",
+      "path": "/lg/self-analysis/bootstrap",
+      "norm_path": "/lg/self-analysis/bootstrap",
+      "controller": "SelfAnalysisController",
+      "func": "",
+      "file": "SelfAnalysisController.java",
+      "line": 37
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/solutions/generate",
+      "norm_path": "/lg/projects/{var}/solutions/generate",
+      "controller": "SolutionController",
+      "func": "generate",
+      "file": "SolutionController.java",
+      "line": 114
+    },
+    {
+      "method": "GET",
+      "path": "/lg/solutions/{solutionId}",
+      "norm_path": "/lg/solutions/{var}",
+      "controller": "SolutionController",
+      "func": "detail",
+      "file": "SolutionController.java",
+      "line": 181
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/solutions",
+      "norm_path": "/lg/projects/{var}/solutions",
+      "controller": "SolutionController",
+      "func": "listByProject",
+      "file": "SolutionController.java",
+      "line": 196
+    },
+    {
+      "method": "POST",
+      "path": "/lg/solutions/{solutionId}/verify",
+      "norm_path": "/lg/solutions/{var}/verify",
+      "controller": "SolutionController",
+      "func": "verify",
+      "file": "SolutionController.java",
+      "line": 217
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/solutions/{solutionId}/bridge",
+      "norm_path": "/lg/projects/{var}/solutions/{var}/bridge",
+      "controller": "SolutionController",
+      "func": "bridge",
+      "file": "SolutionController.java",
+      "line": 282
+    },
+    {
+      "method": "POST",
+      "path": "/lg/solutions/{solutionId}/approve",
+      "norm_path": "/lg/solutions/{var}/approve",
+      "controller": "SolutionController",
+      "func": "approve",
+      "file": "SolutionController.java",
+      "line": 295
+    },
+    {
+      "method": "POST",
+      "path": "/lg/solutions/{solutionId}/reject",
+      "norm_path": "/lg/solutions/{var}/reject",
+      "controller": "SolutionController",
+      "func": "reject",
+      "file": "SolutionController.java",
+      "line": 322
+    },
+    {
+      "method": "GET",
+      "path": "/lg/solutions/{solutionId}/audits",
+      "norm_path": "/lg/solutions/{var}/audits",
+      "controller": "SolutionController",
+      "func": "rebuildAnalysis",
+      "file": "SolutionController.java",
+      "line": 339
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/browse-directory",
+      "norm_path": "/lg/projects/{var}/sources/browse-directory",
+      "controller": "SourceController",
+      "func": "browseDirectory",
+      "file": "SourceController.java",
+      "line": 142
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/repos",
+      "norm_path": "/lg/projects/{var}/sources/repos",
+      "controller": "SourceController",
+      "func": "listRepos",
+      "file": "SourceController.java",
+      "line": 193
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/repos/{id}",
+      "norm_path": "/lg/projects/{var}/sources/repos/{var}",
+      "controller": "SourceController",
+      "func": "getRepo",
+      "file": "SourceController.java",
+      "line": 223
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/repos",
+      "norm_path": "/lg/projects/{var}/sources/repos",
+      "controller": "SourceController",
+      "func": "createRepo",
+      "file": "SourceController.java",
+      "line": 248
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/projects/{projectId}/sources/repos/{id}",
+      "norm_path": "/lg/projects/{var}/sources/repos/{var}",
+      "controller": "SourceController",
+      "func": "updateRepo",
+      "file": "SourceController.java",
+      "line": 298
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{projectId}/sources/repos/{id}",
+      "norm_path": "/lg/projects/{var}/sources/repos/{var}",
+      "controller": "SourceController",
+      "func": "deleteRepo",
+      "file": "SourceController.java",
+      "line": 349
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/repos/{id}/test-connection",
+      "norm_path": "/lg/projects/{var}/sources/repos/{var}/test-connection",
+      "controller": "SourceController",
+      "func": "testRepoConnection",
+      "file": "SourceController.java",
+      "line": 377
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/repos/test-url",
+      "norm_path": "/lg/projects/{var}/sources/repos/test-url",
+      "controller": "SourceController",
+      "func": "testRepoUrl",
+      "file": "SourceController.java",
+      "line": 441
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/repos/{id}/pull",
+      "norm_path": "/lg/projects/{var}/sources/repos/{var}/pull",
+      "controller": "SourceController",
+      "func": "pullRepo",
+      "file": "SourceController.java",
+      "line": 497
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/repos/{id}/scan",
+      "norm_path": "/lg/projects/{var}/sources/repos/{var}/scan",
+      "controller": "SourceController",
+      "func": "scanRepo",
+      "file": "SourceController.java",
+      "line": 603
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/databases",
+      "norm_path": "/lg/projects/{var}/sources/databases",
+      "controller": "SourceController",
+      "func": "listDatabases",
+      "file": "SourceController.java",
+      "line": 655
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/databases/{id}",
+      "norm_path": "/lg/projects/{var}/sources/databases/{var}",
+      "controller": "SourceController",
+      "func": "getDatabase",
+      "file": "SourceController.java",
+      "line": 685
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/databases",
+      "norm_path": "/lg/projects/{var}/sources/databases",
+      "controller": "SourceController",
+      "func": "createDatabase",
+      "file": "SourceController.java",
+      "line": 710
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/projects/{projectId}/sources/databases/{id}",
+      "norm_path": "/lg/projects/{var}/sources/databases/{var}",
+      "controller": "SourceController",
+      "func": "updateDatabase",
+      "file": "SourceController.java",
+      "line": 762
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{projectId}/sources/databases/{id}",
+      "norm_path": "/lg/projects/{var}/sources/databases/{var}",
+      "controller": "SourceController",
+      "func": "deleteDatabase",
+      "file": "SourceController.java",
+      "line": 814
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/databases/{id}/test-connection",
+      "norm_path": "/lg/projects/{var}/sources/databases/{var}/test-connection",
+      "controller": "SourceController",
+      "func": "testDbConnection",
+      "file": "SourceController.java",
+      "line": 842
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/databases/{id}/scan-schema",
+      "norm_path": "/lg/projects/{var}/sources/databases/{var}/scan-schema",
+      "controller": "SourceController",
+      "func": "scanSchema",
+      "file": "SourceController.java",
+      "line": 885
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/documents",
+      "norm_path": "/lg/projects/{var}/sources/documents",
+      "controller": "SourceController",
+      "func": "listDocuments",
+      "file": "SourceController.java",
+      "line": 1003
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/documents/{id}",
+      "norm_path": "/lg/projects/{var}/sources/documents/{var}",
+      "controller": "SourceController",
+      "func": "getDocument",
+      "file": "SourceController.java",
+      "line": 1038
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/documents/upload",
+      "norm_path": "/lg/projects/{var}/sources/documents/upload",
+      "controller": "SourceController",
+      "func": "uploadDocument",
+      "file": "SourceController.java",
+      "line": 1065
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/documents/{id}/parse",
+      "norm_path": "/lg/projects/{var}/sources/documents/{var}/parse",
+      "controller": "SourceController",
+      "func": "parseDocument",
+      "file": "SourceController.java",
+      "line": 1303
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/documents/{id}/download",
+      "norm_path": "/lg/projects/{var}/sources/documents/{var}/download",
+      "controller": "SourceController",
+      "func": "downloadDocument",
+      "file": "SourceController.java",
+      "line": 1388
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{projectId}/sources/documents/{id}",
+      "norm_path": "/lg/projects/{var}/sources/documents/{var}",
+      "controller": "SourceController",
+      "func": "deleteDocument",
+      "file": "SourceController.java",
+      "line": 1451
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/sources/parse-failures",
+      "norm_path": "/lg/projects/{var}/sources/parse-failures",
+      "controller": "SourceController",
+      "func": "listParseFailures",
+      "file": "SourceController.java",
+      "line": 1497
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/parse-failures/{id}/retry",
+      "norm_path": "/lg/projects/{var}/sources/parse-failures/{var}/retry",
+      "controller": "SourceController",
+      "func": "retryParseFailure",
+      "file": "SourceController.java",
+      "line": 1527
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/sources/parse-failures/batch-retry",
+      "norm_path": "/lg/projects/{var}/sources/parse-failures/batch-retry",
+      "controller": "SourceController",
+      "func": "batchRetryParseFailures",
+      "file": "SourceController.java",
+      "line": 1620
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/users/list",
+      "norm_path": "/lg/system/users/list",
+      "controller": "SystemController",
+      "func": "listUsers",
+      "file": "SystemController.java",
+      "line": 65
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/users/{id}",
+      "norm_path": "/lg/system/users/{var}",
+      "controller": "SystemController",
+      "func": "getUser",
+      "file": "SystemController.java",
+      "line": 86
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/users",
+      "norm_path": "/lg/system/users",
+      "controller": "SystemController",
+      "func": "createUser",
+      "file": "SystemController.java",
+      "line": 96
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/users/{id}",
+      "norm_path": "/lg/system/users/{var}",
+      "controller": "SystemController",
+      "func": "updateUser",
+      "file": "SystemController.java",
+      "line": 107
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/users/{id}",
+      "norm_path": "/lg/system/users/{var}",
+      "controller": "SystemController",
+      "func": "deleteUser",
+      "file": "SystemController.java",
+      "line": 120
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/users/{id}/status",
+      "norm_path": "/lg/system/users/{var}/status",
+      "controller": "SystemController",
+      "func": "updateUserStatus",
+      "file": "SystemController.java",
+      "line": 132
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/list",
+      "norm_path": "/lg/system/dicts/list",
+      "controller": "SystemController",
+      "func": "listDicts",
+      "file": "SystemController.java",
+      "line": 146
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/all",
+      "norm_path": "/lg/system/dicts/all",
+      "controller": "SystemController",
+      "func": "listAllDicts",
+      "file": "SystemController.java",
+      "line": 158
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/{id}",
+      "norm_path": "/lg/system/dicts/{var}",
+      "controller": "SystemController",
+      "func": "getDict",
+      "file": "SystemController.java",
+      "line": 165
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/dicts",
+      "norm_path": "/lg/system/dicts",
+      "controller": "SystemController",
+      "func": "createDict",
+      "file": "SystemController.java",
+      "line": 173
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/dicts/{id}",
+      "norm_path": "/lg/system/dicts/{var}",
+      "controller": "SystemController",
+      "func": "updateDict",
+      "file": "SystemController.java",
+      "line": 184
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/dicts/{id}",
+      "norm_path": "/lg/system/dicts/{var}",
+      "controller": "SystemController",
+      "func": "deleteDict",
+      "file": "SystemController.java",
+      "line": 197
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/{id}/items",
+      "norm_path": "/lg/system/dicts/{var}/items",
+      "controller": "SystemController",
+      "func": "getDictItems",
+      "file": "SystemController.java",
+      "line": 209
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/code/{code}/items",
+      "norm_path": "/lg/system/dicts/code/{var}/items",
+      "controller": "SystemController",
+      "func": "getDictItemsByCode",
+      "file": "SystemController.java",
+      "line": 216
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/code/{code}/map",
+      "norm_path": "/lg/system/dicts/code/{var}/map",
+      "controller": "SystemController",
+      "func": "getDictItemMap",
+      "file": "SystemController.java",
+      "line": 223
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/all/maps",
+      "norm_path": "/lg/system/dicts/all/maps",
+      "controller": "SystemController",
+      "func": "getAllDictItemMaps",
+      "file": "SystemController.java",
+      "line": 230
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/dicts/items",
+      "norm_path": "/lg/system/dicts/items",
+      "controller": "SystemController",
+      "func": "createDictItem",
+      "file": "SystemController.java",
+      "line": 237
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/dicts/items/{id}",
+      "norm_path": "/lg/system/dicts/items/{var}",
+      "controller": "SystemController",
+      "func": "updateDictItem",
+      "file": "SystemController.java",
+      "line": 245
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/dicts/items/{id}",
+      "norm_path": "/lg/system/dicts/items/{var}",
+      "controller": "SystemController",
+      "func": "deleteDictItem",
+      "file": "SystemController.java",
+      "line": 258
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/list",
+      "norm_path": "/lg/system/configs/list",
+      "controller": "SystemController",
+      "func": "listConfigs",
+      "file": "SystemController.java",
+      "line": 272
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/{id}",
+      "norm_path": "/lg/system/configs/{var}",
+      "controller": "SystemController",
+      "func": "getConfig",
+      "file": "SystemController.java",
+      "line": 284
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/key/{key}",
+      "norm_path": "/lg/system/configs/key/{var}",
+      "controller": "SystemController",
+      "func": "getConfigValue",
+      "file": "SystemController.java",
+      "line": 292
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/all",
+      "norm_path": "/lg/system/configs/all",
+      "controller": "SystemController",
+      "func": "getAllConfigMap",
+      "file": "SystemController.java",
+      "line": 299
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/configs",
+      "norm_path": "/lg/system/configs",
+      "controller": "SystemController",
+      "func": "createConfig",
+      "file": "SystemController.java",
+      "line": 306
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/configs/{id}",
+      "norm_path": "/lg/system/configs/{var}",
+      "controller": "SystemController",
+      "func": "updateConfig",
+      "file": "SystemController.java",
+      "line": 317
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/configs/key/{key}",
+      "norm_path": "/lg/system/configs/key/{var}",
+      "controller": "SystemController",
+      "func": "updateConfigValue",
+      "file": "SystemController.java",
+      "line": 330
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/configs/{id}",
+      "norm_path": "/lg/system/configs/{var}",
+      "controller": "SystemController",
+      "func": "deleteConfig",
+      "file": "SystemController.java",
+      "line": 342
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/system-overview",
+      "norm_path": "/lg/projects/{var}/system-overview",
+      "controller": "SystemOverviewController",
+      "func": "getOverview",
+      "file": "SystemOverviewController.java",
+      "line": 48
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/system-overview/domains/{domainId}",
+      "norm_path": "/lg/projects/{var}/system-overview/domains/{var}",
+      "controller": "SystemOverviewController",
+      "func": "getDomain",
+      "file": "SystemOverviewController.java",
+      "line": 60
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/system-overview/paths",
+      "norm_path": "/lg/projects/{var}/system-overview/paths",
+      "controller": "SystemOverviewController",
+      "func": "getPaths",
+      "file": "SystemOverviewController.java",
+      "line": 73
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/system-overview/reports/generate",
+      "norm_path": "/lg/projects/{var}/system-overview/reports/generate",
+      "controller": "SystemOverviewController",
+      "func": "generateReport",
+      "file": "SystemOverviewController.java",
+      "line": 87
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system-overview/ingest",
+      "norm_path": "/lg/system-overview/ingest",
+      "controller": "SystemOverviewIngestController",
+      "func": "ingest",
+      "file": "SystemOverviewIngestController.java",
+      "line": 46
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system-overview/ingest-builtins",
+      "norm_path": "/lg/system-overview/ingest-builtins",
+      "controller": "SystemOverviewIngestController",
+      "func": "ingestBuiltins",
+      "file": "SystemOverviewIngestController.java",
+      "line": 65
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system-overview/ingest-from-graph",
+      "norm_path": "/lg/system-overview/ingest-from-graph",
+      "controller": "SystemOverviewIngestController",
+      "func": "ingestFromGraph",
+      "file": "SystemOverviewIngestController.java",
+      "line": 86
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/test-cases",
+      "norm_path": "/lg/projects/{var}/test-cases",
+      "controller": "TestCaseController",
+      "func": "listTestCases",
+      "file": "TestCaseController.java",
+      "line": 78
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/test-cases/{id}",
+      "norm_path": "/lg/projects/{var}/test-cases/{var}",
+      "controller": "TestCaseController",
+      "func": "getTestCase",
+      "file": "TestCaseController.java",
+      "line": 121
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/test-cases",
+      "norm_path": "/lg/projects/{var}/test-cases",
+      "controller": "TestCaseController",
+      "func": "createTestCase",
+      "file": "TestCaseController.java",
+      "line": 132
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/projects/{projectId}/test-cases/{id}",
+      "norm_path": "/lg/projects/{var}/test-cases/{var}",
+      "controller": "TestCaseController",
+      "func": "updateTestCase",
+      "file": "TestCaseController.java",
+      "line": 151
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{projectId}/test-cases/{id}",
+      "norm_path": "/lg/projects/{var}/test-cases/{var}",
+      "controller": "TestCaseController",
+      "func": "deleteTestCase",
+      "file": "TestCaseController.java",
+      "line": 174
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/test-cases/generate",
+      "norm_path": "/lg/projects/{var}/test-cases/generate",
+      "controller": "TestCaseController",
+      "func": "generateTestCases",
+      "file": "TestCaseController.java",
+      "line": 185
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/test-cases/{id}/run",
+      "norm_path": "/lg/projects/{var}/test-cases/{var}/run",
+      "controller": "TestCaseController",
+      "func": "runTestCase",
+      "file": "TestCaseController.java",
+      "line": 422
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/tests/results/callback",
+      "norm_path": "/lg/projects/{var}/tests/results/callback",
+      "controller": "TestCaseController",
+      "func": "testResultCallback",
+      "file": "TestCaseController.java",
+      "line": 453
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/test-runs/start",
+      "norm_path": "/lg/projects/{var}/test-runs/start",
+      "controller": "TestCaseController",
+      "func": "startBatchTestRun",
+      "file": "TestCaseController.java",
+      "line": 505
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/test-runs/{runId}/rerun-failed",
+      "norm_path": "/lg/projects/{var}/test-runs/{var}/rerun-failed",
+      "controller": "TestCaseController",
+      "func": "rerunFailed",
+      "file": "TestCaseController.java",
+      "line": 522
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/test-runs/{runId}/cancel",
+      "norm_path": "/lg/projects/{var}/test-runs/{var}/cancel",
+      "controller": "TestCaseController",
+      "func": "cancelTestRun",
+      "file": "TestCaseController.java",
+      "line": 533
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/test-runs/stats",
+      "norm_path": "/lg/projects/{var}/test-runs/stats",
+      "controller": "TestCaseController",
+      "func": "listTestRuns",
+      "file": "TestCaseController.java",
+      "line": 542
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/test-runs",
+      "norm_path": "/lg/projects/{var}/test-runs",
+      "controller": "TestCaseController",
+      "func": "listTestRuns",
+      "file": "TestCaseController.java",
+      "line": 548
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/test-runs/{runId}",
+      "norm_path": "/lg/projects/{var}/test-runs/{var}",
+      "controller": "TestCaseController",
+      "func": "getTestRunDetail",
+      "file": "TestCaseController.java",
+      "line": 576
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/test-runs/{runId}/results",
+      "norm_path": "/lg/projects/{var}/test-runs/{var}/results",
+      "controller": "TestCaseController",
+      "func": "getResultLogs",
+      "file": "TestCaseController.java",
+      "line": 588
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/test-runs/{runId}/logs",
+      "norm_path": "/lg/projects/{var}/test-runs/{var}/logs",
+      "controller": "TestCaseController",
+      "func": "getResultLogs",
+      "file": "TestCaseController.java",
+      "line": 598
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/solutions/{solutionId}/generate-tests",
+      "norm_path": "/lg/projects/{var}/solutions/{var}/generate-tests",
+      "controller": "TestGenerationController",
+      "func": "generateTests",
+      "file": "TestGenerationController.java",
+      "line": 41
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{projectId}/runtime/traces",
+      "norm_path": "/lg/projects/{var}/runtime/traces",
+      "controller": "TraceController",
+      "func": "ingest",
+      "file": "TraceController.java",
+      "line": 32
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/runtime/topology",
+      "norm_path": "/lg/projects/{var}/runtime/topology",
+      "controller": "TraceController",
+      "func": "getTopology",
+      "file": "TraceController.java",
+      "line": 41
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{projectId}/runtime/traces",
+      "norm_path": "/lg/projects/{var}/runtime/traces",
+      "controller": "TraceController",
+      "func": "listTraces",
+      "file": "TraceController.java",
+      "line": 49
+    },
+    {
+      "method": "GET",
+      "path": "/lg/validation/report/{versionId}",
+      "norm_path": "/lg/validation/report/{var}",
+      "controller": "ValidationController",
+      "func": "updateConfidence",
+      "file": "ValidationController.java",
+      "line": 22
+    },
+    {
+      "method": "POST",
+      "path": "/lg/validation/update-confidence/{versionId}",
+      "norm_path": "/lg/validation/update-confidence/{var}",
+      "controller": "ValidationController",
+      "func": "updateConfidence",
+      "file": "ValidationController.java",
+      "line": 29
+    },
+    {
+      "method": "POST",
+      "path": "/lg/validation/confirm",
+      "norm_path": "/lg/validation/confirm",
+      "controller": "ValidationController",
+      "func": "confirm",
+      "file": "ValidationController.java",
+      "line": 36
+    },
+    {
+      "method": "POST",
+      "path": "/lg/vector/projects/{projectId}/upsert",
+      "norm_path": "/lg/vector/projects/{var}/upsert",
+      "controller": "VectorController",
+      "func": "batchUpsert",
+      "file": "VectorController.java",
+      "line": 32
+    },
+    {
+      "method": "POST",
+      "path": "/lg/vector/projects/{projectId}/search",
+      "norm_path": "/lg/vector/projects/{var}/search",
+      "controller": "VectorController",
+      "func": "semanticSearch",
+      "file": "VectorController.java",
+      "line": 51
+    },
+    {
+      "method": "GET",
+      "path": "/lg/vector/projects/{projectId}/similar-nodes",
+      "norm_path": "/lg/vector/projects/{var}/similar-nodes",
+      "controller": "VectorController",
+      "func": "findSimilarNodes",
+      "file": "VectorController.java",
+      "line": 65
+    }
+  ],
+  "frontend_dedup": [
+    {
+      "method": "GET",
+      "path": "/agents/runs/history",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 45,
+      "raw": "/agents/runs/history"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/run",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 13,
+      "raw": "/agents/run"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/tests/generate",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 17,
+      "raw": "/agents/tests/generate"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/review/suggest",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 20,
+      "raw": "/agents/review/suggest"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/sql/analyze",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 23,
+      "raw": "/agents/sql/analyze"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/tests/analyze-failure",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 26,
+      "raw": "/agents/tests/analyze-failure"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/report/insights",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 29,
+      "raw": "/agents/report/insights"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/refactor/suggest",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 32,
+      "raw": "/agents/refactor/suggest"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/change/impact",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 35,
+      "raw": "/agents/change/impact"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/migration/convert",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 38,
+      "raw": "/agents/migration/convert"
+    },
+    {
+      "method": "POST",
+      "path": "/agents/pr/describe",
+      "file": "frontend/src/api/agent.api.ts",
+      "line": 41,
+      "raw": "/agents/pr/describe"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/list",
+      "file": "frontend/src/api/audit.api.ts",
+      "line": 12,
+      "raw": "/lg/audit/list"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/{var}",
+      "file": "frontend/src/api/audit.api.ts",
+      "line": 15,
+      "raw": "/lg/audit/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/stats/count",
+      "file": "frontend/src/api/audit.api.ts",
+      "line": 26,
+      "raw": "/lg/audit/stats/count"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/audit/clear",
+      "file": "frontend/src/api/audit.api.ts",
+      "line": 23,
+      "raw": "/lg/audit/clear"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/audit/{var}/download",
+      "file": "frontend/src/api/audit.api.ts",
+      "line": 19,
+      "raw": "${apiBaseUrl}/lg/audit/${encodeURIComponent(id)}/download"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/auth/me",
+      "file": "frontend/src/api/auth.api.ts",
+      "line": 53,
+      "raw": "/lg/auth/me"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/auth/login",
+      "file": "frontend/src/api/auth.api.ts",
+      "line": 37,
+      "raw": "/lg/auth/login"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/auth/logout",
+      "file": "frontend/src/api/auth.api.ts",
+      "line": 45,
+      "raw": "/lg/auth/logout"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/auth/refresh",
+      "file": "frontend/src/api/auth.api.ts",
+      "line": 62,
+      "raw": "/lg/auth/refresh"
+    },
+    {
+      "method": "GET",
+      "path": "/change-tasks",
+      "file": "frontend/src/api/change-task.api.ts",
+      "line": 12,
+      "raw": "/change-tasks"
+    },
+    {
+      "method": "GET",
+      "path": "/change-tasks/{var}",
+      "file": "frontend/src/api/change-task.api.ts",
+      "line": 26,
+      "raw": "/change-tasks/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks",
+      "file": "frontend/src/api/change-task.api.ts",
+      "line": 19,
+      "raw": "/change-tasks"
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/impact",
+      "file": "frontend/src/api/change-task.api.ts",
+      "line": 33,
+      "raw": "/change-tasks/${encodeURIComponent(id)}/impact"
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/generate-patch",
+      "file": "frontend/src/api/change-task.api.ts",
+      "line": 40,
+      "raw": "/change-tasks/${encodeURIComponent(id)}/generate-patch"
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/run-validation",
+      "file": "frontend/src/api/change-task.api.ts",
+      "line": 48,
+      "raw": "/change-tasks/${encodeURIComponent(id)}/run-validation"
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/create-pr",
+      "file": "frontend/src/api/change-task.api.ts",
+      "line": 55,
+      "raw": "/change-tasks/${encodeURIComponent(id)}/create-pr"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/evidence-conflicts",
+      "file": "frontend/src/api/evidence-conflict.api.ts",
+      "line": 20,
+      "raw": "/lg/evidence-conflicts"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/evidence-conflicts/{var}/resolve",
+      "file": "frontend/src/api/evidence-conflict.api.ts",
+      "line": 24,
+      "raw": "/lg/evidence-conflicts/${encodeURIComponent(id)}/resolve"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/facts",
+      "file": "frontend/src/api/fact.api.ts",
+      "line": 68,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/facts"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/facts/{var}",
+      "file": "frontend/src/api/fact.api.ts",
+      "line": 78,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/facts/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/facts/{var}/related-nodes",
+      "file": "frontend/src/api/fact.api.ts",
+      "line": 88,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/facts/${encodeURIComponent(id)}/related-nodes"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/evidence",
+      "file": "frontend/src/api/fact.api.ts",
+      "line": 101,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/evidence"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/evidence/by-node/{var}",
+      "file": "frontend/src/api/fact.api.ts",
+      "line": 108,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/evidence/by-node/${encodeURIComponent(nodeId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/evidence/{var}",
+      "file": "frontend/src/api/fact.api.ts",
+      "line": 118,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/evidence/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/jobs",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 98,
+      "raw": "/lg/projects/${projectId}/graphify/jobs"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/jobs/{var}",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 104,
+      "raw": "/lg/projects/${projectId}/graphify/jobs/${jobId}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/diff/{var}/{var}",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 116,
+      "raw": "/lg/projects/${projectId}/graphify/diff/${oldVersionId}/${newVersionId}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/quality",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 122,
+      "raw": "/lg/projects/${projectId}/graphify/quality"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/cross-repo-impact",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 125,
+      "raw": "/lg/projects/${projectId}/graphify/cross-repo-impact"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions/{var}/graphify/import",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 92,
+      "raw": "/lg/projects/${projectId}/scan-versions/${versionId}/graphify/import"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions/{var}/graphify/run",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 95,
+      "raw": "/lg/projects/${projectId}/scan-versions/${versionId}/graphify/run"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graphify/jobs",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 101,
+      "raw": "/lg/projects/${projectId}/graphify/jobs"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graphify/jobs/{var}/cancel",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 107,
+      "raw": "/lg/projects/${projectId}/graphify/jobs/${jobId}/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graphify/jobs/{var}/retry",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 110,
+      "raw": "/lg/projects/${projectId}/graphify/jobs/${jobId}/retry"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graphify/jobs/{var}/rollback",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 113,
+      "raw": "/lg/projects/${projectId}/graphify/jobs/${jobId}/rollback"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graphify/questions",
+      "file": "frontend/src/api/graphify.api.ts",
+      "line": 119,
+      "raw": "/lg/projects/${projectId}/graphify/questions"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects",
+      "file": "frontend/src/api/index.ts",
+      "line": 65,
+      "raw": "/lg/projects"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 92,
+      "raw": "/lg/projects/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/overview",
+      "file": "frontend/src/api/index.ts",
+      "line": 97,
+      "raw": "/lg/projects/${encodeURIComponent(id)}/overview"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/scan-versions",
+      "file": "frontend/src/api/index.ts",
+      "line": 123,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/scan-versions/{var}/progress",
+      "file": "frontend/src/api/index.ts",
+      "line": 133,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions/${encodeURIComponent(versionId)}/progress"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/scan-versions/{var}/logs",
+      "file": "frontend/src/api/index.ts",
+      "line": 187,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions/${encodeURIComponent(versionId)}/logs"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/api-chain",
+      "file": "frontend/src/api/index.ts",
+      "line": 205,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/api-chain"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/api-endpoints",
+      "file": "frontend/src/api/index.ts",
+      "line": 215,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/api-endpoints"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/table-impact",
+      "file": "frontend/src/api/index.ts",
+      "line": 227,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/table-impact"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/feature-view",
+      "file": "frontend/src/api/index.ts",
+      "line": 239,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/feature-view"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/business-view",
+      "file": "frontend/src/api/index.ts",
+      "line": 251,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/business-view"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/merge/candidates",
+      "file": "frontend/src/api/index.ts",
+      "line": 262,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/merge/candidates"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/unified",
+      "file": "frontend/src/api/index.ts",
+      "line": 290,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/unified"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/feature-slices",
+      "file": "frontend/src/api/index.ts",
+      "line": 297,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/feature-slices"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/feature-slices/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 304,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/feature-slices/${encodeURIComponent(sliceId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/quality",
+      "file": "frontend/src/api/index.ts",
+      "line": 311,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/quality"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/drift-queue",
+      "file": "frontend/src/api/index.ts",
+      "line": 318,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/drift-queue"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/tables",
+      "file": "frontend/src/api/index.ts",
+      "line": 323,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/tables"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/graph/diff",
+      "file": "frontend/src/api/index.ts",
+      "line": 333,
+      "raw": "/lg/graph/diff"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/reviews",
+      "file": "frontend/src/api/index.ts",
+      "line": 360,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reviews"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/reviews/history",
+      "file": "frontend/src/api/index.ts",
+      "line": 375,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reviews/history"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/reviews/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 385,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reviews/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/test-cases",
+      "file": "frontend/src/api/index.ts",
+      "line": 444,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-cases"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/test-cases/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 453,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-cases/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/validation/report/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 511,
+      "raw": "/lg/validation/report/${encodeURIComponent(versionId)}"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects",
+      "file": "frontend/src/api/index.ts",
+      "line": 74,
+      "raw": "/lg/projects"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions",
+      "file": "frontend/src/api/index.ts",
+      "line": 113,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions/{var}/start",
+      "file": "frontend/src/api/index.ts",
+      "line": 146,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions/${encodeURIComponent(versionId)}/start${suffix}"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions/{var}/pause",
+      "file": "frontend/src/api/index.ts",
+      "line": 155,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions/${encodeURIComponent(versionId)}/pause"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions/{var}/resume",
+      "file": "frontend/src/api/index.ts",
+      "line": 164,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions/${encodeURIComponent(versionId)}/resume"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions/{var}/cancel",
+      "file": "frontend/src/api/index.ts",
+      "line": 173,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions/${encodeURIComponent(versionId)}/cancel"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graph/merge/decide",
+      "file": "frontend/src/api/index.ts",
+      "line": 273,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/merge/decide"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graph/merge/execute",
+      "file": "frontend/src/api/index.ts",
+      "line": 285,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/graph/merge/execute"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reviews",
+      "file": "frontend/src/api/index.ts",
+      "line": 338,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reviews"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reviews/confirm",
+      "file": "frontend/src/api/index.ts",
+      "line": 399,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reviews/confirm"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reviews/reject",
+      "file": "frontend/src/api/index.ts",
+      "line": 413,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reviews/reject"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reviews/batch-confirm",
+      "file": "frontend/src/api/index.ts",
+      "line": 424,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reviews/batch-confirm"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/test-cases",
+      "file": "frontend/src/api/index.ts",
+      "line": 462,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-cases"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/test-cases/generate",
+      "file": "frontend/src/api/index.ts",
+      "line": 491,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-cases/generate"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/test-cases/{var}/run",
+      "file": "frontend/src/api/index.ts",
+      "line": 496,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-cases/${encodeURIComponent(caseId)}/run"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/validation/update-confidence/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 521,
+      "raw": "/lg/validation/update-confidence/${encodeURIComponent(versionId)}"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/validation/confirm",
+      "file": "frontend/src/api/index.ts",
+      "line": 530,
+      "raw": "/lg/validation/confirm"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/projects/{var}/test-cases/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 472,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-cases/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 83,
+      "raw": "/lg/projects/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{var}/scan-versions/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 182,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/scan-versions/${encodeURIComponent(versionId)}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{var}/test-cases/{var}",
+      "file": "frontend/src/api/index.ts",
+      "line": 481,
+      "raw": "/lg/projects/${projectId}/test-cases/${id}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/knowledge/claims",
+      "file": "frontend/src/api/knowledge.api.ts",
+      "line": 79,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/knowledge/claims"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/knowledge/claims/{var}",
+      "file": "frontend/src/api/knowledge.api.ts",
+      "line": 82,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/knowledge/claims/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/knowledge/gaps",
+      "file": "frontend/src/api/knowledge.api.ts",
+      "line": 85,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/knowledge/gaps"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/knowledge/gaps/{var}/resolve",
+      "file": "frontend/src/api/knowledge.api.ts",
+      "line": 88,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/knowledge/gaps/${encodeURIComponent(id)}/resolve"
+    },
+    {
+      "method": "GET",
+      "path": "/llm/providers",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 24,
+      "raw": "/llm/providers"
+    },
+    {
+      "method": "GET",
+      "path": "/llm/providers/default",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 29,
+      "raw": "/llm/providers/default"
+    },
+    {
+      "method": "GET",
+      "path": "/llm/providers/{var}",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 34,
+      "raw": "/llm/providers/${encodeURIComponent(code)}"
+    },
+    {
+      "method": "POST",
+      "path": "/llm/providers",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 39,
+      "raw": "/llm/providers"
+    },
+    {
+      "method": "POST",
+      "path": "/llm/providers/{var}/test",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 59,
+      "raw": "/llm/providers/${encodeURIComponent(code)}/test"
+    },
+    {
+      "method": "PUT",
+      "path": "/llm/providers/{var}/set-default",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 44,
+      "raw": "/llm/providers/${encodeURIComponent(code)}/set-default"
+    },
+    {
+      "method": "PUT",
+      "path": "/llm/providers/{var}/toggle-active",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 49,
+      "raw": "/llm/providers/${encodeURIComponent(code)}/toggle-active?active=${encodeURIComponent(active)}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/llm/providers/{var}",
+      "file": "frontend/src/api/llm.api.ts",
+      "line": 54,
+      "raw": "/llm/providers/${code}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/notifications/recent",
+      "file": "frontend/src/api/notification.api.ts",
+      "line": 14,
+      "raw": "/lg/notifications/recent"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/notifications/{var}/read",
+      "file": "frontend/src/api/notification.api.ts",
+      "line": 19,
+      "raw": "/lg/notifications/${encodeURIComponent(id)}/read"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/plugins",
+      "file": "frontend/src/api/plugin.api.ts",
+      "line": 29,
+      "raw": "/lg/plugins"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/plugins/{var}",
+      "file": "frontend/src/api/plugin.api.ts",
+      "line": 36,
+      "raw": "/lg/plugins/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/plugins/{var}/enable",
+      "file": "frontend/src/api/plugin.api.ts",
+      "line": 43,
+      "raw": "/lg/plugins/${encodeURIComponent(id)}/enable"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/plugins/{var}/disable",
+      "file": "frontend/src/api/plugin.api.ts",
+      "line": 50,
+      "raw": "/lg/plugins/${encodeURIComponent(id)}/disable"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/admin/prompts/list",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 41,
+      "raw": "/lg/admin/prompts/list"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/admin/prompts/active",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 44,
+      "raw": "/lg/admin/prompts/active"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/admin/prompts/{var}",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 47,
+      "raw": "/lg/admin/prompts/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/admin/prompts",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 50,
+      "raw": "/lg/admin/prompts"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/admin/prompts/cache/refresh",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 62,
+      "raw": "/lg/admin/prompts/cache/refresh"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/admin/prompts/{var}",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 53,
+      "raw": "/lg/admin/prompts/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/admin/prompts/{var}/toggle",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 56,
+      "raw": "/lg/admin/prompts/${encodeURIComponent(id)}/toggle"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/admin/prompts/{var}",
+      "file": "frontend/src/api/prompt.api.ts",
+      "line": 59,
+      "raw": "/lg/admin/prompts/${id}"
+    },
+    {
+      "method": "GET",
+      "path": "/qa/conversations",
+      "file": "frontend/src/api/qa.api.ts",
+      "line": 167,
+      "raw": "/qa/conversations?projectId=${encodeURIComponent(projectId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/qa/conversations/{var}/messages",
+      "file": "frontend/src/api/qa.api.ts",
+      "line": 172,
+      "raw": "/qa/conversations/${encodeURIComponent(conversationId)}/messages"
+    },
+    {
+      "method": "POST",
+      "path": "/qa/ask",
+      "file": "frontend/src/api/qa.api.ts",
+      "line": 54,
+      "raw": "/qa/ask"
+    },
+    {
+      "method": "POST",
+      "path": "/qa/conversations",
+      "file": "frontend/src/api/qa.api.ts",
+      "line": 162,
+      "raw": "/qa/conversations"
+    },
+    {
+      "method": "POST",
+      "path": "/qa/feedback",
+      "file": "frontend/src/api/qa.api.ts",
+      "line": 191,
+      "raw": "/qa/feedback"
+    },
+    {
+      "method": "DELETE",
+      "path": "/qa/conversations/{var}",
+      "file": "frontend/src/api/qa.api.ts",
+      "line": 177,
+      "raw": "/qa/conversations/${conversationId}"
+    },
+    {
+      "method": "POST",
+      "path": "/qa/ask/stream",
+      "file": "frontend/src/api/qa.api.ts",
+      "line": 67,
+      "raw": "/qa/ask/stream"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/reports/list",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 38,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/list"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/reports/{var}/download",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 102,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/${encodeURIComponent(reportId)}/download?format=${encodeURICompone"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/reports/graph-metrics",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 112,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/graph-metrics"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/formats",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 128,
+      "raw": "/reports/formats"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/migration/{var}",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 136,
+      "raw": "/reports/migration/${encodeURIComponent(projectId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/confidence/{var}/{var}",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 145,
+      "raw": "/reports/confidence/${encodeURIComponent(projectId)}/${encodeURIComponent(versionId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/test-coverage/{var}/{var}",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 154,
+      "raw": "/reports/test-coverage/${encodeURIComponent(projectId)}/${encodeURIComponent(versionId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/graph-quality/{var}/{var}",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 163,
+      "raw": "/reports/graph-quality/${encodeURIComponent(projectId)}/${encodeURIComponent(versionId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/feature-slice/{var}/{var}",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 172,
+      "raw": "/reports/feature-slice/${encodeURIComponent(projectId)}/${encodeURIComponent(sliceId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/change-task/{var}/{var}",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 181,
+      "raw": "/reports/change-task/${encodeURIComponent(projectId)}/${encodeURIComponent(taskId)}"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reports/migration-readiness/generate",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 58,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/migration-readiness/generate"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reports/confidence-trend/generate",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 69,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/confidence-trend/generate"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reports/test-coverage/generate",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 80,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/test-coverage/generate"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/reports/graph-quality/generate",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 91,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/graph-quality/generate"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{var}/reports/{var}",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 48,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/reports/${encodeURIComponent(reportId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/reports/insights",
+      "file": "frontend/src/api/report.api.ts",
+      "line": 120,
+      "raw": "/lg/projects/${projectId}/reports/insights"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/impact-viz/requirements/{var}",
+      "file": "frontend/src/api/requirement.ts",
+      "line": 196,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/impact-viz/requirements/${encodeURIComponent(requirementId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/impact-viz/requirements/{var}/summary",
+      "file": "frontend/src/api/requirement.ts",
+      "line": 208,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/impact-viz/requirements/${encodeURIComponent(requirementId)}/summary"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/requirements/analyze",
+      "file": "frontend/src/api/requirement.ts",
+      "line": 83,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/requirements/analyze"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/requirements",
+      "file": "frontend/src/api/requirement.ts",
+      "line": 104,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/requirements"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/requirements/{var}/impact",
+      "file": "frontend/src/api/requirement.ts",
+      "line": 117,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/impact"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/requirements/{var}/clarify",
+      "file": "frontend/src/api/requirement.ts",
+      "line": 130,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/requirements/${encodeURIComponent(requirementId)}/clarify"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/solutions/{var}",
+      "file": "frontend/src/api/solution.ts",
+      "line": 116,
+      "raw": "/lg/solutions/${encodeURIComponent(solutionId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/solutions",
+      "file": "frontend/src/api/solution.ts",
+      "line": 125,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/solutions"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/solutions/generate",
+      "file": "frontend/src/api/solution.ts",
+      "line": 104,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/solutions/generate"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/solutions/{var}/verify",
+      "file": "frontend/src/api/solution.ts",
+      "line": 135,
+      "raw": "/lg/solutions/${encodeURIComponent(solutionId)}/verify"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/repos",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 100,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/repos"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/databases",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 211,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/databases"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/documents",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 252,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/documents"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/browse-directory",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 282,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/browse-directory"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/repos",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 110,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/repos"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/repos/{var}/pull",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 141,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}/pull"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/repos/{var}/scan",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 151,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}/scan"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/repos/{var}/test-connection",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 161,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}/test-connection"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/repos/test-url",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 171,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/repos/test-url"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/databases/{var}/test-connection",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 181,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/databases/${encodeURIComponent(id)}/test-connection"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/databases/{var}/scan-schema",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 191,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/databases/${encodeURIComponent(id)}/scan-schema"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/documents/{var}/parse",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 201,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/documents/${encodeURIComponent(id)}/parse"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/databases",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 221,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/databases"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/documents/upload",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 262,
+      "raw": "/lg/projects/${projectId}/sources/documents/upload"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/projects/{var}/sources/repos/{var}",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 121,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/repos/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/projects/{var}/sources/databases/{var}",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 232,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/databases/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{var}/sources/repos/{var}",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 131,
+      "raw": "/lg/projects/${projectId}/sources/repos/${id}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{var}/sources/databases/{var}",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 242,
+      "raw": "/lg/projects/${projectId}/sources/databases/${id}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/projects/{var}/sources/documents/{var}",
+      "file": "frontend/src/api/source.api.ts",
+      "line": 272,
+      "raw": "/lg/projects/${projectId}/sources/documents/${id}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/system-overview",
+      "file": "frontend/src/api/system-overview.api.ts",
+      "line": 37,
+      "raw": "/lg/projects/${projectId}/system-overview"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/system-overview/domains/{var}",
+      "file": "frontend/src/api/system-overview.api.ts",
+      "line": 42,
+      "raw": "/lg/projects/${projectId}/system-overview/domains/${domainId}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/system-overview/paths",
+      "file": "frontend/src/api/system-overview.api.ts",
+      "line": 52,
+      "raw": "/lg/projects/${projectId}/system-overview/paths"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system-overview/ingest-builtins",
+      "file": "frontend/src/api/system-overview.api.ts",
+      "line": 60,
+      "raw": "/lg/system-overview/ingest-builtins"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system-overview/ingest-from-graph",
+      "file": "frontend/src/api/system-overview.api.ts",
+      "line": 65,
+      "raw": "/lg/system-overview/ingest-from-graph"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/system-overview/reports/generate",
+      "file": "frontend/src/api/system-overview.api.ts",
+      "line": 75,
+      "raw": "/lg/projects/${projectId}/system-overview/reports/generate"
+    },
+    {
+      "method": "GET",
+      "path": "/reports/system-overview/{var}/{var}",
+      "file": "frontend/src/api/system-overview.api.ts",
+      "line": 70,
+      "raw": "/reports/system-overview/${projectId}/${versionId}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/users/list",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 74,
+      "raw": "/lg/system/users/list"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/list",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 98,
+      "raw": "/lg/system/dicts/list"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/all",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 103,
+      "raw": "/lg/system/dicts/all"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/{var}/items",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 125,
+      "raw": "/lg/system/dicts/${encodeURIComponent(dictId)}/items"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/code/{var}/items",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 130,
+      "raw": "/lg/system/dicts/code/${encodeURIComponent(dictCode)}/items"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/code/{var}/map",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 135,
+      "raw": "/lg/system/dicts/code/${encodeURIComponent(dictCode)}/map"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/list",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 181,
+      "raw": "/lg/system/configs/list"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/key/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 209,
+      "raw": "/lg/system/configs/key/${encodeURIComponent(key)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/all",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 216,
+      "raw": "/lg/system/configs/all"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/users",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 78,
+      "raw": "/lg/system/users"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/dicts",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 108,
+      "raw": "/lg/system/dicts"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/dicts/items",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 142,
+      "raw": "/lg/system/dicts/items"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system/configs",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 193,
+      "raw": "/lg/system/configs"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/users/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 82,
+      "raw": "/lg/system/users/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/dicts/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 113,
+      "raw": "/lg/system/dicts/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/dicts/items/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 147,
+      "raw": "/lg/system/dicts/items/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/configs/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 185,
+      "raw": "/lg/system/configs/${encodeURIComponent(id)}"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/configs/key/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 225,
+      "raw": "/lg/system/configs/key/${encodeURIComponent(key)}"
+    },
+    {
+      "method": "PUT",
+      "path": "/lg/system/users/{var}/status",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 234,
+      "raw": "/lg/system/users/${encodeURIComponent(id)}/status"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/users/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 86,
+      "raw": "/lg/system/users/${id}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/dicts/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 118,
+      "raw": "/lg/system/dicts/${id}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/dicts/items/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 152,
+      "raw": "/lg/system/dicts/items/${id}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/lg/system/configs/{var}",
+      "file": "frontend/src/api/system.api.ts",
+      "line": 201,
+      "raw": "/lg/system/configs/${id}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/test-runs",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 103,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/test-runs/{var}",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 113,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/test-runs/{var}/results",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 123,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/results"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/test-runs/{var}/logs",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 133,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/logs"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/test-runs/stats",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 176,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs/stats"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/test-runs/start",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 148,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs/start"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/test-runs/{var}/rerun-failed",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 159,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/rerun-failed"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/test-runs/{var}/cancel",
+      "file": "frontend/src/api/test-run.api.ts",
+      "line": 168,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/test-runs/${encodeURIComponent(runId)}/cancel"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/runtime/topology",
+      "file": "frontend/src/api/trace.api.ts",
+      "line": 50,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/runtime/topology"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/runtime/traces",
+      "file": "frontend/src/api/trace.api.ts",
+      "line": 56,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/runtime/traces"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/runtime/traces",
+      "file": "frontend/src/api/trace.api.ts",
+      "line": 45,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/runtime/traces"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/understanding/tool-health",
+      "file": "frontend/src/api/understanding.api.ts",
+      "line": 76,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/understanding/tool-health"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/understanding/reports/{var}",
+      "file": "frontend/src/api/understanding.api.ts",
+      "line": 93,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/understanding/reports/${encodeURIComponent(taskId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/understanding/reports/{var}/download",
+      "file": "frontend/src/api/understanding.api.ts",
+      "line": 102,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/understanding/reports/${encodeURIComponent(taskId)}/download"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/understanding/reports",
+      "file": "frontend/src/api/understanding.api.ts",
+      "line": 83,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/understanding/reports"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/vector/projects/{var}/similar-nodes",
+      "file": "frontend/src/api/vector.api.ts",
+      "line": 74,
+      "raw": "/lg/vector/projects/${encodeURIComponent(projectId)}/similar-nodes"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/vector/projects/{var}/upsert",
+      "file": "frontend/src/api/vector.api.ts",
+      "line": 45,
+      "raw": "/lg/vector/projects/${encodeURIComponent(projectId)}/upsert"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/vector/projects/{var}/search",
+      "file": "frontend/src/api/vector.api.ts",
+      "line": 58,
+      "raw": "/lg/vector/projects/${projectId}/search"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/qa/feedback",
+      "file": "frontend/src/components/AnswerFeedback.vue",
+      "line": 71,
+      "raw": "/lg/qa/feedback"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/notifications/stream",
+      "file": "frontend/src/components/NotificationCenter.vue",
+      "line": 165,
+      "raw": "${apiBaseUrl}/lg/notifications/stream?projectId=${encodeURIComponent(projectId)}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/all/maps",
+      "file": "frontend/src/utils/dict.ts",
+      "line": 40,
+      "raw": "/lg/system/dicts/all/maps"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/qa/cases/{var}",
+      "file": "frontend/src/views/QaCaseDetailView.vue",
+      "line": 82,
+      "raw": "/lg/projects/${projectId.value}/qa/cases/${caseId.value}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/qa/cases",
+      "file": "frontend/src/views/QaEvaluationView.vue",
+      "line": 408,
+      "raw": "/lg/projects/${projectId.value}/qa/cases${params}"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/qa/eval-runs",
+      "file": "frontend/src/views/QaEvaluationView.vue",
+      "line": 416,
+      "raw": "/lg/projects/${projectId.value}/qa/eval-runs"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/qa/feedback",
+      "file": "frontend/src/views/QaEvaluationView.vue",
+      "line": 496,
+      "raw": "/lg/projects/${projectId.value}/qa/feedback"
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/qa/ragas-evaluate",
+      "file": "frontend/src/views/QaEvaluationView.vue",
+      "line": 572,
+      "raw": "/lg/projects/${projectId.value}/qa/ragas-evaluate"
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/documents/{var}/download",
+      "file": "frontend/src/views/source/DocumentList.vue",
+      "line": 234,
+      "raw": "/lg/projects/${encodeURIComponent(projectId)}/sources/documents/${encodeURIComponent(docId)}/download"
+    }
+  ],
+  "a_class": [],
+  "b_class": [
+    {
+      "method": "DELETE",
+      "path": "/lg/audit/{var}",
+      "detail": {
+        "method": "DELETE",
+        "path": "/lg/audit/{id}",
+        "norm_path": "/lg/audit/{var}",
+        "controller": "AuditLogController",
+        "func": "delete",
+        "file": "AuditLogController.java",
+        "line": 54
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/graph/impacted-nodes",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/graph/impacted-nodes",
+        "norm_path": "/lg/graph/impacted-nodes",
+        "controller": "ImpactGraphController",
+        "func": "getImpactedNodes",
+        "file": "ImpactGraphController.java",
+        "line": 40
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/cpg",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/cpg",
+        "norm_path": "/lg/projects/{var}/cpg",
+        "controller": "CpgController",
+        "func": "buildCpg",
+        "file": "CpgController.java",
+        "line": 39
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/evidence/{var}/related",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/evidence/{id}/related",
+        "norm_path": "/lg/projects/{var}/evidence/{var}/related",
+        "controller": "FactController",
+        "func": "getRelatedNodesForEvidence",
+        "file": "FactController.java",
+        "line": 254
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/nodes/{var}/neighborhood",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/graph/nodes/{nodeId}/neighborhood",
+        "norm_path": "/lg/projects/{var}/graph/nodes/{var}/neighborhood",
+        "controller": "GraphQueryController",
+        "func": "getNodeNeighborhood",
+        "file": "GraphQueryController.java",
+        "line": 274
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/summary",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/graph/summary",
+        "norm_path": "/lg/projects/{var}/graph/summary",
+        "controller": "GraphQueryController",
+        "func": "getGraphSummary",
+        "file": "GraphQueryController.java",
+        "line": 245
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graph/window",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/graph/window",
+        "norm_path": "/lg/projects/{var}/graph/window",
+        "controller": "GraphQueryController",
+        "func": "getGraphWindow",
+        "file": "GraphQueryController.java",
+        "line": 256
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/audit",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/graphify/audit",
+        "norm_path": "/lg/projects/{var}/graphify/audit",
+        "controller": "GraphifyController",
+        "func": "",
+        "file": "GraphifyController.java",
+        "line": 216
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/cross-repo-impact/diff",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/graphify/cross-repo-impact/diff",
+        "norm_path": "/lg/projects/{var}/graphify/cross-repo-impact/diff",
+        "controller": "CrossRepoImpactController",
+        "func": "",
+        "file": "CrossRepoImpactController.java",
+        "line": 62
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/graphify/status",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/graphify/status",
+        "norm_path": "/lg/projects/{var}/graphify/status",
+        "controller": "GraphifyController",
+        "func": "getStatus",
+        "file": "GraphifyController.java",
+        "line": 181
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/process-mining/availability",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/process-mining/availability",
+        "norm_path": "/lg/projects/{var}/process-mining/availability",
+        "controller": "ProcessMiningController",
+        "func": "",
+        "file": "ProcessMiningController.java",
+        "line": 58
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/requirements/{var}/closure-report",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/requirements/{requirementId}/closure-report",
+        "norm_path": "/lg/projects/{var}/requirements/{var}/closure-report",
+        "controller": "RequirementController",
+        "func": "closureReport",
+        "file": "RequirementController.java",
+        "line": 354
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/requirements/{var}/data-lineage",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/requirements/{requirementId}/data-lineage",
+        "norm_path": "/lg/projects/{var}/requirements/{var}/data-lineage",
+        "controller": "RequirementController",
+        "func": "dataLineage",
+        "file": "RequirementController.java",
+        "line": 366
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/scan-versions/{var}/performance-report",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/scan-versions/{versionId}/performance-report",
+        "norm_path": "/lg/projects/{var}/scan-versions/{var}/performance-report",
+        "controller": "ScanController",
+        "func": "performanceReport",
+        "file": "ScanController.java",
+        "line": 232
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/databases/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/sources/databases/{id}",
+        "norm_path": "/lg/projects/{var}/sources/databases/{var}",
+        "controller": "SourceController",
+        "func": "getDatabase",
+        "file": "SourceController.java",
+        "line": 685
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/documents/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/sources/documents/{id}",
+        "norm_path": "/lg/projects/{var}/sources/documents/{var}",
+        "controller": "SourceController",
+        "func": "getDocument",
+        "file": "SourceController.java",
+        "line": 1038
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/parse-failures",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/sources/parse-failures",
+        "norm_path": "/lg/projects/{var}/sources/parse-failures",
+        "controller": "SourceController",
+        "func": "listParseFailures",
+        "file": "SourceController.java",
+        "line": 1497
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/projects/{var}/sources/repos/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/projects/{projectId}/sources/repos/{id}",
+        "norm_path": "/lg/projects/{var}/sources/repos/{var}",
+        "controller": "SourceController",
+        "func": "getRepo",
+        "file": "SourceController.java",
+        "line": 223
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/qa/audit",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/qa/audit",
+        "norm_path": "/lg/qa/audit",
+        "controller": "QaAdminController",
+        "func": "listAuditLogs",
+        "file": "QaAdminController.java",
+        "line": 45
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/quota/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/quota/{projectId}",
+        "norm_path": "/lg/quota/{var}",
+        "controller": "QuotaController",
+        "func": "getQuota",
+        "file": "QuotaController.java",
+        "line": 28
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/solutions/{var}/audits",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/solutions/{solutionId}/audits",
+        "norm_path": "/lg/solutions/{var}/audits",
+        "controller": "SolutionController",
+        "func": "rebuildAnalysis",
+        "file": "SolutionController.java",
+        "line": 339
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/configs/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/system/configs/{id}",
+        "norm_path": "/lg/system/configs/{var}",
+        "controller": "SystemController",
+        "func": "getConfig",
+        "file": "SystemController.java",
+        "line": 284
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/dicts/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/system/dicts/{id}",
+        "norm_path": "/lg/system/dicts/{var}",
+        "controller": "SystemController",
+        "func": "getDict",
+        "file": "SystemController.java",
+        "line": 165
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/lg/system/users/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/lg/system/users/{id}",
+        "norm_path": "/lg/system/users/{var}",
+        "controller": "SystemController",
+        "func": "getUser",
+        "file": "SystemController.java",
+        "line": 86
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/reports/code-understanding/{var}/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/reports/code-understanding/{projectId}/{versionId}",
+        "norm_path": "/reports/code-understanding/{var}/{var}",
+        "controller": "ReportExportController",
+        "func": "exportCodeUnderstandingReport",
+        "file": "ReportExportController.java",
+        "line": 162
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/reports/scan-research/{var}/{var}",
+      "detail": {
+        "method": "GET",
+        "path": "/reports/scan-research/{projectId}/{versionId}",
+        "norm_path": "/reports/scan-research/{var}/{var}",
+        "controller": "ReportExportController",
+        "func": "exportScanResearchReport",
+        "file": "ReportExportController.java",
+        "line": 127
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/lg/projects/{var}/requirements/{var}/items/{var}",
+      "detail": {
+        "method": "PATCH",
+        "path": "/lg/projects/{projectId}/requirements/{requirementId}/items/{itemCode}",
+        "norm_path": "/lg/projects/{var}/requirements/{var}/items/{var}",
+        "controller": "RequirementController",
+        "func": "patchItem",
+        "file": "RequirementController.java",
+        "line": 265
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/assign",
+      "detail": {
+        "method": "POST",
+        "path": "/change-tasks/{id}/assign",
+        "norm_path": "/change-tasks/{var}/assign",
+        "controller": "ChangeTaskController",
+        "func": "assign",
+        "file": "ChangeTaskController.java",
+        "line": 135
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/claim",
+      "detail": {
+        "method": "POST",
+        "path": "/change-tasks/{id}/claim",
+        "norm_path": "/change-tasks/{var}/claim",
+        "controller": "ChangeTaskController",
+        "func": "claim",
+        "file": "ChangeTaskController.java",
+        "line": 121
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/merge",
+      "detail": {
+        "method": "POST",
+        "path": "/change-tasks/{id}/merge",
+        "norm_path": "/change-tasks/{var}/merge",
+        "controller": "ChangeTaskController",
+        "func": "merge",
+        "file": "ChangeTaskController.java",
+        "line": 112
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/change-tasks/{var}/register-gates",
+      "detail": {
+        "method": "POST",
+        "path": "/change-tasks/{id}/register-gates",
+        "norm_path": "/change-tasks/{var}/register-gates",
+        "controller": "ChangeTaskController",
+        "func": "registerGates",
+        "file": "ChangeTaskController.java",
+        "line": 81
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/plugins/register",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/plugins/register",
+        "norm_path": "/lg/plugins/register",
+        "controller": "PluginController",
+        "func": "register",
+        "file": "PluginController.java",
+        "line": 60
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/acceptance-criteria/{var}/fail",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/acceptance-criteria/{criterionId}/fail",
+        "norm_path": "/lg/projects/{var}/acceptance-criteria/{var}/fail",
+        "controller": "RequirementController",
+        "func": "fail",
+        "file": "RequirementController.java",
+        "line": 339
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/acceptance-criteria/{var}/verify",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/acceptance-criteria/{criterionId}/verify",
+        "norm_path": "/lg/projects/{var}/acceptance-criteria/{var}/verify",
+        "controller": "RequirementController",
+        "func": "verifySingle",
+        "file": "RequirementController.java",
+        "line": 309
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/acceptance-criteria/{var}/waive",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/acceptance-criteria/{criterionId}/waive",
+        "norm_path": "/lg/projects/{var}/acceptance-criteria/{var}/waive",
+        "controller": "RequirementController",
+        "func": "waive",
+        "file": "RequirementController.java",
+        "line": 326
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/contracts/requirements/{var}",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/contracts/requirements/{requirementId}",
+        "norm_path": "/lg/projects/{var}/contracts/requirements/{var}",
+        "controller": "ContractController",
+        "func": "generateContract",
+        "file": "ContractController.java",
+        "line": 45
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/extract/facts/code",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/extract/facts/code",
+        "norm_path": "/lg/projects/{var}/extract/facts/code",
+        "controller": "FactController",
+        "func": "extractCodeFacts",
+        "file": "FactController.java",
+        "line": 270
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/extract/facts/doc",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/extract/facts/doc",
+        "norm_path": "/lg/projects/{var}/extract/facts/doc",
+        "controller": "FactController",
+        "func": "",
+        "file": "FactController.java",
+        "line": 283
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/facts/manual",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/facts/manual",
+        "norm_path": "/lg/projects/{var}/facts/manual",
+        "controller": "FactController",
+        "func": "",
+        "file": "FactController.java",
+        "line": 321
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/graphify/analyze",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/graphify/analyze",
+        "norm_path": "/lg/projects/{var}/graphify/analyze",
+        "controller": "GraphifyController",
+        "func": "",
+        "file": "GraphifyController.java",
+        "line": 42
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/process-mining/conformance",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/process-mining/conformance",
+        "norm_path": "/lg/projects/{var}/process-mining/conformance",
+        "controller": "ProcessMiningController",
+        "func": "",
+        "file": "ProcessMiningController.java",
+        "line": 32
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/qa/eval-runs",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/qa/eval-runs",
+        "norm_path": "/lg/projects/{var}/qa/eval-runs",
+        "controller": "QaEvaluationController",
+        "func": "saveEvalRun",
+        "file": "QaEvaluationController.java",
+        "line": 157
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/requirements/{var}/contract",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/requirements/{requirementId}/contract",
+        "norm_path": "/lg/projects/{var}/requirements/{var}/contract",
+        "controller": "ContractLegacyRedirectController",
+        "func": "legacyGenerate",
+        "file": "ContractLegacyRedirectController.java",
+        "line": 40
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/requirements/{var}/items/{var}/clarify",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/requirements/{requirementId}/items/{itemCode}/clarify",
+        "norm_path": "/lg/projects/{var}/requirements/{var}/items/{var}/clarify",
+        "controller": "RequirementController",
+        "func": "clarifyItem",
+        "file": "RequirementController.java",
+        "line": 278
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/requirements/{var}/verify",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/requirements/{requirementId}/verify",
+        "norm_path": "/lg/projects/{var}/requirements/{var}/verify",
+        "controller": "RequirementController",
+        "func": "verifyRequirement",
+        "file": "RequirementController.java",
+        "line": 293
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/scan-versions/{var}/backfill-node-attributes",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/scan-versions/{versionId}/backfill-node-attributes",
+        "norm_path": "/lg/projects/{var}/scan-versions/{var}/backfill-node-attributes",
+        "controller": "ScanController",
+        "func": "backfillNodeAttributes",
+        "file": "ScanController.java",
+        "line": 244
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/solutions/{var}/bridge",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/solutions/{solutionId}/bridge",
+        "norm_path": "/lg/projects/{var}/solutions/{var}/bridge",
+        "controller": "SolutionController",
+        "func": "bridge",
+        "file": "SolutionController.java",
+        "line": 282
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/solutions/{var}/generate-tests",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/solutions/{solutionId}/generate-tests",
+        "norm_path": "/lg/projects/{var}/solutions/{var}/generate-tests",
+        "controller": "TestGenerationController",
+        "func": "generateTests",
+        "file": "TestGenerationController.java",
+        "line": 41
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/parse-failures/batch-retry",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/sources/parse-failures/batch-retry",
+        "norm_path": "/lg/projects/{var}/sources/parse-failures/batch-retry",
+        "controller": "SourceController",
+        "func": "batchRetryParseFailures",
+        "file": "SourceController.java",
+        "line": 1620
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/sources/parse-failures/{var}/retry",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/sources/parse-failures/{id}/retry",
+        "norm_path": "/lg/projects/{var}/sources/parse-failures/{var}/retry",
+        "controller": "SourceController",
+        "func": "retryParseFailure",
+        "file": "SourceController.java",
+        "line": 1527
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/projects/{var}/tests/results/callback",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/projects/{projectId}/tests/results/callback",
+        "norm_path": "/lg/projects/{var}/tests/results/callback",
+        "controller": "TestCaseController",
+        "func": "testResultCallback",
+        "file": "TestCaseController.java",
+        "line": 453
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/self-analysis/bootstrap",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/self-analysis/bootstrap",
+        "norm_path": "/lg/self-analysis/bootstrap",
+        "controller": "SelfAnalysisController",
+        "func": "",
+        "file": "SelfAnalysisController.java",
+        "line": 37
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/solutions/{var}/approve",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/solutions/{solutionId}/approve",
+        "norm_path": "/lg/solutions/{var}/approve",
+        "controller": "SolutionController",
+        "func": "approve",
+        "file": "SolutionController.java",
+        "line": 295
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/solutions/{var}/reject",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/solutions/{solutionId}/reject",
+        "norm_path": "/lg/solutions/{var}/reject",
+        "controller": "SolutionController",
+        "func": "reject",
+        "file": "SolutionController.java",
+        "line": 322
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/lg/system-overview/ingest",
+      "detail": {
+        "method": "POST",
+        "path": "/lg/system-overview/ingest",
+        "norm_path": "/lg/system-overview/ingest",
+        "controller": "SystemOverviewIngestController",
+        "func": "ingest",
+        "file": "SystemOverviewIngestController.java",
+        "line": 46
+      }
+    }
+  ]
+}

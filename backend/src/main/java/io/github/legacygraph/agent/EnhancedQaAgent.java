@@ -78,6 +78,7 @@ public class EnhancedQaAgent {
     private final io.github.legacygraph.repository.GraphReleaseRepository graphReleaseRepository;
     private final io.github.legacygraph.repository.SolutionRepository solutionRepository;
     private final io.github.legacygraph.config.GraphReleaseConfig graphReleaseConfig;
+    private final io.github.legacygraph.service.qa.AclFilterService aclFilterService;
 
     /** QA 链路专用虚拟线程执行器 — 意图分类/改写/HyDE/规划/召回可部分并行 */
     private final ExecutorService qaExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -477,7 +478,19 @@ public class EnhancedQaAgent {
                             rejectData.put("evidences", verificationResult.verifiedEvidences());
                             rejectData.put("answer", rejectMsg);
                             rejectData.put("latencyMs", System.currentTimeMillis() - totalStart);
+                            // H23: 拒答原因 violations() 数组传给前端，供可验证列表展示
+                            rejectData.put("violations", verificationResult.violations());
                             sendEvent(emitter, "complete", rejectData);
+                            // H22: 持久化 ACL 阻断事件到审计日志（触发后 lg_qa_audit_log 递增）
+                            String auditPrincipal = finalAccessContext != null
+                                    && !finalAccessContext.principals().isEmpty()
+                                    ? finalAccessContext.principals().get(0) : "anonymous";
+                            String questionHash = Integer.toHexString(question.hashCode());
+                            String blockedReason = "BLOCK:HIGH_RISK_LOW_CONFIDENCE"
+                                    + (verificationResult.violations().isEmpty() ? ""
+                                        : "|violations=" + String.join(",", verificationResult.violations()));
+                            aclFilterService.audit(projectId, finalGraphReleaseId, auditPrincipal,
+                                    questionHash, finalAclHash, blockedReason);
                             emitter.complete();
                             return;
                         }
@@ -528,6 +541,8 @@ public class EnhancedQaAgent {
                         completeData.put("answer", displayText);
                         completeData.put("latencyMs", totalLatency);
                         completeData.put("stageTimings", stageTimings);
+                        // H23: 低置信度时传 violations 数组，前端展示可验证列表
+                        completeData.put("violations", verificationResult.violations());
                         if (finalParsedChange != null && finalParsedChange.getChangeKind() != null
                                 && !"UNKNOWN".equals(finalParsedChange.getChangeKind())) {
                             Map<String, Object> changeImpact = new HashMap<>();

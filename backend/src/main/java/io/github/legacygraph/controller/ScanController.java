@@ -13,7 +13,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -167,7 +169,7 @@ public class ScanController {
      * @return 成功结果
      */
     @PostMapping("/{versionId}/resume")
-    @Operation(summary = "恢复暂停的扫描", description = "从暂停处恢复继续执行已暂停的扫描任务")
+    @Operation(summary = "恢复扫描", description = "从暂停或失败处恢复继续执行扫描任务")
     public Result<Void> resume(
             @Parameter(description = "项目ID", required = true)
             @PathVariable String projectId,
@@ -175,6 +177,13 @@ public class ScanController {
             @PathVariable String versionId,
             @Parameter(description = "本地代码基础目录，可选")
             @RequestParam(required = false) String baseDir) {
+        // H16: 仅 PAUSED 或 FAILED 状态的扫描允许续扫
+        ScanVersion version = scanVersionService.getById(versionId);
+        String status = version != null ? version.getScanStatus() : null;
+        if (!"PAUSED".equals(status) && !"FAILED".equals(status)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "仅 PAUSED 或 FAILED 状态的扫描允许续扫，当前状态: " + status);
+        }
         scanVersionService.updateScanStatus(versionId, "RUNNING");
         projectScanner.resumeFullScan(projectId, versionId, baseDir);
         return Result.success();

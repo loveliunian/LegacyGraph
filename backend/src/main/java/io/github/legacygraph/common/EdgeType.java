@@ -49,6 +49,7 @@ public enum EdgeType {
     EXPOSES_ENDPOINT("暴露接口"),
     AUTHENTICATES_BY("认证方式"),
     AUTHORIZES_BY("授权方式"),
+    IN_DOMAIN("属于业务域"),  // BusinessProcess → BusinessDomain 归类边（评估 §4 真空区 1）
 
     // ========== 变更闭环关系（增强版2：ChangeTask 管道） ==========
     AFFECTS("影响"),

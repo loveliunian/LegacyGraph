@@ -1,6 +1,7 @@
 package io.github.legacygraph.service.report;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.entity.KnowledgeClaim;
 import io.github.legacygraph.entity.ScanTask;
 import io.github.legacygraph.entity.ScanVersion;
@@ -57,7 +58,7 @@ class ScanResearchReportServiceTest {
 
         ScanTask task = new ScanTask();
         task.setTaskType("JAVA_SCAN");
-        task.setTaskStatus("SUCCESS");
+        task.setTaskStatus(ScanTaskStatus.SUCCESS.name());
         task.setOutputSummary("扫描完成");
 
         KnowledgeClaim claim1 = new KnowledgeClaim();

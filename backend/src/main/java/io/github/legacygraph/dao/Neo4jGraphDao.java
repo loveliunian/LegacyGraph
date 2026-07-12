@@ -540,6 +540,14 @@ public class Neo4jGraphDao {
         return projectionRepo.queryEdgesForNodesByProject(projectId, nodeIds);
     }
 
+    /**
+     * H19: 查询指定节点集合之间的所有边（强制 versionId 过滤）。
+     */
+    public List<Map<String, Object>> queryEdgesForNodesByProject(String projectId, String versionId,
+                                                                  List<String> nodeIds) {
+        return projectionRepo.queryEdgesForNodesByProject(projectId, versionId, nodeIds);
+    }
+
     /** L-16: 查询从指定节点集合出发的所有出边（不要求 to 在集合内），用于 BFS 调用链展开 */
     public List<Map<String, Object>> queryOutgoingEdges(String projectId, String versionId,
                                                          Collection<String> sourceNodeIds) {

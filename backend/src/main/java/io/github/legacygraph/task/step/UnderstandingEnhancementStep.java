@@ -51,7 +51,7 @@ public class UnderstandingEnhancementStep implements AiScanStepExecutor {
 
     @Override
     public ScanStep getScanStep() {
-        return ScanStep.ENHANCE;
+        return ScanStep.UNDERSTANDING_ENHANCEMENT;
     }
 
     @Override

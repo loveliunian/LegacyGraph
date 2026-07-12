@@ -730,16 +730,33 @@ public class Neo4jProjectionRepository {
      * @return 每行包含 {id, type, source, target}
      */
     public List<Map<String, Object>> queryEdgesForNodesByProject(String projectId, List<String> nodeIds) {
+        return queryEdgesForNodesByProject(projectId, null, nodeIds);
+    }
+
+    /**
+     * H19: 查询指定节点集合之间的所有边（强制 versionId 过滤）。
+     * <p>用于 Blast Radius 受影响子图的边集构建，确保不跨版本泄露数据。</p>
+     *
+     * @param versionId 版本 ID（null 时不限定版本，兼容旧调用方）
+     * @return 每行包含 {id, type, source, target}
+     */
+    public List<Map<String, Object>> queryEdgesForNodesByProject(String projectId, String versionId,
+                                                                  List<String> nodeIds) {
         if (nodeIds == null || nodeIds.isEmpty()) return List.of();
         try (Session session = neo4jDriver.session()) {
-            String cypher =
+            StringBuilder cypher = new StringBuilder(
                 "MATCH (from)-[r]->(to) " +
                 "WHERE r.projectId = $projectId " +
-                "AND from.id IN $nodeIds AND to.id IN $nodeIds " +
-                "RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target";
-            Result result = session.run(cypher, Map.of(
-                    "projectId", projectId,
-                    "nodeIds", nodeIds));
+                "AND from.id IN $nodeIds AND to.id IN $nodeIds");
+            Map<String, Object> params = new HashMap<>();
+            params.put("projectId", projectId);
+            params.put("nodeIds", nodeIds);
+            if (versionId != null) {
+                cypher.append(" AND r.versionId = $versionId");
+                params.put("versionId", normalizeId(versionId));
+            }
+            cypher.append(" RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target");
+            Result result = session.run(cypher.toString(), params);
             List<Map<String, Object>> edges = new ArrayList<>();
             while (result.hasNext()) {
                 edges.add(result.next().asMap());

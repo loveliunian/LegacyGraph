@@ -1,0 +1,1515 @@
+{
+  "description": "LegacyGraph QA 评测集 v2 - 100 题覆盖 5 类意图（H28）",
+  "version": "2.0",
+  "total_cases": 100,
+  "categories": ["FACT_LOOKUP", "RELATIONSHIP", "INFERENCE", "CHANGE_IMPACT", "ENUMERATION"],
+  "baseline_targets": {
+    "FACT_LOOKUP": 0.95,
+    "RELATIONSHIP": 0.90,
+    "INFERENCE": 0.80,
+    "CHANGE_IMPACT": 0.70,
+    "ENUMERATION": 0.95
+  },
+  "test_cases": [
+    {
+      "id": "qa_v2_001",
+      "category": "FACT_LOOKUP",
+      "question": "UserController 的主要功能是什么？它定义在哪个文件中？",
+      "expected_keywords": ["用户", "控制器", "接口", "注册", "登录"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["usercontroller"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/controller/UserController.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_002",
+      "category": "FACT_LOOKUP",
+      "question": "OrderService 位于哪个包下？它的核心职责是什么？",
+      "expected_keywords": ["订单", "服务", "创建订单", "com.example.service"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["orderservice"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_003",
+      "category": "FACT_LOOKUP",
+      "question": "UserMapper 对应数据库中的哪张表？",
+      "expected_keywords": ["t_user", "用户表", "Mapper", "namespace"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["usermapper", "t_user"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/mapper/UserMapper.java", "src/main/resources/mapper/UserMapper.xml"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_004",
+      "category": "FACT_LOOKUP",
+      "question": "t_order 表有哪些字段？主键是什么？",
+      "expected_keywords": ["order_id", "user_id", "amount", "status", "主键", "字段"],
+      "expected_evidence_types": ["SQL_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["t_order", "t_order.order_id"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_005",
+      "category": "FACT_LOOKUP",
+      "question": "PaymentController 暴露了哪些 API 接口？",
+      "expected_keywords": ["支付", "接口", "RequestMapping", "pay", "refund"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["paymentcontroller"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/PaymentController.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_006",
+      "category": "FACT_LOOKUP",
+      "question": "OrderEntity 的主键字段是什么？它继承自哪个类？",
+      "expected_keywords": ["orderId", "BaseEntity", "id", "实体"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["orderentity"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/entity/OrderEntity.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_007",
+      "category": "FACT_LOOKUP",
+      "question": "UserService 的 createUser 方法定义在哪个文件的哪一行？",
+      "expected_keywords": ["createUser", "UserService", "方法", "行号"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["userservice.createuser"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/UserService.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_008",
+      "category": "FACT_LOOKUP",
+      "question": "t_user 表上有哪些索引？",
+      "expected_keywords": ["索引", "index", "unique", "mobile", "email"],
+      "expected_evidence_types": ["SQL_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["t_user", "t_user.idx_user_mobile"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_009",
+      "category": "FACT_LOOKUP",
+      "question": "RefundService 属于哪个业务域？它的主要职责是什么？",
+      "expected_keywords": ["退款", "业务域", "支付域", "refund"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["refundservice", "payment_domain"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/RefundService.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_010",
+      "category": "FACT_LOOKUP",
+      "question": "ProductMapper 的 namespace 是什么？它有哪些方法？",
+      "expected_keywords": ["namespace", "com.example.mapper.ProductMapper", "方法", "selectById"],
+      "expected_evidence_types": ["XML_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["productmapper"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/resources/mapper/ProductMapper.xml"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_011",
+      "category": "FACT_LOOKUP",
+      "question": "LoginController 的路由前缀是什么？它处理哪些 HTTP 方法？",
+      "expected_keywords": ["/api/login", "POST", "RequestMapping", "路由"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["logincontroller"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/LoginController.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_012",
+      "category": "FACT_LOOKUP",
+      "question": "t_payment 表的支付状态字段叫什么？有哪些可选值？",
+      "expected_keywords": ["pay_status", "PENDING", "SUCCESS", "FAILED", "状态"],
+      "expected_evidence_types": ["SQL_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["t_payment", "t_payment.pay_status"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_013",
+      "category": "FACT_LOOKUP",
+      "question": "OrderController 使用了哪些 Spring 注解？",
+      "expected_keywords": ["RestController", "RequestMapping", "Autowired", "注解"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["ordercontroller"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/controller/OrderController.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_014",
+      "category": "FACT_LOOKUP",
+      "question": "UserEntity 继承了哪个基类？它有哪些字段？",
+      "expected_keywords": ["BaseEntity", "username", "password", "mobile", "继承"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["userentity"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/entity/UserEntity.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_015",
+      "category": "FACT_LOOKUP",
+      "question": "PaymentService 的事务是如何配置的？用了什么传播行为？",
+      "expected_keywords": ["Transactional", "事务", "REQUIRED", "propagation"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["paymentservice"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/service/PaymentService.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_016",
+      "category": "FACT_LOOKUP",
+      "question": "t_product 表的库存字段是什么类型？默认值是多少？",
+      "expected_keywords": ["stock", "INT", "默认值", "0", "库存"],
+      "expected_evidence_types": ["SQL_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["t_product", "t_product.stock"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_017",
+      "category": "FACT_LOOKUP",
+      "question": "CartMapper 接口定义了哪些方法？",
+      "expected_keywords": ["addToCart", "getCartList", "removeFromCart", "方法"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["cartmapper"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/mapper/CartMapper.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_018",
+      "category": "FACT_LOOKUP",
+      "question": "AuthService 中生成 token 的逻辑在哪个方法中？用了什么算法？",
+      "expected_keywords": ["generateToken", "JWT", "HS256", "token"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["autservice.generatetoken"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/service/AuthService.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_019",
+      "category": "FACT_LOOKUP",
+      "question": "t_order_item 表关联了哪些表？外键字段是什么？",
+      "expected_keywords": ["order_id", "product_id", "外键", "关联", "t_order"],
+      "expected_evidence_types": ["SQL_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["t_order_item", "t_order_item.order_id"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_020",
+      "category": "FACT_LOOKUP",
+      "question": "InventoryService 的核心方法有哪些？它属于哪个业务域？",
+      "expected_keywords": ["deduct", "restock", "库存", "商品域", "方法"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["inventoryservice"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/InventoryService.java"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_021",
+      "category": "RELATIONSHIP",
+      "question": "OrderService 调用了哪些其他 Service？",
+      "expected_keywords": ["PaymentService", "InventoryService", "调用", "依赖", "CALLS"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["orderservice", "paymentservice", "inventoryservice"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_022",
+      "category": "RELATIONSHIP",
+      "question": "UserController 依赖了哪些组件？",
+      "expected_keywords": ["UserService", "AuthService", "依赖", "注入", "Autowired"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["usercontroller", "userservice", "autservice"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/UserController.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_023",
+      "category": "RELATIONSHIP",
+      "question": "OrderController 和 OrderService 之间是什么关系？",
+      "expected_keywords": ["调用", "CALLS", "Controller", "Service", "依赖"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["ordercontroller", "orderservice"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/controller/OrderController.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_024",
+      "category": "RELATIONSHIP",
+      "question": "t_order 表被哪些 Mapper 读写？",
+      "expected_keywords": ["OrderMapper", "READS_DB", "WRITES_DB", "读写"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["t_order", "ordermapper"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/mapper/OrderMapper.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_025",
+      "category": "RELATIONSHIP",
+      "question": "从 PaymentService 到 OrderService 的调用路径是什么？它们之间有直接依赖吗？",
+      "expected_keywords": ["路径", "调用", "PaymentService", "OrderService", "依赖"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["paymentservice", "orderservice"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/service/PaymentService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_026",
+      "category": "RELATIONSHIP",
+      "question": "UserService 调用了哪些 Mapper？",
+      "expected_keywords": ["UserMapper", "调用", "CALLS", "依赖"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["userservice", "usermapper"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/UserService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_027",
+      "category": "RELATIONSHIP",
+      "question": "OrderEntity 和 OrderItemEntity 之间是什么关系？",
+      "expected_keywords": ["一对多", "关联", "order_id", "关系"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["orderentity", "orderitementity"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/entity/OrderEntity.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_028",
+      "category": "RELATIONSHIP",
+      "question": "哪些 Controller 调用了 UserService？",
+      "expected_keywords": ["UserController", "LoginController", "调用", "CALLS"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["userservice", "usercontroller", "logincontroller"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/controller/UserController.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_029",
+      "category": "RELATIONSHIP",
+      "question": "从 PaymentController 到 PaymentMapper 的完整调用链是什么？",
+      "expected_keywords": ["PaymentController", "PaymentService", "PaymentMapper", "调用链"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["paymentcontroller", "paymentservice", "paymentmapper"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/PaymentController.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_030",
+      "category": "RELATIONSHIP",
+      "question": "AuthService 被哪些 Controller 依赖？",
+      "expected_keywords": ["LoginController", "UserController", "依赖", "注入"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["autservice", "logincontroller", "usercontroller"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/service/AuthService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_031",
+      "category": "RELATIONSHIP",
+      "question": "OrderService 写入 t_order 表的数据流是怎样的？经过哪些中间层？",
+      "expected_keywords": ["OrderMapper", "WRITES_DB", "数据流", "写入"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["orderservice", "ordermapper", "t_order"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_032",
+      "category": "RELATIONSHIP",
+      "question": "RefundService 和 PaymentService 之间的依赖关系是什么？谁依赖谁？",
+      "expected_keywords": ["依赖", "调用", "RefundService", "PaymentService", "方向"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["refundservice", "paymentservice"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/RefundService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_033",
+      "category": "RELATIONSHIP",
+      "question": "ProductController 依赖了哪些 Service？",
+      "expected_keywords": ["ProductService", "InventoryService", "依赖", "注入"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["productcontroller", "productservice", "inventoryservice"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/ProductController.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_034",
+      "category": "RELATIONSHIP",
+      "question": "t_user 表和 t_order 表通过什么字段关联？关联关系是什么类型？",
+      "expected_keywords": ["user_id", "一对多", "外键", "关联"],
+      "expected_evidence_types": ["SQL_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["t_user", "t_order", "t_order.user_id"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_035",
+      "category": "RELATIONSHIP",
+      "question": "OrderService 和 InventoryService 之间有交互吗？通过什么方式？",
+      "expected_keywords": ["调用", "库存扣减", "deduct", "交互"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["orderservice", "inventoryservice"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_036",
+      "category": "RELATIONSHIP",
+      "question": "CartService 调用了哪些 Mapper？",
+      "expected_keywords": ["CartMapper", "ProductMapper", "调用", "依赖"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["cartservice", "cartmapper", "productmapper"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/CartService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_037",
+      "category": "RELATIONSHIP",
+      "question": "从 LoginController 到 UserService 的调用路径是什么？",
+      "expected_keywords": ["LoginController", "AuthService", "UserService", "路径"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["logincontroller", "autservice", "userservice"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/controller/LoginController.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_038",
+      "category": "RELATIONSHIP",
+      "question": "OrderItemMapper 读写哪些数据库表？",
+      "expected_keywords": ["t_order_item", "READS_DB", "WRITES_DB", "读写"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["orderitemmapper", "t_order_item"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/mapper/OrderItemMapper.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_039",
+      "category": "RELATIONSHIP",
+      "question": "PermissionService 和 RoleService 之间是什么关系？",
+      "expected_keywords": ["依赖", "调用", "权限", "角色", "关系"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["permissionservice", "roleservice"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/service/PermissionService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_040",
+      "category": "RELATIONSHIP",
+      "question": "PaymentService 到 RefundService 之间有路径吗？最短路径是几跳？",
+      "expected_keywords": ["路径", "最短路径", "跳数", "PaymentService", "RefundService"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION"],
+      "expected_node_keys": ["paymentservice", "refundservice"],
+      "expected_confidence": 0.8,
+      "expected_source_paths": ["src/main/java/com/example/service/PaymentService.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_041",
+      "category": "INFERENCE",
+      "question": "项目中哪些 API 接口可能缺少权限校验？请基于图谱中的 REQUIRES_PERMISSION 边分析。",
+      "expected_keywords": ["权限", "REQUIRES_PERMISSION", "缺失", "风险", "接口"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["apicontroller", "permission"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_042",
+      "category": "INFERENCE",
+      "question": "Service 层是否存在循环依赖？如果有，涉及哪些 Service？",
+      "expected_keywords": ["循环依赖", "circular", "Service", "CALLS"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderservice", "paymentservice"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/service/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_043",
+      "category": "INFERENCE",
+      "question": "哪些 Service 方法执行了数据库写操作但没有 @Transactional 注解？",
+      "expected_keywords": ["Transactional", "事务", "写操作", "WRITES_DB", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["userservice", "orderservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_044",
+      "category": "INFERENCE",
+      "question": "订单状态变更流程是否存在并发风险？哪些地方需要加锁？",
+      "expected_keywords": ["并发", "锁", "状态变更", "乐观锁", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderservice", "t_order.status"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_045",
+      "category": "INFERENCE",
+      "question": "哪些 Mapper 中可能存在 SQL 注入风险？（检查是否使用 ${} 拼接）",
+      "expected_keywords": ["SQL注入", "${}", "拼接", "风险", "Mapper"],
+      "expected_evidence_types": ["XML_FILE", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["ordermapper", "usermapper"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/resources/mapper/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_046",
+      "category": "INFERENCE",
+      "question": "如果 PaymentService 出现故障，会影响哪些业务流程？影响范围有多大？",
+      "expected_keywords": ["影响", "故障", "PaymentService", "订单", "退款"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["paymentservice", "orderservice", "refundservice"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/service/PaymentService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_047",
+      "category": "INFERENCE",
+      "question": "哪些 Controller 接口缺少参数校验（@Valid / @Validated）？",
+      "expected_keywords": ["参数校验", "Valid", "Validated", "缺失", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["ordercontroller", "usercontroller"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_048",
+      "category": "INFERENCE",
+      "question": "是否存在跨业务域的强耦合？哪些 Service 调用了其他业务域的 Service？",
+      "expected_keywords": ["跨域", "耦合", "业务域", "IN_DOMAIN", "CALLS"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderservice", "inventoryservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_049",
+      "category": "INFERENCE",
+      "question": "哪些 Mapper 没有对应的 Entity 类？这可能意味着什么？",
+      "expected_keywords": ["Mapper", "Entity", "缺失", "MAPS_TO"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["ordermapper", "orderentity"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/mapper/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_050",
+      "category": "INFERENCE",
+      "question": "库存扣减流程是否存在数据一致性问题？订单创建和库存扣减是原子的吗？",
+      "expected_keywords": ["一致性", "原子性", "库存扣减", "事务", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderservice", "inventoryservice", "t_product.stock"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_051",
+      "category": "INFERENCE",
+      "question": "哪些 Controller 方法缺少全局异常处理？可能导致什么问题？",
+      "expected_keywords": ["异常处理", "ExceptionHandler", "Controller", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["ordercontroller", "paymentcontroller"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_052",
+      "category": "INFERENCE",
+      "question": "如果修改 UserService 的登录方法，对支付流程有什么潜在影响？",
+      "expected_keywords": ["影响", "UserService", "支付", "登录", "传播"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["userservice", "paymentservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/UserService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_053",
+      "category": "INFERENCE",
+      "question": "是否存在未被任何 Controller 调用的 Service 方法？（死代码）",
+      "expected_keywords": ["未使用", "死代码", "Service", "CALLS", "孤立"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderservice", "userservice"],
+      "expected_confidence": 0.65,
+      "expected_source_paths": ["src/main/java/com/example/service/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_054",
+      "category": "INFERENCE",
+      "question": "哪些表的查询缺少索引支撑，可能导致慢查询？",
+      "expected_keywords": ["索引", "慢查询", "全表扫描", "WHERE", "风险"],
+      "expected_evidence_types": ["SQL_FILE", "JAVA_FILE", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["t_order", "t_payment"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_055",
+      "category": "INFERENCE",
+      "question": "订单创建流程是否有缺失的校验环节？比如库存是否充足、用户状态是否正常。",
+      "expected_keywords": ["校验", "库存", "用户状态", "创建订单", "缺失"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderservice", "inventoryservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_056",
+      "category": "INFERENCE",
+      "question": "退款流程是否存在数据一致性问题？退款和订单状态更新是原子的吗？",
+      "expected_keywords": ["一致性", "原子性", "退款", "订单状态", "事务"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["refundservice", "orderservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/RefundService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_057",
+      "category": "INFERENCE",
+      "question": "哪些接口可能被越权访问？（即有写操作但没有 REQUIRES_PERMISSION 边的接口）",
+      "expected_keywords": ["越权", "权限", "写操作", "REQUIRES_PERMISSION", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["ordercontroller", "usercontroller"],
+      "expected_confidence": 0.65,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_058",
+      "category": "INFERENCE",
+      "question": "Service 层是否存在双向依赖（A 调用 B，B 也调用 A）？",
+      "expected_keywords": ["双向依赖", "循环", "Service", "CALLS", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderservice", "paymentservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_059",
+      "category": "INFERENCE",
+      "question": "哪些 Entity 之间的关联关系可能导致 N+1 查询问题？",
+      "expected_keywords": ["N+1", "懒加载", "关联", "查询", "性能"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["orderentity", "orderitementity"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/entity/OrderEntity.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_060",
+      "category": "INFERENCE",
+      "question": "支付回调接口是否有幂等性风险？如果回调被重复调用会怎样？",
+      "expected_keywords": ["幂等", "回调", "重复", "支付", "风险"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_RELATION", "KNOWLEDGE_CLAIM"],
+      "expected_node_keys": ["paymentcontroller.callback", "paymentservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/controller/PaymentController.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_061",
+      "category": "CHANGE_IMPACT",
+      "question": "给 t_order 表增加一个 priority 字段，需要修改哪些文件？影响范围是什么？",
+      "expected_keywords": ["ALTER TABLE", "OrderEntity", "OrderMapper", "影响", "字段"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "SQL_FILE"],
+      "expected_node_keys": ["t_order", "orderentity", "ordermapper"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql", "src/main/java/com/example/entity/OrderEntity.java", "src/main/java/com/example/mapper/OrderMapper.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_062",
+      "category": "CHANGE_IMPACT",
+      "question": "删除 OrderService 中的 cancelOrder 方法会影响哪些调用方？",
+      "expected_keywords": ["cancelOrder", "影响", "调用方", "Controller", "CALLS"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["orderservice.cancelorder", "ordercontroller"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_063",
+      "category": "CHANGE_IMPACT",
+      "question": "修改 PaymentController 的 /pay 接口路径为 /payment/create，会影响哪些前端调用？",
+      "expected_keywords": ["路径", "接口", "前端", "影响", "ApiEndpoint"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["paymentcontroller.pay", "paymentapi"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/controller/PaymentController.java", "frontend/src/api/payment.js"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_064",
+      "category": "CHANGE_IMPACT",
+      "question": "t_user 表的 mobile 字段长度从 11 改为 20，需要同步修改哪些地方？",
+      "expected_keywords": ["MODIFY", "mobile", "长度", "UserEntity", "影响"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "SQL_FILE"],
+      "expected_node_keys": ["t_user.mobile", "userentity", "usermapper"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql", "src/main/java/com/example/entity/UserEntity.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_065",
+      "category": "CHANGE_IMPACT",
+      "question": "给 OrderEntity 增加一个 remark 属性，影响链路涉及哪些层？",
+      "expected_keywords": ["remark", "OrderEntity", "OrderMapper", "OrderController", "影响"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["orderentity", "ordermapper", "ordercontroller"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/entity/OrderEntity.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_066",
+      "category": "CHANGE_IMPACT",
+      "question": "修改 UserService.login 方法的签名（增加一个 deviceId 参数），会影响哪些调用方？",
+      "expected_keywords": ["login", "签名", "参数", "影响", "LoginController"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["userservice.login", "logincontroller"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/service/UserService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_067",
+      "category": "CHANGE_IMPACT",
+      "question": "t_payment 表增加一个 callback_time 字段，需要修改哪些代码文件？",
+      "expected_keywords": ["callback_time", "PaymentEntity", "PaymentMapper", "影响"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "SQL_FILE"],
+      "expected_node_keys": ["t_payment", "paymententity", "paymentmapper"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql", "src/main/java/com/example/entity/PaymentEntity.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_068",
+      "category": "CHANGE_IMPACT",
+      "question": "重构 OrderMapper.update 方法，将动态 SQL 改为选择性更新，影响哪些 Service？",
+      "expected_keywords": ["update", "OrderMapper", "动态SQL", "影响", "OrderService"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "XML_FILE"],
+      "expected_node_keys": ["ordermapper.update", "orderservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/resources/mapper/OrderMapper.xml", "src/main/java/com/example/service/OrderService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_069",
+      "category": "CHANGE_IMPACT",
+      "question": "修改 ProductController 的 getProduct 接口返回值类型从 Product 改为 ProductVO，影响哪些前端组件？",
+      "expected_keywords": ["返回值", "ProductVO", "前端", "影响", "Page"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["productcontroller.getproduct", "productpage"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/controller/ProductController.java", "frontend/src/views/ProductDetail.vue"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_070",
+      "category": "CHANGE_IMPACT",
+      "question": "给 t_order_item 表添加指向 t_product 的外键约束，会影响哪些写入操作？",
+      "expected_keywords": ["外键", "约束", "t_order_item", "写入", "影响"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "SQL_FILE"],
+      "expected_node_keys": ["t_order_item", "t_product", "orderitemmapper"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_071",
+      "category": "CHANGE_IMPACT",
+      "question": "修改 CartService.addToCart 方法的逻辑（增加库存校验），会影响哪些上游调用方？",
+      "expected_keywords": ["addToCart", "库存校验", "影响", "CartController", "调用方"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["cartservice.addtocart", "cartcontroller"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/service/CartService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_072",
+      "category": "CHANGE_IMPACT",
+      "question": "更改 AuthService 的 token 有效期从 2 小时改为 24 小时，会影响哪些依赖认证的接口？",
+      "expected_keywords": ["token", "有效期", "AuthService", "影响", "认证"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["autservice", "logincontroller"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/AuthService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_073",
+      "category": "CHANGE_IMPACT",
+      "question": "t_refund 表结构调整（增加 refund_reason 字段），需要同步修改哪些文件？",
+      "expected_keywords": ["refund_reason", "RefundEntity", "RefundMapper", "影响"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "SQL_FILE"],
+      "expected_node_keys": ["t_refund", "refundentity", "refundmapper"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql", "src/main/java/com/example/entity/RefundEntity.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_074",
+      "category": "CHANGE_IMPACT",
+      "question": "修改 InventoryService.deduct 方法增加乐观锁逻辑，会影响哪些调用它的 Service？",
+      "expected_keywords": ["deduct", "乐观锁", "影响", "OrderService", "调用方"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["inventoryservice.deduct", "orderservice"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/service/InventoryService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_075",
+      "category": "CHANGE_IMPACT",
+      "question": "更改 OrderController.createOrder 接口的请求参数（增加 couponId 字段），影响哪些前后端文件？",
+      "expected_keywords": ["createOrder", "couponId", "参数", "前端", "影响"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["ordercontroller.createorder", "orderpage"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/controller/OrderController.java", "frontend/src/views/OrderCreate.vue"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_076",
+      "category": "CHANGE_IMPACT",
+      "question": "t_permission 表新增一个权限码 order:export，需要在哪里注册和引用？",
+      "expected_keywords": ["权限码", "order:export", "Permission", "REQUIRES_PERMISSION", "影响"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "SQL_FILE"],
+      "expected_node_keys": ["t_permission", "ordercontroller.export"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql", "src/main/java/com/example/controller/OrderController.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_077",
+      "category": "CHANGE_IMPACT",
+      "question": "修改 RefundService 的退款逻辑（增加退款限额校验），会影响哪些上下游？",
+      "expected_keywords": ["退款限额", "RefundService", "影响", "PaymentController", "上下游"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["refundservice", "paymentcontroller"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/java/com/example/service/RefundService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_078",
+      "category": "CHANGE_IMPACT",
+      "question": "更改 UserMapper.selectByCondition 的查询条件（增加状态过滤），会影响哪些 Service 方法？",
+      "expected_keywords": ["selectByCondition", "状态过滤", "影响", "UserService", "Mapper"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "XML_FILE"],
+      "expected_node_keys": ["usermapper.selectbycondition", "userservice"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/resources/mapper/UserMapper.xml", "src/main/java/com/example/service/UserService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_079",
+      "category": "CHANGE_IMPACT",
+      "question": "t_role 表结构调整（删除 status 字段），需要清理哪些引用了该字段的代码？",
+      "expected_keywords": ["status", "t_role", "删除", "影响", "RoleEntity"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "SQL_FILE"],
+      "expected_node_keys": ["t_role.status", "roleentity", "roleservice"],
+      "expected_confidence": 0.7,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql", "src/main/java/com/example/entity/RoleEntity.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_080",
+      "category": "CHANGE_IMPACT",
+      "question": "修改 PaymentService.pay 方法的返回值从 Boolean 改为 PaymentResult，影响哪些调用方？",
+      "expected_keywords": ["pay", "返回值", "PaymentResult", "影响", "PaymentController"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["paymentservice.pay", "paymentcontroller"],
+      "expected_confidence": 0.75,
+      "expected_source_paths": ["src/main/java/com/example/service/PaymentService.java"],
+      "difficulty": "hard",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_081",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的 Controller 类。",
+      "expected_keywords": ["UserController", "OrderController", "PaymentController", "Controller"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["usercontroller", "ordercontroller", "paymentcontroller"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_082",
+      "category": "ENUMERATION",
+      "question": "列出所有读写 t_order 表的 Mapper 方法。",
+      "expected_keywords": ["OrderMapper", "insert", "update", "selectById", "READS_DB"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE", "GRAPH_RELATION"],
+      "expected_node_keys": ["ordermapper", "t_order"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/mapper/OrderMapper.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_083",
+      "category": "ENUMERATION",
+      "question": "列出所有配置了权限校验（有 REQUIRES_PERMISSION 边）的 API 接口。",
+      "expected_keywords": ["权限", "REQUIRES_PERMISSION", "接口", "ApiEndpoint"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE", "GRAPH_RELATION"],
+      "expected_node_keys": ["ordercontroller.createorder", "usercontroller.deleteuser"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_084",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的 Service 类。",
+      "expected_keywords": ["UserService", "OrderService", "PaymentService", "Service"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["userservice", "orderservice", "paymentservice"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/service/"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_085",
+      "category": "ENUMERATION",
+      "question": "列出所有属于订单业务域的图谱节点。",
+      "expected_keywords": ["订单", "业务域", "OrderService", "OrderController", "IN_DOMAIN"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION"],
+      "expected_node_keys": ["order_domain", "orderservice", "ordercontroller"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_086",
+      "category": "ENUMERATION",
+      "question": "列出所有读写 t_user 表的方法。",
+      "expected_keywords": ["t_user", "UserMapper", "READS_DB", "WRITES_DB", "方法"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE", "GRAPH_RELATION"],
+      "expected_node_keys": ["usermapper", "t_user", "userservice"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/mapper/UserMapper.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_087",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的 Entity 实体类。",
+      "expected_keywords": ["UserEntity", "OrderEntity", "ProductEntity", "Entity"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["userentity", "orderentity", "productentity"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/entity/"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_088",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的 Mapper 接口。",
+      "expected_keywords": ["UserMapper", "OrderMapper", "PaymentMapper", "Mapper"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["usermapper", "ordermapper", "paymentmapper"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/java/com/example/mapper/"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_089",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的 API 接口端点（ApiEndpoint）。",
+      "expected_keywords": ["ApiEndpoint", "接口", "/api", "RequestMapping"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["orderapi", "userapi", "paymentapi"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_090",
+      "category": "ENUMERATION",
+      "question": "列出所有标注了 @Transactional 注解的方法。",
+      "expected_keywords": ["Transactional", "事务", "方法", "Service"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["orderservice.createorder", "paymentservice.pay"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/service/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_091",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的前端页面（Page 节点）。",
+      "expected_keywords": ["Page", "页面", "Vue", "前端"],
+      "expected_evidence_types": ["VUE_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["orderpage", "userpage", "paymentpage"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["frontend/src/views/"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_092",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有功能点（Feature 节点）。",
+      "expected_keywords": ["Feature", "功能点", "特性"],
+      "expected_evidence_types": ["GRAPH_NODE"],
+      "expected_node_keys": ["usermanagement", "ordermanagement", "payment"],
+      "expected_confidence": 0.85,
+      "expected_source_paths": ["src/main/java/com/example/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_093",
+      "category": "ENUMERATION",
+      "question": "列出所有调用了 OrderService 的地方。",
+      "expected_keywords": ["OrderService", "调用", "CALLS", "Controller"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE", "GRAPH_RELATION"],
+      "expected_node_keys": ["orderservice", "ordercontroller"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/OrderController.java"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_094",
+      "category": "ENUMERATION",
+      "question": "列出所有与支付相关的图谱节点。",
+      "expected_keywords": ["PaymentController", "PaymentService", "PaymentMapper", "t_payment", "支付"],
+      "expected_evidence_types": ["GRAPH_NODE", "GRAPH_RELATION"],
+      "expected_node_keys": ["paymentcontroller", "paymentservice", "paymentmapper", "t_payment"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_095",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的权限码（Permission 节点）。",
+      "expected_keywords": ["Permission", "权限码", "权限", "t_permission"],
+      "expected_evidence_types": ["GRAPH_NODE", "SQL_FILE"],
+      "expected_node_keys": ["t_permission", "order:create", "user:delete"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_096",
+      "category": "ENUMERATION",
+      "question": "列出项目中所有的业务域（BusinessDomain 节点）。",
+      "expected_keywords": ["BusinessDomain", "业务域", "用户域", "订单域", "支付域"],
+      "expected_evidence_types": ["GRAPH_NODE"],
+      "expected_node_keys": ["user_domain", "order_domain", "payment_domain"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_097",
+      "category": "ENUMERATION",
+      "question": "列出所有包含删除操作（delete）的 API 接口。",
+      "expected_keywords": ["delete", "删除", "接口", "DELETE", "ApiEndpoint"],
+      "expected_evidence_types": ["JAVA_FILE", "GRAPH_NODE"],
+      "expected_node_keys": ["usercontroller.deleteuser", "ordercontroller.deleteorder"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/controller/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_098",
+      "category": "ENUMERATION",
+      "question": "列出图谱中所有的数据库表节点（Table 节点）。",
+      "expected_keywords": ["Table", "t_user", "t_order", "t_payment", "表"],
+      "expected_evidence_types": ["GRAPH_NODE", "SQL_FILE"],
+      "expected_node_keys": ["t_user", "t_order", "t_payment", "t_product"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_099",
+      "category": "ENUMERATION",
+      "question": "列出 t_order 表的所有字段（Column 节点）。",
+      "expected_keywords": ["order_id", "user_id", "amount", "status", "Column"],
+      "expected_evidence_types": ["GRAPH_NODE", "SQL_FILE"],
+      "expected_node_keys": ["t_order.order_id", "t_order.user_id", "t_order.amount"],
+      "expected_confidence": 0.95,
+      "expected_source_paths": ["src/main/resources/sql/schema.sql"],
+      "difficulty": "easy",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    },
+    {
+      "id": "qa_v2_100",
+      "category": "ENUMERATION",
+      "question": "列出图谱中所有存在 READS_DB 关系的边（即哪些方法读取了哪些表）。",
+      "expected_keywords": ["READS_DB", "读取", "Mapper", "Table", "边"],
+      "expected_evidence_types": ["GRAPH_RELATION", "JAVA_FILE"],
+      "expected_node_keys": ["ordermapper", "usermapper", "t_order", "t_user"],
+      "expected_confidence": 0.9,
+      "expected_source_paths": ["src/main/java/com/example/mapper/"],
+      "difficulty": "medium",
+      "context": {
+        "projectId": "default",
+        "versionId": "latest"
+      }
+    }
+  ]
+}

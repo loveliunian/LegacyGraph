@@ -42,7 +42,7 @@ public class SystemOverviewDocumentService {
     public SystemOverviewDocumentService(SystemOverviewService systemOverviewService,
                                          ReportRepository reportRepository,
                                          Neo4jGraphDao graphDao,
-                                         @Value("${legacy-graph.reports.local-dir:${user.home}/.legacygraph/reports}")
+                                         @Value("${legacygraph.reports.local-dir:${user.home}/.legacygraph/reports}")
                                          String reportRoot) {
         this.systemOverviewService = systemOverviewService;
         this.reportRepository = reportRepository;

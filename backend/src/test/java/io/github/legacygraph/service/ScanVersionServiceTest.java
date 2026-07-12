@@ -1,5 +1,6 @@
 package io.github.legacygraph.service;
 
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.CreateScanVersionRequest;
 import io.github.legacygraph.dto.ScanProgressResponse;
@@ -127,7 +128,7 @@ class ScanVersionServiceTest {
         task1.setId("task-1");
         task1.setVersionId("version-1");
         task1.setTaskType("DB_DISCOVERY");
-        task1.setTaskStatus("SUCCESS");
+        task1.setTaskStatus(ScanTaskStatus.SUCCESS.name());
         task1.setStartedAt(java.time.LocalDateTime.now().minusSeconds(10));
         tasks.add(task1);
 
@@ -135,7 +136,7 @@ class ScanVersionServiceTest {
         task2.setId("task-2");
         task2.setVersionId("version-1");
         task2.setTaskType("PATH_DISCOVERY");
-        task2.setTaskStatus("RUNNING");
+        task2.setTaskStatus(ScanTaskStatus.RUNNING.name());
         task2.setStartedAt(java.time.LocalDateTime.now().minusSeconds(5));
         tasks.add(task2);
 
@@ -164,7 +165,7 @@ class ScanVersionServiceTest {
             task.setId("task-" + i);
             task.setVersionId("version-1");
             task.setTaskType(phaseTypes[i]);
-            task.setTaskStatus("SUCCESS");
+            task.setTaskStatus(ScanTaskStatus.SUCCESS.name());
             task.setStartedAt(java.time.LocalDateTime.now().minusSeconds(60 + i * 10));
             tasks.add(task);
         }
@@ -189,7 +190,7 @@ class ScanVersionServiceTest {
         task.setId("task-1");
         task.setVersionId("version-timeline");
         task.setTaskType("DB_DISCOVERY");
-        task.setTaskStatus("SUCCESS");
+        task.setTaskStatus(ScanTaskStatus.SUCCESS.name());
         task.setStartedAt(startedAt);
         task.setFinishedAt(finishedAt);
 

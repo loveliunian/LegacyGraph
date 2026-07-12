@@ -20,7 +20,7 @@ import java.util.List;
  * </ol>
  * </p>
  * <p>
- * 通过 Feature Flag {@code legacygraph.parse.three-layer.enabled=false}（默认关闭）控制是否启用三层解析。
+ * 通过 Feature Flag {@code legacygraph.document.partition.three-layer.enabled=true}（默认开启）控制是否启用三层解析。
  * 关闭时所有文档走 {@link FastParsingStrategy}（向后兼容）。
  * </p>
  * <p>
@@ -38,7 +38,7 @@ public class DocumentParsingRouter {
     private final List<DocumentParsingStrategy> strategies;
     private final FastParsingStrategy fastFallback;
 
-    @Value("${legacygraph.parse.three-layer.enabled:false}")
+    @Value("${legacygraph.document.partition.three-layer.enabled:true}")
     private boolean threeLayerEnabled;
 
     /** S2-T5: 策略优先级配置（逗号分隔，如 "OCR,LAYOUT,FAST"），高优先级在前 */

@@ -8,6 +8,7 @@ import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.util.IdUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -41,6 +42,7 @@ import java.util.Set;
  * }</pre>
  */
 @Slf4j
+@Component
 public class InterfaceImplCallExpander {
 
     private final Neo4jGraphDao neo4jGraphDao;

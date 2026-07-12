@@ -203,6 +203,8 @@ legacygraph:
   graph:
     api-chain:
       max-depth: 12
+    # 写图模式：direct(直接写图) / shadow(双轨对比) / claim-compiler(Claim编译写图)
+    write-mode: direct
   document:
     partition:
       # Feature Flag：结构感知切块开关（spec 5.4）
@@ -220,7 +222,7 @@ legacygraph:
         ocr-fallback: false  # OCR 默认仍关，扫描件 PDF 才开
   understanding:
     scan-enhancement:
-      enabled: false
+      enabled: true
       max-targets: 20
     tools:
       local-fallback:
@@ -249,9 +251,6 @@ legacygraph:
         enabled: false
         kind: CLI
         path: repomix
-  graph:
-    # 写图模式：direct(直接写图) / shadow(双轨对比) / claim-compiler(Claim编译写图)
-    write-mode: direct
   graphify:
     # Graphify CLI 自动导入开关。默认 false：当前未确认 graphify CLI 已安装。
     # 设为 true 前，请确保 graphify 可执行文件可用（executable 配置路径或在 PATH 中）。
@@ -302,6 +301,15 @@ legacygraph:
       tools: [spectral, oasdiff]
   # P3-1: 图谱质量门禁配置（ScanFinalizationService 已集成）
   scan:
+    # H11: 从 legacy-graph.scan 合并 + 新增缺失配置
+    max-concurrent-files: 10
+    max-file-size-mb: 100
+    max-files: 50000
+    max-docs: 5000
+    adapter-concurrency: 16
+    # 强制全量扫描：禁用增量，确保 AI_FEATURE_MAPPING/AI_DOC_EXTRACT 等不被增量跳过
+    incremental:
+      enabled: false
     quality-gate:
       enabled: true
       thresholds:
@@ -317,40 +325,38 @@ legacygraph:
       timeout-seconds: 120
       llm-model: gpt-4o-mini
 
-legacy-graph:
-  scan:
-    # 并发扫描文件数
-    max-concurrent-files: 10
-    # 文件大小限制 (MB)
-    max-file-size-mb: 100
+  # H11: 以下配置原属于 legacy-graph.* 命名空间，现统一为 legacygraph.*
+  # 测试配置
   test:
-    # 是否允许在生产环境执行测试
     allow-production-test: false
-    # 测试执行超时时间 (秒)
     execution-timeout: 300
+    base-url:
+      dev: http://localhost:8080
+      test: http://localhost:8080
+      prod: http://localhost:8080
+    gate-result-timeout-ms: 300000
+    gate-result-poll-ms: 1000
+  # AI 配置
   ai:
-    # LLM 超时时间 (秒)
+    enable-default: true
+    auto-generate-test-case-default: false
+    min-confidence-default: 0.6
     llm-timeout: 120
-
-  # Agent 配置
+  # Agent 合并决策配置
   agent:
     merge:
-      # LLM 合并决策阈值
       name-weight: 0.8
       semantic-weight: 0.7
       struct-weight: 0.6
       neighbor-weight: 0.5
       evidence-weight: 0.7
-      # 多证据评分权重
       score-name-weight: 0.35
       score-struct-weight: 0.25
       score-evidence-weight: 0.20
       score-runtime-weight: 0.10
       score-history-weight: 0.10
-      # 自动决策阈值
       auto-merge-threshold: 0.85
       review-threshold: 0.50
-      # 置信度计算权重
       confidence-support-weight: 0.50
       confidence-semantic-weight: 0.15
       confidence-struct-weight: 0.15
@@ -358,20 +364,32 @@ legacy-graph:
       confidence-runtime-weight: 0.05
       confidence-human-weight: 0.05
       confidence-conflict-penalty: 0.35
-
   # CLI 工具适配器配置
   tool:
     cli:
-      # 工具名称（codex / claude-code / zread）
       tool-name: codex
-      # 命令模板：{query} 占位符会被替换为实际查询内容
       command-template: codex exec --no-write --json "{query}"
-      # 超时时间（秒）
       timeout-seconds: 180
-      # 最大输出字节数
       max-output-bytes: 200000
-      # 工作目录白名单（空列表 = 允许所有目录，生产环境必须配置）
-      work-dir-whitelist:
+      work-dir-whitelist: []
+  # H04: PM4Py 流程挖掘配置
+  pm4py:
+    python-path: python3
+    script-path: scripts/pm4py_conformance.py
+    timeout-seconds: 60
+  # H11: 报告本地输出目录
+  reports:
+    local-dir: ${user.home}/.legacygraph/reports
+  # H11: 健康检查默认项目 ID
+  health:
+    default-project-id: default
+  # H11: 社区摘要（默认关闭）
+  community:
+    summary:
+      enabled: false
+  # H11: OCR 配置
+  ocr:
+    enabled: false
 
 # 术语相似度阈值配置。
 # 中文业务术语 → 英文子词的映射表已迁入数据库表 lg_terminology_mapping（见 ConfigurableTerminologyService），

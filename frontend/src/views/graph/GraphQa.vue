@@ -130,6 +130,15 @@
                   class="message-confidence">
                   置信度：{{ (msg.confidence * 100).toFixed(0) }}%
                 </div>
+                <!-- H23: 拒答或低置信度时展示违规项可验证列表 -->
+                <div
+                  v-if="msg.violations && msg.violations.length > 0"
+                  class="message-violations">
+                  <span class="violations-label">⚠️ 违规项</span>
+                  <ul class="violations-list">
+                    <li v-for="(v, vi) in msg.violations" :key="vi">{{ v }}</li>
+                  </ul>
+                </div>
                 <div
                   v-if="msg.impact"
                   class="message-impact">
@@ -262,6 +271,9 @@ interface Message {
   impact?: any
   messageId?: string
   conversationId?: string
+  // H23: 拒答/低置信度时携带的违规项列表，供前端展示可验证列表
+  rejected?: boolean
+  violations?: string[]
 }
 
 const conversations = ref<QaConversation[]>([])
@@ -423,6 +435,9 @@ const handleSend = async () => {
             impact: data.changeImpact || streamingImpact.value,
             messageId,
             conversationId: data.conversationId || currentConversationId.value || undefined,
+            // H23: 透传拒答标记和违规项数组，供消息渲染时展示可验证列表
+            rejected: data.rejected === true,
+            violations: Array.isArray(data.violations) ? data.violations : [],
           })
 
           streamingContent.value = ''
@@ -892,6 +907,32 @@ onMounted(async () => {
   color: #67c23a;
 }
 
+/* H23: 拒答/低置信度违规项列表样式 */
+.message-violations {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fff1f0;
+  border-radius: 6px;
+  border-left: 3px solid #ff4d4f;
+}
+
+.violations-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff4d4f;
+}
+
+.violations-list {
+  margin: 6px 0 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #5c0505;
+}
+
+.violations-list li {
+  line-height: 1.6;
+}
+
 .message-impact {
   margin-top: 12px;
   padding: 12px;
@@ -1009,9 +1050,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
-}
   margin-top: 8px;
-  display: flex;
   gap: 8px;
 }
 </style>

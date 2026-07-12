@@ -229,7 +229,7 @@ public class AdapterExecutionService {
         int progressTotal = discoveredCount > 0 ? discoveredCount : total;
         taskRecorder.logProgress(task, 0, progressTotal, "adapter candidate files", null);
         // 统一并发配置：默认 16（与 ProjectScanner 保持一致）
-        int maxConcurrency = Math.max(1, Integer.getInteger("legacy-graph.scan.adapter-concurrency", 16));
+        int maxConcurrency = Math.max(1, Integer.getInteger("legacygraph.scan.adapter-concurrency", 16));
         Semaphore semaphore = new Semaphore(maxConcurrency);
         AtomicInteger visited = new AtomicInteger(0);
         AtomicInteger processed = new AtomicInteger(0);

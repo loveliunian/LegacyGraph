@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.common.ScanStep;
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.entity.AiScanJob;
 import io.github.legacygraph.entity.ScanTask;
@@ -119,7 +120,7 @@ public class AiScanOrchestrator {
         // 让前端进度 API 能实时看到该阶段，避免显示为"已跳过"
         ScanTask aiTask = scanTaskRecorder.createTask(projectId, versionId, "AI_ORCHESTRATION", "AI智能分析");
         // 立即标记为 QUEUED（createTask 默认是 RUNNING）
-        aiTask.setTaskStatus("QUEUED");
+        aiTask.setTaskStatus(ScanTaskStatus.QUEUED.name());
         aiTask.setUpdatedAt(LocalDateTime.now());
         try {
             scanTaskRepository.updateById(aiTask);
@@ -332,7 +333,7 @@ public class AiScanOrchestrator {
         if (task == null || !"QUEUED".equals(task.getTaskStatus())) {
             return;
         }
-        task.setTaskStatus("RUNNING");
+        task.setTaskStatus(ScanTaskStatus.RUNNING.name());
         task.setUpdatedAt(LocalDateTime.now());
         try {
             scanTaskRepository.updateById(task);
@@ -372,7 +373,7 @@ public class AiScanOrchestrator {
         task.setVersionId(versionId);
         task.setTaskType(taskType);
         task.setTaskName(taskName);
-        task.setTaskStatus("RUNNING");
+        task.setTaskStatus(ScanTaskStatus.RUNNING.name());
         task.setStartedAt(LocalDateTime.now());
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());

@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  * 与过滤计数（Counter），便于监控 ACL 过滤对查询延迟的影响。registry 缺失时静默降级。</p>
  */
 @Slf4j
-@Service
+@Service("graphAclFilterService")
 public class AclFilterService {
 
     @Autowired(required = false)

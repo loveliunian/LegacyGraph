@@ -83,7 +83,7 @@ public class GraphQualityAssessor {
     private final KnowledgeClaimService knowledgeClaimService;
 
     /** 当项目根目录无法解析时的回退目录 */
-    @Value("${legacy-graph.reports.local-dir:${user.home}/.legacygraph/reports}")
+    @Value("${legacygraph.reports.local-dir:${user.home}/.legacygraph/reports}")
     private String fallbackReportRoot;
 
     @Autowired

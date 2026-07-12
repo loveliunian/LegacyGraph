@@ -14,22 +14,28 @@ import io.github.legacygraph.repository.QaEvaluationRunRepository;
 import io.github.legacygraph.repository.QaFeedbackRepository;
 import io.github.legacygraph.repository.QaTestCaseRepository;
 import io.github.legacygraph.service.evaluation.RagasMetricsService;
+import io.github.legacygraph.service.qa.QaEvaluationService;
 import io.github.legacygraph.util.IdUtil;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * QA 评测控制器 — 项目级评测用例与历史评测运行的查询入口。
@@ -51,9 +57,10 @@ public class QaEvaluationController {
     private final QaEvaluationRunRepository qaEvaluationRunRepository;
     private final ObjectMapper objectMapper;
     private final RagasMetricsService ragasMetricsService;
+    private final QaEvaluationService qaEvaluationService;
 
     /** 评测报告本地目录（与 DefaultQaEvaluationService 的回退目录口径一致） */
-    @Value("${legacy-graph.reports.local-dir:${user.home}/.legacygraph/reports}")
+    @Value("${legacygraph.reports.local-dir:${user.home}/.legacygraph/reports}")
     private String reportRoot;
 
     /** 评测报告子目录 */
@@ -227,6 +234,206 @@ public class QaEvaluationController {
         private List<String> expectedEntities;
         /** 期望被覆盖的关键词列表 */
         private List<String> expectedKeywords;
+    }
+
+    // ==================== H28: v2 评测集接口 ====================
+
+    /** v2 评测集 classpath 路径 */
+    private static final String V2_TEST_SET_PATH = "qa-evaluation/test-set-v2.json";
+
+    /** v2 基线目标（与 test-set-v2.json 中 baseline_targets 一致） */
+    private static final Map<String, Double> V2_BASELINE_TARGETS = Map.of(
+            "FACT_LOOKUP", 0.95,
+            "RELATIONSHIP", 0.90,
+            "INFERENCE", 0.80,
+            "CHANGE_IMPACT", 0.70,
+            "ENUMERATION", 0.95
+    );
+
+    /**
+     * H28: 运行 v2 评测集（100 题，5 类意图）。
+     * <p>
+     * 从 classpath 加载 test-set-v2.json，调用 QaEvaluationService 运行评测，
+     * 按 intent 分组计算分类准确率，与基线目标对比。
+     * </p>
+     *
+     * @param projectId 项目 ID
+     * @param versionId 扫描版本 ID（可选，默认 "latest"）
+     * @return v2 评测结果（含分类指标）
+     */
+    @PostMapping("/eval-v2/run")
+    public Result<QaEvalV2Response> runEvalV2(
+            @PathVariable String projectId,
+            @RequestParam(required = false, defaultValue = "latest") String versionId) {
+        log.info("H28: v2 eval run triggered: projectId={}, versionId={}", projectId, versionId);
+        try {
+            // 1. 加载 v2 评测集
+            List<QaTestCase> testCases = loadV2TestSet(projectId);
+            if (testCases.isEmpty()) {
+                return Result.error("v2 评测集加载失败或为空");
+            }
+            log.info("H28: loaded {} v2 test cases", testCases.size());
+
+            // 2. 运行评测
+            QaEvaluationResult evalResult = qaEvaluationService.evaluate(projectId, versionId, testCases);
+
+            // 3. 按 intent 分组计算分类准确率
+            Map<String, CategoryMetric> categoryMetrics = computeCategoryMetrics(evalResult);
+
+            // 4. 落库
+            try {
+                QaEvaluationRun run = toEntity(projectId, evalResult);
+                qaEvaluationRunRepository.insert(run);
+                log.info("H28: v2 eval run saved: runId={}", run.getId());
+            } catch (Exception e) {
+                log.warn("H28: failed to save v2 eval run: {}", e.getMessage());
+            }
+
+            // 5. 构建响应
+            QaEvalV2Response response = new QaEvalV2Response();
+            response.setEvalResult(evalResult);
+            response.setCategoryMetrics(categoryMetrics);
+            response.setBaselineTargets(V2_BASELINE_TARGETS);
+            response.setRegressionDetected(checkRegression(categoryMetrics));
+
+            return Result.success(response);
+        } catch (Exception e) {
+            log.error("H28: v2 eval run failed: projectId={}, err={}", projectId, e.getMessage(), e);
+            return Result.error("v2 评测运行失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * H28: 查询 v2 基线目标。
+     *
+     * @return 基线目标映射
+     */
+    @GetMapping("/eval-v2/baseline")
+    public Result<Map<String, Double>> getV2Baseline() {
+        return Result.success(V2_BASELINE_TARGETS);
+    }
+
+    /**
+     * 从 classpath 加载 v2 评测集，解析为 QaTestCase 列表。
+     */
+    private List<QaTestCase> loadV2TestSet(String projectId) throws IOException {
+        ClassPathResource resource = new ClassPathResource(V2_TEST_SET_PATH);
+        if (!resource.exists()) {
+            log.error("H28: v2 test set not found at classpath:{}", V2_TEST_SET_PATH);
+            return List.of();
+        }
+        List<QaTestCase> cases = new ArrayList<>();
+        try (InputStream is = resource.getInputStream()) {
+            String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(json);
+            com.fasterxml.jackson.databind.JsonNode testCasesNode = root.get("test_cases");
+            if (testCasesNode == null || !testCasesNode.isArray()) {
+                log.error("H28: v2 test set has no test_cases array");
+                return List.of();
+            }
+            for (com.fasterxml.jackson.databind.JsonNode tcNode : testCasesNode) {
+                QaTestCase tc = new QaTestCase();
+                tc.setId(tcNode.path("id").asText());
+                tc.setProjectId(projectId);
+                tc.setQuestion(tcNode.path("question").asText());
+                tc.setIntent(tcNode.path("category").asText());
+                tc.setStatus("GOLDEN");
+                // expectedEntities 从 expected_node_keys 加载
+                List<String> nodeKeys = new ArrayList<>();
+                com.fasterxml.jackson.databind.JsonNode nkNode = tcNode.get("expected_node_keys");
+                if (nkNode != null && nkNode.isArray()) {
+                    nkNode.forEach(n -> nodeKeys.add(n.asText()));
+                }
+                tc.setExpectedEntities(nodeKeys);
+                // expectedKeywords
+                List<String> keywords = new ArrayList<>();
+                com.fasterxml.jackson.databind.JsonNode kwNode = tcNode.get("expected_keywords");
+                if (kwNode != null && kwNode.isArray()) {
+                    kwNode.forEach(k -> keywords.add(k.asText()));
+                }
+                tc.setExpectedKeywords(keywords);
+                tc.setShouldAbstain(false);
+                tc.setCreatedAt(LocalDateTime.now());
+                cases.add(tc);
+            }
+        }
+        return cases;
+    }
+
+    /**
+     * 按 intent 分组计算分类准确率。
+     */
+    private Map<String, CategoryMetric> computeCategoryMetrics(QaEvaluationResult evalResult) {
+        Map<String, CategoryMetric> metrics = new LinkedHashMap<>();
+        if (evalResult.getCaseResults() == null) {
+            return metrics;
+        }
+        // 按 intent 分组
+        Map<String, List<QaEvaluationResult.QaTestCaseResult>> grouped = new LinkedHashMap<>();
+        for (QaEvaluationResult.QaTestCaseResult cr : evalResult.getCaseResults()) {
+            String intent = cr.getIntent() != null ? cr.getIntent() : "UNKNOWN";
+            grouped.computeIfAbsent(intent, k -> new ArrayList<>()).add(cr);
+        }
+        // 计算每类准确率
+        for (Map.Entry<String, List<QaEvaluationResult.QaTestCaseResult>> entry : grouped.entrySet()) {
+            String category = entry.getKey();
+            List<QaEvaluationResult.QaTestCaseResult> results = entry.getValue();
+            int total = results.size();
+            int passed = (int) results.stream().filter(QaEvaluationResult.QaTestCaseResult::isPassed).count();
+            double accuracy = total > 0 ? (double) passed / total : 0.0;
+            double baseline = V2_BASELINE_TARGETS.getOrDefault(category, 0.0);
+            CategoryMetric metric = new CategoryMetric();
+            metric.setTotalCases(total);
+            metric.setPassedCases(passed);
+            metric.setAccuracy(accuracy);
+            metric.setBaselineTarget(baseline);
+            metric.setMeetsBaseline(accuracy >= baseline);
+            metrics.put(category, metric);
+        }
+        return metrics;
+    }
+
+    /**
+     * 检查是否有分类准确率回归（低于基线 > 5%）。
+     */
+    private boolean checkRegression(Map<String, CategoryMetric> metrics) {
+        for (Map.Entry<String, CategoryMetric> entry : metrics.entrySet()) {
+            CategoryMetric m = entry.getValue();
+            if (m.getBaselineTarget() - m.getAccuracy() > 0.05) {
+                log.warn("H28: regression detected in category {}: accuracy={}, baseline={}",
+                        entry.getKey(), m.getAccuracy(), m.getBaselineTarget());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** H28: v2 评测响应 */
+    @Data
+    public static class QaEvalV2Response {
+        /** 完整评测结果 */
+        private QaEvaluationResult evalResult;
+        /** 分类指标（按 intent 分组） */
+        private Map<String, CategoryMetric> categoryMetrics;
+        /** 基线目标 */
+        private Map<String, Double> baselineTargets;
+        /** 是否检测到回归（某分类低于基线 > 5%） */
+        private boolean regressionDetected;
+    }
+
+    /** H28: 分类指标 */
+    @Data
+    public static class CategoryMetric {
+        /** 该分类用例总数 */
+        private int totalCases;
+        /** 通过用例数 */
+        private int passedCases;
+        /** 准确率（0~1） */
+        private double accuracy;
+        /** 基线目标（0~1） */
+        private double baselineTarget;
+        /** 是否达到基线 */
+        private boolean meetsBaseline;
     }
 
     // ==================== 辅助方法 ====================

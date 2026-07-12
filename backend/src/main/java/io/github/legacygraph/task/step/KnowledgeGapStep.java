@@ -37,7 +37,7 @@ public class KnowledgeGapStep implements AiScanStepExecutor {
 
     @Override
     public ScanStep getScanStep() {
-        return ScanStep.ENHANCE;
+        return ScanStep.GAP_FINDING;
     }
 
     @Override

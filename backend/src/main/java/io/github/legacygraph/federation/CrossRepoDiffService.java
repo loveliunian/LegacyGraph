@@ -2,6 +2,7 @@ package io.github.legacygraph.federation;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.entity.GraphNode;
 import io.github.legacygraph.integration.graphify.GraphifyCompatibilityService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 跨仓 graph.json 差异服务（评估 §5.2 S3）。
@@ -117,6 +119,92 @@ public class CrossRepoDiffService {
                 .missingInGraphify(List.of())
                 .missingInLegacy(List.of())
                 .onlyInSemantic(List.of())
+                .build();
+    }
+
+    /**
+     * 完整 diff：解析 graph.json + 用 legacy 节点列表计算真实对齐率（H03）。
+     *
+     * <p>controller 调用此方法，传入从 Neo4j 查询到的 legacy 节点列表，
+     * 内部完成 graph.json 解析 + Jaccard 对齐率计算 + missing 列表生成。</p>
+     *
+     * @param graphJsonPath graph.json 文件路径
+     * @param projectId     项目 ID
+     * @param versionId     版本 ID
+     * @param legacyNodes   从 Neo4j 查询到的本项目节点列表
+     * @return 完整差异报告（含真实 alignmentRate + missingInGraphify + missingInLegacy）
+     */
+    public CrossRepoDiffReport diffWithLegacyNodes(String graphJsonPath, String projectId,
+                                                    String versionId, List<GraphNode> legacyNodes) {
+        Set<String> graphifyNodeIds = new HashSet<>();
+        try {
+            String content = Files.readString(Path.of(graphJsonPath));
+            JsonNode root = objectMapper.readTree(content);
+            JsonNode nodes = root.get("nodes");
+            if (nodes != null && nodes.isArray()) {
+                for (JsonNode n : nodes) {
+                    String label = n.path("label").asText(null);
+                    if (label == null) continue;
+                    if (GraphifyCompatibilityService.isSemanticNodeType(label)) continue;
+                    String id = n.path("id").asText(null);
+                    if (id != null) graphifyNodeIds.add(label + "::" + id);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse graph.json {}: {}", graphJsonPath, e.getMessage());
+            return CrossRepoDiffReport.builder()
+                    .projectId(projectId)
+                    .versionId(versionId)
+                    .graphJsonPath(graphJsonPath)
+                    .alignmentRate(0.0)
+                    .missingInGraphify(List.of())
+                    .missingInLegacy(List.of())
+                    .onlyInSemantic(List.of())
+                    .build();
+        }
+
+        // 构建 legacy 节点 key 集（格式与 graphifyNodeIds 一致：label::nodeKey）
+        Set<String> onlySemantic = new HashSet<>();
+        Set<String> legacyNodeIds = new HashSet<>();
+        if (legacyNodes != null) {
+            for (GraphNode n : legacyNodes) {
+                String type = n.getNodeType();
+                String key = n.getNodeKey();
+                if (type == null || key == null) continue;
+                String composite = type + "::" + key;
+                if (GraphifyCompatibilityService.isSemanticNodeType(type)) {
+                    onlySemantic.add(composite);
+                } else {
+                    legacyNodeIds.add(composite);
+                }
+            }
+        }
+
+        // 计算 Jaccard 对齐率
+        double alignmentRate = computeAlignmentRate(graphifyNodeIds, legacyNodeIds);
+
+        // missingInGraphify: 在 legacy 但不在 graphify
+        List<String> missingInGraphify = new ArrayList<>(legacyNodeIds);
+        missingInGraphify.removeAll(graphifyNodeIds);
+
+        // missingInLegacy: 在 graphify 但不在 legacy
+        List<String> missingInLegacy = new ArrayList<>(graphifyNodeIds);
+        missingInLegacy.removeAll(legacyNodeIds);
+
+        log.info("Cross-repo diff: projectId={}, versionId={}, graphify={}, legacy={}, alignment={}, missingInGraphify={}, missingInLegacy={}",
+                projectId, versionId, graphifyNodeIds.size(), legacyNodeIds.size(),
+                String.format("%.4f", alignmentRate), missingInGraphify.size(), missingInLegacy.size());
+
+        return CrossRepoDiffReport.builder()
+                .projectId(projectId)
+                .versionId(versionId)
+                .graphJsonPath(graphJsonPath)
+                .totalInGraphify(graphifyNodeIds.size())
+                .totalInLegacy(legacyNodeIds.size())
+                .alignmentRate(alignmentRate)
+                .missingInGraphify(missingInGraphify)
+                .missingInLegacy(missingInLegacy)
+                .onlyInSemantic(new ArrayList<>(onlySemantic))
                 .build();
     }
 

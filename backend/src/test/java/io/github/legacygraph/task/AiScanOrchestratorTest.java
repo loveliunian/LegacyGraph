@@ -8,6 +8,7 @@ import io.github.legacygraph.agent.CodeFactAgent;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.ScanStep;
+import io.github.legacygraph.common.ScanTaskStatus;
 import io.github.legacygraph.builder.BusinessGraphBuilder;
 import io.github.legacygraph.builder.EvidenceGraphWriter;
 import io.github.legacygraph.dao.Neo4jGraphDao;
@@ -152,7 +153,7 @@ class AiScanOrchestratorTest {
                     task.setVersionId(inv.getArgument(1));
                     task.setTaskType(inv.getArgument(2));
                     task.setTaskName(inv.getArgument(3));
-                    task.setTaskStatus("RUNNING");
+                    task.setTaskStatus(ScanTaskStatus.RUNNING.name());
                     task.setStartedAt(java.time.LocalDateTime.now());
                     task.setCreatedAt(java.time.LocalDateTime.now());
                     task.setUpdatedAt(java.time.LocalDateTime.now());
@@ -166,7 +167,7 @@ class AiScanOrchestratorTest {
                     if (task != null) {
                         if (summary != null) task.setOutputSummary(summary);
                         task.setErrorMessage(error);
-                        task.setTaskStatus(error == null ? "SUCCESS" : "FAILED");
+                        task.setTaskStatus(error == null ? ScanTaskStatus.SUCCESS.name() : ScanTaskStatus.FAILED.name());
                         task.setFinishedAt(java.time.LocalDateTime.now());
                         task.setUpdatedAt(java.time.LocalDateTime.now());
                         scanTaskRepository.updateById(task);
@@ -181,7 +182,7 @@ class AiScanOrchestratorTest {
                     if (task != null) {
                         if (summary != null) task.setOutputSummary(summary);
                         task.setErrorMessage(error);
-                        task.setTaskStatus(terminalStatus != null ? terminalStatus : (error == null ? "SUCCESS" : "FAILED"));
+                        task.setTaskStatus(terminalStatus != null ? terminalStatus : (error == null ? ScanTaskStatus.SUCCESS.name() : ScanTaskStatus.FAILED.name()));
                         task.setFinishedAt(java.time.LocalDateTime.now());
                         task.setUpdatedAt(java.time.LocalDateTime.now());
                         scanTaskRepository.updateById(task);
