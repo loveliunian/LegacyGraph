@@ -37,12 +37,15 @@ public class GraphCacheInvalidator {
         if (versionId != null) {
             String normalized = IdUtil.normalizeId(versionId);
             patterns.add("graph:" + normalized + ":*");
+            // S3-T5: 同时清除 scan_version 时间戳缓存，确保下次查询获取最新 updatedAt
+            patterns.add("scanver:ts:" + normalized + "*");
             patterns.add("validation-report::*" + versionId + "*");
             if (!normalized.equals(versionId)) {
                 patterns.add("validation-report::*" + normalized + "*");
             }
         } else {
             patterns.add("graph:*");
+            patterns.add("scanver:ts:*");
             patterns.add("validation-report*");
         }
         // 报告缓存键形如 lg:report-xxx::projectId:versionId，按 report- 前缀整体失效

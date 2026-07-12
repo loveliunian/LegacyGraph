@@ -160,6 +160,10 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.github.legacygraph.service.scan.BlastRadiusAnalyzer blastRadiusAnalyzer;
 
+    /** S1-T2: 扫描锁服务 — 基于 PG advisory lock 防止同项目并发扫描互踩 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private io.github.legacygraph.service.scan.ScanLockService scanLockService;
+
     /** 扫描后 AI 编排默认开关（legacy-graph.ai.*），scanScope 未显式指定时生效 */
     @org.springframework.beans.factory.annotation.Value("${legacy-graph.ai.enable-default:true}")
     private boolean aiEnableDefault;
@@ -436,6 +440,23 @@ public class ProjectScanner {
     public void startFullScan(String projectId, String versionId, String baseDir) {
         log.info("Starting full scan: projectId={}, versionId={}, baseDir={}", projectId, versionId, baseDir);
 
+        // S1-T2: 获取项目级扫描锁，防止同项目并发扫描互踩
+        if (!scanLockService.tryAcquireScanLock(projectId)) {
+            log.warn("Scan rejected — another scan is already running for projectId={}", projectId);
+            try {
+                ScanVersion rejectedVersion = scanVersionRepository.getById(versionId);
+                if (rejectedVersion != null) {
+                    rejectedVersion.setScanStatus("REJECTED");
+                    rejectedVersion.setErrorMessage("已有扫描任务正在执行，请等待其完成后再发起扫描");
+                    rejectedVersion.setFinishedAt(LocalDateTime.now());
+                    scanVersionRepository.updateById(rejectedVersion);
+                }
+            } catch (Exception ex) {
+                log.error("Failed to update rejected scan status: versionId={}", versionId, ex);
+            }
+            return;
+        }
+
         try {
             // M10修复：@Async 方法入口添加异常处理，防止异常被吞没
             // 清除之前的取消标记
@@ -468,6 +489,9 @@ public class ProjectScanner {
             } catch (Exception ex) {
                 log.error("M10: Failed to update scan status: versionId={}", versionId, ex);
             }
+        } finally {
+            // S1-T2: 无论成功/失败/异常，释放扫描锁
+            scanLockService.releaseScanLock(projectId);
         }
     }
 
@@ -614,6 +638,8 @@ public class ProjectScanner {
             // === 0. 自动发现：数据库连接、子路径、文档（并行化优化） ===
             log.info("Scan still running: projectId={}, versionId={}, phase=DISCOVERY, detail=starting parallel auto-discovery phase",
                     projectId, versionId);
+            // S1-T3: 保存 DISCOVERY 阶段检查点（状态机来源）
+            saveCheckpoint(versionId, "DISCOVERY", 0, null, 0);
 
             // 并行执行三个独立的发现阶段：DB_DISCOVERY / PATH_DISCOVERY / DOC_DISCOVERY
             boolean shouldScanDocs = scopeScanTypes == null || scopeScanTypes.isEmpty()
@@ -744,6 +770,8 @@ public class ProjectScanner {
             if (shouldScanCode || shouldScanDocs) {
                 log.info("Scan still running: projectId={}, versionId={}, phase=ADAPTER_SCAN, detail=starting adapter registry scan",
                         projectId, versionId);
+                // S1-T3: 保存 ADAPTER_SCAN 阶段检查点
+                saveCheckpoint(versionId, "ADAPTER_SCAN", 0, null, 0);
                 ScanTask adapterTask = createTask(projectId, versionId, "ADAPTER_SCAN", "适配器抽取扫描");
                 adapterCount = scanAssetsWithAdapters(projectId, versionId, baseDir, backendDir, frontendDir, adapterTask, resolvedPlan, incrementalChangedPaths);
                 completeTask(adapterTask, "Adapter processed " + adapterCount + " assets", null);
@@ -1015,6 +1043,8 @@ public class ProjectScanner {
             // 此子任务仅作为扫描阶段标记，不执行实质操作
             log.info("Scan still running: projectId={}, versionId={}, phase=GRAPH_BUILD, detail=graph built in Neo4j",
                     projectId, versionId);
+            // S1-T3: 保存 GRAPH_BUILD 阶段检查点
+            saveCheckpoint(versionId, "GRAPH_BUILD", 0, null, 0);
             ScanTask buildTask = createTask(projectId, versionId, "GRAPH_BUILD", "图谱构建");
             completeTask(buildTask, "Graph built in Neo4j", null);
 
@@ -1101,6 +1131,8 @@ public class ProjectScanner {
                 log.warn("Failed to count Neo4j nodes for summary: {}", ex.getMessage());
             }
             log.info("Full scan completed successfully: versionId={}, neo4jNodes={}", versionId, totalNodes);
+            // S1-T3: 扫描成功后清理所有检查点（状态机终态）
+            clearCheckpoints(versionId);
 
         } catch (Exception e) {
             log.error("Scan failed: versionId={}", versionId, e);
@@ -1114,6 +1146,7 @@ public class ProjectScanner {
                 applyStatsSnapshot(version, projectId, versionId);
                 scanVersionRepository.updateById(version);
             }
+            // S1-T3: 失败时保留检查点（供 resume 续扫），不清理
         }
     }
 

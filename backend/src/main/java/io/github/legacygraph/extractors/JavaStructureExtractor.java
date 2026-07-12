@@ -145,6 +145,9 @@ public class JavaStructureExtractor {
             classInfo.setSourcePath(javaFile.toString());
             classInfo.setStartLine(clazz.getBegin().map(p -> p.line).orElse(null));
             classInfo.setEndLine(clazz.getEnd().map(p -> p.line).orElse(null));
+            // S2-T6: 列级定位 span
+            classInfo.setStartColumn(clazz.getBegin().map(p -> p.column).orElse(null));
+            classInfo.setEndColumn(clazz.getEnd().map(p -> p.column).orElse(null));
             classInfo.setMethods(new ArrayList<>());
             classInfo.setFields(new ArrayList<>());
             classInfo.setExtendedTypes(extendedTypes);
@@ -169,7 +172,9 @@ public class JavaStructureExtractor {
                             methodName,
                             qualifiedName + "." + methodSignature,
                             method.getBegin().map(p -> p.line).orElse(null),
-                            method.getEnd().map(p -> p.line).orElse(null)
+                            method.getEnd().map(p -> p.line).orElse(null),
+                            method.getBegin().map(p -> p.column).orElse(null),
+                            method.getEnd().map(p -> p.column).orElse(null)
                     );
                     // L-10: 提取方法注解和 synchronized 修饰符用于并发属性
                     if (!method.getAnnotations().isEmpty()) {
@@ -202,13 +207,17 @@ public class JavaStructureExtractor {
                     Integer fieldStart = field.getBegin().map(p -> p.line).orElse(null);
                     Integer fieldEnd = field.getEnd().map(p -> p.line).orElse(null);
                     // 一个字段声明可能声明多个变量（如 private String a, b;），逐个收集
+                    Integer fieldStartCol = field.getBegin().map(p -> p.column).orElse(null);
+                    Integer fieldEndCol = field.getEnd().map(p -> p.column).orElse(null);
                     for (VariableDeclarator var : field.getVariables()) {
                         classInfo.getFields().add(new JavaFieldInfo(
                                 var.getNameAsString(),
                                 var.getTypeAsString(),
                                 fieldAnnotations,
                                 fieldStart,
-                                fieldEnd
+                                fieldEnd,
+                                fieldStartCol,
+                                fieldEndCol
                         ));
                     }
                 }
@@ -391,6 +400,10 @@ public class JavaStructureExtractor {
         private String sourcePath;
         private Integer startLine;
         private Integer endLine;
+        /** S2-T6: 列级定位 span（起始列，从 1 开始） */
+        private Integer startColumn;
+        /** S2-T6: 列级定位 span（结束列） */
+        private Integer endColumn;
         private List<JavaMethodInfo> methods = new ArrayList<>();
         /** L-12: 类的字段列表（含字段级注解，用于入图为 ConfigItem/Dependency/FeatureFlag 节点） */
         private List<JavaFieldInfo> fields = new ArrayList<>();
@@ -415,6 +428,10 @@ public class JavaStructureExtractor {
         private String qualifiedName;
         private Integer startLine;
         private Integer endLine;
+        /** S2-T6: 列级定位 span（起始列，从 1 开始） */
+        private Integer startColumn;
+        /** S2-T6: 列级定位 span（结束列） */
+        private Integer endColumn;
         /** L-10: 方法上的注解名称列表（如 Transactional, Async, Cacheable, Lock） */
         private List<String> annotations;
         /** L-10: 是否有 synchronized 关键字 */
@@ -425,6 +442,17 @@ public class JavaStructureExtractor {
             this.qualifiedName = qualifiedName;
             this.startLine = startLine;
             this.endLine = endLine;
+        }
+
+        /** S2-T6: 带列级定位的构造器 */
+        public JavaMethodInfo(String methodName, String qualifiedName, Integer startLine, Integer endLine,
+                              Integer startColumn, Integer endColumn) {
+            this.methodName = methodName;
+            this.qualifiedName = qualifiedName;
+            this.startLine = startLine;
+            this.endLine = endLine;
+            this.startColumn = startColumn;
+            this.endColumn = endColumn;
         }
     }
 
@@ -443,5 +471,79 @@ public class JavaStructureExtractor {
         private List<String> annotations;
         private Integer startLine;
         private Integer endLine;
+        /** S2-T6: 列级定位 span（起始列，从 1 开始） */
+        private Integer startColumn;
+        /** S2-T6: 列级定位 span（结束列） */
+        private Integer endColumn;
+    }
+
+    // ==================== S2-T2: 注解→节点类型映射表 ====================
+
+    /**
+     * S2-T2: Spring/Stereo 注解 → 节点类型映射表。
+     * <p>
+     * 根据类上的注解推断节点类型，优先级高于包路径推断。
+     * 映射规则：
+     * <ul>
+     *   <li>@RestController / @Controller → "CONTROLLER"</li>
+     *   <li>@Service → "SERVICE"</li>
+     *   <li>@Repository → "REPOSITORY"</li>
+     *   <li>@Mapper / @Repository(mybatis) → "MAPPER"</li>
+     *   <li>@Component / @ComponentScan → "COMPONENT"</li>
+     *   <li>@Configuration / @ConfigurationProperties → "CONFIGURATION"</li>
+     *   <li>@Entity / @Table → "ENTITY"</li>
+     *   <li>@FeignClient → "FEIGN_CLIENT"</li>
+     *   <li>@RestControllerAdvice / @ControllerAdvice → "ADVICE"</li>
+     *   <li>@Aspect → "ASPECT"</li>
+     * </ul>
+     * </p>
+     */
+    private static final java.util.Map<String, String> ANNOTATION_TO_NODE_TYPE = java.util.Map.ofEntries(
+            java.util.Map.entry("RestController", "CONTROLLER"),
+            java.util.Map.entry("Controller", "CONTROLLER"),
+            java.util.Map.entry("Service", "SERVICE"),
+            java.util.Map.entry("Repository", "REPOSITORY"),
+            java.util.Map.entry("Mapper", "MAPPER"),
+            java.util.Map.entry("Component", "COMPONENT"),
+            java.util.Map.entry("Configuration", "CONFIGURATION"),
+            java.util.Map.entry("ConfigurationProperties", "CONFIGURATION"),
+            java.util.Map.entry("Entity", "ENTITY"),
+            java.util.Map.entry("Table", "ENTITY"),
+            java.util.Map.entry("FeignClient", "FEIGN_CLIENT"),
+            java.util.Map.entry("RestControllerAdvice", "ADVICE"),
+            java.util.Map.entry("ControllerAdvice", "ADVICE"),
+            java.util.Map.entry("Aspect", "ASPECT"),
+            java.util.Map.entry("Data", "DATA_DTO"),
+            java.util.Map.entry("Dto", "DATA_DTO"),
+            java.util.Map.entry("Builder", "DATA_DTO")
+    );
+
+    /**
+     * S2-T2: 根据类注解推断节点类型。
+     * <p>遍历注解列表，返回第一个匹配的节点类型；无匹配返回 null（由调用方降级到包路径推断）。</p>
+     *
+     * @param annotations 类注解简单名列表
+     * @return 节点类型字符串，或 null（无匹配）
+     */
+    public static String inferNodeTypeFromAnnotations(List<String> annotations) {
+        if (annotations == null || annotations.isEmpty()) {
+            return null;
+        }
+        for (String annotation : annotations) {
+            String normalized = normalizeAnnotationSimple(annotation);
+            String nodeType = ANNOTATION_TO_NODE_TYPE.get(normalized);
+            if (nodeType != null) {
+                return nodeType;
+            }
+        }
+        return null;
+    }
+
+    /** 去掉注解的包名前缀和参数，只保留简单名 */
+    private static String normalizeAnnotationSimple(String annotation) {
+        int parenIdx = annotation.indexOf('(');
+        String name = parenIdx > 0 ? annotation.substring(0, parenIdx) : annotation;
+        int dotIdx = name.lastIndexOf('.');
+        return dotIdx > 0 ? name.substring(dotIdx + 1) : name;
     }
 }

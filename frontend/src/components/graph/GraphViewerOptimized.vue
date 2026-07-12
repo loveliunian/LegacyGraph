@@ -136,7 +136,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   height: '600px',
   editable: true,
-  aggregationThreshold: 500,
+  aggregationThreshold: 3000, // S4-T3: 节点 > 3000 自动收敛
   workerEnabled: true
 })
 
@@ -169,7 +169,14 @@ let layoutWorker: Worker | null = null
 
 const totalNodesCount = computed(() => props.nodes.length)
 const totalEdgesCount = computed(() => props.edges.length)
-const shouldUseAggregation = computed(() => props.nodes.length > props.aggregationThreshold)
+// S4-T3: LOD 收敛阈值可通过 URL 参数覆盖（如 ?lodThreshold=2000），避免命中率断崖
+const effectiveAggregationThreshold = computed(() => {
+  if (typeof window === 'undefined') return props.aggregationThreshold
+  const urlParam = new URLSearchParams(window.location.search).get('lodThreshold')
+  const urlValue = urlParam ? parseInt(urlParam, 10) : NaN
+  return Number.isFinite(urlValue) && urlValue > 0 ? urlValue : props.aggregationThreshold
+})
+const shouldUseAggregation = computed(() => props.nodes.length > effectiveAggregationThreshold.value)
 const shouldUseWorker = computed(() => props.workerEnabled && props.nodes.length > 200)
 
 watch(
@@ -188,14 +195,14 @@ watch(currentZoom, (zoom) => {
 })
 
 function processNodes(nodes: Node<GraphNodeData>[]) {
-  if (nodes.length < props.aggregationThreshold) {
+  if (nodes.length < effectiveAggregationThreshold.value) {
     visibleNodes.value = nodes.map((node, index) => ({
       ...node,
       id: node.id,
       type: 'custom',
-      position: node.position || { 
-        x: 100 + (index % 10) * 200, 
-        y: 100 + Math.floor(index / 10) * 150 
+      position: node.position || {
+        x: 100 + (index % 10) * 200,
+        y: 100 + Math.floor(index / 10) * 150
       },
       style: {
         width: 180,
@@ -204,7 +211,8 @@ function processNodes(nodes: Node<GraphNodeData>[]) {
     }))
     isAggregating.value = false
   } else {
-    applyNodeAggregation(nodes)
+    // S4-T3: 多级 LOD — 低缩放时用大 gridSize 高度聚合
+    applyNodeAggregation(nodes, lodGridSize(currentZoom.value))
   }
 }
 
@@ -233,9 +241,20 @@ function processEdgesSafe(nodes: Node[], edges: Edge[]) {
   processEdges(edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target)))
 }
 
-function applyNodeAggregation(nodes: Node<GraphNodeData>[]) {
+/**
+ * S4-T3: 多级 LOD 聚合 — gridSize 随缩放级别变化。
+ * zoom < 0.3 → gridSize 300（高度聚合，万级节点收敛到可渲染量）
+ * zoom 0.3-0.8 → gridSize 200（中度聚合）
+ * zoom > 0.8 → gridSize 100（轻度聚合，接近展开）
+ */
+function lodGridSize(zoom: number): number {
+  if (zoom < 0.3) return 300
+  if (zoom < 0.8) return 200
+  return 100
+}
+
+function applyNodeAggregation(nodes: Node<GraphNodeData>[], gridSize = 150) {
   isAggregating.value = true
-  const gridSize = 150
   const groups = new Map<string, Node<GraphNodeData>[]>()
 
   nodes.forEach((node) => {
@@ -300,14 +319,15 @@ function applyNodeAggregation(nodes: Node<GraphNodeData>[]) {
 }
 
 function updateAggregationByZoom(zoom: number) {
+  // S4-T3: 三级 LOD — 高缩放展开，中缩放中度聚合，低缩放高度聚合
   if (zoom > 1.5) {
     visibleNodes.value = props.nodes.map((node, index) => ({
       ...node,
       id: node.id,
       type: 'custom',
-      position: node.position || { 
-        x: 100 + (index % 10) * 200, 
-        y: 100 + Math.floor(index / 10) * 150 
+      position: node.position || {
+        x: 100 + (index % 10) * 200,
+        y: 100 + Math.floor(index / 10) * 150
       },
       style: {
         width: 180,
@@ -315,8 +335,8 @@ function updateAggregationByZoom(zoom: number) {
       }
     }))
     isAggregating.value = false
-  } else if (zoom < 0.8 && shouldUseAggregation.value) {
-    applyNodeAggregation(props.nodes)
+  } else if (shouldUseAggregation.value) {
+    applyNodeAggregation(props.nodes, lodGridSize(zoom))
   }
 }
 

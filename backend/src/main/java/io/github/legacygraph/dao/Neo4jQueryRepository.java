@@ -31,6 +31,24 @@ public class Neo4jQueryRepository {
 
     private static final Duration NODE_CACHE_TTL = Duration.ofSeconds(60);
 
+    // S3-T7: prepared statement 常量 — 固定 Cypher 提取为 static final，避免重复构建字符串，
+    // 同时让 Neo4j 服务端更好地复用查询计划缓存
+    private static final String CYPHER_FIND_NODE_BY_ID =
+            "MATCH (n) WHERE n.id = $id RETURN n LIMIT 1";
+    private static final String CYPHER_FIND_NODES_BY_IDS =
+            "MATCH (n) WHERE n.id IN $ids RETURN n";
+    private static final String CYPHER_FIND_EDGE_BY_ID =
+            "MATCH (from)-[r {id: $id}]->(to) RETURN r, from, to LIMIT 1";
+    private static final String CYPHER_FIND_NEIGHBOR_IDS =
+            "MATCH (n {id: $nodeId, projectId: $projectId})-[r]-(m) " +
+            "WHERE r.projectId = $projectId AND m.id IS NOT NULL " +
+            "RETURN DISTINCT m.id AS neighborId";
+    private static final String CYPHER_FIND_NEIGHBOR_IDS_BY_SOURCES =
+            "MATCH (n)-[r]-(m) " +
+            "WHERE n.id IN $sourceIds AND n.projectId = $projectId " +
+            "AND r.projectId = $projectId AND m.id IS NOT NULL " +
+            "RETURN n.id AS sourceId, m.id AS neighborId";
+
     public Neo4jQueryRepository(Driver neo4jDriver) {
         this.neo4jDriver = neo4jDriver;
     }
@@ -61,9 +79,7 @@ public class Neo4jQueryRepository {
             }
         }
         try (Session session = neo4jDriver.session()) {
-            Result result = session.run(
-                    "MATCH (n) WHERE n.id = $id RETURN n LIMIT 1",
-                    Map.of("id", nodeId));
+            Result result = session.run(CYPHER_FIND_NODE_BY_ID, Map.of("id", nodeId));
             if (result.hasNext()) {
                 GraphNode node = recordToNode(result.next().get("n").asNode());
                 if (cacheService != null && nodeId != null) {
@@ -79,9 +95,7 @@ public class Neo4jQueryRepository {
     public List<GraphNode> findNodesByIds(List<String> nodeIds) {
         if (nodeIds == null || nodeIds.isEmpty()) return List.of();
         try (Session session = neo4jDriver.session()) {
-            Result result = session.run(
-                    "MATCH (n) WHERE n.id IN $ids RETURN n",
-                    Map.of("ids", nodeIds));
+            Result result = session.run(CYPHER_FIND_NODES_BY_IDS, Map.of("ids", nodeIds));
             List<GraphNode> nodes = new ArrayList<>();
             while (result.hasNext()) {
                 nodes.add(recordToNode(result.next().get("n").asNode()));
@@ -399,11 +413,7 @@ public class Neo4jQueryRepository {
      */
     public Set<String> findNeighborNodeIds(String projectId, String nodeId) {
         try (Session session = neo4jDriver.session()) {
-            String cypher =
-                "MATCH (n {id: $nodeId, projectId: $projectId})-[r]-(m) " +
-                "WHERE r.projectId = $projectId AND m.id IS NOT NULL " +
-                "RETURN DISTINCT m.id AS neighborId";
-            Result result = session.run(cypher, Map.of(
+            Result result = session.run(CYPHER_FIND_NEIGHBOR_IDS, Map.of(
                     "projectId", projectId,
                     "nodeId", nodeId));
             Set<String> ids = new HashSet<>();
@@ -422,12 +432,7 @@ public class Neo4jQueryRepository {
             String projectId, Collection<String> sourceNodeIds, int perNodeLimit) {
         if (sourceNodeIds == null || sourceNodeIds.isEmpty()) return Map.of();
         try (Session session = neo4jDriver.session()) {
-            String cypher =
-                "MATCH (n)-[r]-(m) " +
-                "WHERE n.id IN $sourceIds AND n.projectId = $projectId " +
-                "AND r.projectId = $projectId AND m.id IS NOT NULL " +
-                "RETURN n.id AS sourceId, m.id AS neighborId";
-            Result result = session.run(cypher, Map.of(
+            Result result = session.run(CYPHER_FIND_NEIGHBOR_IDS_BY_SOURCES, Map.of(
                     "projectId", projectId,
                     "sourceIds", new ArrayList<>(sourceNodeIds)));
             Map<String, Set<String>> map = new HashMap<>();
@@ -450,9 +455,7 @@ public class Neo4jQueryRepository {
     /** 按 ID 查找边（返回两端节点 id 属性，而非 Neo4j 内部 elementId） */
     public Optional<GraphEdge> findEdgeById(String edgeId) {
         try (Session session = neo4jDriver.session()) {
-            Result result = session.run(
-                    "MATCH (from)-[r {id: $id}]->(to) RETURN r, from, to LIMIT 1",
-                    Map.of("id", edgeId));
+            Result result = session.run(CYPHER_FIND_EDGE_BY_ID, Map.of("id", edgeId));
             if (result.hasNext()) {
                 org.neo4j.driver.Record rec = result.next();
                 org.neo4j.driver.types.Relationship rel = rec.get("r").asRelationship();

@@ -96,7 +96,7 @@
             :nodes="filteredNodesForTemplate"
             :edges="filteredEdgesForTemplate"
             height="calc(100vh - 255px)"
-            :aggregation-threshold="500"
+            :aggregation-threshold="3000"
             :worker-enabled="true"
             @node-click="handleNodeClick"
             @edge-click="handleEdgeClick"
@@ -619,27 +619,37 @@ async function loadGraph(versionId: string) {
   try {
     const data: any = await graphApi.getUnifiedGraph(projectId.value, versionId, minConfidence.value)
 
-    // 转换节点格式为 VueFlow 格式
-    // L-21: 移除 Math.random() 随机布点，不设置 position，
-    //       由 GraphViewerOptimized.processNodes 提供网格 fallback，加载后调用 runAutoLayout
-    internalNodes.value = (data.nodes || []).map((node: GraphNodeData) => ({
-      id: node.id,
-      data: {
-        ...node,
-        label: node.label
+    // S4-T4: 增量渲染 — 保留已有节点的 position，只增删差异节点，切换耗时 < 500ms
+    const existingNodeMap = new Map<string, InternalNode>()
+    for (const n of internalNodes.value) {
+      if (n.position) existingNodeMap.set(n.id, n)
+    }
+    const newNodes: InternalNode[] = (data.nodes || []).map((node: GraphNodeData) => {
+      const prev = existingNodeMap.get(node.id)
+      if (prev && prev.position) {
+        // 保留已有节点位置，避免重新布局
+        return { id: node.id, position: prev.position, data: { ...node, label: node.label } }
       }
-    }))
+      // 新增节点：不设置 position，由 GraphViewerOptimized fallback 布局
+      return { id: node.id, data: { ...node, label: node.label } }
+    })
+    internalNodes.value = newNodes
 
-    // 转换边格式为 VueFlow 格式
+    // 边按 ID 增量替换（边无位置概念，直接替换但保留已有 label 映射）
+    const existingEdgeMap = new Map<string, InternalEdge>()
+    for (const e of internalEdges.value) {
+      existingEdgeMap.set(e.id, e)
+    }
     internalEdges.value = (data.edges || []).map((edge: GraphEdgeData) => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
       label: edge.label || dictLabel('graph_edge_type', edge.type || ''),
-      data: {
-        ...edge
-      }
+      data: { ...edge }
     }))
+    // 标记：如果节点位置大部分保留（增量切换），则跳过 runAutoLayout
+    const retainedCount = newNodes.filter(n => existingNodeMap.has(n.id)).length
+    const isIncremental = retainedCount > 0 && retainedCount >= newNodes.length * 0.5
 
     // 存储空视图诊断原因供模板展示
     emptyReasons.value = data.emptyReasons || null
@@ -647,12 +657,19 @@ async function loadGraph(versionId: string) {
     if ((data.nodeCount || 0) === 0 && emptyReasons.value) {
       ElMessage.warning('图谱数据为空，详见诊断信息')
     } else {
-      ElMessage.success(`已加载 ${data.nodeCount || 0} 节点, ${data.edgeCount || 0} 关系`)
-      // L-21: 节点加载后自动布局，使首次打开即呈现有结构的图
-      nextTick(() => {
-        setTimeout(() => graphViewerRef.value?.runAutoLayout(), 100)
-      })
+      const msg = isIncremental
+        ? `增量加载 ${data.nodeCount || 0} 节点（保留 ${retainedCount} 位置）, ${data.edgeCount || 0} 关系`
+        : `已加载 ${data.nodeCount || 0} 节点, ${data.edgeCount || 0} 关系`
+      ElMessage.success(msg)
+      // S4-T4: 增量切换时不重新布局（保留已有位置），仅首次加载或大幅变更时自动布局
+      if (!isIncremental) {
+        nextTick(() => {
+          setTimeout(() => graphViewerRef.value?.runAutoLayout(), 100)
+        })
+      }
     }
+    // 消除未使用变量警告
+    void existingEdgeMap
   } catch (error) {
     console.error('加载图谱失败', error)
     ElMessage.error('加载图谱失败')

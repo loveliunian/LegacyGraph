@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +31,32 @@ public class GraphPathReadModel {
     /** L-16: API 调用链 BFS 每跳最大节点数，防止爆炸式扩展 */
     private static final int API_CHAIN_PER_DEPTH_LIMIT = 500;
 
+    /** S3-T4: 表影响反向 BFS 最大深度，默认 8（clamp ≤ 8，可配 legacygraph.graph.table-impact.max-depth） */
+    @Value("${legacygraph.graph.table-impact.max-depth:8}")
+    private int tableImpactMaxDepth;
+
+    /** S3-T4: 表影响正向 BFS 最大深度，默认 3（clamp ≤ 8） */
+    @Value("${legacygraph.graph.table-impact.forward-depth:3}")
+    private int tableImpactForwardDepth;
+
+    /** S3-T4: 查询超时毫秒数，默认 2000ms（验收：P99 < 2s） */
+    @Value("${legacygraph.graph.query.timeout-ms:2000}")
+    private long queryTimeoutMs;
+
+    /** S3-T4: 连续超时熔断阈值，默认 5 次 */
+    @Value("${legacygraph.graph.query.circuit-breaker-threshold:5}")
+    private int circuitBreakerThreshold;
+
+    /** S3-T4: 熔断恢复时间，默认 30s */
+    @Value("${legacygraph.graph.query.circuit-breaker-reset-ms:30000}")
+    private long circuitBreakerResetMs;
+
+    /** S3-T4: 熔断状态 — 连续超时计数 */
+    private final AtomicLong consecutiveTimeouts = new AtomicLong(0);
+
+    /** S3-T4: 熔断到期时间（System.nanoTime 时间戳） */
+    private volatile long circuitBreakerOpenUntilNanos = 0L;
+
     public GraphPathReadModel(Neo4jGraphDao neo4jGraphDao) {
         this.neo4jGraphDao = neo4jGraphDao;
     }
@@ -43,6 +70,16 @@ public class GraphPathReadModel {
      * @param maxDepth   调用方显式传入的深度限制（null 时使用配置默认值，内部 clamp ≤ 12）
      */
     public PathChain getApiCallChain(String projectId, String versionId, String apiKey, Integer maxDepth) {
+        // S3-T4: 熔断检查 — 熔断期内直接返回空结果
+        if (isCircuitBreakerOpen()) {
+            log.warn("Circuit breaker open, returning empty API call chain (versionId={})", versionId);
+            PathChain empty = new PathChain();
+            empty.nodes = new ArrayList<>();
+            empty.edges = new ArrayList<>();
+            empty.degraded = true;
+            return empty;
+        }
+
         // Neo4j 存储 versionId 无连字符，需规范化
         String normalizedVersionId = IdUtil.normalizeId(versionId);
 
@@ -50,6 +87,9 @@ public class GraphPathReadModel {
         int effectiveDepth = maxDepth != null
                 ? Math.max(1, Math.min(maxDepth, 12))
                 : Math.max(1, Math.min(apiChainMaxDepth, 12));
+
+        // S3-T4: 超时 deadline
+        long deadlineNanos = System.nanoTime() + queryTimeoutMs * 1_000_000L;
 
         PathChain chain = new PathChain();
         chain.nodes = new ArrayList<>();
@@ -66,6 +106,15 @@ public class GraphPathReadModel {
         visited.add(apiNode.get().getId());
 
         for (int depth = 0; depth < effectiveDepth; depth++) {
+            // S3-T4: 超时熔断 — 每跳检查 deadline
+            if (System.nanoTime() > deadlineNanos) {
+                log.warn("API call chain BFS timed out at depth {}/{} ({}ms), returning partial result (versionId={})",
+                        depth, effectiveDepth, queryTimeoutMs, versionId);
+                chain.degraded = true;
+                onQueryTimeout();
+                return chain;
+            }
+
             // 查询当前 frontier 的所有出边
             List<Map<String, Object>> outgoingEdges = neo4jGraphDao.queryOutgoingEdges(
                     projectId, normalizedVersionId, visited);
@@ -100,6 +149,7 @@ public class GraphPathReadModel {
                 break;
             }
         }
+        onQuerySuccess();
         return chain;
     }
 
@@ -114,8 +164,21 @@ public class GraphPathReadModel {
 
     /** 表影响范围 */
     public PathChain getTableImpact(String projectId, String versionId, String tableName) {
+        // S3-T4: 熔断检查 — 熔断期内直接返回空结果
+        if (isCircuitBreakerOpen()) {
+            log.warn("Circuit breaker open, returning empty table impact (versionId={})", versionId);
+            PathChain empty = new PathChain();
+            empty.nodes = new ArrayList<>();
+            empty.edges = new ArrayList<>();
+            empty.degraded = true;
+            return empty;
+        }
+
         // Neo4j 存储 versionId 无连字符，需规范化
         String normalizedVersionId = IdUtil.normalizeId(versionId);
+
+        // S3-T4: 超时 deadline
+        long deadlineNanos = System.nanoTime() + queryTimeoutMs * 1_000_000L;
 
         PathChain chain = new PathChain();
         chain.nodes = new ArrayList<>();
@@ -136,7 +199,17 @@ public class GraphPathReadModel {
         visited.add(target.get().getId());
 
         // 反向遍历：谁依赖/引用这个表（上游：SqlStatement←Method←ApiEndpoint）
-        for (int depth = 0; depth < 6; depth++) {
+        // S3-T4: depth 可配 + clamp ≤ 8（原硬编码 6）
+        int effectiveReverseDepth = Math.max(1, Math.min(tableImpactMaxDepth, 8));
+        for (int depth = 0; depth < effectiveReverseDepth; depth++) {
+            // S3-T4: 超时熔断
+            if (System.nanoTime() > deadlineNanos) {
+                log.warn("Table impact reverse BFS timed out at depth {}/{} ({}ms), returning partial result (table={})",
+                        depth, effectiveReverseDepth, queryTimeoutMs, tableName);
+                chain.degraded = true;
+                onQueryTimeout();
+                return chain;
+            }
             List<Map<String, Object>> incomingEdges = neo4jGraphDao.queryIncomingEdges(
                     projectId, normalizedVersionId, visited);
 
@@ -164,7 +237,17 @@ public class GraphPathReadModel {
 
         // 正向遍历：查找关联表（通过 REFERENCES / JOINS 边，当前表→引用表）
         Set<String> relatedVisited = new HashSet<>(visited);
-        for (int depth = 0; depth < 3; depth++) {
+        // S3-T4: depth 可配 + clamp ≤ 8（原硬编码 3）
+        int effectiveForwardDepth = Math.max(1, Math.min(tableImpactForwardDepth, 8));
+        for (int depth = 0; depth < effectiveForwardDepth; depth++) {
+            // S3-T4: 超时熔断
+            if (System.nanoTime() > deadlineNanos) {
+                log.warn("Table impact forward BFS timed out at depth {}/{} ({}ms), returning partial result (table={})",
+                        depth, effectiveForwardDepth, queryTimeoutMs, tableName);
+                chain.degraded = true;
+                onQueryTimeout();
+                return chain;
+            }
             List<Map<String, Object>> outgoingEdges = neo4jGraphDao.queryOutgoingEdges(
                     projectId, normalizedVersionId, relatedVisited);
 
@@ -226,6 +309,7 @@ public class GraphPathReadModel {
             inferImplicitTableAssociations(projectId, normalizedVersionId, target.get(), chain, relatedVisited);
         }
 
+        onQuerySuccess();
         return chain;
     }
 
@@ -332,12 +416,37 @@ public class GraphPathReadModel {
         return new EdgeInfo(id, type, source, target);
     }
 
+    // ==================== S3-T4: 查询熔断器 ====================
+
+    /** 熔断器是否开启（熔断期内直接返回降级结果） */
+    private boolean isCircuitBreakerOpen() {
+        long openUntil = circuitBreakerOpenUntilNanos;
+        return openUntil > 0 && System.nanoTime() < openUntil;
+    }
+
+    /** 查询成功 — 重置连续超时计数 */
+    private void onQuerySuccess() {
+        consecutiveTimeouts.set(0);
+    }
+
+    /** 查询超时 — 累计连续超时计数，达到阈值则开启熔断 */
+    private void onQueryTimeout() {
+        long count = consecutiveTimeouts.incrementAndGet();
+        if (count >= circuitBreakerThreshold) {
+            circuitBreakerOpenUntilNanos = System.nanoTime() + circuitBreakerResetMs * 1_000_000L;
+            log.error("Circuit breaker OPENED after {} consecutive timeouts, will reset in {}ms",
+                    count, circuitBreakerResetMs);
+        }
+    }
+
     // ==================== DTO ====================
 
     public static class PathChain {
         public String startNodeId;
         public List<NodeInfo> nodes;
         public List<EdgeInfo> edges;
+        /** S3-T4: 降级标记 — true 表示结果可能不完整（超时或熔断），前端可据此提示用户 */
+        public boolean degraded;
     }
 
     public record NodeInfo(String id, String type, String name, String displayName,

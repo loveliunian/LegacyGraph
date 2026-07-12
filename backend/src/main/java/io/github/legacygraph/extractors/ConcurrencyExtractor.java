@@ -34,6 +34,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.legacygraph.concurrency.ConcurrencyPropertyExtractor;
+
 /**
  * 事务与并发扫描器（v6.0 P9：CONCURRENCY）— 扫描 Java 源码中的事务与并发特征。
  * <p>覆盖以下维度：
@@ -175,12 +177,26 @@ public class ConcurrencyExtractor {
         // 检测锁机制
         String lockType = detectLockType(method, reentrantLockFieldNames);
 
+        // S2-T4: 方法体级并发原语检测（volatile/AtomicXxx/Lock API/CompletableFuture/Thread/SyncUtility）
+        String methodBody = method.getBody().map(b -> b.toString()).orElse(null);
+        Map<String, Object> bodyProps = ConcurrencyPropertyExtractor.extractFromBody(methodBody);
+        boolean volatileField = bodyProps.containsKey("volatileField");
+        @SuppressWarnings("unchecked")
+        String atomicUsage = bodyProps.containsKey("atomicUsage")
+                ? String.join(",", (List<String>) bodyProps.get("atomicUsage")) : null;
+        boolean lockApi = bodyProps.containsKey("lockApi");
+        boolean completableFuture = bodyProps.containsKey("completableFuture");
+        boolean threadUsage = bodyProps.containsKey("threadUsage");
+        boolean syncUtility = bodyProps.containsKey("syncUtility");
+
         // self-invocation 检测：本方法是否调用同类内的 @Transactional 方法
         // （若调用，则被调 @Transactional 方法的代理会失效 → 标记风险在 caller 上）
         String selfInvocationTarget = detectSelfInvocation(method, transactionalMethodNames);
 
         // 无任何并发特征且无 self-invocation → 跳过
-        if (!transactional && !async && lockType == null && selfInvocationTarget == null) {
+        if (!transactional && !async && lockType == null && selfInvocationTarget == null
+                && !volatileField && atomicUsage == null && !lockApi
+                && !completableFuture && !threadUsage && !syncUtility) {
             return null;
         }
 
@@ -196,6 +212,13 @@ public class ConcurrencyExtractor {
         fact.setSourcePath(javaFile.toString());
         fact.setStartLine(method.getBegin().map(p -> p.line).orElse(null));
         fact.setEndLine(method.getEnd().map(p -> p.line).orElse(null));
+        // S2-T4: 方法体级并发原语
+        fact.setVolatileField(volatileField);
+        fact.setAtomicUsage(atomicUsage);
+        fact.setLockApi(lockApi);
+        fact.setCompletableFuture(completableFuture);
+        fact.setThreadUsage(threadUsage);
+        fact.setSyncUtility(syncUtility);
 
         // self-invocation 风险：本方法（caller）通过自调用触发了 @Transactional 方法，
         // 导致被调方法事务失效。风险标记在 caller 上，并记录被调方法名。
@@ -424,6 +447,18 @@ public class ConcurrencyExtractor {
         private String sourcePath;
         private Integer startLine;
         private Integer endLine;
+        /** S2-T4: volatile 字段使用 */
+        private boolean volatileField;
+        /** S2-T4: AtomicXxx 类使用（逗号分隔的类型列表） */
+        private String atomicUsage;
+        /** S2-T4: Lock/ReentrantLock API 使用 */
+        private boolean lockApi;
+        /** S2-T4: CompletableFuture 使用 */
+        private boolean completableFuture;
+        /** S2-T4: Thread/Runnable/Executor 使用 */
+        private boolean threadUsage;
+        /** S2-T4: 同步工具类使用（CountDownLatch/CyclicBarrier/Semaphore/Phaser） */
+        private boolean syncUtility;
     }
 
     /**

@@ -433,6 +433,25 @@ public class EnhancedQaAgent {
                         double finalConfidence = confidenceBreakdown.finalScore();
                         boolean isLowConfidence = verificationResult.isLowCoverage();
 
+                        // S4-T1: 强制证据回填校验 — 答案必须引用至少 1 个图谱节点 ID
+                        if (graphNodes != null && !graphNodes.isEmpty()
+                                && !isChitchatIntent(finalIntent)) {
+                            boolean cited = false;
+                            for (GraphNode gn : graphNodes) {
+                                if (gn.getId() != null && displayText.contains(gn.getId())) {
+                                    cited = true;
+                                    break;
+                                }
+                            }
+                            if (!cited) {
+                                log.warn("S4-T1: answer lacks graph node citation, intent={}, question='{}'",
+                                        finalIntent, question);
+                                displayText += "\n\n> ⚠️ 本回答未引用图谱证据节点，请核实信息来源。";
+                                finalConfidence *= 0.8;
+                                isLowConfidence = true;
+                            }
+                        }
+
                         // 高风险意图（CHANGE_IMPACT）置信度 < 0.5 → 拒答
                         if (finalIntent == QueryIntent.CHANGE_IMPACT
                                 && finalConfidence < ConfidenceScorer.HIGH_RISK_REJECT_THRESHOLD) {
@@ -638,6 +657,16 @@ public class EnhancedQaAgent {
 
             log.debug("Graph expanded: {} seeds, {} total nodes after {} hops",
                 seedNodes.size(), result.size(), depth);
+
+            // S4-T2: 按 evidenceScore + confidence 降序排序，负反馈节点排后面
+            result.sort((a, b) -> {
+                int scoreA = (a.getEvidenceScore() != null ? a.getEvidenceScore() : 0)
+                        + (int) ((a.getConfidence() != null ? a.getConfidence().doubleValue() : 0) * 100);
+                int scoreB = (b.getEvidenceScore() != null ? b.getEvidenceScore() : 0)
+                        + (int) ((b.getConfidence() != null ? b.getConfidence().doubleValue() : 0) * 100);
+                return Integer.compare(scoreB, scoreA);
+            });
+
             return result;
         } catch (Exception e) {
             log.warn("Graph expansion failed: {}", e.getMessage());
@@ -695,9 +724,12 @@ public class EnhancedQaAgent {
         }
 
         context.append("## 相关代码/实体\n");
+        context.append("（请在答案中用 [节点ID] 格式引用至少一个上述节点）\n");
         for (int i = 0; i < Math.min(5, nodes.size()); i++) {
             GraphNode node = nodes.get(i);
-            context.append("- ").append(node.getNodeType()).append(": ")
+            // S4-T1: 节点 ID 嵌入 context，供 LLM 引用 + 答案校验
+            context.append("- [").append(node.getId()).append("] ")
+                   .append(node.getNodeType()).append(": ")
                    .append(node.getDisplayName() != null ? node.getDisplayName() : node.getNodeName());
             if (node.getDescription() != null) {
                 context.append(" - ").append(node.getDescription());
@@ -1202,6 +1234,14 @@ public class EnhancedQaAgent {
         double graphScore = Math.min(1.0, graphEvidences / 3.0);
         double docScore = Math.min(0.5, docEvidences / 5.0 * 0.5);
         return Math.min(1.0, graphScore * 0.7 + docScore * 0.3);
+    }
+
+    /**
+     * S4-T1: 闲聊型意图白名单 — 跳过强制证据回填，避免命中率断崖。
+     * null 意图视为闲聊，跳过校验；其他意图均需证据引用。
+     */
+    private boolean isChitchatIntent(QueryIntent intent) {
+        return intent == null;
     }
 
     private void sendEvent(SseEmitter emitter, String eventName, Object data) {

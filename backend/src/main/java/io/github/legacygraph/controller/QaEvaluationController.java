@@ -7,8 +7,10 @@ import io.github.legacygraph.common.Result;
 import io.github.legacygraph.dto.evaluation.RagasReport;
 import io.github.legacygraph.dto.qa.QaEvaluationResult;
 import io.github.legacygraph.dto.qa.QaFeedbackRequest;
+import io.github.legacygraph.entity.QaEvaluationRun;
 import io.github.legacygraph.entity.QaFeedback;
 import io.github.legacygraph.entity.QaTestCase;
+import io.github.legacygraph.repository.QaEvaluationRunRepository;
 import io.github.legacygraph.repository.QaFeedbackRepository;
 import io.github.legacygraph.repository.QaTestCaseRepository;
 import io.github.legacygraph.service.evaluation.RagasMetricsService;
@@ -46,6 +48,7 @@ public class QaEvaluationController {
 
     private final QaTestCaseRepository qaTestCaseRepository;
     private final QaFeedbackRepository qaFeedbackRepository;
+    private final QaEvaluationRunRepository qaEvaluationRunRepository;
     private final ObjectMapper objectMapper;
     private final RagasMetricsService ragasMetricsService;
 
@@ -100,36 +103,66 @@ public class QaEvaluationController {
     }
 
     /**
-     * 查询历史评测运行记录。
-     * <p>
-     * 读取项目评测报告目录下的 {@code qa-evaluation-*.json} 文件，按评测时间倒序返回。
-     * </p>
+     * S4-T6: 查询历史评测运行记录 — 优先查数据库（落库的指标），fallback 到 JSON 文件。
+     * <p>验收标准：评估结果可查询。</p>
      *
      * @param projectId 项目 ID
      * @return 历史评测运行列表（每项为一次评测结果汇总）
      */
     @GetMapping("/eval-runs")
     public Result<List<QaEvaluationResult>> listEvalRuns(@PathVariable String projectId) {
-        Path dir = resolveReportDir(projectId);
+        // S4-T6: 优先查数据库
         List<QaEvaluationResult> runs = new ArrayList<>();
-        if (dir == null || !Files.isDirectory(dir)) {
-            return Result.success(runs);
-        }
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "qa-evaluation-*.json")) {
-            for (Path file : stream) {
-                QaEvaluationResult result = readReport(file);
-                if (result != null) {
-                    runs.add(result);
-                }
+        try {
+            List<QaEvaluationRun> dbRuns = qaEvaluationRunRepository.lambdaQuery()
+                    .eq(QaEvaluationRun::getProjectId, projectId)
+                    .orderByDesc(QaEvaluationRun::getEvaluatedAt)
+                    .list();
+            for (QaEvaluationRun dbRun : dbRuns) {
+                runs.add(toResultDto(dbRun));
             }
-        } catch (IOException e) {
-            log.warn("QaEvaluationController: failed to list eval runs for projectId={}: {}", projectId, e.getMessage());
+        } catch (Exception e) {
+            log.warn("S4-T6: failed to query eval runs from DB for projectId={}: {}", projectId, e.getMessage());
         }
-        // 按评测时间倒序排列（最新在前）
-        runs.sort(Comparator.nullsLast(
-                Comparator.comparing(QaEvaluationResult::getEvaluatedAt,
-                        Comparator.nullsLast(Comparator.reverseOrder()))));
+
+        // fallback：数据库无数据时读取 JSON 文件
+        if (runs.isEmpty()) {
+            Path dir = resolveReportDir(projectId);
+            if (dir != null && Files.isDirectory(dir)) {
+                try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "qa-evaluation-*.json")) {
+                    for (Path file : stream) {
+                        QaEvaluationResult result = readReport(file);
+                        if (result != null) {
+                            runs.add(result);
+                        }
+                    }
+                } catch (IOException e) {
+                    log.warn("QaEvaluationController: failed to list eval runs for projectId={}: {}", projectId, e.getMessage());
+                }
+                runs.sort(Comparator.nullsLast(
+                        Comparator.comparing(QaEvaluationResult::getEvaluatedAt,
+                                Comparator.nullsLast(Comparator.reverseOrder()))));
+            }
+        }
         return Result.success(runs);
+    }
+
+    /**
+     * S4-T6: 保存评测结果到数据库 — 评测完成后调用，指标落库支持可查询。
+     *
+     * @param projectId 项目 ID
+     * @param result    评测结果
+     * @return 落库后的记录 ID
+     */
+    @PostMapping("/eval-runs")
+    public Result<String> saveEvalRun(
+            @PathVariable String projectId,
+            @RequestBody QaEvaluationResult result) {
+        QaEvaluationRun run = toEntity(projectId, result);
+        qaEvaluationRunRepository.insert(run);
+        log.info("S4-T6: eval run saved to DB: projectId={}, runId={}, passed={}",
+                projectId, run.getId(), run.getPassed());
+        return Result.success(run.getId());
     }
 
     /**
@@ -285,5 +318,56 @@ public class QaEvaluationController {
             return null;
         }
         return Paths.get(reportRoot, projectId, DOCS_SUBDIR);
+    }
+
+    // S4-T6: 评测结果 DB ↔ DTO 转换
+
+    /** 实体 → DTO */
+    private QaEvaluationResult toResultDto(QaEvaluationRun run) {
+        QaEvaluationResult dto = new QaEvaluationResult();
+        dto.setProjectId(run.getProjectId());
+        dto.setVersionId(run.getVersionId());
+        dto.setEvaluatedAt(run.getEvaluatedAt());
+        dto.setEntityRecall(run.getEntityRecall() != null ? run.getEntityRecall() : 0);
+        dto.setEvidencePrecision(run.getEvidencePrecision() != null ? run.getEvidencePrecision() : 0);
+        dto.setRequiredKeywordCoverage(run.getRequiredKeywordCoverage() != null ? run.getRequiredKeywordCoverage() : 0);
+        dto.setAbstentionAccuracy(run.getAbstentionAccuracy() != null ? run.getAbstentionAccuracy() : 0);
+        dto.setRagasContextPrecision(run.getRagasContextPrecision() != null ? run.getRagasContextPrecision() : 0);
+        dto.setRagasContextRecall(run.getRagasContextRecall() != null ? run.getRagasContextRecall() : 0);
+        dto.setRagasFaithfulness(run.getRagasFaithfulness() != null ? run.getRagasFaithfulness() : 0);
+        dto.setRagasAnswerRelevancy(run.getRagasAnswerRelevancy() != null ? run.getRagasAnswerRelevancy() : 0);
+        dto.setTotalCases(run.getTotalCases() != null ? run.getTotalCases() : 0);
+        dto.setPassedCases(run.getPassedCases() != null ? run.getPassedCases() : 0);
+        dto.setPassed(run.getPassed() != null && run.getPassed());
+        return dto;
+    }
+
+    /** DTO → 实体 */
+    private QaEvaluationRun toEntity(String projectId, QaEvaluationResult result) {
+        QaEvaluationRun run = new QaEvaluationRun();
+        run.setId(IdUtil.fastUUID());
+        run.setProjectId(projectId);
+        run.setVersionId(result.getVersionId());
+        run.setEvaluatedAt(result.getEvaluatedAt() != null ? result.getEvaluatedAt() : java.time.LocalDateTime.now());
+        run.setEntityRecall(result.getEntityRecall());
+        run.setEvidencePrecision(result.getEvidencePrecision());
+        run.setRequiredKeywordCoverage(result.getRequiredKeywordCoverage());
+        run.setAbstentionAccuracy(result.getAbstentionAccuracy());
+        run.setRagasContextPrecision(result.getRagasContextPrecision());
+        run.setRagasContextRecall(result.getRagasContextRecall());
+        run.setRagasFaithfulness(result.getRagasFaithfulness());
+        run.setRagasAnswerRelevancy(result.getRagasAnswerRelevancy());
+        run.setTotalCases(result.getTotalCases());
+        run.setPassedCases(result.getPassedCases());
+        run.setPassed(result.isPassed());
+        if (result.getFailureReasons() != null && !result.getFailureReasons().isEmpty()) {
+            try {
+                run.setFailureReasons(objectMapper.writeValueAsString(result.getFailureReasons()));
+            } catch (JsonProcessingException e) {
+                run.setFailureReasons(String.join("; ", result.getFailureReasons()));
+            }
+        }
+        run.setCreatedAt(java.time.LocalDateTime.now());
+        return run;
     }
 }

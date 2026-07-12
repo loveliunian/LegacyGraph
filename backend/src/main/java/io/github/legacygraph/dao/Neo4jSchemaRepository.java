@@ -52,6 +52,12 @@ public class Neo4jSchemaRepository {
                 // nodeKey 索引：加速按 nodeKey 点查（MERGE/去重的关键索引）
                 session.run(String.format(
                         "CREATE INDEX IF NOT EXISTS FOR (n:%s) ON (n.nodeKey)", label));
+                // S3-T7: nodeName 索引 — 中文字段名加速精确匹配（getTableImpact 等按名称查询）
+                session.run(String.format(
+                        "CREATE INDEX IF NOT EXISTS FOR (n:%s) ON (n.nodeName)", label));
+                // S3-T7: sourcePath 索引 — 加速 findNodesBySourcePath 查询
+                session.run(String.format(
+                        "CREATE INDEX IF NOT EXISTS FOR (n:%s) ON (n.sourcePath)", label));
             }
 
             // Relationship 属性索引：加速按 projectId + versionId 查询边
@@ -60,7 +66,7 @@ public class Neo4jSchemaRepository {
                 session.run(String.format(
                         "CREATE INDEX IF NOT EXISTS FOR ()-[r:%s]-() ON (r.projectId, r.versionId)", relType));
             }
-            log.info("Created Neo4j indexes for {} node types and {} edge types",
+            log.info("Created Neo4j indexes for {} node types and {} edge types (incl. S3-T7 nodeName/sourcePath indexes)",
                     NodeType.values().length, EdgeType.values().length);
             // id 属性已在 createConstraints 中通过 UNIQUE 约束自动索引，无需重复建
         }
