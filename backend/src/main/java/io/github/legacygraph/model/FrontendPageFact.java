@@ -39,6 +39,8 @@ public class FrontendPageFact {
         private String clickMethod;
         private String permission;
         private String apiUrl;
+        /** G9: 按钮 HTTP method（get/post/put/delete），缺失时默认 POST */
+        private String httpMethod;
         private Integer lineNumber;
     }
 }

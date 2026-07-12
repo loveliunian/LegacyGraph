@@ -1,5 +1,6 @@
 package io.github.legacygraph.service.scan;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.common.GraphReleaseStatus;
 import io.github.legacygraph.dto.qa.QaEvaluationResult;
 import io.github.legacygraph.dto.scan.Decision;
@@ -87,7 +88,8 @@ class ScanFinalizationServiceTest {
                 graphQualityGate,
                 graphReleaseService,
                 semanticCache,
-                qaEvaluationService);
+                qaEvaluationService,
+                new ObjectMapper());
     }
 
     /**
@@ -136,7 +138,7 @@ class ScanFinalizationServiceTest {
 
         // 验证发布 + 缓存失效
         verify(graphReleaseService).startValidation(eq(PID), eq(VID));
-        verify(graphReleaseService).markPublished(eq("release-1"));
+        verify(graphReleaseService).markPublished(eq("release-1"), any());
         verify(semanticCache).invalidateByProject(eq(PID));
     }
 
@@ -161,7 +163,7 @@ class ScanFinalizationServiceTest {
         verify(graphReleaseService).markFailed(eq("release-2"), eq(reasons));
 
         // 不调用 markPublished，不失效缓存
-        verify(graphReleaseService, never()).markPublished(anyString());
+        verify(graphReleaseService, never()).markPublished(anyString(), any());
         verify(semanticCache, never()).invalidateByProject(anyString());
     }
 
@@ -186,7 +188,7 @@ class ScanFinalizationServiceTest {
         verify(reusableComponentMarker).mark(eq(PID), eq(VID));
         verify(graphQualityAssessor).assessAndReport(eq(PID), eq(VID));
         verify(scanArtifactPublisher).publishArtifactsOnly(eq(PID), eq(VID));
-        verify(graphReleaseService).markPublished(eq("release-3"));
+        verify(graphReleaseService).markPublished(eq("release-3"), any());
     }
 
     @Test
@@ -203,7 +205,7 @@ class ScanFinalizationServiceTest {
         service.finalize(PID, VID);
 
         verify(scanArtifactPublisher).publishArtifactsOnly(eq(PID), eq(VID));
-        verify(graphReleaseService).markPublished(eq("release-4"));
+        verify(graphReleaseService).markPublished(eq("release-4"), any());
     }
 
     @Test
@@ -220,7 +222,7 @@ class ScanFinalizationServiceTest {
         service.finalize(PID, VID);
 
         verify(graphQualityGate).evaluate(eq(PID), eq(VID));
-        verify(graphReleaseService).markPublished(eq("release-5"));
+        verify(graphReleaseService).markPublished(eq("release-5"), any());
     }
 
     // ========================================================
@@ -246,7 +248,7 @@ class ScanFinalizationServiceTest {
         assertThat(captor.getValue().get(0)).contains("QUALITY_GATE_EVALUATION_ERROR");
 
         // 不调用 markPublished，不失效缓存
-        verify(graphReleaseService, never()).markPublished(anyString());
+        verify(graphReleaseService, never()).markPublished(anyString(), any());
         verify(semanticCache, never()).invalidateByProject(anyString());
     }
 
@@ -266,7 +268,7 @@ class ScanFinalizationServiceTest {
 
         service.finalize(PID, VID);
 
-        verify(graphReleaseService, never()).markPublished(anyString());
+        verify(graphReleaseService, never()).markPublished(anyString(), any());
         // 已发布幂等场景也失效缓存
         verify(semanticCache).invalidateByProject(eq(PID));
     }
@@ -343,7 +345,7 @@ class ScanFinalizationServiceTest {
 
         service.finalize(PID, VID);
 
-        verify(graphReleaseService, never()).markPublished(anyString());
+        verify(graphReleaseService, never()).markPublished(anyString(), any());
         verify(semanticCache, never()).invalidateByProject(anyString());
     }
 
@@ -373,7 +375,7 @@ class ScanFinalizationServiceTest {
         when(graphQualityGate.evaluate(eq(PID), eq(VID))).thenReturn(passed);
         GraphRelease release = buildRelease("release-11", GraphReleaseStatus.VALIDATING);
         when(graphReleaseService.startValidation(eq(PID), eq(VID))).thenReturn(release);
-        when(graphReleaseService.markPublished(eq("release-11")))
+        when(graphReleaseService.markPublished(eq("release-11"), any()))
                 .thenThrow(new RuntimeException("markPublished error"));
 
         service.finalize(PID, VID);
@@ -413,7 +415,7 @@ class ScanFinalizationServiceTest {
         inOrder.verify(scanArtifactPublisher).publishArtifactsOnly(eq(PID), eq(VID));
         inOrder.verify(graphQualityGate).evaluate(eq(PID), eq(VID));
         inOrder.verify(graphReleaseService).startValidation(eq(PID), eq(VID));
-        inOrder.verify(graphReleaseService).markPublished(eq("release-12"));
+        inOrder.verify(graphReleaseService).markPublished(eq("release-12"), any());
         inOrder.verify(semanticCache).invalidateByProject(eq(PID));
     }
 
@@ -466,7 +468,7 @@ class ScanFinalizationServiceTest {
         verify(scanArtifactPublisher, times(1)).publishArtifactsOnly(eq(PID), eq(VID));
         verify(graphQualityGate, times(1)).evaluate(eq(PID), eq(VID));
         verify(graphReleaseService, times(1)).startValidation(eq(PID), eq(VID));
-        verify(graphReleaseService, times(1)).markPublished(eq("release-14"));
+        verify(graphReleaseService, times(1)).markPublished(eq("release-14"), any());
         verify(semanticCache, times(1)).invalidateByProject(eq(PID));
     }
 

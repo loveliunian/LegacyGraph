@@ -1,13 +1,17 @@
 package io.github.legacygraph.service.scan;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.dto.qa.QaEvaluationResult;
 import io.github.legacygraph.dto.scan.Decision;
 import io.github.legacygraph.entity.GraphRelease;
+import io.github.legacygraph.eval.GraphifyQualityResult;
+import io.github.legacygraph.eval.GraphifyQualityService;
 import io.github.legacygraph.service.graph.GraphReleaseService;
 import io.github.legacygraph.service.qa.QaEvaluationService;
 import io.github.legacygraph.service.qa.SemanticCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -60,6 +64,14 @@ public class ScanFinalizationService {
     private final GraphReleaseService graphReleaseService;
     private final SemanticCache semanticCache;
     private final QaEvaluationService qaEvaluationService;
+    private final ObjectMapper objectMapper;
+
+    /**
+     * Graphify 质量评估服务，可选注入（graphify 可能禁用或 Bean 未注册）。
+     * 用于在发布时计算 GraphifyQualityResult 并写入 GraphRelease.metrics。
+     */
+    @Autowired(required = false)
+    private GraphifyQualityService graphifyQualityService;
 
     /** Feature Flag：社区摘要生成开关，默认关闭 */
     @Value("${legacygraph.community.summary.enabled:false}")
@@ -198,15 +210,36 @@ public class ScanFinalizationService {
             return;
         }
 
+        // 计算并序列化 Graphify 质量指标（失败不阻断发布）
+        String metricsJson = resolveGraphifyMetrics(projectId, scanVersionId);
+
         try {
-            graphReleaseService.markPublished(release.getId());
-            log.info("ScanFinalizationService: GraphRelease published: id={}, projectId={}, scanVersionId={}",
-                    release.getId(), projectId, scanVersionId);
+            graphReleaseService.markPublished(release.getId(), metricsJson);
+            log.info("ScanFinalizationService: GraphRelease published: id={}, projectId={}, scanVersionId={}, metrics={}",
+                    release.getId(), projectId, scanVersionId, metricsJson != null ? "written" : "skipped");
             // 9. 缓存失效（发布成功后才失效，避免门禁失败时清掉仍可能被使用的缓存）
             invalidateCache(projectId);
         } catch (Exception e) {
             log.warn("ScanFinalizationService: GraphRelease markPublished failed (non-blocking): id={}, error={}",
                     release.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 计算 Graphify 质量指标并序列化为 JSON。
+     * GraphifyQualityService 未注入或评估异常时返回 null，不阻断发布。
+     */
+    private String resolveGraphifyMetrics(String projectId, String scanVersionId) {
+        if (graphifyQualityService == null) {
+            return null;
+        }
+        try {
+            GraphifyQualityResult result = graphifyQualityService.getQuality(projectId, scanVersionId);
+            return objectMapper.writeValueAsString(result);
+        } catch (Exception e) {
+            log.warn("ScanFinalizationService: graphify quality metrics resolution failed (non-blocking): projectId={}, scanVersionId={}, error={}",
+                    projectId, scanVersionId, e.getMessage());
+            return null;
         }
     }
 

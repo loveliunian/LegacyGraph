@@ -1,6 +1,7 @@
 package io.github.legacygraph.extractors.adapter;
 
 import io.github.legacygraph.builder.GraphBuilder;
+import io.github.legacygraph.common.SourceType;
 import io.github.legacygraph.extractors.MyBatisAnnotationExtractor;
 import io.github.legacygraph.model.MapperSqlFact;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,10 @@ public class MyBatisAnnotationAdapter implements ExtractionAdapter {
         if (mapperFact == null || mapperFact.getNamespace() == null) {
             return ExtractionResult.builder().processedAssets(1).summary("MyBatis annotation: no SQL found").build();
         }
-        
+
+        // G1: 标记来源为 MYBATIS_ANNOTATION，让 GraphBuilder 正确区分注解式与 XML
+        mapperFact.setSourceType(SourceType.MYBATIS_ANNOTATION.name());
+
         factPersister.saveFact(context.getProjectId(), context.getVersionId(),
                 "MAPPER_ANNOTATION", "MAPPER", mapperFact.getNamespace(), mapperFact.getNamespace(),
                 asset.getRelativePath(), null, null, mapperFact, BigDecimal.ONE, "EXTRACTED");

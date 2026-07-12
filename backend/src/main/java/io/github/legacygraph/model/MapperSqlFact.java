@@ -17,4 +17,7 @@ public class MapperSqlFact {
     private List<MyBatisXmlExtractor.SqlStatement> statements;
     private List<String> allReadTables;
     private List<String> allWriteTables;
+
+    /** 事实来源类型（MYBATIS_XML / MYBATIS_ANNOTATION），默认 MYBATIS_XML 保持向后兼容 */
+    private String sourceType = "MYBATIS_XML";
 }

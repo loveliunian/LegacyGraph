@@ -2,6 +2,7 @@ package io.github.legacygraph.integration.graphify;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.common.NodeType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +23,43 @@ public class GraphifyCompatibilityService {
     private static final Set<String> KNOWN_FIELDS = Set.of(
             "directed", "nodes", "links", "edges", "hyperedges", "built_at_commit"
     );
+
+    /**
+     * 业务语义节点 — Graphify 不覆盖（评估 §5.1 关键约束）。
+     *
+     * <p>Graphify 仅做 AST + 反推断，不做业务语义抽取。
+     * releaseGatePassed 与 diff 报告必须明确排除这些节点类型，避免误判。</p>
+     */
+    public static final Set<String> SEMANTIC_NODE_TYPES = Set.of(
+            NodeType.BusinessDomain.name(),
+            NodeType.BusinessProcess.name(),
+            NodeType.BusinessObject.name(),
+            NodeType.BusinessRule.name(),
+            "Role",
+            NodeType.FeatureModule.name(),
+            NodeType.Feature.name(),
+            "Menu",
+            NodeType.Page.name(),
+            "Button",
+            "Permission",
+            "Requirement",
+            "Solution",
+            "ChangeTask",
+            "Patch",
+            "PR",
+            "TestCase",
+            "Assertion"
+    );
+
+    /**
+     * 判断给定节点类型是否属于"业务语义节点"。
+     *
+     * <p>业务语义节点不进入 Graphify diff / releaseGatePassed；CI 评测在 diff 报告中
+     * 标注"业务语义节点不计 releaseGatePassed"，避免误判。</p>
+     */
+    public static boolean isSemanticNodeType(String nodeType) {
+        return nodeType != null && SEMANTIC_NODE_TYPES.contains(nodeType);
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 

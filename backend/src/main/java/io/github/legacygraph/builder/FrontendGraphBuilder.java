@@ -1,5 +1,6 @@
 package io.github.legacygraph.builder;
 
+import io.github.legacygraph.builder.match.FieldSimilarityCalculator;
 import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeStatus;
 import io.github.legacygraph.common.NodeType;
@@ -14,8 +15,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -28,6 +31,7 @@ public class FrontendGraphBuilder {
 
     private final Neo4jGraphDao neo4jGraphDao;
     private final EvidenceGraphWriter writer;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public FrontendGraphBuilder(Neo4jGraphDao neo4jGraphDao,
                                EvidenceGraphWriter writer) {
@@ -58,6 +62,10 @@ public class FrontendGraphBuilder {
             FrontendPageFact page, GraphNode parentMenu) {
         // 创建Page节点
         String pageKey = normalizePageKey(page.getRoutePath(), page.getComponentPath());
+        // G4: 写入 module / vueFilePath 属性，让 feature-view 可按模块过滤
+        Map<String, Object> pageProps = new java.util.HashMap<>();
+        pageProps.put("module", deriveModule(page.getComponentPath()));
+        pageProps.put("vueFilePath", page.getComponentPath());
         GraphNode pageNode = findOrCreateNode(
                 projectId, versionId,
                 NodeType.Page.name(),
@@ -70,7 +78,8 @@ public class FrontendGraphBuilder {
                 null,
                 null,
                 BigDecimal.ONE,
-                NodeStatus.CONFIRMED
+                NodeStatus.CONFIRMED,
+                pageProps
         );
 
         // 菜单/父节点包含此页面
@@ -226,10 +235,16 @@ public class FrontendGraphBuilder {
                     );
                 }
 
-                // API调用
+                // API调用 (G9: 使用 button 真实 httpMethod，不再硬编码 POST)
                 if (button.getApiUrl() != null && !button.getApiUrl().isEmpty()) {
                     String normalizedPath = GraphBuilder.normalizePath(button.getApiUrl());
-                    String apiKey = "POST " + normalizedPath; // 默认POST
+                    String btnHttpMethod = button.getHttpMethod() != null && !button.getHttpMethod().isBlank()
+                            ? button.getHttpMethod().toUpperCase() : "POST";
+                    if (button.getHttpMethod() == null || button.getHttpMethod().isBlank()) {
+                        log.debug("Button '{}' apiUrl={} has unresolved httpMethod, defaulting to POST",
+                                button.getText(), button.getApiUrl());
+                    }
+                    String apiKey = btnHttpMethod + " " + normalizedPath;
                     Optional<GraphNode> backendApiOpt = findBackendApi(projectId, versionId, apiKey);
                     if (backendApiOpt.isPresent()) {
                         createEdge(projectId, versionId,
@@ -372,7 +387,44 @@ public class FrontendGraphBuilder {
             }
         }
 
-        return Math.min(score, 1.0);
+        // G7: 前后端 API 字段相似度（请求字段 + 响应字段）
+        // 前端 FrontendApiCall 当前无 requestSchema/responseSchema 字段，暂传空数组
+        String[] reqFields = new String[0];
+        String[] respFields = new String[0];
+        // 后端从 backendApi 的 properties JSON 中尝试提取 requestFields / responseFields（可能不存在，传空数组）
+        String[] apiReqFields = new String[0];
+        String[] apiRespFields = new String[0];
+        String propsJson = backendApi.getProperties();
+        if (propsJson != null && !propsJson.isEmpty()) {
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> props = objectMapper.readValue(propsJson, Map.class);
+                apiReqFields = toStringArray(props.get("requestFields"));
+                apiRespFields = toStringArray(props.get("responseFields"));
+            } catch (Exception e) {
+                log.debug("Failed to parse backend API properties JSON for field similarity: {}", propsJson, e);
+            }
+        }
+        score += FieldSimilarityCalculator.similarity(reqFields, apiReqFields) * 0.1;
+        score += FieldSimilarityCalculator.similarity(respFields, apiRespFields) * 0.1;
+
+        return Math.min(score, 1.2);
+    }
+
+    /**
+     * 将 properties JSON 中提取的 Object 转为 String[]，支持 List 类型；其他类型返回空数组。
+     */
+    private String[] toStringArray(Object value) {
+        if (value instanceof List) {
+            List<?> list = (List<?>) value;
+            String[] result = new String[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                Object item = list.get(i);
+                result[i] = item == null ? null : item.toString();
+            }
+            return result;
+        }
+        return new String[0];
     }
 
     /**
@@ -410,6 +462,29 @@ public class FrontendGraphBuilder {
             String sourceType, String sourcePath,
             Integer startLine, Integer endLine,
             BigDecimal confidence, NodeStatus status) {
+        return findOrCreateNode(projectId, versionId, nodeType, nodeKey, nodeName,
+                displayName, description, sourceType, sourcePath,
+                startLine, endLine, confidence, status, null);
+    }
+
+    /**
+     * 查找或创建节点（带额外属性，G4：module/vueFilePath 等）。
+     */
+    private GraphNode findOrCreateNode(String projectId, String versionId,
+            String nodeType, String nodeKey, String nodeName,
+            String displayName, String description,
+            String sourceType, String sourcePath,
+            Integer startLine, Integer endLine,
+            BigDecimal confidence, NodeStatus status,
+            Map<String, Object> extraProperties) {
+        String propsJson = null;
+        if (extraProperties != null && !extraProperties.isEmpty()) {
+            try {
+                propsJson = objectMapper.writeValueAsString(extraProperties);
+            } catch (Exception e) {
+                log.warn("Failed to serialize extra properties for {}: {}", nodeKey, e.getMessage());
+            }
+        }
         return writer.upsertNode(GraphNodeClaim.builder()
                 .projectId(projectId)
                 .versionId(versionId)
@@ -424,7 +499,29 @@ public class FrontendGraphBuilder {
                 .endLine(endLine)
                 .confidence(confidence)
                 .status(status != null ? status.name() : null)
+                .properties(propsJson)
                 .build());
+    }
+
+    /**
+     * G4: 从前端文件路径提取模块名（第一层目录，如 views/user/Index.vue → user）。
+     */
+    private static String deriveModule(String componentPath) {
+        if (componentPath == null || componentPath.isBlank()) {
+            return "UNCLASSIFIED";
+        }
+        String normalized = componentPath.replace('\\', '/');
+        // 去掉前导 ./ 或 /
+        normalized = normalized.replaceAll("^\\./+", "").replaceAll("^/+", "");
+        String[] segments = normalized.split("/");
+        for (String seg : segments) {
+            if (seg.isBlank() || "src".equals(seg) || "views".equals(seg)
+                    || "pages".equals(seg) || "components".equals(seg)) {
+                continue;
+            }
+            return seg.toLowerCase();
+        }
+        return "UNCLASSIFIED";
     }
 
     /**

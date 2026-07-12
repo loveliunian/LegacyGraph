@@ -45,4 +45,7 @@ public class GraphRelease {
     /** 失败原因列表（JSONB 列存储，通过 JacksonTypeHandler 序列化） */
     @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> failureReasons;
+
+    /** 质量指标 JSON（GraphifyQualityResult 等），发布时写入 */
+    private String metrics;
 }

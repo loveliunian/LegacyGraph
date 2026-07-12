@@ -6,6 +6,7 @@ import io.github.legacygraph.dto.scan.ResolvedScanPlan;
 import io.github.legacygraph.entity.SourceAssetSnapshot;
 import io.github.legacygraph.extractors.adapter.SourceAsset;
 import io.github.legacygraph.repository.SourceAssetSnapshotRepository;
+import io.github.legacygraph.util.PathMatcherUtil;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -63,10 +64,12 @@ public class AssetDiscoveryService {
                 Path frontendPath = Path.of(repo.getFrontendDir());
 
                 if (Files.exists(backendPath)) {
-                    addAssets(assets, walkAndBuildAssets(backendPath, scanCode, scanDocs));
+                    addAssets(assets, walkAndBuildAssets(backendPath, scanCode, scanDocs,
+                            repo.getIncludePatterns(), repo.getExcludePatterns()));
                 }
                 if (!frontendPath.equals(backendPath) && Files.exists(frontendPath)) {
-                    addAssets(assets, walkAndBuildAssets(frontendPath, scanCode, scanDocs));
+                    addAssets(assets, walkAndBuildAssets(frontendPath, scanCode, scanDocs,
+                            repo.getIncludePatterns(), repo.getExcludePatterns()));
                 }
             }
         }
@@ -230,13 +233,21 @@ public class AssetDiscoveryService {
         return deletions;
     }
 
-    private List<SourceAsset> walkAndBuildAssets(Path root, boolean scanCode, boolean scanDocs) {
+    private List<SourceAsset> walkAndBuildAssets(Path root, boolean scanCode, boolean scanDocs,
+                                                  List<String> includePatterns, List<String> excludePatterns) {
+        String includeStr = joinPatterns(includePatterns);
+        String excludeStr = joinPatterns(excludePatterns);
+        var includeMatcher = PathMatcherUtil.compile(includeStr);
+        var excludeMatcher = PathMatcherUtil.compile(excludeStr);
+        boolean hasExclude = !excludeStr.isEmpty();
         List<Path> paths;
         try (var stream = Files.walk(root)) {
             paths = stream
                     .filter(Files::isRegularFile)
                     .filter(p -> !isExcludedDir(p, root))
                     .filter(p -> hasSupportedExtension(p))
+                    .filter(p -> PathMatcherUtil.matches(includeMatcher, p, root))
+                    .filter(p -> !hasExclude || !PathMatcherUtil.matches(excludeMatcher, p, root))
                     .sorted() // 按路径字典序排序，确保 maxFiles 截断确定性
                     .toList();
         } catch (IOException e) {
@@ -251,6 +262,20 @@ public class AssetDiscoveryService {
                 })
                 .filter(asset -> shouldIncludeAsset(asset, scanCode, scanDocs))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 将 pattern 列表合并为逗号分隔字符串，过滤空白项；
+     * 返回空串表示无有效 pattern（与 PathMatcherUtil.compile 的空判定一致）。
+     */
+    private static String joinPatterns(List<String> patterns) {
+        if (patterns == null || patterns.isEmpty()) {
+            return "";
+        }
+        return patterns.stream()
+                .filter(s -> s != null && !s.trim().isEmpty())
+                .map(String::trim)
+                .collect(Collectors.joining(","));
     }
 
     private SourceAsset buildAsset(Path file, String relativePath) {

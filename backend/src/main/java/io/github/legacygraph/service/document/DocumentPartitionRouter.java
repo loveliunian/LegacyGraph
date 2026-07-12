@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -39,6 +40,10 @@ public class DocumentPartitionRouter {
     /** tier → service 映射（LEGACY 层级不参与路由） */
     private final Map<String, DocumentPartitionService> tierMap;
 
+    /** G13: 三层解析总开关——关闭时全部走 FAST（一键回退） */
+    @Value("${legacygraph.document.partition.three-layer.enabled:true}")
+    private boolean threeLayerEnabled;
+
     public DocumentPartitionRouter(List<DocumentPartitionService> services) {
         Map<String, DocumentPartitionService> map = new HashMap<>();
         if (services != null) {
@@ -67,6 +72,14 @@ public class DocumentPartitionRouter {
     public List<DocumentElement> partition(byte[] content, String mimeType, String fileName) {
         if (content == null || content.length == 0) {
             return List.of();
+        }
+
+        // G13: 三层总开关——关闭时全部走 FAST（一键回退）
+        if (!threeLayerEnabled) {
+            List<DocumentElement> fastResult = partitionByTier(TIER_FAST, content, mimeType, fileName);
+            log.debug("Three-layer disabled, fallback to FAST: fileName={}, elements={}",
+                    fileName, fastResult.size());
+            return fastResult;
         }
 
         // 1. OCR 层：PDF 且文本层 < 1000 字符

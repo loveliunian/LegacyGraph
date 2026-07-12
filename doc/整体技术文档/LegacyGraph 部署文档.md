@@ -196,39 +196,36 @@ cd deploy
 vim .env
 ```
 
-模板：
+模板（对齐 `deploy/.env.example`）：
 
 ```dotenv
 BACKEND_PORT=8080
 FRONTEND_PORT=80
 
 POSTGRES_URL=jdbc:postgresql://<pg-host>:5432/legacy_graph
-POSTGRES_USERNAME=legacygraph
-POSTGRES_PASSWORD=<postgres-password>
+POSTGRES_USERNAME=legacy_graph_user
+POSTGRES_PASSWORD=your_postgres_password
 
 NEO4J_URI=bolt://<neo4j-host>:7687
 NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=<neo4j-password>
+NEO4J_PASSWORD=your_neo4j_password
 
 REDIS_HOST=<redis-host>
 REDIS_PORT=6379
-REDIS_PASSWORD=<redis-password-or-empty>
+REDIS_PASSWORD=your_redis_password
 
 MINIO_ENDPOINT=http://<minio-host>:9000
-MINIO_ACCESS_KEY=<minio-access-key>
-MINIO_SECRET_KEY=<minio-secret-key>
-
-JWT_SECRET=<at-least-32-bytes-random-secret>
+MINIO_ACCESS_KEY=your_minio_access_key
+MINIO_SECRET_KEY=your_minio_secret_key
 
 # LLM 可选；实际运行时还会读取 lg_llm_provider.api_config
 OPENAI_API_KEY=<openai-key-or-empty>
-DEEPSEEK_API_KEY=<deepseek-key-or-empty>
 ```
 
 注意：
 
-- Compose 当前会显式要求 PostgreSQL、Neo4j、Redis、MinIO 变量。
-- `JWT_SECRET` 生产必须设置，即使代码存在开发默认值也不要依赖。
+- Compose 当前会显式要求 PostgreSQL、Neo4j、Redis、MinIO 变量（带 `:?` 必填校验）。
+- `JWT_SECRET` 未在 `.env.example` 中声明，`application.yml` 有开发默认值 `legacygraph-dev-secret-key-2024-very-long-for-jwt-hmac`，**生产环境必须通过环境变量或配置覆盖**。
 - LLM Provider 的默认模型和 API Key 最终以 `lg_llm_provider` 表为准。
 
 ### 2. 启动应用
@@ -273,15 +270,12 @@ docker compose up --build -d
 classpath:db/migration
 ```
 
-当前脚本（V1–V36，共 36 个）：
+当前脚本（V1–V84，共 83 个，V70 缺失）：
 
-- `V1__initial_schema.sql` ~ `V12__seed_prompt_templates.sql`
-- `V13__scan_version_stats_cache.sql`、`V14__change_task_version_column.sql`、`V15__knowledge_claim_and_gap_task.sql`、`V16__domain_ontology.sql`
-- `V17__switch_embedding_to_siliconflow.sql`、`V18__fix_prompt_output_schemas.sql`、`V19__switch_embedding_to_local_ollama.sql`
-- `V20__source_asset_snapshot.sql`、`V21__graph_write_intent_outbox.sql`、`V22__understanding_tool_runs.sql`、`V23__fix_vector_document_schema.sql`
-- `V24__scan_task_progress.sql`、`V25__seed_doc_parse_status_dict.sql`、`V26__repair_scan_task_progress_columns.sql`、`V27__db_schema_fingerprint.sql`
-- `V28__ai_scan_job.sql`、`V29__qa_conversation_tables.sql`、`V30__semantic_cache.sql`
-- `V31__outbox_enhance.sql`、`V32__ai_scan_job_current_step.sql`、`V33__unify_table_prefix.sql`、`V34__notifications.sql`、`V35__evidence_conflicts.sql`、`V36__seed_qa_agent_prompt_templates.sql`
+- `V1__initial_schema.sql` ~ `V36__seed_qa_agent_prompt_templates.sql`（V1–V36）
+- `V37__fix_qa_answer_remove_json_output.sql` ~ `V54__seed_test_generation_prompt.sql`（V37–V54，Prompt 模板与修复）
+- `V55__create_lg_file_snapshot.sql` ~ `V69__source_snapshot.sql`（V55–V69，文件快照/图谱发布/需求/方案/源码快照）
+- `V71__change_task_assignee.sql` ~ `V84__source_snapshot.sql`（V71–V84，指派人/验收验证/方案审核/QA 审计/STALE 状态/扫描检查点等）
 
 完整清单与说明见 [数据库设计文档](数据库设计文档.md#flyway-迁移版本)。`V33` 将 `sys_*` 表统一为 `lg_sys_*`、`migration_risk` 为 `lg_migration_risk`。
 
@@ -293,7 +287,7 @@ FROM flyway_schema_history
 ORDER BY installed_rank;
 ```
 
-应看到 `V1` 到 `V36` 且 `success = true`。
+应看到 `V1` 到 `V84` 且 `success = true`。
 
 检查核心表：
 
@@ -619,6 +613,7 @@ mc mirror legacygraph/legacy-graph ./backup/legacy-graph
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
+| 4.0 | 2026-07-12 | 迁移版本补齐至 V84（V37–V84，V70 缺失）；`.env` 模板对齐实际 `.env.example`（移除 JWT_SECRET/DEEPSEEK_API_KEY，补充说明 JWT_SECRET 开发默认值与生产覆盖要求）；补充 Compose `:?` 必填校验说明 |
 | 3.0 | 2026-07-06 | 部署架构补充 Prometheus/Grafana 可观测性栈（compose 现启动 4 个服务）；迁移版本补齐至 V36（V31–V36）；新增 Graphify CLI 可选外部依赖；部署架构图改为 Mermaid |
 | 2.0 | 2026-07-03 | 新增 V6-V30 迁移版本（25 个新脚本）；更新 Flyway 版本检查范围 |
 | 1.2 | 2026-07-01 | 修正图谱存储描述：Neo4j 查询替换 PostgreSQL `lg_graph_node`/`lg_graph_edge` |

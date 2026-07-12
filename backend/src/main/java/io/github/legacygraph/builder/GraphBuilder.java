@@ -88,7 +88,12 @@ public class GraphBuilder {
             nodes.add(controllerNode);
 
             // 创建ApiEndpoint节点
-            String apiNodeKey = normalizeApiKey(api.getHttpMethod(), api.getFullPath());
+            // 评估 §2.1：ApiEndpoint 重载覆盖修复 — nodeKey 加 @<signature-hash> 后缀
+            // 用 methodSignature + httpMethod 作为消歧维度（methodSignature 形如 name(Param1, Param2)）
+            String baseKey = normalizeApiKey(api.getHttpMethod(), api.getFullPath());
+            String signatureDiscriminator = (api.getHttpMethod() == null ? "" : api.getHttpMethod() + "|")
+                    + (api.getMethodSignature() == null ? "" : api.getMethodSignature());
+            String apiNodeKey = ApiNodeKeyFactory.of(baseKey, signatureDiscriminator);
             String displayName = api.getHttpMethod() + " " + api.getFullPath();
             Map<String, Object> apiProps = new LinkedHashMap<>();
             putIfNotNull(apiProps, "params", api.getRequestParams());
@@ -368,6 +373,11 @@ public class GraphBuilder {
         String mapperDesc = mapperFact.getNamespace() != null
                 ? "MyBatis Mapper: " + mapperFact.getNamespace() : null;
 
+        // G1: 使用 MapperSqlFact 携带的 sourceType（MYBATIS_XML / MYBATIS_ANNOTATION），不再硬编码
+        String mapperSourceType = mapperFact.getSourceType() != null
+                ? mapperFact.getSourceType()
+                : SourceType.MYBATIS_XML.name();
+
         List<Neo4jWriteRepository.BatchNodeUpsert> nodeBatch = new ArrayList<>();
         List<Neo4jWriteRepository.BatchEdgeByKeyUpsert> edgeBatch = new ArrayList<>();
         Set<String> seenNodeKeys = new HashSet<>();
@@ -375,7 +385,7 @@ public class GraphBuilder {
         Map<String, Object> mapperProps = new HashMap<>();
         mapperProps.put("displayName", mapperName);
         mapperProps.put("description", mapperDesc);
-        mapperProps.put("sourceType", SourceType.MYBATIS_XML.name());
+        mapperProps.put("sourceType", mapperSourceType);
         mapperProps.put("sourcePath", mapperFact.getSourcePath());
         mapperProps.put("confidence", 1.0);
         mapperProps.put("status", NodeStatus.CONFIRMED.name());
@@ -390,7 +400,7 @@ public class GraphBuilder {
             if (!seenNodeKeys.contains(sqlKey)) {
                 Map<String, Object> sqlProps = new HashMap<>();
                 sqlProps.put("displayName", sqlName);
-                sqlProps.put("sourceType", SourceType.MYBATIS_XML.name());
+                sqlProps.put("sourceType", mapperSourceType);
                 sqlProps.put("sourcePath", mapperFact.getSourcePath());
                 sqlProps.put("startLine", stmt.getStartLine());
                 sqlProps.put("endLine", stmt.getEndLine());
@@ -404,12 +414,12 @@ public class GraphBuilder {
             edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
                     mapperKey, sqlKey, EdgeType.CONTAINS.name(),
                     mapperKey + "->contains->" + sqlKey,
-                    edgeProps(SourceType.MYBATIS_XML.name(), BigDecimal.ONE, NodeStatus.CONFIRMED)));
+                    edgeProps(mapperSourceType, BigDecimal.ONE, NodeStatus.CONFIRMED)));
 
             edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
                     mapperKey, sqlKey, EdgeType.EXECUTES.name(),
                     mapperKey + "->executes->" + sqlKey,
-                    edgeProps(SourceType.MYBATIS_XML.name(), BigDecimal.ONE, NodeStatus.CONFIRMED)));
+                    edgeProps(mapperSourceType, BigDecimal.ONE, NodeStatus.CONFIRMED)));
 
             String sqlToParse = (stmt.getExpandedSql() != null && !stmt.getExpandedSql().isBlank())
                     ? stmt.getExpandedSql() : stmt.getSql();

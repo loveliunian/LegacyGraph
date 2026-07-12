@@ -76,6 +76,15 @@ public class TraceIngestionService {
             count++;
 
             runtimeEvidence.add(toRuntimeEvidenceRecord(span, trace.getStartedAt()));
+
+            // G12: 标记运行时已验证节点（verifiedScore 回写，匹配的图谱节点 verifiedScore=1.0）
+            try {
+                markRuntimeVerified(projectId, request.getVersionId(),
+                        span.getOperationName(), span.getSpanKind());
+            } catch (Exception e) {
+                log.warn("markRuntimeVerified failed for operationName={}: {}",
+                        span.getOperationName(), e.getMessage());
+            }
         }
         traceGraphAligner.align(projectId, request.getVersionId(), runtimeEvidence);
         log.info("Ingested {} spans for projectId={}, versionId={}", count, projectId, request.getVersionId());

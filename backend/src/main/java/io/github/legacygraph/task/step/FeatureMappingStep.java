@@ -9,6 +9,7 @@ import io.github.legacygraph.common.EdgeType;
 import io.github.legacygraph.common.NodeType;
 import io.github.legacygraph.common.ScanStep;
 import io.github.legacygraph.dao.Neo4jGraphDao;
+import io.github.legacygraph.dto.AiScanConfig;
 import io.github.legacygraph.dto.graph.GraphEdgeClaim;
 import io.github.legacygraph.entity.GraphEdge;
 import io.github.legacygraph.entity.GraphNode;
@@ -196,14 +197,39 @@ public class FeatureMappingStep implements AiScanStepExecutor {
             int ruleDomainMappings = 0;
             int ruleFeatureCandidates = 0;
             int ruleProcessApiMappings = 0;
+            int ruleProcessDomainMappings = 0;
+            int ruleObjectMapperMappings = 0;
+            int ruleRuleMappings = 0;
             if (businessGraphBuilder != null) {
                 try {
-                    ruleFeatureMappings = businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
-                    ruleObjectMappings = businessGraphBuilder.mapBusinessObjectsToTables(projectId, versionId);
-                    ruleDomainMappings = businessGraphBuilder.mapBusinessDomainsToCode(projectId, versionId);
-                    ruleFeatureCandidates = businessGraphBuilder.mergeCrossLanguageFeatures(projectId, versionId);
-                    // L-11: 补建 IMPLEMENTS 边（BusinessProcess → ApiEndpoint），此前为死代码从未调用
-                    ruleProcessApiMappings = businessGraphBuilder.mapBusinessProcessesToApis(projectId, versionId);
+                    AiScanConfig config = ctx.getConfig();
+                    if (config != null) {
+                        if (config.isFeatureToCodeMapping()) {
+                            ruleFeatureMappings = businessGraphBuilder.mapFeaturesToCode(projectId, versionId);
+                        }
+                        if (config.isObjectToTableMapping()) {
+                            ruleObjectMappings = businessGraphBuilder.mapBusinessObjectsToTables(projectId, versionId);
+                        }
+                        if (config.isDomainToCodeMapping()) {
+                            ruleDomainMappings = businessGraphBuilder.mapBusinessDomainsToCode(projectId, versionId);
+                        }
+                        if (config.isCrossLanguageFeatureMerge()) {
+                            ruleFeatureCandidates = businessGraphBuilder.mergeCrossLanguageFeatures(projectId, versionId);
+                        }
+                        if (config.isProcessToApiMapping()) {
+                            ruleProcessApiMappings = businessGraphBuilder.mapBusinessProcessesToApis(projectId, versionId);
+                        }
+                        // 评估 §4 矩阵真空区 1/2/3 — 默认开关由 AiScanConfig 控制
+                        if (config.isProcessToDomain()) {
+                            ruleProcessDomainMappings = businessGraphBuilder.mapBusinessProcessesToDomains(projectId, versionId);
+                        }
+                        if (config.isObjectToMapperMapping()) {
+                            ruleObjectMapperMappings = businessGraphBuilder.mapBusinessObjectsToMappers(projectId, versionId);
+                        }
+                        if (config.isRuleToRuleMapping()) {
+                            ruleRuleMappings = businessGraphBuilder.mapBusinessRulesToRuleNodes(projectId, versionId);
+                        }
+                    }
                 } catch (Exception e) {
                     log.warn("Rule-based mapping failed as supplement: {}", e.getMessage());
                 } finally {
@@ -217,7 +243,10 @@ public class FeatureMappingStep implements AiScanStepExecutor {
                     + "业务对象技术映射 " + ruleObjectMappings + " 条，"
                     + "业务域技术映射 " + ruleDomainMappings + " 条，"
                     + "跨语言 Feature 待确认候选 " + ruleFeatureCandidates + " 组，"
-                    + "流程→API 实现映射 " + ruleProcessApiMappings + " 条";
+                    + "流程→API 实现映射 " + ruleProcessApiMappings + " 条，"
+                    + "流程→业务域 " + ruleProcessDomainMappings + " 条，"
+                    + "业务对象→Mapper " + ruleObjectMapperMappings + " 条，"
+                    + "业务规则→规则类 " + ruleRuleMappings + " 条";
             support.completeTask(task, summary, null);
             return StepExecutionResult.builder().success(true).message(summary)
                     .processedCount(totalPersisted.get()).build();

@@ -86,6 +86,22 @@ public class GraphReleaseService {
      * @throws BusinessException 记录不存在或状态非 VALIDATING 时抛出
      */
     public GraphRelease markPublished(String graphReleaseId) {
+        return markPublished(graphReleaseId, null);
+    }
+
+    /**
+     * 标记发布成功并写入质量指标。
+     * <p>
+     * 状态从 VALIDATING 变为 PUBLISHED，记录 publishedAt 时间；
+     * 若 metrics 非空则同时写入 GraphRelease.metrics（质量指标 JSON）。
+     * </p>
+     *
+     * @param graphReleaseId 发布记录 ID
+     * @param metrics        质量指标 JSON（可为 null）
+     * @return 更新后的发布记录
+     * @throws BusinessException 记录不存在或状态非 VALIDATING 时抛出
+     */
+    public GraphRelease markPublished(String graphReleaseId, String metrics) {
         GraphRelease release = requireRelease(graphReleaseId);
 
         if (!GraphReleaseStatus.VALIDATING.name().equals(release.getStatus())) {
@@ -95,10 +111,14 @@ public class GraphReleaseService {
 
         release.setStatus(GraphReleaseStatus.PUBLISHED.name());
         release.setPublishedAt(LocalDateTime.now());
+        if (metrics != null) {
+            release.setMetrics(metrics);
+        }
         repository.updateById(release);
 
-        log.info("GraphRelease published: id={}, project={}, scanVersion={}",
-                release.getId(), release.getProjectId(), release.getScanVersionId());
+        log.info("GraphRelease published: id={}, project={}, scanVersion={}, metrics={}",
+                release.getId(), release.getProjectId(), release.getScanVersionId(),
+                metrics != null ? "written" : "skipped");
         return release;
     }
 

@@ -66,7 +66,51 @@ class AssetDiscoveryServiceTest {
         assertEquals(List.of("selected.md"), paths);
     }
 
+    @Test
+    void discoverAssets_appliesIncludePatterns() throws Exception {
+        Files.writeString(tempDir.resolve("UserService.java"), "class UserService {}");
+        Files.writeString(tempDir.resolve("guide.md"), "# Guide");
+        Files.writeString(tempDir.resolve("config.yml"), "key: value");
+        AssetDiscoveryService service = new AssetDiscoveryService(mock(SourceAssetSnapshotRepository.class));
+
+        ResolvedScanPlan plan = planWithRepo(Set.of("CODE_SCAN", "DOC_PARSE"),
+                List.of("**/*.md"), List.of());
+
+        List<String> paths = service.discoverAssets(plan).getAssets().stream()
+                .map(SourceAsset::getRelativePath)
+                .sorted()
+                .toList();
+
+        assertEquals(List.of("guide.md"), paths);
+    }
+
+    @Test
+    void discoverAssets_appliesExcludePatterns() throws Exception {
+        Files.writeString(tempDir.resolve("UserService.java"), "class UserService {}");
+        Path testDir = tempDir.resolve("test");
+        Files.createDirectories(testDir);
+        Files.writeString(testDir.resolve("UserServiceTest.java"), "class UserServiceTest {}");
+        Files.writeString(tempDir.resolve("guide.md"), "# Guide");
+        AssetDiscoveryService service = new AssetDiscoveryService(mock(SourceAssetSnapshotRepository.class));
+
+        ResolvedScanPlan plan = planWithRepo(Set.of("CODE_SCAN", "DOC_PARSE"),
+                List.of(), List.of("**/test/**"));
+
+        List<String> paths = service.discoverAssets(plan).getAssets().stream()
+                .map(SourceAsset::getRelativePath)
+                .sorted()
+                .toList();
+
+        assertEquals(List.of("UserService.java", "guide.md"), paths);
+    }
+
     private ResolvedScanPlan planWithRepo(Set<String> scanTypes) {
+        return planWithRepo(scanTypes, List.of(), List.of());
+    }
+
+    private ResolvedScanPlan planWithRepo(Set<String> scanTypes,
+                                          List<String> includePatterns,
+                                          List<String> excludePatterns) {
         return ResolvedScanPlan.builder()
                 .projectId("project-1")
                 .versionId("version-1")
@@ -75,8 +119,8 @@ class AssetDiscoveryServiceTest {
                         .baseDir(tempDir.toString())
                         .backendDir(tempDir.toString())
                         .frontendDir(tempDir.toString())
-                        .includePatterns(List.of())
-                        .excludePatterns(List.of())
+                        .includePatterns(includePatterns)
+                        .excludePatterns(excludePatterns)
                         .build()))
                 .documents(List.of())
                 .scanTypes(scanTypes)

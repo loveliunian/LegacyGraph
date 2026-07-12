@@ -33,7 +33,7 @@
 
 ### LLM Agent 体系
 
-Agent 位于 `agent` 包，统一经 `LlmGateway` 调用——支持多模型动态路由、Prompt 模板渲染、PII 脱敏、结构化校验、`lg_prompt_run` 审计（token/latency/inputHash）和 Redis 结果缓存（TTL 7d）。主要 Agent：`CodeFactAgent`、`DocUnderstandingAgent`、`FeatureMappingAgent`、`GraphMergeAgent`、`TestCaseAgent`、`ReviewAgent`、`QaAgent`/`EnhancedQaAgent`、`SqlAdvisorAgent`、`TestFailureAnalysisAgent`、`ReportInsightAgent`、`RefactorAgent`、`ChangeImpactAgent`、`MigrationAgent`、`PrDescriptionAgent`、`DbSchemaAnalysisAgent`、`CodeUnderstandingAgent`。
+Agent 位于 `agent` 包，统一经 `LlmGateway` 调用——支持多模型动态路由、Prompt 模板渲染、PII 脱敏、结构化校验、`lg_prompt_run` 审计（token/latency/inputHash）和 Redis 结果缓存（TTL 7d）。当前共 21 个 Agent：`CodeFactAgent`、`DocUnderstandingAgent`、`FeatureMappingAgent`、`GraphMergeAgent`、`TestCaseAgent`、`TestGenerationAgent`、`ReviewAgent`、`QaAgent`/`EnhancedQaAgent`、`SqlAdvisorAgent`、`TestFailureAnalysisAgent`、`ReportInsightAgent`、`RefactorAgent`、`ChangeImpactAgent`、`MigrationAgent`、`PrDescriptionAgent`、`DbSchemaAnalysisAgent`、`GraphRagPlannerAgent`、`GapFinderAgent`、`PatchPlanAgent`、`AddColumnPatchAgent`。
 
 ### RAG 问答
 
@@ -67,7 +67,7 @@ flowchart LR
         UI["Vue 3 SPA<br/>(Element Plus / AntV G6)"]
     end
     subgraph "Spring Boot 4 / Jetty :8080"
-        API["Controller ×34"]
+        API["Controller ×48"]
         SVC["Service / Agent / Builder / Extractor"]
         GW["LlmGateway"]
         DAO["Neo4jGraphDao"]
@@ -99,17 +99,20 @@ flowchart LR
 | 关系数据库 | PostgreSQL 15+ + jsonb + GIN 索引 |
 | 向量检索 | pgvector（HNSW 索引） |
 | 图数据库 | Neo4j 5.x（Java Driver 5.26.0，图谱独占存储） |
-| 缓存 | Redis 7.x（Lettuce） |
-| 对象存储 | MinIO |
+| 缓存 | Redis 7.x（Lettuce，database=11） |
+| 对象存储 | MinIO 9.0.3 SDK |
 | ORM | MyBatis-Plus 3.5.16 |
-| 数据库迁移 | Flyway（手动 `FlywayConfig`，V1–V36） |
-| 代码/SQL/文档解析 | JavaParser / JSqlParser 4.9 / Apache Tika |
+| 数据库迁移 | Flyway（手动 `FlywayConfig`，V1–V84） |
+| 代码/SQL/文档解析 | JavaParser 3.28.2 / JSqlParser 4.9 / Apache Tika 3.0.0 |
+| 异步任务 | Java 21 虚拟线程（taskExecutor / ioTaskExecutor / testExecutor） |
 | 认证 | JWT + Redis 黑名单 |
 | 前端框架 | Vue 3.4.21 + TypeScript 5.4.2 + Vite 5.1.6 |
 | UI 组件 | Element Plus 2.14.2 |
-| 图可视化 | @antv/G6 5.x、@vue-flow/core 1.33 |
-| 状态管理 | Pinia 2.1.7 |
-| 国际化 | Vue I18n 9.10 |
+| 图可视化 | @antv/G6 5.0.12、@vue-flow/core 1.33 |
+| 状态管理 | Pinia 2.1.7 + pinia-plugin-persistedstate |
+| 国际化 | Vue I18n 9.10.2 |
+| 测试 | JUnit 5 / Vitest 1.4 / Playwright 1.42 |
+| PWA | vite-plugin-pwa 0.19.8（仅生产构建启用） |
 | 可观测性 | Prometheus + Grafana（compose 内置） |
 
 ### 模型支持
@@ -120,12 +123,14 @@ flowchart LR
 
 | 类别 | 数量 |
 |---|---:|
-| 后端 Controller | 34 |
-| 后端 Entity | 52 |
-| 数据库表 | ~44 活跃表（V1–V36；另含 2 张已废弃 `lg_graph_node/edge`） |
-| Vue 页面 | 56 |
-| 后端测试类 | 223（`mvn test`） |
-| Flyway 迁移 | V1–V36 |
+| 后端 Controller | 48 |
+| 后端 Entity | 73 |
+| Flyway 迁移 | V1–V84（共 83 个脚本，V70 缺失） |
+| Vue 页面 | 63 |
+| 前端 API 模块 | 24 |
+| 后端测试类 | 291（`mvn test`） |
+| 后端一级子包 | 34 |
+| Agent 类 | 21 |
 
 ## 快速开始
 
@@ -145,14 +150,14 @@ cp .env.example .env    # 填写外部 PostgreSQL/Neo4j/Redis/MinIO 连接信息
 docker compose up -d --build
 ```
 
-数据库表由 Flyway 在后端启动时自动迁移（V1–V36），**无需手动执行 init.sql**（仓库不再提供 `docs/sql/init.sql`）。
+数据库表由 Flyway 在后端启动时自动迁移（V1–V84），**无需手动执行 init.sql**（仓库不再提供 `docs/sql/init.sql`）。
 
 ### 本地开发
 
 ```bash
 # 后端
 cd backend
-mvn clean test          # 223 个测试类
+mvn clean test          # 291 个测试类
 mvn spring-boot:run     # http://localhost:8080/api
 
 # 前端
@@ -167,36 +172,48 @@ npm run type-check      # 类型门禁
 ```
 LegacyGraph/
 ├── backend/src/main/java/io/github/legacygraph/
-│   ├── agent/          # LLM Agent
+│   ├── agent/          # LLM Agent（21 个 Agent 类 + adapter）
+│   ├── analysis/       # 静态分析（CPG/CFG/DFG/AOP/反射调用）
+│   ├── annotation/     # @Log
+│   ├── aspect/         # LogAspect 审计日志
 │   ├── builder/        # 图谱构建器（GraphBuilder/FrontendGraphBuilder/EvidenceGraphWriter）
-│   ├── common/         # Result/PageResult/NodeType/EdgeType/枚举
+│   ├── common/         # Result/PageResult/NodeType/EdgeType/枚举（10 个枚举类）
+│   ├── concurrency/    # 并发属性抽取
 │   ├── config/         # Security/Redis/Flyway/Neo4j/MinIO/MyBatis/Async
-│   ├── controller/     # REST API（34 个）
-│   ├── dao/            # Neo4jGraphDao
+│   ├── controller/     # REST API（48 个）
+│   ├── dao/            # Neo4jGraphDao / CypherCatalog
 │   ├── deployment/     # Graphify 部署/健康/运维监控
-│   ├── dto/            # 数据传输对象
-│   ├── entity/         # 数据库实体（52 个）
+│   ├── dto/            # 数据传输对象（按业务域分子包）
+│   ├── entity/         # 数据库实体（73 个）
 │   ├── eval/           # Graphify 质量评测
 │   ├── event/          # 领域事件
+│   ├── exception/      # 统一异常
+│   ├── extractors/     # Java/Vue/MyBatis/SQL/DB/Document 抽取器 + adapter
 │   ├── federation/     # 跨仓库图谱联邦
+│   ├── filter/         # JwtAuthenticationFilter
 │   ├── governance/     # Graphify 访问治理/脱敏
 │   ├── graphify/       # Graphify 作业/快照/差异/回滚
+│   ├── handler/        # MyBatis TypeHandler（pgvector 向量）
 │   ├── integration/graphify/  # Graphify CLI 集成（Runner/Parser/Import/兼容性）
-│   ├── llm/            # LlmGateway + Prompt 加载 + PII 脱敏
-│   ├── plugin/         # 插件注册
-│   ├── query/ review/ security/  # Graphify 问答/评审/安全
-│   ├── repository/     # MyBatis-Plus Mapper
-│   ├── service/        # 业务逻辑（scan/graph/qa/report/system/...）
-│   ├── task/           # 扫描编排（ProjectScanner/AiScanOrchestrator）
+│   ├── llm/            # LlmGateway + Prompt 加载 + PII 脱敏 + SecretScanService
+│   ├── model/          # 领域模型
+│   ├── plugin/         # 插件注册（PluginRegistry/McpPluginAdapter）
+│   ├── query/          # Graphify 问答服务
+│   ├── repository/     # MyBatis-Plus Mapper（统一继承 LegacyBaseMapper）
+│   ├── review/         # Graphify 规则化评审
+│   ├── security/       # 出处/敏感信息脱敏
+│   ├── service/        # 业务逻辑（21 个子包：scan/graph/qa/report/system/...）
+│   ├── task/           # 扫描编排（ProjectScanner/AiScanOrchestrator，含 step 子包）
 │   ├── tenant/         # 多租户配额
+│   ├── terminology/    # 术语映射（TerminologyService）
 │   ├── test/           # 测试执行器（Api/E2e/Db）
 │   ├── understanding/  # 代码理解编排 + 工具路由
 │   └── util/           # JWT 等工具
 ├── frontend/src/
-│   ├── views/          # 56 个页面（dashboard/project/source/scan/graph/fact/review/
+│   ├── views/          # 63 个页面（dashboard/project/source/scan/graph/fact/review/
 │   │                   #        test/report/migration/system/audit/agent/change/
-│   │                   #        understanding/vector/workbench/graphify）
-│   ├── api/            # 19 个 API 模块
+│   │                   #        understanding/vector/workbench/graphify/requirement/solution）
+│   ├── api/            # 24 个 API 模块
 │   ├── components/ constants/ router/ stores/ styles/ types/ utils/ locales/
 ├── deploy/             # docker-compose.yml + Dockerfile + Prometheus/Grafana 配置
 └── doc/整体技术文档/    # 架构/数据库/部署/运维/开发规范文档
@@ -207,15 +224,21 @@ LegacyGraph/
 | 端点 | 说明 |
 |---|---|
 | `/api/lg/auth/*` | JWT 认证（登录/登出/刷新/当前用户） |
-| `/api/lg/projects/*` | 项目、数据源、扫描、图谱、事实、测试、报告、理解、graphify |
+| `/api/lg/projects/*` | 项目、数据源、扫描、图谱、事实、测试、报告、理解、graphify、需求、方案 |
 | `/api/lg/graph/diff` | 图谱版本差异 |
 | `/api/lg/graphify/jobs` `/diff` `/questions` | Graphify 作业/差异/问答 |
 | `/api/qa/*` `/qa/ask/stream` | 自然语言问答（含流式） |
+| `/api/qa/evaluations` `/api/qa/feedbacks` | QA 评测与反馈 |
 | `/api/agents/*` `/api/agents/runs` | Agent 运行与运行记录 |
 | `/api/llm/providers` `/api/lg/admin/prompts` | LLM Provider + Prompt 模板 |
 | `/api/lg/system` `/api/lg/audit` `/api/lg/notifications` `/api/lg/plugins` `/api/lg/quota` | 系统/审计/通知/插件/配额 |
 | `/api/lg/evidence-conflicts` `/api/lg/validation` | 证据冲突 / 图谱验证 |
+| `/api/lg/system-overview/*` | 系统概览摄入与管理（部分需 ADMIN） |
+| `/api/lg/self-analysis/*` | 自分析引导（需 ADMIN） |
 | `/api/reports` `/api/lg/vector/*` `/api/trace/*` | 报告导出 / 向量检索 / 运行时链路 |
+| `/api/cpg/*` `/api/contracts/*` | 代码属性图 / 契约管理 |
+| `/api/requirements/*` `/api/solutions/*` | 需求结构化 / 方案生成 |
+| `/api/impact/*` `/api/cross-repo/impact` | 影响分析 / 跨仓影响 |
 
 > 后端 context-path 为 `/api`，业务接口多以 `/lg/...` 声明，故外部访问路径通常是 `/api/lg/...`。
 

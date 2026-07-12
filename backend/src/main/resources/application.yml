@@ -211,6 +211,13 @@ legacygraph:
       enabled: true
       # 每块最大字符数（默认 2500，不含 headingPath 前缀）
       max-chars: 2500
+      # G13: 三层文档解析默认开（FAST/LAYOUT 无条件开，OCR 对扫描件 PDF 才开）
+      # three-layer.enabled=false 时全部走 FAST（一键回退开关）
+      three-layer:
+        enabled: true
+        fast-mime: text/markdown,text/plain,text/x-markdown
+        layout-mime: application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        ocr-fallback: false  # OCR 默认仍关，扫描件 PDF 才开
   understanding:
     scan-enhancement:
       enabled: false
@@ -246,6 +253,10 @@ legacygraph:
     # 写图模式：direct(直接写图) / shadow(双轨对比) / claim-compiler(Claim编译写图)
     write-mode: direct
   graphify:
+    # Graphify CLI 自动导入开关。默认 false：当前未确认 graphify CLI 已安装。
+    # 设为 true 前，请确保 graphify 可执行文件可用（executable 配置路径或在 PATH 中）。
+    # 开启后扫描流程会自动调用 GraphifyRunner 生成 graphify-out 并导入 Neo4j，
+    # ScanFinalizationService 发布时会计算 GraphifyQualityResult 写入 GraphRelease.metrics。
     enabled: false
     executable: graphify
     timeout-seconds: 900

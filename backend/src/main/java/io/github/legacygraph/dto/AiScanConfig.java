@@ -24,6 +24,30 @@ public class AiScanConfig {
     /** 最低置信度阈值：低于此值的节点进入人工审核准备 */
     private double minConfidence = 0.6;
 
+    /** G8 业务编排：业务流程 → API 映射（mapBusinessProcessesToApis） */
+    private boolean processToApiMapping = true;
+
+    /** G8 业务编排：业务对象 → 数据表映射（mapBusinessObjectsToTables） */
+    private boolean objectToTableMapping = true;
+
+    /** G8 业务编排：业务域 → 代码映射（mapBusinessDomainsToCode） */
+    private boolean domainToCodeMapping = true;
+
+    /** G8 业务编排：跨语言 Feature 合并（mergeCrossLanguageFeatures） */
+    private boolean crossLanguageFeatureMerge = true;
+
+    /** G8 业务编排：Feature → 代码映射（mapFeaturesToCode） */
+    private boolean featureToCodeMapping = true;
+
+    /** G8 业务编排：BusinessProcess → BusinessDomain 归类（评估 §4 真空区 1，默认关） */
+    private boolean processToDomain = false;
+
+    /** G8 业务编排：BusinessObject → Mapper（IMPLEMENTED_BY 边，评估 §4 真空区 2 拆分） */
+    private boolean objectToMapperMapping = true;
+
+    /** G8 业务编排：BusinessRule → 代码层 Rule 节点（评估 §4 真空区 3，默认关） */
+    private boolean ruleToRuleMapping = false;
+
     /**
      * 从 scanScope JSON 文本解析；解析失败返回默认（关闭 AI）配置。
      */
@@ -45,6 +69,14 @@ public class AiScanConfig {
         config.setEnableAi(base.isEnableAi());
         config.setAutoGenerateTestCase(base.isAutoGenerateTestCase());
         config.setMinConfidence(base.getMinConfidence());
+        config.setProcessToApiMapping(base.isProcessToApiMapping());
+        config.setObjectToTableMapping(base.isObjectToTableMapping());
+        config.setDomainToCodeMapping(base.isDomainToCodeMapping());
+        config.setCrossLanguageFeatureMerge(base.isCrossLanguageFeatureMerge());
+        config.setFeatureToCodeMapping(base.isFeatureToCodeMapping());
+        config.setProcessToDomain(base.isProcessToDomain());
+        config.setObjectToMapperMapping(base.isObjectToMapperMapping());
+        config.setRuleToRuleMapping(base.isRuleToRuleMapping());
 
         if (scanScopeJson == null || scanScopeJson.isBlank()) {
             return config;
@@ -62,6 +94,32 @@ public class AiScanConfig {
             }
             if (node.hasNonNull("minConfidence")) {
                 config.setMinConfidence(node.get("minConfidence").asDouble(config.getMinConfidence()));
+            }
+            // G8 业务编排细粒度开关：scanScope 显式指定 > defaults 基线（默认 true）
+            if (node.hasNonNull("processToApiMapping")) {
+                config.setProcessToApiMapping(node.get("processToApiMapping").asBoolean(config.isProcessToApiMapping()));
+            }
+            if (node.hasNonNull("objectToTableMapping")) {
+                config.setObjectToTableMapping(node.get("objectToTableMapping").asBoolean(config.isObjectToTableMapping()));
+            }
+            if (node.hasNonNull("domainToCodeMapping")) {
+                config.setDomainToCodeMapping(node.get("domainToCodeMapping").asBoolean(config.isDomainToCodeMapping()));
+            }
+            if (node.hasNonNull("crossLanguageFeatureMerge")) {
+                config.setCrossLanguageFeatureMerge(node.get("crossLanguageFeatureMerge").asBoolean(config.isCrossLanguageFeatureMerge()));
+            }
+            if (node.hasNonNull("featureToCodeMapping")) {
+                config.setFeatureToCodeMapping(node.get("featureToCodeMapping").asBoolean(config.isFeatureToCodeMapping()));
+            }
+            // G8 业务编排 — 评估 §4 矩阵真空区 1/2/3 闭环
+            if (node.hasNonNull("processToDomain")) {
+                config.setProcessToDomain(node.get("processToDomain").asBoolean(config.isProcessToDomain()));
+            }
+            if (node.hasNonNull("objectToMapperMapping")) {
+                config.setObjectToMapperMapping(node.get("objectToMapperMapping").asBoolean(config.isObjectToMapperMapping()));
+            }
+            if (node.hasNonNull("ruleToRuleMapping")) {
+                config.setRuleToRuleMapping(node.get("ruleToRuleMapping").asBoolean(config.isRuleToRuleMapping()));
             }
         } catch (Exception e) {
             log.warn("Failed to parse AI scan config from scanScope, using defaults: {}", e.getMessage());
