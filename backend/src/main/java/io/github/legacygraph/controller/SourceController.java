@@ -11,12 +11,14 @@ import io.github.legacygraph.dto.CreateDbConnectionRequest;
 import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.DbConnection;
 import io.github.legacygraph.entity.Document;
+import io.github.legacygraph.entity.ParseFailure;
 import io.github.legacygraph.extractors.DocumentExtractor;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.DbConnectionRepository;
 import io.github.legacygraph.repository.DocumentRepository;
 import io.github.legacygraph.repository.DocChunkRepository;
 import io.github.legacygraph.repository.VectorDocumentRepository;
+import io.github.legacygraph.repository.ParseFailureRepository;
 import io.github.legacygraph.service.graph.GraphCacheInvalidator;
 import io.github.legacygraph.service.scan.ScanVersionService;
 import io.github.legacygraph.service.scan.SourceService;
@@ -75,6 +77,7 @@ public class SourceController {
     private final DocumentRepository documentRepository;
     private final DocChunkRepository docChunkRepository;
     private final VectorDocumentRepository vectorDocumentRepository;
+    private final ParseFailureRepository parseFailureRepository;
     private final ScanVersionService scanVersionService;
     private final ProjectScanner projectScanner;
     private final GraphCacheInvalidator graphCacheInvalidator;
@@ -108,6 +111,7 @@ public class SourceController {
                             DocumentRepository documentRepository,
                             DocChunkRepository docChunkRepository,
                             VectorDocumentRepository vectorDocumentRepository,
+                            ParseFailureRepository parseFailureRepository,
                             ScanVersionService scanVersionService,
                             ProjectScanner projectScanner,
                             GraphCacheInvalidator graphCacheInvalidator,
@@ -120,6 +124,7 @@ public class SourceController {
         this.documentRepository = documentRepository;
         this.docChunkRepository = docChunkRepository;
         this.vectorDocumentRepository = vectorDocumentRepository;
+        this.parseFailureRepository = parseFailureRepository;
         this.scanVersionService = scanVersionService;
         this.projectScanner = projectScanner;
         this.graphCacheInvalidator = graphCacheInvalidator;
@@ -1476,6 +1481,177 @@ public class SourceController {
         documentRepository.deleteById(id);
         graphCacheInvalidator.invalidateProjectOverview(projectId);
         return Result.success();
+    }
+
+    // ==================== 解析失败管理（S1-T4）====================
+
+    /**
+     * 查询文档解析失败列表
+     * S1-T4: 将 parse_failure 表暴露到前端，支持按版本/文档过滤
+     *
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID（可选）
+     * @param documentId 文档ID（可选）
+     * @return 解析失败记录列表
+     */
+    @GetMapping("/parse-failures")
+    @Operation(summary = "查询解析失败列表", description = "查询文档分片解析失败记录，支持按版本和文档过滤")
+    public Result<List<ParseFailure>> listParseFailures(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "扫描版本ID（可选）")
+            @RequestParam(required = false) String versionId,
+            @Parameter(description = "文档ID（可选）")
+            @RequestParam(required = false) String documentId) {
+        LambdaQueryWrapper<ParseFailure> wrapper = new LambdaQueryWrapper<ParseFailure>()
+                .eq(ParseFailure::getProjectId, projectId)
+                .orderByDesc(ParseFailure::getCreatedAt);
+        if (versionId != null && !versionId.isBlank()) {
+            wrapper.eq(ParseFailure::getVersionId, versionId);
+        }
+        if (documentId != null && !documentId.isBlank()) {
+            wrapper.eq(ParseFailure::getDocumentId, documentId);
+        }
+        List<ParseFailure> failures = parseFailureRepository.selectList(wrapper);
+        return Result.success(failures);
+    }
+
+    /**
+     * 重试解析失败的文档
+     * S1-T4: 提供重试入口，对失败文档重新执行解析
+     *
+     * @param projectId 项目ID
+     * @param id 解析失败记录ID
+     * @return 重试结果
+     */
+    @PostMapping("/parse-failures/{id}/retry")
+    @Operation(summary = "重试解析失败", description = "对解析失败的文档重新执行解析")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "重试完成"),
+            @ApiResponse(responseCode = "404", description = "失败记录不存在")
+    })
+    @Log(value = "重试文档解析", type = Log.OperationType.CREATE)
+    public Result<Map<String, Object>> retryParseFailure(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "解析失败记录ID", required = true)
+            @PathVariable String id) {
+        ParseFailure failure = parseFailureRepository.selectById(id);
+        if (failure == null || !failure.getProjectId().equals(projectId)) {
+            return Result.error("解析失败记录不存在");
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        // 查找对应的文档记录
+        Document doc = documentRepository.selectById(failure.getDocumentId());
+        if (doc == null) {
+            // 文档已被删除，清理失败记录
+            parseFailureRepository.deleteById(id);
+            result.put("success", false);
+            result.put("message", "对应文档已不存在，已清理失败记录");
+            return Result.success(result);
+        }
+
+        try {
+            // 重新解析文档
+            doc.setParseStatus("PARSING");
+            documentRepository.updateById(doc);
+
+            DocumentExtractor extractor = this.documentExtractor;
+            java.io.File file = new java.io.File(doc.getFilePath());
+            String text = extractor.extractText(file);
+            List<DocumentExtractor.DocumentChunk> chunks = extractor.chunkDocument(text, doc.getDocName(), 500);
+
+            List<io.github.legacygraph.entity.DocChunk> chunkEntities = new java.util.ArrayList<>();
+            for (DocumentExtractor.DocumentChunk chunk : chunks) {
+                io.github.legacygraph.entity.DocChunk docChunk = new io.github.legacygraph.entity.DocChunk();
+                docChunk.setProjectId(projectId);
+                docChunk.setVersionId(doc.getVersionId());
+                docChunk.setDocName(doc.getDocName());
+                docChunk.setDocPath(doc.getFilePath());
+                docChunk.setChunkIndex(chunk.getIndex());
+                docChunk.setTitlePath(chunk.getTitlePath());
+                docChunk.setContent(chunk.getContent());
+                docChunk.setTokenCount(chunk.getTokenCount());
+                chunkEntities.add(docChunk);
+            }
+            if (!chunkEntities.isEmpty()) {
+                docChunkRepository.insertBatch(chunkEntities);
+            }
+
+            doc.setParseStatus("PARSED");
+            doc.setFactCount(chunks.size());
+            doc.setParsedAt(LocalDateTime.now());
+            doc.setUpdatedAt(LocalDateTime.now());
+            documentRepository.updateById(doc);
+
+            // 解析成功后删除失败记录
+            parseFailureRepository.deleteById(id);
+
+            result.put("success", true);
+            result.put("chunkCount", chunks.size());
+            result.put("message", "重试成功，共生成 " + chunks.size() + " 个文本片段");
+            log.info("Parse failure retry succeeded: failureId={}, docName={}", id, doc.getDocName());
+        } catch (Exception e) {
+            // 更新失败记录的错误信息
+            failure.setErrorMessage("重试失败: " + e.getMessage());
+            failure.setCreatedAt(LocalDateTime.now());
+            parseFailureRepository.updateById(failure);
+
+            doc.setParseStatus("PARSE_FAILED");
+            doc.setErrorMessage("重试失败: " + e.getMessage());
+            documentRepository.updateById(doc);
+
+            result.put("success", false);
+            result.put("message", "重试失败: " + e.getMessage());
+            log.error("Parse failure retry failed: failureId={}", id, e);
+        }
+        return Result.success(result);
+    }
+
+    /**
+     * 批量重试解析失败
+     * S1-T4: 对同一版本下的所有解析失败记录批量重试
+     *
+     * @param projectId 项目ID
+     * @param versionId 扫描版本ID
+     * @return 批量重试结果统计
+     */
+    @PostMapping("/parse-failures/batch-retry")
+    @Operation(summary = "批量重试解析失败", description = "对指定版本下的所有解析失败记录批量重试")
+    @Log(value = "批量重试文档解析", type = Log.OperationType.CREATE)
+    public Result<Map<String, Object>> batchRetryParseFailures(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "扫描版本ID", required = true)
+            @RequestParam String versionId) {
+        LambdaQueryWrapper<ParseFailure> wrapper = new LambdaQueryWrapper<ParseFailure>()
+                .eq(ParseFailure::getProjectId, projectId)
+                .eq(ParseFailure::getVersionId, versionId);
+        List<ParseFailure> failures = parseFailureRepository.selectList(wrapper);
+
+        int succeeded = 0;
+        int failed = 0;
+        for (ParseFailure failure : failures) {
+            try {
+                Result<Map<String, Object>> retryResult = retryParseFailure(projectId, failure.getId());
+                if (retryResult.getData() != null && Boolean.TRUE.equals(retryResult.getData().get("success"))) {
+                    succeeded++;
+                } else {
+                    failed++;
+                }
+            } catch (Exception e) {
+                failed++;
+                log.warn("Batch retry failed for failureId={}: {}", failure.getId(), e.getMessage());
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", failures.size());
+        result.put("succeeded", succeeded);
+        result.put("failed", failed);
+        result.put("message", String.format("批量重试完成: 成功 %d, 失败 %d", succeeded, failed));
+        return Result.success(result);
     }
 
     // ==================== 工具方法 ====================

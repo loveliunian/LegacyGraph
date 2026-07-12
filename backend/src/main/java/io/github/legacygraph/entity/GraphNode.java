@@ -39,6 +39,9 @@ public class GraphNode {
     private String evidenceIds;
     private String aliasNames;
 
+    // S4-T2: 用户反馈证据分（👍 +1 / 👎 -1），用于检索排序加权
+    private Integer evidenceScore;
+
     private Boolean runtimeVerified;
     private LocalDateTime lastSeenAt;
     private Integer traceCount;

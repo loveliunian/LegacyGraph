@@ -112,4 +112,87 @@ public class RetrievalIntentRouter {
         log.debug("Retrieval intent routed: query='{}', intent={}", query, intent);
         return result;
     }
+
+    // ==================== S4-T1: 强制图谱证据回填 ====================
+
+    /** 闲聊型白名单关键词 — 命中时跳过强制证据回填，避免命中率断崖 */
+    private static final String[] CHITCHAT_KEYWORDS = {
+            "你好", "hello", "hi ", "谢谢", "thanks", "你是谁", "who are you",
+            "帮我", "帮我看看"
+    };
+
+    /**
+     * S4-T1: 构建带图谱证据的 prompt 模板。
+     * <p>将检索到的图谱节点 ID 嵌入 prompt，要求 LLM 在答案中引用节点 ID。
+     * 闲聊型白名单或无证据节点时返回原始 query。</p>
+     *
+     * @param query      用户查询
+     * @param intent     意图类型
+     * @param graphNodes 检索到的图谱节点列表（Map 至少含 id/nodeName/nodeType）
+     * @return 增强后的 prompt；闲聊或无证据时返回原始 query
+     */
+    public String buildEvidenceBackedPrompt(String query, Intent intent, List<Map<String, Object>> graphNodes) {
+        if (isChitchat(intent, query) || graphNodes == null || graphNodes.isEmpty()) {
+            return query;
+        }
+        StringBuilder evidence = new StringBuilder();
+        evidence.append("请基于以下图谱证据节点回答问题，并在答案中用 [节点ID] 格式引用至少一个节点。\n\n");
+        evidence.append("图谱证据：\n");
+        int idx = 1;
+        for (Map<String, Object> node : graphNodes) {
+            String id = String.valueOf(node.getOrDefault("id", ""));
+            String name = String.valueOf(node.getOrDefault("nodeName", node.getOrDefault("name", "")));
+            String type = String.valueOf(node.getOrDefault("nodeType", node.getOrDefault("type", "")));
+            evidence.append(String.format("  [%d] id=%s | type=%s | name=%s%n", idx, id, type, name));
+            idx++;
+        }
+        evidence.append("\n问题：").append(query);
+        evidence.append("\n\n要求：答案必须引用至少一个上述节点 ID（格式 [节点ID]），禁止编造未列出的节点。");
+        return evidence.toString();
+    }
+
+    /**
+     * S4-T1: 强制证据回填校验 — 检查答案是否引用了至少 1 个图谱节点 ID。
+     * <p>闲聊型白名单跳过校验。验收标准：答案至少引用 1 个图谱节点。</p>
+     *
+     * @param answer     LLM 生成的答案
+     * @param intent     意图类型
+     * @param query      原始查询
+     * @param graphNodes 检索到的图谱节点列表
+     * @return true=通过（引用了节点或是闲聊白名单），false=未引用任何节点
+     */
+    public boolean enforceEvidenceCitation(String answer, Intent intent, String query,
+                                            List<Map<String, Object>> graphNodes) {
+        if (isChitchat(intent, query)) {
+            return true; // 闲聊型白名单
+        }
+        if (answer == null || answer.isBlank() || graphNodes == null || graphNodes.isEmpty()) {
+            return false;
+        }
+        for (Map<String, Object> node : graphNodes) {
+            String id = String.valueOf(node.getOrDefault("id", ""));
+            if (!id.isBlank() && !id.equals("null") && answer.contains(id)) {
+                return true;
+            }
+        }
+        log.warn("S4-T1: answer lacks graph node citation, intent={}, query='{}'", intent, query);
+        return false;
+    }
+
+    /**
+     * 闲聊型白名单 — GENERAL 意图或匹配闲聊关键词的查询跳过强制证据回填。
+     */
+    private boolean isChitchat(Intent intent, String query) {
+        if (intent == Intent.GENERAL) {
+            return true;
+        }
+        if (query == null) return false;
+        String lower = query.toLowerCase();
+        for (String kw : CHITCHAT_KEYWORDS) {
+            if (lower.contains(kw)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

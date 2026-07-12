@@ -8,11 +8,13 @@ import io.github.legacygraph.entity.SourceSnapshot;
 import io.github.legacygraph.repository.SourceSnapshotRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * G-02: SourceSnapshotService — 资料源不可变快照服务。
@@ -32,12 +34,15 @@ public class SourceSnapshotService {
 
     private final SourceSnapshotRepository sourceSnapshotRepository;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Autowired
     public SourceSnapshotService(SourceSnapshotRepository sourceSnapshotRepository,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  JdbcTemplate jdbcTemplate) {
         this.sourceSnapshotRepository = sourceSnapshotRepository;
         this.objectMapper = objectMapper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -147,6 +152,64 @@ public class SourceSnapshotService {
     }
 
     // ==================== 内部方法 ====================
+
+    /**
+     * S1-T1: 查询 file_snapshot 只读归档视图。
+     * <p>外部查询 file_snapshot 统一走 lg_file_snapshot_archive 视图（只读），
+     * 不直接访问 lg_file_snapshot 表（仅供 FileChangeDetector 内部写入）。</p>
+     *
+     * @param projectId 项目 ID
+     * @return 归档文件快照列表（file_path → file_hash 等字段）
+     */
+    public List<Map<String, Object>> queryFileSnapshotArchive(String projectId) {
+        if (projectId == null) {
+            return Collections.emptyList();
+        }
+        try {
+            return jdbcTemplate.queryForList(
+                    "SELECT file_path, file_hash, file_size, scanned_at, " +
+                    "extractor_version, embedding_model, change_type, last_seen_at " +
+                    "FROM lg_file_snapshot_archive WHERE project_id = ? ORDER BY file_path",
+                    projectId
+            );
+        } catch (Exception e) {
+            log.warn("Failed to query file_snapshot_archive view: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * S1-T1: 统计归档文件快照数。
+     */
+    public long countFileSnapshotArchive(String projectId) {
+        if (projectId == null) {
+            return 0;
+        }
+        try {
+            Long count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM lg_file_snapshot_archive WHERE project_id = ?",
+                    Long.class,
+                    projectId
+            );
+            return count != null ? count : 0;
+        } catch (Exception e) {
+            log.warn("Failed to count file_snapshot_archive: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * S1-T1: 检查 file_snapshot 归档视图是否可用。
+     * <p>用于启动时验证 V86 迁移已执行。</p>
+     */
+    public boolean isArchiveViewAvailable() {
+        try {
+            jdbcTemplate.queryForObject("SELECT 1 FROM lg_file_snapshot_archive LIMIT 1", Integer.class);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     private String serializeDescriptor(SourceDescriptor descriptor) {
         try {

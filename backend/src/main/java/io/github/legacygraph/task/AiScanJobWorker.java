@@ -35,6 +35,7 @@ public class AiScanJobWorker {
     private ScanArtifactPublisher scanArtifactPublisher;
     private io.github.legacygraph.service.scan.ScanFinalizationService scanFinalizationService;
     private io.github.legacygraph.config.GraphReleaseConfig graphReleaseConfig;
+    private io.github.legacygraph.service.graph.GraphQueryService graphQueryService;
 
     public AiScanJobWorker(AiScanJobRepository aiScanJobRepository,
                            AiScanOrchestrator aiScanOrchestrator,
@@ -76,6 +77,11 @@ public class AiScanJobWorker {
     @Autowired(required = false)
     void setGraphReleaseConfig(io.github.legacygraph.config.GraphReleaseConfig graphReleaseConfig) {
         this.graphReleaseConfig = graphReleaseConfig;
+    }
+
+    @Autowired(required = false)
+    void setGraphQueryService(io.github.legacygraph.service.graph.GraphQueryService graphQueryService) {
+        this.graphQueryService = graphQueryService;
     }
 
     /**
@@ -135,6 +141,11 @@ public class AiScanJobWorker {
                     scanVersionRepository.updateById(version);
                     log.info("ScanVersion updated after AI job: versionId={}, nodeCount={}, finishedAt={}", 
                             job.getVersionId(), version.getNodeCount(), version.getFinishedAt());
+                    // S3-T5: 扫描完成后清除图谱缓存，确保下次查询获取最新数据
+                    if (graphQueryService != null) {
+                        graphQueryService.evictGraphCache(job.getVersionId());
+                        log.debug("Graph cache evicted after AI job completion: versionId={}", job.getVersionId());
+                    }
                     if (isScanFinalizationEnabled()) {
                         runScanFinalization(job.getProjectId(), job.getVersionId());
                     } else {

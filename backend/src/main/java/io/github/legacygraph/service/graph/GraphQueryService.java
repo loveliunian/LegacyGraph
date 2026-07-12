@@ -61,20 +61,47 @@ public class GraphQueryService {
         this.projectionReadModel = projectionReadModel;
     }
 
-    /** 图谱缓存 key：graph:{versionId}:{view}:{paramHash} */
+    /**
+     * S3-T5: 图谱缓存 key：graph:{versionId}:{updatedAt}:{view}:{paramHash}
+     * <p>加入 ScanVersion.updatedAt 时间戳隔离，同版本重扫后缓存 key 自动变化，避免脏数据。
+     * 改进 hash 算法：用 String.join 替代 Arrays.hashCode，降低碰撞概率。</p>
+     */
     private String graphKey(String versionId, String view, String... params) {
         String v = normalizeVersionId(versionId);
-        return "graph:" + v + ":" + view + ":" + Integer.toHexString(Arrays.hashCode(params));
+        String epoch = getScanVersionEpoch(versionId);
+        String paramHash = Integer.toHexString(String.join("|", Arrays.asList(params)).hashCode());
+        return "graph:" + v + ":" + epoch + ":" + view + ":" + paramHash;
+    }
+
+    /**
+     * S3-T5: 获取 ScanVersion 的 updatedAt 时间戳（epoch 秒），用于缓存 key 隔离。
+     * <p>短缓存 10s 避免频繁查 DB；扫描完成后 evictGraphCache 会清除此缓存 + 图谱缓存。</p>
+     */
+    @SuppressWarnings("unchecked")
+    private String getScanVersionEpoch(String versionId) {
+        String normalizedVid = normalizeVersionId(versionId);
+        String tsKey = "scanver:ts:" + normalizedVid;
+        return cacheService.getOrLoad(tsKey, String.class, Duration.ofSeconds(10),
+                () -> {
+                    ScanVersion sv = scanVersionRepository.selectById(normalizedVid);
+                    if (sv == null || sv.getUpdatedAt() == null) {
+                        return "0";
+                    }
+                    return String.valueOf(sv.getUpdatedAt().toEpochSecond(java.time.ZoneOffset.UTC));
+                });
     }
 
     /**
      * 按版本失效所有图谱只读缓存（合并/审核确认/重新扫描后调用）。
+     * S3-T5: 同时清除 scan_version 时间戳缓存，确保下次查询获取最新 updatedAt。
      */
     public void evictGraphCache(String versionId) {
         if (versionId == null) {
             return;
         }
-        cacheService.evictByPrefix("graph:" + normalizeVersionId(versionId) + ":");
+        String normalizedVid = normalizeVersionId(versionId);
+        cacheService.evictByPrefix("graph:" + normalizedVid + ":");
+        cacheService.evictByPrefix("scanver:ts:" + normalizedVid);
     }
 
     /**

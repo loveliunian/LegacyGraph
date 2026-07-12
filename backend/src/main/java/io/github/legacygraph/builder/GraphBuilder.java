@@ -2424,7 +2424,7 @@ public class GraphBuilder {
      * 未标注时根据 targetNodeType 推断。
      * </p>
      *
-     * @param edgeTargetKind 调用目标类型（SERVICE_CALL / DATABASE_CALL / LOG_CALL / CONFIG_CALL / ENDPOINT_EXPOSE）
+     * @param edgeTargetKind 调用目标类型（SERVICE_CALL / DATABASE_CALL / LOG_CALL / CONFIG_CALL / ENDPOINT_EXPOSE / REMOTE_CALL）
      * @param targetNodeType 被调用方节点类型
      * @return EdgeType 名称
      */
@@ -2435,6 +2435,7 @@ public class GraphBuilder {
                 case "LOG_CALL" -> EdgeType.WRITES_LOG.name();
                 case "CONFIG_CALL" -> EdgeType.READS_CONFIG.name();
                 case "ENDPOINT_EXPOSE" -> EdgeType.EXPOSES_ENDPOINT.name();
+                case "REMOTE_CALL" -> EdgeType.CALLS_EXTERNAL.name();
                 default -> EdgeType.CALLS.name();
             };
         }
@@ -3935,10 +3936,73 @@ public class GraphBuilder {
 
     // ==================== 存根方法（预先存在的编译错误修复，待完整实现） ====================
 
-    /** 存根：并发图谱构建 */
+    // ==================== S2-T4: 并发图谱构建 ====================
+
+    /**
+     * S2-T4: 并发图谱构建 — 创建 TransactionScope 节点 + Method --BOUND_BY--> TransactionScope 边。
+     * <p>
+     * 遍历 ConcurrencyScanResult 中的 ConcurrencyFact，为每个有并发属性的方法创建独立的
+     * TransactionScope 节点（nodeKey = {methodNodeKey}:txscope），并建立 Method --BOUND_BY-->
+     * TransactionScope 边。节点 properties 包含注解级（@Transactional/@Async/@Lock/synchronized）
+     * 和方法体级（volatile/AtomicXxx/CompletableFuture/Thread/SyncUtility）并发属性。
+     * </p>
+     */
     public void buildConcurrencyGraph(String projectId, String versionId,
             io.github.legacygraph.extractors.ConcurrencyExtractor.ConcurrencyScanResult result) {
-        log.debug("buildConcurrencyGraph stub: projectId={}, versionId={}", projectId, versionId);
+        if (result == null || result.getFacts() == null || result.getFacts().isEmpty()) {
+            return;
+        }
+
+        List<Neo4jWriteRepository.BatchNodeUpsert> nodeBatch = new ArrayList<>();
+        List<Neo4jWriteRepository.BatchEdgeByKeyUpsert> edgeBatch = new ArrayList<>();
+
+        for (io.github.legacygraph.extractors.ConcurrencyExtractor.ConcurrencyFact fact : result.getFacts()) {
+            if (fact.getMethodSignature() == null || fact.getClassName() == null) {
+                continue;
+            }
+            // Method 节点 key 与 buildJavaStructureGraph 中一致：className + "." + methodSignature
+            String methodNodeKey = fact.getClassName() + "." + fact.getMethodSignature();
+            String txScopeNodeKey = methodNodeKey + ":txscope";
+            String txScopeName = "TransactionScope:" + fact.getMethodName();
+
+            Map<String, Object> txProps = new HashMap<>();
+            txProps.put("transactional", fact.isTransactional());
+            if (fact.getPropagation() != null) txProps.put("propagation", fact.getPropagation());
+            if (fact.getIsolation() != null) txProps.put("isolation", fact.getIsolation());
+            txProps.put("async", fact.isAsync());
+            if (fact.getLockType() != null) txProps.put("lockType", fact.getLockType());
+            txProps.put("txFailureRisk", fact.isTxFailureRisk());
+            if (fact.getTxFailureReason() != null) txProps.put("txFailureReason", fact.getTxFailureReason());
+            // S2-T4 方法体级并发原语
+            if (fact.isVolatileField()) txProps.put("volatileField", true);
+            if (fact.getAtomicUsage() != null) txProps.put("atomicUsage", fact.getAtomicUsage());
+            if (fact.isLockApi()) txProps.put("lockApi", true);
+            if (fact.isCompletableFuture()) txProps.put("completableFuture", true);
+            if (fact.isThreadUsage()) txProps.put("threadUsage", true);
+            if (fact.isSyncUtility()) txProps.put("syncUtility", true);
+            if (fact.getSourcePath() != null) txProps.put("sourcePath", fact.getSourcePath());
+            if (fact.getStartLine() != null) txProps.put("startLine", fact.getStartLine());
+            if (fact.getEndLine() != null) txProps.put("endLine", fact.getEndLine());
+
+            nodeBatch.add(new Neo4jWriteRepository.BatchNodeUpsert(
+                    NodeType.TransactionScope.name(), txScopeNodeKey, txScopeName, txProps));
+
+            // Method --BOUND_BY--> TransactionScope
+            edgeBatch.add(new Neo4jWriteRepository.BatchEdgeByKeyUpsert(
+                    methodNodeKey, txScopeNodeKey, EdgeType.BOUND_BY.name(),
+                    methodNodeKey + "->boundBy->" + txScopeNodeKey,
+                    edgeProps(SourceType.CODE_AST.name(), java.math.BigDecimal.ONE, NodeStatus.CONFIRMED)));
+        }
+
+        if (!nodeBatch.isEmpty()) {
+            neo4jGraphDao.mergeNodesBatch(projectId, versionId, nodeBatch);
+        }
+        if (!edgeBatch.isEmpty()) {
+            neo4jGraphDao.mergeEdgesByKeyBatch(projectId, versionId, edgeBatch);
+        }
+
+        log.info("buildConcurrencyGraph: {} TransactionScope nodes, {} BOUND_BY edges (projectId={}, versionId={})",
+                nodeBatch.size(), edgeBatch.size(), projectId, versionId);
     }
 
     /** 存根：异常图谱构建 */

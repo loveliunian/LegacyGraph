@@ -8,9 +8,11 @@ import io.github.legacygraph.dto.EvidenceItem;
 import io.github.legacygraph.dto.evaluation.RagasReport;
 import io.github.legacygraph.dto.qa.QaEvaluationResult;
 import io.github.legacygraph.entity.CodeRepo;
+import io.github.legacygraph.entity.QaEvaluationRun;
 import io.github.legacygraph.entity.QaTestCase;
 import io.github.legacygraph.service.evaluation.RagasMetricsService;
 import io.github.legacygraph.repository.CodeRepoRepository;
+import io.github.legacygraph.repository.QaEvaluationRunRepository;
 import io.github.legacygraph.repository.QaTestCaseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +46,7 @@ public class DefaultQaEvaluationService implements QaEvaluationService {
     private final CodeRepoRepository codeRepoRepository;
     private final ObjectMapper objectMapper;
     private final RagasMetricsService ragasMetricsService;
+    private final QaEvaluationRunRepository qaEvaluationRunRepository;
 
     private static final String DOCS_SUBDIR = "docs/legacygraph";
 
@@ -309,6 +312,42 @@ public class DefaultQaEvaluationService implements QaEvaluationService {
             log.info("DefaultQaEvaluationService: qa evaluation report written to {}", reportFile);
         } catch (IOException e) {
             log.warn("DefaultQaEvaluationService: failed to write report to {}: {}", reportFile, e.getMessage());
+        }
+
+        // S4-T6: 评估指标落库，支持可查询
+        saveEvalRunToDb(projectId, versionId, result, reportFile != null ? reportFile.toString() : null);
+    }
+
+    /**
+     * S4-T6: 将评测结果写入 lg_qa_evaluation_run 表，支持可查询。
+     */
+    private void saveEvalRunToDb(String projectId, String versionId, QaEvaluationResult result, String reportFilePath) {
+        try {
+            QaEvaluationRun run = new QaEvaluationRun();
+            run.setProjectId(projectId);
+            run.setVersionId(versionId);
+            run.setEvaluatedAt(result.getEvaluatedAt() != null ? result.getEvaluatedAt() : LocalDateTime.now());
+            run.setEntityRecall(result.getEntityRecall());
+            run.setEvidencePrecision(result.getEvidencePrecision());
+            run.setRequiredKeywordCoverage(result.getRequiredKeywordCoverage());
+            run.setAbstentionAccuracy(result.getAbstentionAccuracy());
+            run.setRagasContextPrecision(result.getRagasContextPrecision());
+            run.setRagasContextRecall(result.getRagasContextRecall());
+            run.setRagasFaithfulness(result.getRagasFaithfulness());
+            run.setRagasAnswerRelevancy(result.getRagasAnswerRelevancy());
+            run.setTotalCases(result.getTotalCases());
+            run.setPassedCases(result.getPassedCases());
+            run.setPassed(result.isPassed());
+            if (result.getFailureReasons() != null && !result.getFailureReasons().isEmpty()) {
+                run.setFailureReasons(objectMapper.writeValueAsString(result.getFailureReasons()));
+            }
+            run.setReportFilePath(reportFilePath);
+            run.setCreatedAt(LocalDateTime.now());
+            qaEvaluationRunRepository.insert(run);
+            log.info("S4-T6: eval run saved to DB: projectId={}, versionId={}, passed={}",
+                    projectId, versionId, result.isPassed());
+        } catch (Exception e) {
+            log.warn("S4-T6: failed to save eval run to DB: {}", e.getMessage());
         }
     }
 

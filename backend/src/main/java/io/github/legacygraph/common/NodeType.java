@@ -59,7 +59,10 @@ public enum NodeType {
 
     // ========== 方案生成（Task 10） ==========
     Solution("方案"),
-    SolutionStep("方案步骤");
+    SolutionStep("方案步骤"),
+
+    // ========== 并发分析（S2-T4） ==========
+    TransactionScope("事务范围");
 
     private final String description;
 

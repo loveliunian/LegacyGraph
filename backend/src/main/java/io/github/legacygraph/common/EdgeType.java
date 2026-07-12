@@ -69,7 +69,10 @@ public enum EdgeType {
     // ========== 方案生成关系（Task 10） ==========
     STEP_OF("步骤属于"),                               // SolutionStep → Solution
     VALIDATED_BY("由...校验"),                         // Solution / SolutionStep → Evidence / ValidationGate
-    REVISED_BY("由...修订");                           // Solution → Solution（修订版本链）
+    REVISED_BY("由...修订"),                           // Solution → Solution（修订版本链）
+
+    // ========== 并发分析（S2-T4） ==========
+    BOUND_BY("绑定于");                                // Method → TransactionScope
 
     private final String description;
 

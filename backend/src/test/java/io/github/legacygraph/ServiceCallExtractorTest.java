@@ -276,4 +276,120 @@ class ServiceCallExtractorTest {
                         && "findById".equals(r.getTargetMethod()));
         assertTrue(resolved, "this.userMapper.findById() 应解析出 targetClass=UserMapper（修复前 this. 前缀导致 miss）");
     }
+
+    // ============ S2-T1-PATCH: Lambda 表达式抽取测试 ============
+
+    @Test
+    void testExtractFromFile_LambdaBodyMethodCall() throws IOException {
+        // 场景：lambda 表达式体内的方法调用 — () -> userMapper.findById(id)
+        // 验证：抽取器会为 lambda 体内的方法调用打 LAMBDA_CALL 标记，且 targetClass 正确解析
+        String content = """
+                package com.example.service;
+
+                import com.example.mapper.UserMapper;
+                import lombok.RequiredArgsConstructor;
+                import org.springframework.stereotype.Service;
+                import java.util.function.Supplier;
+
+                @Service
+                @RequiredArgsConstructor
+                public class UserService {
+                    private final UserMapper userMapper;
+
+                    public Object findUserDeferred(Long id) {
+                        Supplier<Object> supplier = () -> userMapper.findById(id);
+                        return supplier.get();
+                    }
+                }
+                """;
+        Path javaFile = tempDir.resolve("UserService.java");
+        Files.writeString(javaFile, content);
+
+        ServiceCallExtractor extractor = new ServiceCallExtractor();
+        List<ServiceCallExtractor.CallRelation> relations = extractor.extractFromFile(javaFile.toFile());
+
+        // 至少有一条 LAMBDA_CALL 边指向 userMapper.findById
+        boolean lambdaEdgeFound = relations.stream()
+                .anyMatch(r -> "LAMBDA_CALL".equals(r.getEdgeTargetKind())
+                        && "UserMapper".equals(r.getTargetClass())
+                        && "findById".equals(r.getTargetMethod()));
+        assertTrue(lambdaEdgeFound,
+                "lambda 体内 userMapper.findById 应标记为 LAMBDA_CALL 并解析 targetClass=UserMapper");
+    }
+
+    @Test
+    void testExtractFromFile_LambdaWithExplicitParam() throws IOException {
+        // 场景：lambda 带显式类型参数 (User u) -> mapper.selectByName(u.getName())
+        // 验证：lambda 参数的显式类型不影响 methodVarToType，但 lambda 体内的方法调用仍能解析
+        String content = """
+                package com.example.service;
+
+                import com.example.mapper.UserMapper;
+                import com.example.model.User;
+                import lombok.RequiredArgsConstructor;
+                import org.springframework.stereotype.Service;
+                import java.util.function.Function;
+
+                @Service
+                @RequiredArgsConstructor
+                public class UserService {
+                    private final UserMapper userMapper;
+
+                    public String extractName(User input) {
+                        Function<User, String> fn = (User u) -> userMapper.selectByName(u.getName());
+                        return fn.apply(input);
+                    }
+                }
+                """;
+        Path javaFile = tempDir.resolve("UserService.java");
+        Files.writeString(javaFile, content);
+
+        ServiceCallExtractor extractor = new ServiceCallExtractor();
+        List<ServiceCallExtractor.CallRelation> relations = extractor.extractFromFile(javaFile.toFile());
+
+        // 找到 LAMBDA_CALL 边
+        boolean lambdaEdge = relations.stream()
+                .anyMatch(r -> "LAMBDA_CALL".equals(r.getEdgeTargetKind())
+                        && "UserMapper".equals(r.getTargetClass())
+                        && "selectByName".equals(r.getTargetMethod()));
+        assertTrue(lambdaEdge, "显式类型参数 lambda 体内的 userMapper.selectByName 应被标记为 LAMBDA_CALL");
+    }
+
+    @Test
+    void testExtractFromFile_LambdaCapturesOuterVariable() throws IOException {
+        // 场景：lambda 捕获外层方法的局部变量 — mapper = userMapper; () -> mapper.findById(id)
+        // 验证：lambda 闭包变量追踪生效，外层局部变量类型解析到 UserMapper
+        String content = """
+                package com.example.service;
+
+                import com.example.mapper.UserMapper;
+                import lombok.RequiredArgsConstructor;
+                import org.springframework.stereotype.Service;
+                import java.util.function.Supplier;
+
+                @Service
+                @RequiredArgsConstructor
+                public class UserService {
+                    private final UserMapper userMapper;
+
+                    public Object findUserViaLocal(Long id) {
+                        UserMapper mapper = userMapper;
+                        Supplier<Object> supplier = () -> mapper.findById(id);
+                        return supplier.get();
+                    }
+                }
+                """;
+        Path javaFile = tempDir.resolve("UserService.java");
+        Files.writeString(javaFile, content);
+
+        ServiceCallExtractor extractor = new ServiceCallExtractor();
+        List<ServiceCallExtractor.CallRelation> relations = extractor.extractFromFile(javaFile.toFile());
+
+        // lambda 捕获了外层局部变量 mapper（类型 UserMapper），mapper.findById 应解析为 UserMapper
+        boolean lambdaCaptures = relations.stream()
+                .anyMatch(r -> "LAMBDA_CALL".equals(r.getEdgeTargetKind())
+                        && "UserMapper".equals(r.getTargetClass())
+                        && "findById".equals(r.getTargetMethod()));
+        assertTrue(lambdaCaptures, "lambda 闭包捕获外层 mapper 局部变量应解析 targetClass=UserMapper");
+    }
 }

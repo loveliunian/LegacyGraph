@@ -11,7 +11,9 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
@@ -29,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -124,6 +127,8 @@ public class ServiceCallExtractor {
                 // 建立注入变量名→类型映射（字段注入 + 构造器注入）
                 Map<String, String> injectedVarToType = collectInjectedVarTypes(clazz);
                 Set<String> injectedServices = new HashSet<>(injectedVarToType.values());
+                // S2-T3: 检测远程调用注入字段（@DubboReference/@Reference）
+                Set<String> remoteInjectedVars = collectRemoteInjectedVars(clazz);
 
                 // 遍历所有方法，抽取方法调用
                 for (MethodDeclaration method : clazz.getMethods()) {
@@ -188,6 +193,10 @@ public class ServiceCallExtractor {
                             if (resolvedType != null) {
                                 rel.setTargetClass(resolvedType);
                                 rel.setTargetMethod(calledMethod);
+                                // S2-T3: 远程调用注入字段的方法调用标记为 REMOTE_CALL
+                                if (remoteInjectedVars.contains(varName)) {
+                                    rel.setEdgeTargetKind("REMOTE_CALL");
+                                }
                             }
                         });
 
@@ -210,6 +219,112 @@ public class ServiceCallExtractor {
                         }
                         relations.add(rel);
                     });
+
+                    // S2-T1: 方法引用（::语法）遍历 — 补全 this::method / instance::method / ClassName::staticMethod
+                    method.findAll(MethodReferenceExpr.class).forEach(methodRef -> {
+                        String refMethodName = methodRef.getIdentifier();
+                        CallRelation refRel = new CallRelation(className, callerMethod, refMethodName);
+                        refRel.setSourcePath(filePath);
+                        refRel.setLineNumber(methodRef.getBegin().map(p -> p.line).orElse(null));
+                        refRel.setCallerMethodSignature(callerMethod);
+                        refRel.setReceiverExpression(methodRef.toString());
+
+                        // S2-T1: 方法引用 scope 解析 — getScope() 返回 Expression（非 Optional）
+                        Expression scope = methodRef.getScope();
+                        if (scope.isThisExpr()) {
+                            // this::methodName → 当前类
+                            refRel.setTargetClass(className);
+                            refRel.setTargetMethod(refMethodName);
+                        } else if (scope.isNameExpr()) {
+                            String scopeName = scope.asNameExpr().getNameAsString();
+                            // 优先从变量映射解析（instance::method 场景）
+                            String resolvedType = methodVarToType.get(scopeName);
+                            if (resolvedType != null) {
+                                refRel.setTargetClass(resolvedType);
+                                refRel.setTargetMethod(refMethodName);
+                                // S2-T3: 远程调用注入字段标记
+                                if (remoteInjectedVars.contains(scopeName)) {
+                                    refRel.setEdgeTargetKind("REMOTE_CALL");
+                                }
+                            } else {
+                                // 可能是类名引用（ClassName::staticMethod）
+                                refRel.setTargetClass(scopeName);
+                                refRel.setTargetMethod(refMethodName);
+                            }
+                        } else if (scope.isFieldAccessExpr()) {
+                            // this.field::method 场景
+                            String fieldScope = scope.asFieldAccessExpr().getScope().toString();
+                            String fieldName = scope.asFieldAccessExpr().getNameAsString();
+                            if ("this".equals(fieldScope)) {
+                                String resolvedType = methodVarToType.get(fieldName);
+                                if (resolvedType != null) {
+                                    refRel.setTargetClass(resolvedType);
+                                    refRel.setTargetMethod(refMethodName);
+                                    if (remoteInjectedVars.contains(fieldName)) {
+                                        refRel.setEdgeTargetKind("REMOTE_CALL");
+                                    }
+                                }
+                            }
+                        }
+                        relations.add(refRel);
+                    });
+
+                    // S2-T1-PATCH: Lambda 表达式增强 — 显式遍历 LambdaExpr，
+                    // 为 lambda 体内的方法调用打 LAMBDA_CALL 标记，并把 lambda 参数 + 捕获变量加入 methodVarToType，
+                    // 让已抽取的 MethodCallExpr 边能正确解析 targetClass。
+                    // 同时支持闭包变量（outer 局部变量）追踪：lambda 内引用了外层方法局部变量时，
+                    // 把外层变量类型纳入 lambda 内的可见变量映射（lambda 闭包共享外部作用域的变量名）。
+                    Map<String, String> outerLocalVars = collectOuterLocalVarTypes(method);
+                    for (LambdaExpr lambda : method.findAll(LambdaExpr.class)) {
+                        // lambda 参数: (x, y) -> body → 参数名加入方法变量映射
+                        lambda.getParameters().forEach(p -> {
+                            String paramType = normalizeTypeName(p.getType().asString());
+                            if (paramType != null) {
+                                methodVarToType.put(p.getNameAsString(), paramType);
+                            }
+                        });
+                        // 捕获变量：lambda 体内引用的 NameExpr 名称若不在 methodVarToType，
+                        // 尝试从外层方法局部变量解析
+                        lambda.findAll(com.github.javaparser.ast.expr.NameExpr.class).forEach(nameExpr -> {
+                            String name = nameExpr.getNameAsString();
+                            if (!methodVarToType.containsKey(name) && outerLocalVars.containsKey(name)) {
+                                methodVarToType.put(name, outerLocalVars.get(name));
+                            }
+                        });
+                        // 为 lambda 体内的方法调用打 LAMBDA_CALL 标记（callerMethod 仍为外层方法）
+                        lambda.findAll(MethodCallExpr.class).forEach(methodCall -> {
+                            String calledMethod = methodCall.getNameAsString();
+                            CallRelation lambdaRel = new CallRelation(className, callerMethod, calledMethod);
+                            lambdaRel.setSourcePath(filePath);
+                            lambdaRel.setLineNumber(methodCall.getBegin().map(p -> p.line).orElse(null));
+                            lambdaRel.setCallerMethodSignature(callerMethod);
+                            lambdaRel.setEdgeTargetKind("LAMBDA_CALL");
+                            methodCall.getScope().ifPresent(scope -> {
+                                String varName = scope.toString();
+                                if (varName.startsWith("this.")) {
+                                    varName = varName.substring("this.".length());
+                                }
+                                String resolvedType = methodVarToType.get(varName);
+                                if (resolvedType != null) {
+                                    lambdaRel.setTargetClass(resolvedType);
+                                    lambdaRel.setTargetMethod(calledMethod);
+                                    if (remoteInjectedVars.contains(varName)) {
+                                        lambdaRel.setEdgeTargetKind("LAMBDA_REMOTE_CALL");
+                                    }
+                                }
+                            });
+                            // 去重
+                            boolean duplicate = relations.stream().anyMatch(r ->
+                                    Objects.equals(r.getLineNumber(), lambdaRel.getLineNumber())
+                                            && Objects.equals(r.getTargetClass(), lambdaRel.getTargetClass())
+                                            && Objects.equals(r.getCalledMethod(), lambdaRel.getCalledMethod())
+                                            && "LAMBDA_CALL".equals(r.getEdgeTargetKind())
+                            );
+                            if (!duplicate) {
+                                relations.add(lambdaRel);
+                            }
+                        });
+                    }
                 }
 
                 // 添加注入依赖边（仅依赖关系，不含调用方法）
@@ -281,6 +396,28 @@ public class ServiceCallExtractor {
     }
 
     /**
+     * S2-T3: 检测远程调用注入字段（@DubboReference / @Reference）。
+     * <p>返回变量名集合，这些变量的方法调用应标记为 edgeTargetKind="REMOTE_CALL"，
+     * 由 GraphBuilder.resolveCallEdgeType 路由为 CALLS_EXTERNAL 边。</p>
+     */
+    private Set<String> collectRemoteInjectedVars(ClassOrInterfaceDeclaration clazz) {
+        Set<String> remoteVars = new HashSet<>();
+        for (FieldDeclaration field : clazz.getFields()) {
+            boolean isRemote = field.getAnnotations().stream()
+                    .anyMatch(a -> {
+                        String name = a.getNameAsString();
+                        return "DubboReference".equals(name) || "Reference".equals(name);
+                    });
+            if (isRemote) {
+                for (VariableDeclarator var : field.getVariables()) {
+                    remoteVars.add(var.getNameAsString());
+                }
+            }
+        }
+        return remoteVars;
+    }
+
+    /**
      * 构建方法内可见的变量→类型映射：注入字段/构造参数（类级）+ 方法参数 + 方法内本地变量。
      * 用于推断方法调用实参的类型，从而生成被调用方法签名。
      */
@@ -299,6 +436,29 @@ public class ServiceCallExtractor {
             }
         }
         return varToType;
+    }
+
+    /**
+     * S2-T1-PATCH: 收集方法内的"外层"局部变量（即非 lambda 内部声明的局部变量），
+     * 用于 lambda 闭包变量追踪。lambda 可以引用外层方法的局部变量，
+     * 这些变量在 lambda 体内也"可见"，需要加入 methodVarToType 才能正确解析 lambda 体内的方法调用。
+     *
+     * <p>实现：过滤掉 lambda 体内的 VariableDeclaration（避免重复），返回其余局部变量。
+     * 复杂度 O(method.size)，无嵌套遍历。</p>
+     */
+    private Map<String, String> collectOuterLocalVarTypes(MethodDeclaration method) {
+        Map<String, String> outer = new HashMap<>();
+        for (VariableDeclarationExpr vde : method.findAll(VariableDeclarationExpr.class)) {
+            // 跳过 lambda 体内的变量声明（lambda 体内的变量属于 lambda 作用域，不算外层捕获）
+            if (vde.findAncestor(LambdaExpr.class).isPresent()) {
+                continue;
+            }
+            String type = normalizeTypeName(vde.getElementType().asString());
+            for (VariableDeclarator v : vde.getVariables()) {
+                outer.put(v.getNameAsString(), type);
+            }
+        }
+        return outer;
     }
 
     /**
