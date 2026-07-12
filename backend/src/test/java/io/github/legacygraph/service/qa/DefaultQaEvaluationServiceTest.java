@@ -8,6 +8,7 @@ import io.github.legacygraph.dto.qa.QaEvaluationResult;
 import io.github.legacygraph.entity.CodeRepo;
 import io.github.legacygraph.entity.QaTestCase;
 import io.github.legacygraph.repository.CodeRepoRepository;
+import io.github.legacygraph.repository.QaEvaluationRunRepository;
 import io.github.legacygraph.repository.QaTestCaseRepository;
 import io.github.legacygraph.service.evaluation.RagasMetricsService;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -43,10 +45,13 @@ class DefaultQaEvaluationServiceTest {
     private static final String PROJECT_ID = "proj-test";
     private static final String VERSION_ID = "ver-test";
 
+    private QaEvaluationRunRepository qaEvaluationRunRepository;
+
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
-        service = new DefaultQaEvaluationService(qaAgent, qaTestCaseRepository, codeRepoRepository, objectMapper, new RagasMetricsService());
+        qaEvaluationRunRepository = mock(QaEvaluationRunRepository.class);
+        service = new DefaultQaEvaluationService(qaAgent, qaTestCaseRepository, codeRepoRepository, objectMapper, new RagasMetricsService(), qaEvaluationRunRepository);
         // 报告写到临时目录，避免污染用户 home
         ReflectionTestUtils.setField(service, "fallbackReportRoot",
                 System.getProperty("java.io.tmpdir") + "/legacygraph-qa-test");
