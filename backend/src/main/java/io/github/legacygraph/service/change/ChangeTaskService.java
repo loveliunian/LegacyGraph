@@ -6,6 +6,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.legacygraph.agent.ChangeImpactAgent;
 import io.github.legacygraph.agent.adapter.AddColumnPatchAgentAdapter;
+import io.github.legacygraph.agent.adapter.ApiChangePatchAgentAdapter;
+import io.github.legacygraph.agent.adapter.FrontendPatchAgentAdapter;
 import io.github.legacygraph.agent.adapter.MigrationAgentAdapter;
 import io.github.legacygraph.agent.adapter.RefactorAgentAdapter;
 import io.github.legacygraph.dao.Neo4jGraphDao;
@@ -14,12 +16,17 @@ import io.github.legacygraph.dto.change.ChangeTaskProposal;
 import io.github.legacygraph.dto.graph.AgentEnvelope;
 import io.github.legacygraph.dto.graph.ImpactSubgraph;
 import io.github.legacygraph.dto.graph.PatchPlan;
+import io.github.legacygraph.dto.sandbox.SandboxRequest;
+import io.github.legacygraph.dto.sandbox.SandboxResult;
 import io.github.legacygraph.entity.ChangeTask;
 import io.github.legacygraph.entity.PatchFile;
+import io.github.legacygraph.entity.PatchDraft;
 import io.github.legacygraph.entity.PrTask;
 import io.github.legacygraph.entity.ReviewRecord;
+import io.github.legacygraph.entity.Solution;
 import io.github.legacygraph.entity.ValidationGate;
 import io.github.legacygraph.repository.*;
+import io.github.legacygraph.service.sandbox.SandboxExecutor;
 import io.github.legacygraph.service.test.PatchPlanValidator;
 import io.github.legacygraph.service.test.ValidationGateRunner;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +69,8 @@ public class ChangeTaskService {
     private final MigrationAgentAdapter migrationAgentAdapter;
     private final AddColumnPatchAgentAdapter addColumnPatchAgentAdapter;
     private final io.github.legacygraph.agent.PatchPlanAgent patchPlanAgent;
+    private final ApiChangePatchAgentAdapter apiChangePatchAgentAdapter;
+    private final FrontendPatchAgentAdapter frontendPatchAgentAdapter;
     private final PatchPlanValidator patchPlanValidator;
     private final ValidationGateRunner validationGateRunner;
     private final PrOrchestrator prOrchestrator;
@@ -69,6 +78,9 @@ public class ChangeTaskService {
     private final TransactionTemplate transactionTemplate;
     private final ColumnIngestService columnIngestService;
     private final Neo4jGraphDao neo4jGraphDao;
+    private final PatchDraftService patchDraftService;
+    private final SandboxExecutor sandboxExecutor;
+    private final io.github.legacygraph.repository.SolutionRepository solutionRepository;
 
     public ChangeTaskService(ChangeTaskRepository changeTaskRepository,
                              PatchFileRepository patchFileRepository,
@@ -80,13 +92,18 @@ public class ChangeTaskService {
                              MigrationAgentAdapter migrationAgentAdapter,
                              AddColumnPatchAgentAdapter addColumnPatchAgentAdapter,
                              io.github.legacygraph.agent.PatchPlanAgent patchPlanAgent,
+                             ApiChangePatchAgentAdapter apiChangePatchAgentAdapter,
+                             FrontendPatchAgentAdapter frontendPatchAgentAdapter,
                              PatchPlanValidator patchPlanValidator,
                              ValidationGateRunner validationGateRunner,
                              PrOrchestrator prOrchestrator,
                              ObjectMapper objectMapper,
                              TransactionTemplate transactionTemplate,
                              ColumnIngestService columnIngestService,
-                             Neo4jGraphDao neo4jGraphDao) {
+                             Neo4jGraphDao neo4jGraphDao,
+                             PatchDraftService patchDraftService,
+                             SandboxExecutor sandboxExecutor,
+                             io.github.legacygraph.repository.SolutionRepository solutionRepository) {
         this.changeTaskRepository = changeTaskRepository;
         this.patchFileRepository = patchFileRepository;
         this.validationGateRepository = validationGateRepository;
@@ -97,6 +114,8 @@ public class ChangeTaskService {
         this.migrationAgentAdapter = migrationAgentAdapter;
         this.addColumnPatchAgentAdapter = addColumnPatchAgentAdapter;
         this.patchPlanAgent = patchPlanAgent;
+        this.apiChangePatchAgentAdapter = apiChangePatchAgentAdapter;
+        this.frontendPatchAgentAdapter = frontendPatchAgentAdapter;
         this.patchPlanValidator = patchPlanValidator;
         this.validationGateRunner = validationGateRunner;
         this.prOrchestrator = prOrchestrator;
@@ -104,6 +123,9 @@ public class ChangeTaskService {
         this.transactionTemplate = transactionTemplate;
         this.columnIngestService = columnIngestService;
         this.neo4jGraphDao = neo4jGraphDao;
+        this.patchDraftService = patchDraftService;
+        this.sandboxExecutor = sandboxExecutor;
+        this.solutionRepository = solutionRepository;
     }
 
     /** 创建变更任务（状态 OPEN）—— 短 TX。 */
@@ -237,7 +259,41 @@ public class ChangeTaskService {
         // 短 TX 持久化 patch files + 状态更新
         transactionTemplate.executeWithoutResult(status ->
                 persistPatchResult(taskId, finalPlan, vr, task.getProjectId(), task.getVersionId()));
+
+        // 阶段二-2.2 + 漏点 ⑥：若关联 Solution 已 APPROVED，同步生成 PatchDraft 中间产物。
+        // 失败不影响主流程（仅记日志）。
+        trySyncPatchDraftFromSolution(task);
+
         return finalPlan;
+    }
+
+    /**
+     * 漏点 ⑥ 修复：把 Solution → PatchDraft 钩入主链路。
+     * <p>仅当任务是通过 {@code SolutionToChangeTaskBridge.bridge(...)} 创建的（solution.changeTaskId
+     * == taskId 且 Solution.status == APPROVED）时，调用 {@link PatchDraftService#createDraft}
+     * 在 Solution 与 ChangeTask 之间生成可验证的 PatchDraft 中间产物。</p>
+     * <p>失败仅记日志，不影响补丁生成主流程（PatchDraftServiceImpl 内部已做幂等保护）。</p>
+     */
+    private void trySyncPatchDraftFromSolution(ChangeTask task) {
+        try {
+            com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Solution> wrapper =
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+            wrapper.eq(Solution::getChangeTaskId, task.getId());
+            Solution linkedSolution = solutionRepository.selectOne(wrapper);
+            if (linkedSolution == null) {
+                return;
+            }
+            if (!"APPROVED".equals(linkedSolution.getStatus())) {
+                return;
+            }
+            PatchDraft draft = patchDraftService.createDraft(
+                    task.getProjectId(), task.getVersionId(), linkedSolution.getId());
+            log.info("PatchDraft synced from solution: changeTaskId={}, draftId={}, solutionId={}",
+                    task.getId(), draft.getId(), linkedSolution.getId());
+        } catch (Exception e) {
+            log.warn("trySyncPatchDraftFromSolution failed for task {}: {}",
+                    task.getId(), e.getMessage());
+        }
     }
 
     /**
@@ -289,7 +345,8 @@ public class ChangeTaskService {
     }
 
     /**
-     * 通过 Adapter 链路生成补丁（原有逻辑）。
+     * 通过 Adapter 链路生成补丁（原有逻辑 + 阶段二-2.3 扩展）。
+     * <p>覆盖六类任务类型：REFACTOR / UPGRADE / BUGFIX / ADD_COLUMN / API_CHANGE / FRONTEND_CHANGE。</p>
      */
     private PatchPlan generatePatchViaAgent(String taskId, ChangeTask task,
                                             PatchGenRequest req, ImpactSubgraph subgraph) {
@@ -311,6 +368,18 @@ public class ChangeTaskService {
                     req.getColumnType(),
                     req.getNullable() != null && req.getNullable(),
                     req.getDefaultValue(),
+                    subgraph, evidenceIds);
+            case "API_CHANGE" -> plan = apiChangePatchAgentAdapter.toPatchPlan(
+                    taskId, task.getProjectId(),
+                    req.getEndpointPath(), req.getHttpMethod(), req.getApiChangeType(),
+                    req.getControllerName(), req.getMethodName(),
+                    req.getApiChangeDescription() != null ? req.getApiChangeDescription() : task.getInputIssue(),
+                    subgraph, evidenceIds);
+            case "FRONTEND_CHANGE" -> plan = frontendPatchAgentAdapter.toPatchPlan(
+                    taskId, task.getProjectId(),
+                    req.getFrontendFramework(), req.getFrontendChangeType(),
+                    req.getFrontendComponentName(), req.getFilePath(),
+                    req.getFrontendChangeDescription() != null ? req.getFrontendChangeDescription() : task.getInputIssue(),
                     subgraph, evidenceIds);
             default -> throw new IllegalArgumentException(
                     "任务类型 " + task.getTaskType() + " 暂无自动补丁生成器");
@@ -404,8 +473,11 @@ public class ChangeTaskService {
                 .caseIds(caseIds)
                 .build();
 
-        // 门禁执行（长 IO：命令执行、测试等待，无 TX）
-        boolean allPassed = validationGateRunner.runAll(taskId, ctx);
+        // 阶段三-3.1 + 漏点 ⑤ 修复：先把 PatchFile 物化到沙箱 workingDir，
+        // 再走原有 ValidationGateRunner 跑门禁。失败原因统一收集。
+        boolean sandboxOk = runSandboxIfPossible(taskId, task, workingDir);
+        boolean gatesOk = sandboxOk && validationGateRunner.runAll(taskId, ctx);
+        boolean allPassed = gatesOk;
 
         // 短 TX 更新任务状态
         ChangeTask validated = transactionTemplate.execute(status ->
@@ -612,6 +684,51 @@ public class ChangeTaskService {
     }
 
     /**
+     * 漏点 ⑤ 修复：可选地把当前任务的 PatchFile 物化到 sandbox workingDir 并执行门禁。
+     * <p>若未配置 workingDir 或无 PatchFile 则直接返回 true（视为沙箱阶段跳过，由
+     * {@link ValidationGateRunner} 继续原有流程）。失败返回 false，阻止后续门禁执行。</p>
+     *
+     * @return true 表示沙箱阶段通过或跳过；false 表示沙箱失败，应阻断后续验证
+     */
+    private boolean runSandboxIfPossible(String taskId, ChangeTask task, String workingDir) {
+        if (workingDir == null || workingDir.isBlank()) {
+            log.debug("Sandbox skipped (no workingDir) for task {}", taskId);
+            return true;
+        }
+        List<PatchFile> patches = patchFileRepository.lambdaQuery()
+                .eq(PatchFile::getChangeTaskId, taskId).list();
+        if (patches == null || patches.isEmpty()) {
+            log.debug("Sandbox skipped (no patches) for task {}", taskId);
+            return true;
+        }
+
+        List<SandboxRequest.FileChange> changes = new ArrayList<>();
+        for (PatchFile pf : patches) {
+            changes.add(SandboxRequest.FileChange.builder()
+                    .filePath(pf.getFilePath())
+                    .changeType(pf.getChangeType())
+                    .content(pf.getPatchText())
+                    .build());
+        }
+
+        // 取默认门禁：与 registerGates 保持一致；这里兜底 STATIC + UNIT
+        List<String> gateTypes = List.of("STATIC", "UNIT");
+
+        SandboxRequest req = SandboxRequest.builder()
+                .changeTaskId(taskId)
+                .files(changes)
+                .gateTypes(gateTypes)
+                .workingDir(workingDir)
+                .environment("test")
+                .build();
+
+        SandboxResult result = sandboxExecutor.execute(req);
+        log.info("Sandbox result for task {}: success={}, reason={}",
+                taskId, result.isSuccess(), result.getFailureReason());
+        return result.isSuccess();
+    }
+
+    /**
      * 按 sourcePath 查找图谱节点并标记 stale=true。
      * versionId 传 null 以覆盖项目下所有版本。
      */
@@ -700,5 +817,27 @@ public class ChangeTaskService {
         private Boolean nullable;
         /** ADD_COLUMN 用：默认值（可空） */
         private String defaultValue;
+        // ==================== API_CHANGE 字段（阶段二-2.3） ====================
+        /** API_CHANGE 用：端点路径，如 /api/v1/users */
+        private String endpointPath;
+        /** API_CHANGE 用：HTTP 方法：GET/POST/PUT/DELETE/PATCH */
+        private String httpMethod;
+        /** API_CHANGE 用：变更类型：CREATE/MODIFY/DEPRECATE */
+        private String apiChangeType;
+        /** API_CHANGE 用：Controller 类名 */
+        private String controllerName;
+        /** API_CHANGE 用：方法名 */
+        private String methodName;
+        /** API_CHANGE 用：变更描述 */
+        private String apiChangeDescription;
+        // ==================== FRONTEND_CHANGE 字段（阶段二-2.3） ====================
+        /** FRONTEND_CHANGE 用：前端框架，如 vue/react */
+        private String frontendFramework;
+        /** FRONTEND_CHANGE 用：变更类型：CREATE/MODIFY/DELETE */
+        private String frontendChangeType;
+        /** FRONTEND_CHANGE 用：组件名 */
+        private String frontendComponentName;
+        /** FRONTEND_CHANGE 用：变更描述 */
+        private String frontendChangeDescription;
     }
 }

@@ -12,6 +12,7 @@ import io.github.legacygraph.llm.SecretScanService;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
+import io.github.legacygraph.service.normalize.BusinessDomainNormalizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,7 +64,7 @@ class EvidenceGraphWriterTest {
 
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
                 neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
-                new SecretScanService(), pgEvidenceTxExecutor);
+                new SecretScanService(), pgEvidenceTxExecutor, new BusinessDomainNormalizer());
 
         GraphNode node = writer.upsertNode(GraphNodeClaim.builder()
                 .projectId("project-1")
@@ -97,7 +98,7 @@ class EvidenceGraphWriterTest {
 
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
                 neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
-                new SecretScanService(), pgEvidenceTxExecutor);
+                new SecretScanService(), pgEvidenceTxExecutor, new BusinessDomainNormalizer());
 
         writer.attachEvidence("node-1", EvidenceRecord.builder()
                 .evidenceType("doc")
@@ -128,7 +129,7 @@ class EvidenceGraphWriterTest {
 
         EvidenceGraphWriter writer = new EvidenceGraphWriter(
                 neo4jGraphDao, evidenceRepository, nodeEvidenceRepository, edgeEvidenceRepository,
-                new SecretScanService(), pgEvidenceTxExecutor);
+                new SecretScanService(), pgEvidenceTxExecutor, new BusinessDomainNormalizer());
 
         writer.upsertEdge(GraphEdgeClaim.builder()
                 .projectId("project-1").versionId("v1")

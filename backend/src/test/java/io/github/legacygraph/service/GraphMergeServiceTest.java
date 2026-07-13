@@ -15,6 +15,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.legacygraph.service.graph.GraphMergeService;
+import io.github.legacygraph.service.graph.NodeBlockingService;
+import io.github.legacygraph.service.normalize.BusinessDomainNormalizer;
+import io.github.legacygraph.service.similarity.SemanticSimilarityCalculator;
 
 class GraphMergeServiceTest {
 
@@ -37,14 +40,16 @@ class GraphMergeServiceTest {
 
     @Test
     void testConstruction() {
-        graphMergeService = new GraphMergeService(new FakeNeo4jGraphDao(), null, agentConfig);
+        graphMergeService = new GraphMergeService(new FakeNeo4jGraphDao(), null, agentConfig,
+                new NodeBlockingService(new BusinessDomainNormalizer()), new SemanticSimilarityCalculator());
         assertNotNull(graphMergeService);
     }
 
     @Test
     void executeMergeRecordsLineageAsValidJsonWhenNodeNameContainsReplacementTokens() throws Exception {
         FakeNeo4jGraphDao neo4jGraphDao = new FakeNeo4jGraphDao();
-        graphMergeService = new GraphMergeService(neo4jGraphDao, null, agentConfig);
+        graphMergeService = new GraphMergeService(neo4jGraphDao, null, agentConfig,
+                new NodeBlockingService(new BusinessDomainNormalizer()), new SemanticSimilarityCalculator());
         GraphNode targetNode = new GraphNode();
         targetNode.setId("target-1");
         targetNode.setProjectId("project-1");

@@ -10,7 +10,7 @@
       </el-tag>
       <el-button
         v-if="showClear"
-        type="text"
+        link
         size="small"
         @click="$emit('clear')"
       >

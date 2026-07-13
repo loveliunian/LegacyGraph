@@ -37,6 +37,7 @@ describe('mapQaHistoryMessages', () => {
         evidences: [],
         messageId: 'm1',
         conversationId: 'conv-1',
+        createdAt: '2026-07-03T10:00:00',
       },
       {
         role: 'assistant',
@@ -52,6 +53,7 @@ describe('mapQaHistoryMessages', () => {
         ],
         messageId: 'm2',
         conversationId: 'conv-1',
+        createdAt: '2026-07-03T10:00:01',
       },
     ])
   })

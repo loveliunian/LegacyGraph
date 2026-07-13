@@ -35,6 +35,10 @@ class GraphPathReadModelTest {
         pathReadModel = new GraphPathReadModel(neo4jGraphDao);
         // L-16: 注入 @Value 字段（单元测试无 Spring 上下文）
         ReflectionTestUtils.setField(pathReadModel, "apiChainMaxDepth", 12);
+        // P1: 注入超时与熔断参数，避免 queryTimeoutMs=0 导致 BFS 立即超时
+        ReflectionTestUtils.setField(pathReadModel, "queryTimeoutMs", 5000L);
+        ReflectionTestUtils.setField(pathReadModel, "circuitBreakerThreshold", 5);
+        ReflectionTestUtils.setField(pathReadModel, "circuitBreakerResetMs", 30000L);
 
         apiNode = new GraphNode();
         apiNode.setId("api-1");
@@ -44,38 +48,56 @@ class GraphPathReadModelTest {
 
     /**
      * L-16: BFS 邻居展开 — queryOutgoingEdges 返回带目标节点信息的边 Map。
+     * P1: 真实图谱为 ApiEndpoint -HANDLED_BY-> Method（非 ApiEndpoint -CALLS-> Service）。
+     * 同时验证反向 CONTAINS 收集：Method 的入边 (Controller)-[CONTAINS]->(Method) 被补入链路。
      */
     @Test
-    @DisplayName("getApiCallChain: BFS 邻居展开，边 Map 携带目标节点信息")
+    @DisplayName("getApiCallChain: BFS 邻居展开 + 反向 CONTAINS 收集父节点")
     void testGetApiCallChain_bfsNeighborExpansion() {
         when(neo4jGraphDao.findNode("p1", "v1", "ApiEndpoint", "node-key"))
                 .thenReturn(Optional.of(apiNode));
 
-        // L-16: queryOutgoingEdges 返回带 to* 字段的 Map
+        // 正向 BFS: ApiEndpoint -HANDLED_BY-> Method（真实边类型）
         Map<String, Object> edge1 = new HashMap<>();
         edge1.put("id", "edge-1");
-        edge1.put("type", "CALLS");
+        edge1.put("type", "HANDLED_BY");
         edge1.put("source", "api-1");
-        edge1.put("target", "svc-1");
-        edge1.put("toType", "Service");
-        edge1.put("toName", "OrderService");
-        edge1.put("toDisplayName", "Order Service");
+        edge1.put("target", "method-1");
+        edge1.put("toType", "Method");
+        edge1.put("toName", "uploadPDF");
+        edge1.put("toDisplayName", "uploadPDF");
         edge1.put("toConfidence", java.math.BigDecimal.ONE);
         edge1.put("toStatus", "CONFIRMED");
-        edge1.put("toSourcePath", "/src/OrderService.java");
+        edge1.put("toSourcePath", "/src/BankUploadController.java");
 
-        // 第一次调用返回 1 条出边，第二次（已访问 svc-1）返回空
+        // 第一次调用返回 1 条出边，第二次（已访问 method-1）返回空
         when(neo4jGraphDao.queryOutgoingEdges(eq("p1"), eq("v1"), anyCollection()))
                 .thenReturn(List.of(edge1))
                 .thenReturn(List.of());
+
+        // P1: 反向 CONTAINS 收集 —— Method 的入边 (Controller)-[CONTAINS]->(Method)
+        Map<String, Object> containsEdge = new HashMap<>();
+        containsEdge.put("id", "edge-2");
+        containsEdge.put("type", "CONTAINS");
+        containsEdge.put("source", "controller-1");
+        containsEdge.put("target", "method-1");
+        containsEdge.put("fromType", "Controller");
+        containsEdge.put("fromName", "BankUploadController");
+        containsEdge.put("fromDisplayName", "BankUploadController");
+        containsEdge.put("fromConfidence", java.math.BigDecimal.ONE);
+        containsEdge.put("fromStatus", "CONFIRMED");
+        containsEdge.put("fromSourcePath", "/src/BankUploadController.java");
+        when(neo4jGraphDao.queryIncomingEdges(eq("p1"), eq("v1"), anyCollection()))
+                .thenReturn(List.of(containsEdge));
 
         GraphPathReadModel.PathChain chain = pathReadModel.getApiCallChain("p1", "v1", "node-key");
 
         assertNotNull(chain);
         assertEquals("api-1", chain.startNodeId);
-        assertTrue(chain.nodes.size() >= 2, "应包含 API 节点 + Service 节点");
-        assertEquals(1, chain.edges.size(), "应有 1 条 CALLS 边");
-        assertEquals("CALLS", chain.edges.get(0).type());
+        assertTrue(chain.nodes.size() >= 3, "应包含 API + Method + Controller 父节点");
+        // 至少包含 HANDLED_BY 与 CONTAINS 两条边
+        assertTrue(chain.edges.size() >= 2, "应包含 HANDLED_BY 边 + 反向 CONTAINS 边");
+        assertEquals("HANDLED_BY", chain.edges.get(0).type());
 
         // L-16: 验证使用 queryOutgoingEdges 而非 queryEdges
         verify(neo4jGraphDao, atLeastOnce()).queryOutgoingEdges(eq("p1"), eq("v1"), anyCollection());

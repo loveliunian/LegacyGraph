@@ -488,11 +488,12 @@ public class Neo4jProjectionRepository {
                                                          Collection<String> sourceNodeIds) {
         if (sourceNodeIds == null || sourceNodeIds.isEmpty()) return List.of();
         try (Session session = neo4jDriver.session()) {
+            // P2: 兼容老图谱边不带 r.projectId/r.versionId 属性 —— NULL 视为匹配
             String cypher =
                 "MATCH (from)-[r]->(to) " +
-                "WHERE r.projectId = $projectId " +
+                "WHERE (r.projectId IS NULL OR r.projectId = $projectId) " +
                 "AND from.id IN $sourceNodeIds " +
-                "AND r.versionId = $versionId " +
+                "AND (r.versionId IS NULL OR r.versionId = $versionId) " +
                 "RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target, " +
                 "to.nodeType AS toType, to.nodeName AS toName, to.displayName AS toDisplayName, " +
                 "to.confidence AS toConfidence, to.status AS toStatus, to.sourcePath AS toSourcePath";
@@ -520,11 +521,12 @@ public class Neo4jProjectionRepository {
                                                          Collection<String> targetNodeIds) {
         if (targetNodeIds == null || targetNodeIds.isEmpty()) return List.of();
         try (Session session = neo4jDriver.session()) {
+            // P2: 兼容老图谱边不带 r.projectId/r.versionId 属性 —— NULL 视为匹配
             String cypher =
                 "MATCH (from)-[r]->(to) " +
-                "WHERE r.projectId = $projectId " +
+                "WHERE (r.projectId IS NULL OR r.projectId = $projectId) " +
                 "AND to.id IN $targetNodeIds " +
-                "AND r.versionId = $versionId " +
+                "AND (r.versionId IS NULL OR r.versionId = $versionId) " +
                 "RETURN r.id AS id, type(r) AS type, from.id AS source, to.id AS target, " +
                 "from.nodeType AS fromType, from.nodeName AS fromName, from.displayName AS fromDisplayName, " +
                 "from.confidence AS fromConfidence, from.status AS fromStatus, from.sourcePath AS fromSourcePath";

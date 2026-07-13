@@ -55,6 +55,7 @@ final class Neo4jConversions {
         params.put("properties", node.getProperties() != null ? node.getProperties() : "{}");
         params.put("scanType", node.getScanType() != null ? node.getScanType() : "");
         params.put("className", node.getClassName() != null ? node.getClassName() : "");
+        params.put("aliasNames", node.getAliasNames());
         params.put("verifiedScore", node.getVerifiedScore() != null ? node.getVerifiedScore().doubleValue() : 0.0);
         params.put("runtimeVerified", node.getRuntimeVerified() != null ? node.getRuntimeVerified() : false);
         params.put("lastSeenAt", node.getLastSeenAt() != null ? node.getLastSeenAt().toString() : null);
@@ -88,6 +89,7 @@ final class Neo4jConversions {
         else if (conf instanceof String) node.setConfidence(new BigDecimal((String) conf));
         node.setStatus((String) props.get("status"));
         node.setProperties((String) props.get("properties"));
+        node.setAliasNames((String) props.get("aliasNames"));
         Object vs = props.get("verifiedScore");
         if (vs instanceof Double) node.setVerifiedScore(BigDecimal.valueOf((Double) vs));
         else if (vs instanceof String) node.setVerifiedScore(new BigDecimal((String) vs));

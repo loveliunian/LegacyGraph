@@ -60,6 +60,9 @@ public class ChangeTask {
     /** 关联的 AgentRun 合约ID，便于回放补丁生成过程 */
     private String agentRunId;
 
+    /** 阶段三-3.1 漏点 ⑤：是否启用沙箱执行（执行门禁前先在沙箱中验证补丁） */
+    private Boolean sandboxEnabled;
+
     /** 指派给的用户/团队/角色标识 */
     private String assignee;
 

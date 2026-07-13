@@ -27,10 +27,15 @@ public class MyBatisAnnotationExtractor {
 
     private static final String[] SQL_ANNOTATIONS = {
         "Select", "Insert", "Update", "Delete",
+        "SelectProvider", "InsertProvider", "UpdateProvider", "DeleteProvider",
         "org.apache.ibatis.annotations.Select",
         "org.apache.ibatis.annotations.Insert",
         "org.apache.ibatis.annotations.Update",
-        "org.apache.ibatis.annotations.Delete"
+        "org.apache.ibatis.annotations.Delete",
+        "org.apache.ibatis.annotations.SelectProvider",
+        "org.apache.ibatis.annotations.InsertProvider",
+        "org.apache.ibatis.annotations.UpdateProvider",
+        "org.apache.ibatis.annotations.DeleteProvider"
     };
 
     private final JavaParser javaParser;
@@ -60,13 +65,25 @@ public class MyBatisAnnotationExtractor {
                 return null;
             }
 
-            // 查找 Mapper 接口
+            // P0-2: 查找 Mapper 接口 —— 放宽命名匹配，兼容继承 BaseMapper 的任意命名接口
             Optional<ClassOrInterfaceDeclaration> mapperInterface = cu.findAll(ClassOrInterfaceDeclaration.class)
                 .stream()
                 .filter(ClassOrInterfaceDeclaration::isInterface)
-                .filter(c -> c.getNameAsString().endsWith("Mapper") 
-                          || c.getNameAsString().endsWith("Dao")
-                          || c.getNameAsString().endsWith("Repository"))
+                .filter(c -> {
+                    String name = c.getNameAsString();
+                    // 命名兜底
+                    if (name.endsWith("Mapper") || name.endsWith("Dao")
+                            || name.endsWith("Repository") || name.endsWith("DAO")
+                            || name.endsWith("DaoImpl")) {
+                        return true;
+                    }
+                    // 继承 BaseMapper / Mapper / JoinMapper 等通用 Mapper 基类
+                    return c.getExtendedTypes().stream().anyMatch(t -> {
+                        String s = t.getNameAsString();
+                        return s.equals("BaseMapper") || s.equals("Mapper") || s.equals("JoinMapper")
+                                || s.endsWith("BaseMapper");
+                    });
+                })
                 .findFirst();
 
             if (mapperInterface.isEmpty()) {

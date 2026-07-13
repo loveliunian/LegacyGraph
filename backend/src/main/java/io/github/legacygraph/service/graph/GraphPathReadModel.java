@@ -149,8 +149,54 @@ public class GraphPathReadModel {
                 break;
             }
         }
+
+        // P1: 反向 CONTAINS 收集 —— 把 (Controller/Service/Mapper)-[CONTAINS]->(Method) 的父节点补入链路。
+        // 正向 BFS 只跟随出边，而图谱中 CONTAINS 方向是父→子，Method 的父类节点需反向一跳才能拿到。
+        collectReverseContainsParents(projectId, normalizedVersionId, chain, visited, deadlineNanos);
+
         onQuerySuccess();
         return chain;
+    }
+
+    /**
+     * P1: 反向 CONTAINS 收集 —— 为链路中的 Method 节点补齐父节点（Controller/Service/Mapper）。
+     * <p>图谱中 (Controller)-[CONTAINS]->(Method) 是父→子方向，正向 BFS 从 Method 出发拿不到父节点。
+     * 此方法对链路内所有 Method 节点查入边，过滤 CONTAINS，把父节点加入链路，使前端能展示完整链路：
+     * API → Method (+ Controller/Service/Mapper 父节点) → SqlStatement → Table。</p>
+     */
+    private void collectReverseContainsParents(String projectId, String versionId,
+                                                PathChain chain, Set<String> visited, long deadlineNanos) {
+        // 收集链路中的 Method / SqlStatement 节点 ID —— 反向 CONTAINS 收集父节点（Controller/Service/Mapper）
+        // - (Controller/Service)-[CONTAINS]->(Method)
+        // - (Mapper)-[CONTAINS]->(SqlStatement)
+        // 两者方向都是父→子，正向 BFS 拿不到父节点，必须反向一跳
+        Set<String> candidateIds = new HashSet<>();
+        for (NodeInfo n : chain.nodes) {
+            if ("Method".equals(n.type()) || "SqlStatement".equals(n.type())) {
+                candidateIds.add(n.id());
+            }
+        }
+        if (candidateIds.isEmpty()) return;
+
+        // 超时保护
+        if (System.nanoTime() > deadlineNanos) {
+            chain.degraded = true;
+            return;
+        }
+
+        List<Map<String, Object>> incomingEdges = neo4jGraphDao.queryIncomingEdges(
+                projectId, versionId, candidateIds);
+
+        for (Map<String, Object> edge : incomingEdges) {
+            String edgeType = (String) edge.get("type");
+            String sourceId = (String) edge.get("source");
+            if (!"CONTAINS".equalsIgnoreCase(edgeType)) continue;
+            if (sourceId == null || visited.contains(sourceId)) continue;
+
+            visited.add(sourceId);
+            chain.edges.add(toEdgeInfoFromMap(edge));
+            chain.nodes.add(toNodeInfoFromIncomingEdgeMap(edge));
+        }
     }
 
     /**

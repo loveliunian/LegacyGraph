@@ -1,7 +1,7 @@
 <template>
   <div
     class="custom-node"
-    :class="[`node-${nodeTypeClass}`, { 'node-selected': isSelected, 'node-pending': isPending }]"
+    :class="[`node-${nodeTypeClass}`, { 'node-selected': isSelected, 'node-pending': isPending, 'node-duplicate': isDuplicate }]"
     :style="{ borderColor: nodeColor }"
   >
     <div
@@ -100,6 +100,9 @@ const nodeStatus = computed(() => String(nodeData.value.status || ''))
 const isSelected = computed(() => props.selected === true)
 
 const isPending = computed(() => ['pending', 'pending_confirm'].includes(nodeStatus.value.toLowerCase()))
+
+/** P6: 疑似重复节点（与 duplicateNodeIds 集合匹配），显示虚线框高亮 */
+const isDuplicate = computed(() => nodeData.value.duplicate === true)
 
 const confidence = computed(() => Number(nodeData.value.confidence ?? 0))
 
@@ -208,6 +211,18 @@ function normalizeType(type?: string): string {
 
 .node-pending {
   opacity: 0.85;
+}
+
+/* P6: 疑似重复节点高亮（虚线橙边框 + 同色背景提示） */
+.node-duplicate {
+  border-style: dashed !important;
+  border-color: #e6a23c !important;
+  border-width: 2px !important;
+  background: rgba(230, 162, 60, 0.06);
+}
+
+.node-duplicate:hover {
+  box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.25);
 }
 
 .node-header {

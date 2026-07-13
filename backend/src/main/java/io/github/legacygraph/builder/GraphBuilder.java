@@ -2010,7 +2010,8 @@ public class GraphBuilder {
             if (classInfo.getQualifiedName() == null || classInfo.getQualifiedName().isBlank()) {
                 continue;
             }
-            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName(), classInfo.getAnnotations());
+            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName(), classInfo.getAnnotations(),
+                    classInfo.getExtendedTypes(), classInfo.getImplementedTypes());
             String classKey = classInfo.getQualifiedName();
             String inheritProps = buildInheritProperties(classInfo);
 
@@ -2119,7 +2120,8 @@ public class GraphBuilder {
             if (classInfo.getQualifiedName() == null || classInfo.getQualifiedName().isBlank()) {
                 continue;
             }
-            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName(), classInfo.getAnnotations());
+            NodeType classNodeType = inferNodeType(classInfo.getQualifiedName(), classInfo.getAnnotations(),
+                    classInfo.getExtendedTypes(), classInfo.getImplementedTypes());
             String classKey = classInfo.getQualifiedName();
             GraphNode classNode = neo4jGraphDao.findNode(projectId, versionId,
                     classNodeType.name(), classKey).orElse(null);
@@ -2204,11 +2206,22 @@ public class GraphBuilder {
                 continue;
             }
             NodeType targetNodeType = inferNodeType(targetClassKey);
+            // P0-3: 当 ServiceCallExtractor 已标注 DATABASE_CALL 时，目标必为 Mapper，
+            // 用 Mapper 标签查找，避免 inferNodeType(仅 FQN) 对非标准命名的 Mapper 接口返回 Unknown 而漏连。
+            if ("DATABASE_CALL".equalsIgnoreCase(call.getEdgeTargetKind())) {
+                targetNodeType = NodeType.Mapper;
+            }
             // find-only：targetClass 是简单名，类节点 nodeKey 是 FQN，精确查找通常 miss。
             // 不再用 findOrCreateNodeByClass（会创建重复的简单名节点污染图谱），miss 时 targetNode=null，
             // 下面的 callerNode!=null && targetNode!=null 门会跳过本调用，交给 JavaMemberCallResolver 二次扫描解析。
             GraphNode targetNode = neo4jGraphDao.findNode(
                     projectId, versionId, targetNodeType.name(), targetClassKey).orElse(null);
+            // P0-3: DATABASE_CALL 在 Mapper 标签 miss 时，退化为 Unknown 标签再查一次，
+            // 兼容部分 Mapper 节点因注解缺失被归为 Unknown 的情况。
+            if (targetNode == null && "DATABASE_CALL".equalsIgnoreCase(call.getEdgeTargetKind())) {
+                targetNode = neo4jGraphDao.findNode(
+                        projectId, versionId, NodeType.Unknown.name(), targetClassKey).orElse(null);
+            }
 
             // 如果调用方和被调用方都存在，创建 CALLS 边
             if (callerNode != null && targetNode != null) {
@@ -2343,13 +2356,19 @@ public class GraphBuilder {
     }
 
     /**
-     * L-09: 根据注解 + 类名推断节点类型（注解优先，避免包路径污染）。
+     * L-09: 根据注解 + 类名 + 继承信息推断节点类型（注解优先，避免包路径污染）。
+     * <p>P0-1 增强：兼容 MyBatis-Plus 时代 "任何接口命名 + extends BaseMapper / implements IService" 的项目结构，
+     * 让被 @Service / @Repository / @Mapper 注解的类无论名字是什么都能正确归类，
+     * 并对继承 BaseMapper / IService / BaseServiceImpl 的类做兜底识别。</p>
      *
-     * @param className   类的全限定名（可为 null）
-     * @param annotations 类级注解名称列表（如 RestController, Service, Mapper），可为 null
+     * @param className       类的全限定名（可为 null）
+     * @param annotations     类级注解名称列表（如 RestController, Service, Mapper），可为 null
+     * @param extendedTypes   extends 的父类简单名列表（可为 null）
+     * @param implementedTypes implements 的接口简单名列表（可为 null）
      */
-    private NodeType inferNodeType(String className, List<String> annotations) {
-        // 1. 注解优先判定
+    private NodeType inferNodeType(String className, List<String> annotations,
+                                    List<String> extendedTypes, List<String> implementedTypes) {
+        // 1. 注解优先判定（兼容 FQN 形式与简单名形式）
         if (annotations != null && !annotations.isEmpty()) {
             for (String anno : annotations) {
                 String simple = anno.contains(".") ? anno.substring(anno.lastIndexOf('.') + 1) : anno;
@@ -2364,6 +2383,37 @@ public class GraphBuilder {
                 }
             }
         }
+
+        // 1.5 P0-1: 继承识别 —— MyBatis-Plus / Spring 通用基类
+        // 接口 extends BaseMapper<T> / Mapper<T> / JoinMapper 等 → Mapper
+        // 类 implements IService<...> / extends ServiceImpl<...> / BaseServiceImpl<...> → Service
+        if (extendedTypes != null) {
+            for (String ext : extendedTypes) {
+                if (ext == null) continue;
+                String s = ext.contains(".") ? ext.substring(ext.lastIndexOf('.') + 1) : ext;
+                if (s.equals("BaseMapper") || s.equals("Mapper") || s.equals("JoinMapper")
+                        || s.endsWith("BaseMapper")) {
+                    return NodeType.Mapper;
+                }
+                if (s.equals("ServiceImpl") || s.equals("BaseServiceImpl")
+                        || s.endsWith("ServiceImpl")) {
+                    return NodeType.Service;
+                }
+            }
+        }
+        if (implementedTypes != null) {
+            for (String impl : implementedTypes) {
+                if (impl == null) continue;
+                String s = impl.contains(".") ? impl.substring(impl.lastIndexOf('.') + 1) : impl;
+                if (s.equals("BaseMapper") || s.equals("Mapper") || s.endsWith("BaseMapper")) {
+                    return NodeType.Mapper;
+                }
+                if (s.equals("IService") || s.endsWith("IService")) {
+                    return NodeType.Service;
+                }
+            }
+        }
+
         // 2. 没有匹配注解 → 按简单名（最后一个点之后的 token）匹配，避免子串污染
         if (className == null || className.isEmpty()) {
             return NodeType.Unknown;
@@ -2388,10 +2438,20 @@ public class GraphBuilder {
     }
 
     /**
+     * L-09: 根据注解 + 类名推断节点类型（向后兼容，无继承信息时使用）。
+     *
+     * @param className   类的全限定名（可为 null）
+     * @param annotations 类级注解名称列表（如 RestController, Service, Mapper），可为 null
+     */
+    private NodeType inferNodeType(String className, List<String> annotations) {
+        return inferNodeType(className, annotations, null, null);
+    }
+
+    /**
      * L-09: 仅按类名推断（向后兼容，无注解时使用）。
      */
     private NodeType inferNodeType(String className) {
-        return inferNodeType(className, null);
+        return inferNodeType(className, null, null, null);
     }
 
     /**

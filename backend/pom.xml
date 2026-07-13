@@ -32,6 +32,8 @@
         <lombok.version>1.18.46</lombok.version>
         <!-- Spring AI -->
         <spring-ai.version>2.0.0</spring-ai.version>
+        <!-- 拼音库（业务域节点归一化用） -->
+        <pinyin4j.version>2.5.1</pinyin4j.version>
     </properties>
 
     <dependencies>
@@ -167,6 +169,13 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
+        </dependency>
+
+        <!-- Pinyin4j for Chinese pinyin (业务域节点归一化/Blocking) -->
+        <dependency>
+            <groupId>com.belerweb</groupId>
+            <artifactId>pinyin4j</artifactId>
+            <version>${pinyin4j.version}</version>
         </dependency>
 
         <!-- OkHttp (Spring AI 依赖，minio 9.x 不再传递) -->

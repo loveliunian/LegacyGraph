@@ -283,5 +283,18 @@ export const sourceApi = {
       `/lg/projects/${encodeURIComponent(projectId)}/sources/browse-directory`,
       path ? { path } : {}
     )
+  },
+
+  /**
+   * 读取文件内容
+   * @param projectId 项目ID
+   * @param filePath 文件路径
+   * @returns 文件内容和文件名
+   */
+  getFileContent: (projectId: string, filePath: string) => {
+    return get<{ content: string; fileName: string }>(
+      `/lg/projects/${encodeURIComponent(projectId)}/sources/file-content`,
+      { filePath }
+    )
   }
 }

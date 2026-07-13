@@ -74,4 +74,11 @@ public class GraphNodeClaim {
     /** 所属类的全限定名（用于代码节点） */
     private String className;
 
+    /**
+     * 别名列表（JSON 数组字符串，如 ["用户中心","yh","user"]）。
+     * <p>业务域节点合并优化（graph-merge-optimization-plan.md 改进②）：用于跨源别名识别与 Blocking。
+     * 为空时由 {@code EvidenceGraphWriter} 对业务域类型自动派生。</p>
+     */
+    private String aliasNames;
+
 }

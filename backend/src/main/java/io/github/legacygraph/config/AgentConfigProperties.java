@@ -4,6 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Agent 相关配置属性 —— 从 application.yml 读取 legacygraph.agent 配置。
  * <p>
@@ -34,6 +37,8 @@ public class AgentConfigProperties {
         // ===== 多证据评分权重（GraphMergeService.scoreCandidate） =====
         /** 名称评分权重（默认 0.35） */
         private double scoreNameWeight = 0.35;
+        /** 语义评分权重（默认 0.0，业务域类型由 scoreWeightsByType 覆盖） */
+        private double scoreSemanticWeight = 0.0;
         /** 结构评分权重（默认 0.25） */
         private double scoreStructWeight = 0.25;
         /** 证据评分权重（默认 0.20） */
@@ -42,6 +47,21 @@ public class AgentConfigProperties {
         private double scoreRuntimeWeight = 0.10;
         /** 历史评分权重（默认 0.10） */
         private double scoreHistoryWeight = 0.10;
+
+        // ===== 类型感知评分权重（改进④：按节点类型分桶） =====
+        /**
+         * 按节点类型分桶的评分权重。key = nodeType（如 "BusinessDomain"），value = 权重配置。
+         * <p>未配置的节点类型使用 default 权重（即上述全局 score*Weight 字段）。</p>
+         * <p>示例配置见 application.yml / graph-merge-optimization-plan.md 改进④。</p>
+         */
+        private Map<String, ScoreWeights> scoreWeightsByType = new HashMap<>();
+
+        /**
+         * 获取指定节点类型的评分权重，未配置则返回 null（调用方使用全局默认权重）。
+         */
+        public ScoreWeights weightsFor(String nodeType) {
+            return nodeType != null ? scoreWeightsByType.get(nodeType) : null;
+        }
 
         // ===== 自动决策阈值（GraphMergeService.decideMerge） =====
         /** 自动合并阈值（默认 0.85） */
@@ -64,5 +84,25 @@ public class AgentConfigProperties {
         private double confidenceHumanWeight = 0.05;
         /** 冲突扣分系数 */
         private double confidenceConflictPenalty = 0.35;
+    }
+
+    /**
+     * 类型感知的评分权重（改进④）。
+     * <p>每个维度权重 0-1，六维之和应为 1.0（业务域类型语义分权重更高）。</p>
+     */
+    @Data
+    public static class ScoreWeights {
+        /** 名称相似度权重 */
+        private double name = 0.35;
+        /** 语义相似度权重 */
+        private double semantic = 0.0;
+        /** 结构邻域相似度权重 */
+        private double struct = 0.25;
+        /** 共享证据权重 */
+        private double evidence = 0.20;
+        /** 运行时共现权重 */
+        private double runtime = 0.10;
+        /** 历史权重 */
+        private double history = 0.10;
     }
 }

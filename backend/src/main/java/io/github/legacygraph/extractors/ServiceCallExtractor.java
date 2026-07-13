@@ -197,6 +197,11 @@ public class ServiceCallExtractor {
                                 if (remoteInjectedVars.contains(varName)) {
                                     rel.setEdgeTargetKind("REMOTE_CALL");
                                 }
+                                // P0-3: 注入的 Mapper 字段调用标记为 DATABASE_CALL，
+                                // 兼容 Controller 直接 @Autowired Mapper 的项目结构（无 Service 中转）
+                                else if (isMapperType(resolvedType)) {
+                                    rel.setEdgeTargetKind("DATABASE_CALL");
+                                }
                             }
                         });
 
@@ -310,6 +315,11 @@ public class ServiceCallExtractor {
                                     lambdaRel.setTargetMethod(calledMethod);
                                     if (remoteInjectedVars.contains(varName)) {
                                         lambdaRel.setEdgeTargetKind("LAMBDA_REMOTE_CALL");
+                                    }
+                                    // P0-3 对齐：lambda 体里对注入 Mapper 字段的调用也标记 DATABASE_CALL，
+                                    // 避免 LAMBDA_CALL 默认走 resolveCallEdgeType → CALLS 而非 CALLS_DB
+                                    else if (isMapperType(resolvedType)) {
+                                        lambdaRel.setEdgeTargetKind("DATABASE_CALL");
                                     }
                                 }
                             });
@@ -544,6 +554,25 @@ public class ServiceCallExtractor {
      */
     private String normalizeTypeName(String type) {
         return MethodSignatureSupport.normalizeTypeName(type);
+    }
+
+    /**
+     * P0-3: 判断类型名是否为 Mapper（MyBatis Mapper / DAO / Repository）。
+     * <p>用于在调用抽取阶段识别注入的 Mapper 字段，将对其的方法调用标记为 DATABASE_CALL，
+     * 兼容 Controller 直接 @Autowired Mapper 的项目结构（无 Service 中转）。</p>
+     * <p>判断依据：简单名后缀（Mapper/Dao/DAO/Repository）或 FQN 含 BaseMapper。</p>
+     */
+    private static boolean isMapperType(String typeName) {
+        if (typeName == null || typeName.isBlank()) return false;
+        String simple = typeName.contains(".")
+                ? typeName.substring(typeName.lastIndexOf('.') + 1)
+                : typeName;
+        if (simple.endsWith("Mapper") || simple.endsWith("Dao")
+                || simple.endsWith("DAO") || simple.endsWith("Repository")) {
+            return true;
+        }
+        // MyBatis-Plus BaseMapper 子类（FQN 含 BaseMapper）
+        return typeName.contains("BaseMapper");
     }
 
     /**

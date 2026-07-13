@@ -51,6 +51,9 @@ CREATE TABLE lg_code_repo (
     local_path      TEXT,
     backend_sub_path  TEXT,
     frontend_sub_path TEXT,
+    provider        VARCHAR(32),
+    default_branch  VARCHAR(128),
+    review_team     VARCHAR(256),
     status          VARCHAR(32) NOT NULL DEFAULT 'NEW',
     last_pull_status VARCHAR(32),
     last_pull_time  TIMESTAMP,
@@ -1104,10 +1107,85 @@ CREATE TABLE lg_pr_task (
     deleted             SMALLINT     NOT NULL DEFAULT 0
 );
 
+-- ============================================
+-- 补丁草案表（阶段二-2.2）
+-- ============================================
+CREATE TABLE lg_patch_draft (
+    id                    VARCHAR(36) PRIMARY KEY,
+    solution_id           VARCHAR(36) NOT NULL,
+    project_id            VARCHAR(36) NOT NULL,
+    version_id            VARCHAR(36),
+    status                VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+    files_json            TEXT,
+    risk_level            VARCHAR(32),
+    generated_by          VARCHAR(64),
+    validation_report_json TEXT,
+    created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    validated_at          TIMESTAMP,
+    materialized_at       TIMESTAMP
+);
+
+CREATE INDEX idx_lg_patch_draft_solution ON lg_patch_draft(solution_id);
+CREATE INDEX idx_lg_patch_draft_project  ON lg_patch_draft(project_id);
+CREATE INDEX idx_lg_patch_draft_status   ON lg_patch_draft(status);
+
+-- ============================================
+-- 方案主表 + 方案步骤（漏点 ⑨ 修复：H2 同步 V65/V91）
+-- PatchDraftServiceImpl.createDraft 依赖这两张表
+-- ============================================
+CREATE TABLE lg_solution (
+    id                    VARCHAR(36) PRIMARY KEY,
+    project_id            VARCHAR(36) NOT NULL,
+    requirement_id        VARCHAR(36) NOT NULL,
+    status                VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+    summary               TEXT,
+    analysis_json         TEXT,
+    impact_result_json    TEXT,
+    verification_errors   TEXT,
+    change_task_id        VARCHAR(36),
+    created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_solution_project     ON lg_solution(project_id);
+CREATE INDEX idx_lg_solution_requirement ON lg_solution(requirement_id);
+CREATE INDEX idx_lg_solution_status      ON lg_solution(status);
+
+CREATE TABLE lg_solution_step (
+    id                   VARCHAR(36) PRIMARY KEY,
+    solution_id          VARCHAR(36) NOT NULL,
+    step_index           INTEGER NOT NULL,
+    title                VARCHAR(255),
+    description          TEXT,
+    file_path            TEXT,
+    symbol_name          VARCHAR(512),
+    evidence_ids         TEXT,
+    action_type          VARCHAR(32),
+    test_description     TEXT,
+    rollback_description TEXT,
+    code_snippet         TEXT,
+    code_language        VARCHAR(32),
+    change_scope         VARCHAR(32),
+    test_files           TEXT,
+    created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_lg_solution_step_solution ON lg_solution_step(solution_id);
+CREATE INDEX idx_lg_solution_step_index    ON lg_solution_step(solution_id, step_index);
+
+-- ============================================
+-- ChangeTask 沙箱启用开关（漏点 ⑤ 修复：V94 同步）
+-- ============================================
+ALTER TABLE lg_change_task ADD COLUMN sandbox_enabled SMALLINT NOT NULL DEFAULT 0;
+
+-- ============================================
+-- CodeRepo 访问令牌（漏点 ⑧ 修复：V94 同步）
+-- ============================================
+ALTER TABLE lg_code_repo ADD COLUMN access_token TEXT;
+
 -- Disable referential integrity for tests (FK constraints cause issues with
 -- soft-delete + unique constraint combos in H2)
 SET REFERENTIAL_INTEGRITY FALSE;
-
 -- ============================================
 -- 系统用户表
 -- ============================================

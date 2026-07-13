@@ -351,12 +351,24 @@ legacygraph:
       neighbor-weight: 0.5
       evidence-weight: 0.7
       score-name-weight: 0.35
+      score-semantic-weight: 0.0
       score-struct-weight: 0.25
       score-evidence-weight: 0.20
       score-runtime-weight: 0.10
       score-history-weight: 0.10
       auto-merge-threshold: 0.85
       review-threshold: 0.50
+      # 改进④：类型感知评分权重（业务域类型语义优先，API/Table 结构优先）
+      score-weights-by-type:
+        BusinessDomain:   {name: 0.15, semantic: 0.45, struct: 0.10, evidence: 0.20, runtime: 0.05, history: 0.05}
+        BusinessProcess:  {name: 0.20, semantic: 0.40, struct: 0.15, evidence: 0.15, runtime: 0.05, history: 0.05}
+        BusinessObject:   {name: 0.30, semantic: 0.30, struct: 0.20, evidence: 0.15, runtime: 0.05, history: 0.00}
+        BusinessRule:     {name: 0.25, semantic: 0.35, struct: 0.15, evidence: 0.15, runtime: 0.05, history: 0.05}
+        Role:             {name: 0.25, semantic: 0.35, struct: 0.15, evidence: 0.15, runtime: 0.05, history: 0.05}
+        Feature:          {name: 0.40, semantic: 0.20, struct: 0.20, evidence: 0.15, runtime: 0.05, history: 0.00}
+        ApiEndpoint:      {name: 0.20, semantic: 0.05, struct: 0.40, evidence: 0.25, runtime: 0.10, history: 0.00}
+        Table:            {name: 0.30, semantic: 0.05, struct: 0.40, evidence: 0.20, runtime: 0.05, history: 0.00}
+        default:          {name: 0.35, semantic: 0.00, struct: 0.25, evidence: 0.20, runtime: 0.10, history: 0.10}
       confidence-support-weight: 0.50
       confidence-semantic-weight: 0.15
       confidence-struct-weight: 0.15

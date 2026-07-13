@@ -7,6 +7,7 @@ import io.github.legacygraph.entity.EdgeEvidence;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
+import io.github.legacygraph.service.graph.GraphMergeService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -82,20 +83,30 @@ public class GraphQualityAssessor {
     private final EdgeEvidenceRepository edgeEvidenceRepository;
     private final KnowledgeClaimService knowledgeClaimService;
 
+    /** 重复节点阈值：超过该值自动触发增量合并（graph-merge-optimization-plan.md §4.3） */
+    private static final int DUPLICATE_NODE_TRIGGER_THRESHOLD = 5;
+
+    /** 增量合并的 LLM 预算上限（与 GraphMergeScheduler 保持一致） */
+    private static final int INCREMENTAL_LLM_BUDGET = 200;
+
     /** 当项目根目录无法解析时的回退目录 */
     @Value("${legacygraph.reports.local-dir:${user.home}/.legacygraph/reports}")
     private String fallbackReportRoot;
+
+    private final GraphMergeService graphMergeService;
 
     @Autowired
     public GraphQualityAssessor(Neo4jGraphDao graphDao, CodeRepoRepository codeRepoRepository,
                                 NodeEvidenceRepository nodeEvidenceRepository,
                                 EdgeEvidenceRepository edgeEvidenceRepository,
-                                KnowledgeClaimService knowledgeClaimService) {
+                                KnowledgeClaimService knowledgeClaimService,
+                                GraphMergeService graphMergeService) {
         this.graphDao = graphDao;
         this.codeRepoRepository = codeRepoRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.edgeEvidenceRepository = edgeEvidenceRepository;
         this.knowledgeClaimService = knowledgeClaimService;
+        this.graphMergeService = graphMergeService;
     }
 
     /**
@@ -156,6 +167,31 @@ public class GraphQualityAssessor {
             log.info("GraphQualityAssessor: quality report written to {}", reportFile);
         } catch (IOException e) {
             log.warn("GraphQualityAssessor: failed to write report to {}: {}", reportFile, e.getMessage());
+        }
+
+        // 7. 重复节点 > 5 时自动触发增量合并（graph-merge-optimization-plan.md §4.3）
+        triggerIncrementalMergeIfDuplicateHeavy(projectId, structuralMetric.duplicateNodes());
+    }
+
+    /**
+     * 当重复节点数超过阈值（默认 5）时，自动触发一次增量合并。
+     * <p>同步执行（assessAndReport 本身已是扫描后置流程，不阻塞主扫描）；
+     * 合并失败不影响评估报告已写入的产物。</p>
+     */
+    private void triggerIncrementalMergeIfDuplicateHeavy(String projectId, long duplicateNodes) {
+        if (duplicateNodes <= DUPLICATE_NODE_TRIGGER_THRESHOLD) return;
+        log.info("GraphQualityAssessor: duplicate nodes={} > {}, triggering incremental merge for project={}",
+                duplicateNodes, DUPLICATE_NODE_TRIGGER_THRESHOLD, projectId);
+        try {
+            GraphMergeService.MergeRunResult result =
+                    graphMergeService.runMergeForProject(projectId, null, INCREMENTAL_LLM_BUDGET);
+            log.info("GraphQualityAssessor: incremental merge done for project={}: " +
+                            "{} candidates, {} auto-merged, {} review, {} rejected, took={}ms",
+                    projectId, result.getTotalCandidates(), result.getTotalAutoMerged(),
+                    result.getTotalReview(), result.getTotalRejected(), result.getDurationMs());
+        } catch (Exception e) {
+            log.warn("GraphQualityAssessor: incremental merge failed for project={}: {}",
+                    projectId, e.getMessage(), e);
         }
     }
 

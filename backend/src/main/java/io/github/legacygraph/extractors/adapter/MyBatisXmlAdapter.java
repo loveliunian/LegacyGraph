@@ -33,7 +33,12 @@ public class MyBatisXmlAdapter implements ExtractionAdapter {
         if (asset.getFileType() == null || !XML_EXTENSIONS.contains(asset.getFileType().toLowerCase())) {
             return false;
         }
-        return isMapperFile(asset.getRelativePath());
+        // P0-2: 文件名匹配（快速路径）或内容含 <mapper namespace=...>（兼容任意位置/命名的 XML）
+        if (isMapperFile(asset.getRelativePath())) {
+            return true;
+        }
+        // cachedContent 未预读时 fallback 到文件内容读取，保证 P0-2 在所有调度场景生效
+        return hasMapperNamespace(asset.getCachedContent(), asset.getFile());
     }
 
     @Override
@@ -77,5 +82,30 @@ public class MyBatisXmlAdapter implements ExtractionAdapter {
                 || (name.contains("mapper") && name.endsWith(".xml"))
                 || (name.contains("Dao") && name.endsWith(".xml"))
                 || (name.contains("Repository") && name.endsWith(".xml"));
+    }
+
+    /**
+     * P0-2: 内容标记检查 —— 用 namespace 取代文件名兜底，兼容任意位置/命名的 MyBatis XML。
+     */
+    static boolean hasMapperNamespace(String content) {
+        return hasMapperNamespace(content, (java.nio.file.Path) null);
+    }
+
+    /**
+     * P0-2 修复：cachedContent 未预读时 fallback 到读文件全文（小文件，可直接读）。
+     * <p>XML 文件相对短小且需要找多行才能命中 &lt;mapper namespace，建议直接读全文（不像 Java 需逐行）。</p>
+     */
+    static boolean hasMapperNamespace(String content, java.nio.file.Path path) {
+        if (content != null) {
+            return content.contains("<mapper namespace");
+        }
+        if (path == null || !java.nio.file.Files.isReadable(path)) {
+            return false;
+        }
+        try {
+            return java.nio.file.Files.readString(path).contains("<mapper namespace");
+        } catch (java.io.IOException ignored) {
+            return false;
+        }
     }
 }

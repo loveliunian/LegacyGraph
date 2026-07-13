@@ -44,6 +44,22 @@ public class CodeRepo {
 
     private String localPath;
 
+    /** Git 提供商：github / gitlab / gitea（阶段三-3.2 新增） */
+    private String provider;
+
+    /** 默认分支（如 main / master / develop，阶段三-3.2 新增） */
+    private String defaultBranch;
+
+    /** 默认 review 团队（阶段三-3.2 新增） */
+    private String reviewTeam;
+
+    /**
+     * 远程仓库访问令牌（阶段三-3.2 漏点 ⑧ 新增）。
+     * <p>建议落地前用 {@code CryptoUtils} 等对称加密落库；当前字段为明文占位，
+     * 实际生产部署前应替换为加密方案（如 AES-GCM）。</p>
+     */
+    private String accessToken;
+
     private String status;
 
     private String lastPullStatus;

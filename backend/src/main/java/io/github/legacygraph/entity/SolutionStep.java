@@ -57,5 +57,11 @@ public class SolutionStep {
     /** 代码语言（java/xml/sql/vue/ts 等） */
     private String codeLanguage;
 
+    /** 变更范围：FULL（完整替换）/ PARTIAL（部分修改） */
+    private String changeScope;
+
+    /** 需新增/修改的测试文件列表（JSON 数组字符串） */
+    private String testFiles;
+
     private LocalDateTime createdAt;
 }

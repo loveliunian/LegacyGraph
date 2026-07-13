@@ -42,6 +42,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
@@ -1439,6 +1441,98 @@ public class SourceController {
         } catch (IOException e) {
             log.error("Failed to read document file: {}", filePath, e);
             return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * 读取扫描发现的文件内容（仅在证据面板中查看代码/文档）。
+     * 安全约束：
+     * <ol>
+     *   <li>必须先取到当前项目的 CodeRepo（没有关联仓库直接 403）—— 避免无仓库关联时绕开路径白名单</li>
+     *   <li>路径强校验：先 normalize 再比较前缀，避免"../"与 symlink race</li>
+     *   <li>拒绝符号链接（FollowSymlinkOption.NOFOLLOW_LINKS）—— 防 symlink 指向 repo 外</li>
+     *   <li>读取上限 {@value #MAX_FILE_CONTENT_BYTES} 字节，防止 OOM</li>
+     * </ol>
+     */
+    private static final long MAX_FILE_CONTENT_BYTES = 2L * 1024 * 1024;
+
+    @GetMapping("/file-content")
+    @Operation(summary = "读取文件内容", description = "读取扫描发现的代码或文档文件内容，用于证据面板查看")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "文件内容"),
+            @ApiResponse(responseCode = "404", description = "文件不存在"),
+            @ApiResponse(responseCode = "403", description = "无权访问该文件")
+    })
+    public Result<Map<String, Object>> getFileContent(
+            @Parameter(description = "项目ID", required = true)
+            @PathVariable String projectId,
+            @Parameter(description = "文件路径", required = true)
+            @RequestParam String filePath) {
+        try {
+            if (filePath == null || filePath.isBlank()) {
+                return Result.error("文件路径不能为空");
+            }
+
+            // 1. 必须先关联到 CodeRepo，避免无仓库项目下任意读文件
+            List<CodeRepo> repos = codeRepoRepository.selectList(
+                    new LambdaQueryWrapper<CodeRepo>().eq(CodeRepo::getProjectId, projectId));
+            if (repos == null || repos.isEmpty()) {
+                return Result.error("项目尚未关联代码仓库，无可读文件");
+            }
+
+            // 2. 解析输入路径并按 repo localPath 各自校验（多仓库项目取首个匹配）
+            Path input = Paths.get(filePath);
+            Path inputAbs = input.toAbsolutePath().normalize();
+            CodeRepo matchedRepo = null;
+            Path repoRoot = null;
+            for (CodeRepo r : repos) {
+                if (r.getLocalPath() == null) continue;
+                Path root = Paths.get(r.getLocalPath()).toAbsolutePath().normalize();
+                if (inputAbs.startsWith(root)) {
+                    matchedRepo = r;
+                    repoRoot = root;
+                    break;
+                }
+            }
+            if (matchedRepo == null) {
+                return Result.error("无权访问该文件");
+            }
+
+            // 3. TOCTOU + symlink 防御：toRealPath 解析符号链接后再做前缀校验
+            Path real;
+            try {
+                real = inputAbs.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            } catch (NoSuchFileException e) {
+                return Result.error("文件不存在");
+            } catch (IOException e) {
+                return Result.error("无法解析文件路径");
+            }
+            if (!real.startsWith(repoRoot)) {
+                return Result.error("无权访问该文件");
+            }
+
+            // 4. 大小限制，避免 OOM
+            long size;
+            try {
+                size = Files.size(real);
+            } catch (IOException e) {
+                return Result.error("无法读取文件元信息");
+            }
+            if (size > MAX_FILE_CONTENT_BYTES) {
+                return Result.error("文件超过 2MB 上限，拒绝读取");
+            }
+
+            String content = Files.readString(real);
+            String fileName = real.getFileName().toString();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("content", content);
+            result.put("fileName", fileName);
+
+            return Result.success(result);
+        } catch (IOException e) {
+            log.error("Failed to read file: {}", filePath, e);
+            return Result.error("读取文件失败: " + e.getMessage());
         }
     }
 

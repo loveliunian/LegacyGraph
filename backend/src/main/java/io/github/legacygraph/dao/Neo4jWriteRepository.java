@@ -109,10 +109,12 @@ public class Neo4jWriteRepository {
                     "n.description = $description, n.sourceType = $sourceType, n.sourcePath = $sourcePath, " +
                     "n.startLine = $startLine, n.endLine = $endLine, n.confidence = $confidence, " +
                     "n.status = $status, n.properties = $properties, n.scanType = $scanType, n.className = $className, " +
+                    "n.aliasNames = $aliasNames, " +
                     "n.verifiedScore = $verifiedScore, n.runtimeVerified = $runtimeVerified, " +
                     "n.lastSeenAt = $lastSeenAt, n.traceCount = $traceCount, " +
                     "n.createdAt = $createdAt, n.updatedAt = $updatedAt " +
                     "ON MATCH SET n.updatedAt = $updatedAt, n.nodeType = $nodeType, n.scanType = $scanType, n.className = $className, " +
+                    "n.aliasNames = CASE WHEN $aliasNames IS NOT NULL THEN $aliasNames ELSE n.aliasNames END, " +
                     "n.properties = CASE WHEN $properties IS NOT NULL AND $properties <> '{}' THEN $properties ELSE n.properties END " +
                     "RETURN n, (n.createdAt = $createdAt) AS created",
                     label);

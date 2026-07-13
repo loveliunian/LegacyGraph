@@ -47,6 +47,8 @@ export type {
   SolutionGenerateResponse,
   SolutionVerifyResult,
 } from './solution'
+export { mergeApi } from './merge.api'
+export type { MergeCandidate, GraphMergeDecision, MergeDecision } from './merge.api'
 
 // 保留原有导出向后兼容
 import { get, post, del, put } from '@/utils/request'

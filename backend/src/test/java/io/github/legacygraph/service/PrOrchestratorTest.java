@@ -32,6 +32,9 @@ class PrOrchestratorTest {
     @Mock private PatchFileRepository patchFileRepository;
     @Mock private ValidationGateRepository validationGateRepository;
     @Mock private PrDescriptionAgent prDescriptionAgent;
+    @Mock private io.github.legacygraph.repository.CodeRepoRepository codeRepoRepository;
+    @Mock private io.github.legacygraph.repository.ChangeTaskRepository changeTaskRepository;
+    @Mock private org.springframework.beans.factory.ObjectProvider<List<io.github.legacygraph.service.pr.GitProviderAdapter>> gitProviderAdaptersProvider;
 
     private PrOrchestrator orchestrator;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -39,7 +42,8 @@ class PrOrchestratorTest {
     @BeforeEach
     void setUp() {
         orchestrator = new PrOrchestrator(prTaskRepository, patchFileRepository,
-                validationGateRepository, prDescriptionAgent, objectMapper);
+                validationGateRepository, prDescriptionAgent, objectMapper,
+                codeRepoRepository, changeTaskRepository, gitProviderAdaptersProvider);
     }
 
     private ChangeTask task(String type, String status) {

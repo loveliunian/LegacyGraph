@@ -6,6 +6,7 @@ import io.github.legacygraph.entity.EdgeEvidence;
 import io.github.legacygraph.repository.CodeRepoRepository;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
+import io.github.legacygraph.service.graph.GraphMergeService;
 import io.github.legacygraph.service.graph.KnowledgeClaimService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -62,6 +63,9 @@ class GraphQualityAssessorTest {
     @Mock
     private KnowledgeClaimService knowledgeClaimService;
 
+    @Mock
+    private GraphMergeService graphMergeService;
+
     @TempDir
     Path tempDir;
 
@@ -70,7 +74,8 @@ class GraphQualityAssessorTest {
     @BeforeEach
     void setUp() {
         assessor = new GraphQualityAssessor(graphDao, codeRepoRepository,
-                nodeEvidenceRepository, edgeEvidenceRepository, knowledgeClaimService);
+                nodeEvidenceRepository, edgeEvidenceRepository, knowledgeClaimService,
+                graphMergeService);
         // 注入回退目录为临时目录，避免依赖 user.home
         ReflectionTestUtils.setField(assessor, "fallbackReportRoot", tempDir.toString());
         // codeRepoRepository 返回空列表 → 使用回退目录

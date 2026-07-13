@@ -23,6 +23,16 @@
           />
         </el-select>
         <el-button
+          size="small"
+          @click="openMergePanel">
+          <el-icon><Connection /></el-icon>
+          合并候选
+          <el-badge
+            v-if="mergeCandidateCount > 0"
+            :value="mergeCandidateCount"
+            class="merge-badge" />
+        </el-button>
+        <el-button
           type="primary"
           size="small"
           :loading="loading"
@@ -54,6 +64,19 @@
           <span>待审核</span>
         </div>
         <div class="stat-value warning">{{ pendingCount }}</div>
+      </div>
+      <div
+        class="stat-item clickable"
+        @click="openMergePanel">
+        <div class="stat-meta">
+          <el-icon><Connection /></el-icon>
+          <span>疑似重复</span>
+        </div>
+        <div
+          class="stat-value"
+          :class="mergeCandidateCount > 0 ? 'warning' : 'info'">
+          {{ mergeCandidateCount }}
+        </div>
       </div>
       <div class="stat-item">
         <div class="stat-meta">
@@ -118,7 +141,7 @@
                 节点筛选
               </span>
               <el-button
-                type="text"
+                link
                 size="small"
                 @click="resetFilters">
                 重置
@@ -225,7 +248,7 @@
                 节点详情
               </span>
               <el-button
-                type="text"
+                link
                 size="small"
                 @click="selectedNode = null">
                 <el-icon><Close /></el-icon>
@@ -342,8 +365,36 @@
           title="共找到 {{ nodeEvidence.length }} 条相关证据"
           type="info"
           style="margin-bottom: 16px;" />
-        <EvidencePanel :evidence="nodeEvidence" />
+        <EvidencePanel 
+        :evidence="nodeEvidence" 
+        @view-doc="handleViewDoc" 
+        @view-code="handleViewCode"
+        @view-db="handleViewDb"
+        @view-test="handleViewTest"
+      />
       </div>
+    </el-drawer>
+
+    <el-dialog
+      v-model="filePreviewVisible"
+      :title="filePreviewTitle"
+      width="80%"
+      top="5vh"
+      destroy-on-close>
+      <pre class="file-preview-content">{{ filePreviewContent }}</pre>
+    </el-dialog>
+
+    <!-- 合并候选抽屉（P6 graph-merge-optimization-plan.md §5.1） -->
+    <el-drawer
+      v-model="mergeDrawerVisible"
+      title="合并候选"
+      size="40%"
+      direction="rtl"
+      destroy-on-close>
+      <MergeCandidatesPanel
+        :project-id="projectId"
+        :nodes="mergePanelNodes"
+        @merged="onMerged" />
     </el-drawer>
   </div>
 </template>
@@ -376,11 +427,13 @@ import {
   Link,
   QuestionFilled
 } from '@element-plus/icons-vue'
-import { graphApi, reviewApi, factApi } from '@/api'
+import { graphApi, reviewApi, factApi, sourceApi } from '@/api'
+import { mergeApi, type MergeCandidate } from '@/api/merge.api'
 import { loadScanVersions, type ScanVersion } from '@/utils/versionsCache'
 import { dictLabel } from '@/utils/dict'
 import GraphViewerOptimized from '@/components/graph/GraphViewerOptimized.vue'
 import EvidencePanel from '@/components/EvidencePanel.vue'
+import MergeCandidatesPanel from './MergeCandidatesPanel.vue'
 import type { Node, Edge } from '@vue-flow/core'
 import type { Evidence } from '@/types'
 
@@ -473,8 +526,20 @@ interface InternalEdge {
 const internalNodes = ref<InternalNode[]>([])
 const internalEdges = ref<InternalEdge[]>([])
 
+// P6: 疑似重复节点 id 集合（用于 CustomNode 虚线框高亮）
+const duplicateNodeIds = ref<Set<string>>(new Set())
+
 // 转换为 VueFlow 类型供模板使用
-const filteredNodesForTemplate = computed((): Node[] => filteredNodes.value as unknown as Node[])
+// P6: 给疑似重复节点的 data 加 duplicate:true 标记，供 CustomNode 显示虚线框
+const filteredNodesForTemplate = computed((): Node[] => {
+  const dupIds = duplicateNodeIds.value
+  if (dupIds.size === 0) return filteredNodes.value as unknown as Node[]
+  return filteredNodes.value.map((n) =>
+    dupIds.has(n.id)
+      ? { ...n, data: { ...n.data, duplicate: true } }
+      : { ...n, data: { ...n.data, duplicate: false } },
+  ) as unknown as Node[]
+})
 const filteredEdgesForTemplate = computed((): Edge[] => filteredEdges.value as unknown as Edge[])
 
 const filteredNodes = computed((): InternalNode[] => {
@@ -811,6 +876,107 @@ function locateNode() {
   }
 }
 
+const filePreviewVisible = ref(false)
+const filePreviewContent = ref('')
+const filePreviewTitle = ref('')
+
+async function handleViewDoc(evidence: Evidence) {
+  const filePath = extractFilePath(evidence.summary || '')
+  if (!filePath) {
+    ElMessage.warning('无法提取文件路径')
+    return
+  }
+  await loadFileContent(filePath)
+}
+
+async function handleViewCode(evidence: Evidence) {
+  const filePath = extractFilePath(evidence.location || evidence.summary || '')
+  if (!filePath) {
+    ElMessage.warning('无法提取文件路径')
+    return
+  }
+  await loadFileContent(filePath)
+}
+
+function handleViewDb(_evidence: Evidence) {
+  ElMessage.info('数据库结构查看功能开发中')
+}
+
+function handleViewTest(_evidence: Evidence) {
+  ElMessage.info('测试结果查看功能开发中')
+}
+
+function extractFilePath(text: string): string | null {
+  const match = text.match(/\(([^)]+)\)/)
+  if (match) {
+    return match[1].trim()
+  }
+  const pathMatch = text.match(/(\/[^)]+)/)
+  if (pathMatch) {
+    return pathMatch[1].trim()
+  }
+  return null
+}
+
+async function loadFileContent(filePath: string) {
+  try {
+    const result = await sourceApi.getFileContent(projectId.value, filePath)
+    filePreviewContent.value = result.content
+    filePreviewTitle.value = result.fileName || filePath
+    filePreviewVisible.value = true
+  } catch (error) {
+    console.error('加载文件内容失败', error)
+    ElMessage.error('加载文件内容失败')
+  }
+}
+
+// ==================== 合并候选（P6 graph-merge-optimization-plan.md §5） ====================
+
+const mergeDrawerVisible = ref(false)
+/** 业务域类型合并候选数（用于统计栏徽标） */
+const mergeCandidateCount = ref(0)
+/** 业务域默认类型列表（与 MergeCandidatesPanel 一致） */
+const MERGE_DOMAIN_TYPES = ['BusinessDomain', 'BusinessProcess', 'BusinessObject', 'BusinessRule', 'Role']
+
+/** 提供给 MergeCandidatesPanel 的节点列表（id → label） */
+const mergePanelNodes = computed(() =>
+  internalNodes.value.map((n) => ({ id: n.id, label: n.data?.label || n.id })),
+)
+
+/** 加载合并候选数 + 疑似重复节点 id 集合（仅业务域类型，避免一次拉全量） */
+async function loadMergeCandidateStats() {
+  if (!projectId.value) return
+  let total = 0
+  const dupIds = new Set<string>()
+  try {
+    for (const t of MERGE_DOMAIN_TYPES) {
+      const list: MergeCandidate[] = await mergeApi.listCandidates(projectId.value, t)
+      total += list.length
+      for (const c of list) {
+        if (c.similarityScore >= 0.5) {
+          dupIds.add(c.nodeAId)
+          dupIds.add(c.nodeBId)
+        }
+      }
+    }
+  } catch (e) {
+    // 合并候选加载失败不影响主图谱
+    console.warn('loadMergeCandidateStats failed:', e)
+  }
+  mergeCandidateCount.value = total
+  duplicateNodeIds.value = dupIds
+}
+
+function openMergePanel() {
+  mergeDrawerVisible.value = true
+}
+
+/** 合并执行后刷新图谱 + 重新统计候选 */
+async function onMerged() {
+  await loadGraph(currentVersion.value)
+  await loadMergeCandidateStats()
+}
+
 onMounted(async () => {
   try {
     await loadVersions()
@@ -822,6 +988,8 @@ onMounted(async () => {
       currentVersion.value = versions.value[0].id
       await loadGraph(currentVersion.value)
     }
+    // 加载合并候选统计（P6：疑似重复节点高亮）
+    loadMergeCandidateStats()
   } catch (error) {
     console.error('onMounted error:', error)
     ElMessage.error('页面初始化失败')
@@ -865,7 +1033,7 @@ onMounted(async () => {
 
 .top-stat-bar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -879,6 +1047,22 @@ onMounted(async () => {
   border: 1px solid #ebeef5;
   border-radius: 6px;
   background: #fff;
+}
+
+/* P6: 疑似重复统计项可点击 */
+.top-stat-bar .stat-item.clickable {
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.top-stat-bar .stat-item.clickable:hover {
+  border-color: #409eff;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.12);
+}
+
+/* P6: 合并候选按钮徽标 */
+.merge-badge {
+  margin-left: 6px;
 }
 
 .stat-meta {
@@ -1074,5 +1258,18 @@ onMounted(async () => {
 .graph-actions .el-tooltip {
   display: flex;
   align-items: center;
+}
+
+.file-preview-content {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

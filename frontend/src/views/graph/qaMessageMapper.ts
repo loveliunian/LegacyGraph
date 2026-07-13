@@ -7,6 +7,10 @@ export interface QaChatMessage {
   evidences: EvidenceItem[]
   messageId: string
   conversationId: string
+  // 提问/回答时间（ISO 字符串），历史消息来自后端 createdAt
+  createdAt?: string
+  // 回答耗时（毫秒），仅流式新回答有；历史消息未持久化，故缺省
+  latencyMs?: number
 }
 
 export function mapQaHistoryMessages(messages: QaMessage[]): QaChatMessage[] {
@@ -17,6 +21,7 @@ export function mapQaHistoryMessages(messages: QaMessage[]): QaChatMessage[] {
     evidences: parseEvidences(message.evidences ?? message.evidencesJson),
     messageId: message.id,
     conversationId: message.conversationId,
+    createdAt: message.createdAt,
   }))
 }
 

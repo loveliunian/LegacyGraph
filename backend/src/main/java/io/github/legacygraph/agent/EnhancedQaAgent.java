@@ -159,6 +159,7 @@ public class EnhancedQaAgent {
                 completeData.put("fromCache", true);
                 completeData.put("confidence", cachedConfidence);
                 completeData.put("evidences", cachedEvidences);
+                completeData.put("latencyMs", System.currentTimeMillis() - totalStart);
                 sendEvent(emitter, "complete", completeData);
                 emitter.complete();
                 return;

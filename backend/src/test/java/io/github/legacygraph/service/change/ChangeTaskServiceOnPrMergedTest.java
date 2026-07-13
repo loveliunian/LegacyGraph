@@ -39,11 +39,16 @@ class ChangeTaskServiceOnPrMergedTest {
     @Mock private MigrationAgentAdapter migrationAgentAdapter;
     @Mock private AddColumnPatchAgentAdapter addColumnPatchAgentAdapter;
     @Mock private io.github.legacygraph.agent.PatchPlanAgent patchPlanAgent;
+    @Mock private io.github.legacygraph.agent.adapter.ApiChangePatchAgentAdapter apiChangePatchAgentAdapter;
+    @Mock private io.github.legacygraph.agent.adapter.FrontendPatchAgentAdapter frontendPatchAgentAdapter;
     @Mock private ValidationGateRunner validationGateRunner;
     @Mock private PrOrchestrator prOrchestrator;
     @Mock private TransactionTemplate transactionTemplate;
     @Mock private ColumnIngestService columnIngestService;
     @Mock private Neo4jGraphDao neo4jGraphDao;
+    @Mock private io.github.legacygraph.service.change.PatchDraftService patchDraftService;
+    @Mock private io.github.legacygraph.service.sandbox.SandboxExecutor sandboxExecutor;
+    @Mock private io.github.legacygraph.repository.SolutionRepository solutionRepository;
 
     private ChangeTaskService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -53,8 +58,11 @@ class ChangeTaskServiceOnPrMergedTest {
         service = new ChangeTaskService(changeTaskRepository, patchFileRepository,
                 validationGateRepository, reviewRecordRepository, impactSubgraphService,
                 changeImpactAgent, refactorAgentAdapter, migrationAgentAdapter,
-                addColumnPatchAgentAdapter, patchPlanAgent, new PatchPlanValidator(), validationGateRunner,
-                prOrchestrator, objectMapper, transactionTemplate, columnIngestService, neo4jGraphDao);
+                addColumnPatchAgentAdapter, patchPlanAgent,
+                apiChangePatchAgentAdapter, frontendPatchAgentAdapter,
+                new PatchPlanValidator(), validationGateRunner,
+                prOrchestrator, objectMapper, transactionTemplate, columnIngestService,
+                neo4jGraphDao, patchDraftService, sandboxExecutor, solutionRepository);
     }
 
     @Test

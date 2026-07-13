@@ -11,6 +11,7 @@ import io.github.legacygraph.llm.SecretScanService;
 import io.github.legacygraph.repository.EdgeEvidenceRepository;
 import io.github.legacygraph.repository.EvidenceRepository;
 import io.github.legacygraph.repository.NodeEvidenceRepository;
+import io.github.legacygraph.service.normalize.BusinessDomainNormalizer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +64,7 @@ public class EvidenceGraphWriter {
     private final EdgeEvidenceRepository edgeEvidenceRepository;
     private final SecretScanService secretScanService;
     private final PgEvidenceTxExecutor pgEvidenceTxExecutor;
+    private final BusinessDomainNormalizer businessDomainNormalizer;
 
     /**
      * per-nodeKey 细粒度锁：防止并发 MERGE 同一 (nodeType, nodeKey) 产生重复节点。
@@ -84,13 +86,15 @@ public class EvidenceGraphWriter {
                                NodeEvidenceRepository nodeEvidenceRepository,
                                EdgeEvidenceRepository edgeEvidenceRepository,
                                SecretScanService secretScanService,
-                               PgEvidenceTxExecutor pgEvidenceTxExecutor) {
+                               PgEvidenceTxExecutor pgEvidenceTxExecutor,
+                               BusinessDomainNormalizer businessDomainNormalizer) {
         this.neo4jGraphDao = neo4jGraphDao;
         this.evidenceRepository = evidenceRepository;
         this.nodeEvidenceRepository = nodeEvidenceRepository;
         this.edgeEvidenceRepository = edgeEvidenceRepository;
         this.secretScanService = secretScanService;
         this.pgEvidenceTxExecutor = pgEvidenceTxExecutor;
+        this.businessDomainNormalizer = businessDomainNormalizer;
     }
 
     // ==================== 节点操作 ====================
@@ -132,6 +136,8 @@ public class EvidenceGraphWriter {
         node.setProperties(claim.getProperties());
         node.setScanType(claim.getScanType());
         node.setClassName(claim.getClassName());
+        // 改进②：透传 aliasNames，业务域类型缺省时自动派生（拼音首字母 + 后缀剥离 + 同义词）
+        node.setAliasNames(resolveAliasNames(claim));
         node.setCreatedAt(LocalDateTime.now());
         node.setUpdatedAt(LocalDateTime.now());
 
@@ -460,6 +466,25 @@ public class EvidenceGraphWriter {
             return "PENDING_CONFIRM";
         }
         return "CONFIRMED";
+    }
+
+    /**
+     * 解析节点的 aliasNames（graph-merge-optimization-plan.md 改进②）。
+     * <p>优先使用 claim 显式声明的别名；业务域类型缺省时由 {@link BusinessDomainNormalizer} 自动派生
+     * （拼音首字母 + 后缀剥离 + 同义词替换），确保新节点都带 ≥2 个别名。</p>
+     */
+    private String resolveAliasNames(GraphNodeClaim claim) {
+        // 1. 显式声明的别名优先
+        if (hasText(claim.getAliasNames())) {
+            return claim.getAliasNames();
+        }
+        // 2. 业务域类型缺省时自动派生
+        if (businessDomainNormalizer != null
+                && businessDomainNormalizer.isBusinessDomainType(claim.getNodeType())
+                && hasText(claim.getNodeName())) {
+            return businessDomainNormalizer.deriveAliasesAsJson(claim.getNodeName());
+        }
+        return null;
     }
 
     private boolean isAiSource(String sourceType) {

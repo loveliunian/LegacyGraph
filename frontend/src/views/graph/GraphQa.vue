@@ -112,6 +112,12 @@
                   class="message-content"
                   v-html="renderMarkdown(msg.content)" />
                 <div
+                  v-if="msg.createdAt || msg.latencyMs != null"
+                  class="message-meta">
+                  <span v-if="msg.createdAt">{{ msg.role === 'user' ? '提问' : '回答' }} {{ formatTime(msg.createdAt) }}</span>
+                  <span v-if="msg.latencyMs != null" class="meta-latency"> · 耗时 {{ formatLatency(msg.latencyMs) }}</span>
+                </div>
+                <div
                   v-if="msg.evidences && msg.evidences.length > 0"
                   class="message-evidences">
                   <span class="evidence-label">来源</span>
@@ -274,6 +280,10 @@ interface Message {
   // H23: 拒答/低置信度时携带的违规项列表，供前端展示可验证列表
   rejected?: boolean
   violations?: string[]
+  // 提问/回答时间（ISO 字符串）
+  createdAt?: string
+  // 回答耗时（毫秒），仅流式新回答有
+  latencyMs?: number
 }
 
 const conversations = ref<QaConversation[]>([])
@@ -343,6 +353,25 @@ const isEvidenceCited = (content: string, n: number): boolean => {
   return patterns.some(p => content.includes(p))
 }
 
+// 时间/耗时格式化：提问时间显示为 HH:mm:ss；耗时 <1s 显示 ms，否则显示秒
+const formatTime = (iso?: string): string => {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ''
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  } catch {
+    return ''
+  }
+}
+
+const formatLatency = (ms?: number): string => {
+  if (ms == null || isNaN(ms)) return ''
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 const renderMarkdown = (text: string) => {
   if (!text) return ''
   const html = text
@@ -388,7 +417,8 @@ const handleSend = async () => {
   await ensureConversation()
 
   const streamConvId = currentConversationId.value
-  messages.value.push({ role: 'user', content: question })
+  const questionTime = new Date().toISOString()
+  messages.value.push({ role: 'user', content: question, createdAt: questionTime })
   inputText.value = ''
   thinking.value = true
   streamingContent.value = ''
@@ -438,6 +468,8 @@ const handleSend = async () => {
             // H23: 透传拒答标记和违规项数组，供消息渲染时展示可验证列表
             rejected: data.rejected === true,
             violations: Array.isArray(data.violations) ? data.violations : [],
+            createdAt: new Date().toISOString(),
+            latencyMs: typeof data.latencyMs === 'number' ? data.latencyMs : undefined,
           })
 
           streamingContent.value = ''
@@ -858,6 +890,16 @@ onMounted(async () => {
 .message-content :deep(pre code) {
   background: none;
   padding: 0;
+}
+
+.message-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #909399;
+}
+
+.meta-latency {
+  color: #c0c4cc;
 }
 
 .message-evidences {
