@@ -34,6 +34,8 @@
         <spring-ai.version>2.0.0</spring-ai.version>
         <!-- 拼音库（业务域节点归一化用） -->
         <pinyin4j.version>2.5.1</pinyin4j.version>
+        <!-- BPMN 流程引擎解析（camunda-bpmn-model 7.24.0 是 Maven Central 最后社区版） -->
+        <camunda-bpmn-model.version>7.24.0</camunda-bpmn-model.version>
     </properties>
 
     <dependencies>
@@ -341,6 +343,13 @@
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>
             <version>0.64.8</version>
+        </dependency>
+
+        <!-- BPMN 流程引擎解析：解析 .bpmn/.bpmn20.xml 流程定义文件 + 从流程引擎数据库读取已部署的 BPMN XML -->
+        <dependency>
+            <groupId>org.camunda.bpm.model</groupId>
+            <artifactId>camunda-bpmn-model</artifactId>
+            <version>${camunda-bpmn-model.version}</version>
         </dependency>
     </dependencies>
 

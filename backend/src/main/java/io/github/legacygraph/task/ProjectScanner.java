@@ -164,6 +164,18 @@ public class ProjectScanner {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.github.legacygraph.service.scan.BlastRadiusAnalyzer blastRadiusAnalyzer;
 
+    /** 流程引擎配置读取器（可选）：从目标项目 application.yml 读取 BPMN 引擎 DB 连接 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.extractors.bpmn.ProcessEngineConfigExtractor processEngineConfigExtractor;
+
+    /** 标准 BPMN 引擎 DB 适配器（可选）：扫描 act_ 前缀的流程引擎库 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.extractors.adapter.BpmnEngineDbAdapter bpmnEngineDbAdapter;
+
+    /** 自研流程引擎 DB 适配器（可选）：扫描配置驱动的业务流程表 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.github.legacygraph.extractors.adapter.CustomWorkflowDbAdapter customWorkflowDbAdapter;
+
     /** S1-T2: 扫描锁服务 — 基于 PG advisory lock 防止同项目并发扫描互踩 */
     @org.springframework.beans.factory.annotation.Autowired
     private io.github.legacygraph.service.scan.ScanLockService scanLockService;
@@ -171,7 +183,7 @@ public class ProjectScanner {
     /** 扫描后 AI 编排默认开关（legacygraph.ai.*），scanScope 未显式指定时生效 */
     @org.springframework.beans.factory.annotation.Value("${legacygraph.ai.enable-default:true}")
     private boolean aiEnableDefault;
-    @org.springframework.beans.factory.annotation.Value("${legacygraph.ai.auto-generate-test-case-default:false}")
+    @org.springframework.beans.factory.annotation.Value("${legacygraph.ai.auto-generate-test-case-default:true}")
     private boolean aiAutoGenerateTestCaseDefault;
     @org.springframework.beans.factory.annotation.Value("${legacygraph.ai.min-confidence-default:0.6}")
     private double aiMinConfidenceDefault;
@@ -883,6 +895,69 @@ public class ProjectScanner {
                 } catch (Exception e) {
                     log.warn("Mapper-SQL link failed (non-blocking): versionId={}, err={}", versionId, e.getMessage());
                     completeTask(linkTask, "failed: " + e.getMessage(), e.getMessage());
+                }
+            }
+
+            // === BPMN_DB_SCAN 阶段：流程引擎数据库扫描（文件扫描完成后补充 DB 源 + 运行时数据） ===
+            // 插入位置：MAPPER_SQL_LINK 之后、EXTERNAL_VERIFY 之前。
+            // 理由：代码扫描必须先完成，BPMN ServiceTask 的 EXECUTES_BY 边才能匹配到已存在的 Service/Method 节点。
+            // 失败隔离：DB 扫描失败仅 log.warn，不阻塞后续 AI_ORCHESTRATION。
+            if (isCancelled(versionId)) return;
+            if (shouldScanCode && processEngineConfigExtractor != null
+                    && (bpmnEngineDbAdapter != null || customWorkflowDbAdapter != null)
+                    && backendDir != null && !backendDir.isBlank()) {
+                ScanTask bpmnDbTask = createTask(projectId, versionId, "BPMN_DB_SCAN", "流程引擎数据库扫描");
+                try {
+                    log.info("Scan still running: projectId={}, versionId={}, phase=BPMN_DB_SCAN, detail=starting",
+                            projectId, versionId);
+
+                    // 1. 从目标项目配置读取流程引擎连接信息
+                    io.github.legacygraph.extractors.bpmn.ProcessEngineConnectionInfo connInfo =
+                            processEngineConfigExtractor.extract(backendDir);
+                    if (connInfo == null || !connInfo.isConnectable()) {
+                        completeTask(bpmnDbTask, "no process engine DB config found, skipped", null, "SKIPPED");
+                        log.info("Scan still running: projectId={}, versionId={}, phase=BPMN_DB_SCAN, detail=skipped (no config)",
+                                projectId, versionId);
+                    } else {
+                        // 2. 构造 ScanContext
+                        java.util.Map<String, Object> bpmnConfig = new java.util.concurrent.ConcurrentHashMap<>();
+                        bpmnConfig.put("processEngine.db", connInfo);
+                        ScanContext bpmnContext = ScanContext.builder()
+                                .projectId(projectId)
+                                .versionId(versionId)
+                                .baseDir(baseDir)
+                                .backendDir(backendDir)
+                                .frontendDir(frontendDir)
+                                .config(bpmnConfig)
+                                .build();
+
+                        // 3. 按引擎类型分发
+                        int bpmnProcessCount = 0, bpmnNodeCount = 0, bpmnEdgeCount = 0;
+                        if (connInfo.getEngineType() == io.github.legacygraph.extractors.bpmn.EngineType.CUSTOM) {
+                            if (customWorkflowDbAdapter != null) {
+                                ExtractionResult r = customWorkflowDbAdapter.scanFromDatabase(bpmnContext);
+                                bpmnProcessCount = r.getProcessedAssets();
+                                bpmnNodeCount = r.getNodeCount();
+                                bpmnEdgeCount = r.getEdgeCount();
+                            }
+                        } else {
+                            if (bpmnEngineDbAdapter != null) {
+                                ExtractionResult r = bpmnEngineDbAdapter.scanFromDatabase(bpmnContext);
+                                bpmnProcessCount = r.getProcessedAssets();
+                                bpmnNodeCount = r.getNodeCount();
+                                bpmnEdgeCount = r.getEdgeCount();
+                            }
+                        }
+                        completeTask(bpmnDbTask,
+                                "scanned " + bpmnProcessCount + " processes, " + bpmnNodeCount + " nodes",
+                                null);
+                        log.info("Scan still running: projectId={}, versionId={}, phase=BPMN_DB_SCAN, detail=completed ({} processes, {} nodes, {} edges)",
+                                projectId, versionId, bpmnProcessCount, bpmnNodeCount, bpmnEdgeCount);
+                    }
+                } catch (Exception e) {
+                    // 失败隔离：DB 扫描失败不阻塞后续 AI_ORCHESTRATION
+                    log.warn("BPMN DB scan failed (non-blocking): versionId={}, err={}", versionId, e.getMessage());
+                    completeTask(bpmnDbTask, "failed: " + e.getMessage(), e.getMessage());
                 }
             }
 
@@ -2424,6 +2499,8 @@ public class ProjectScanner {
         // 仅包含有适配器能处理的文件类型
         return name.endsWith(".java")
                 || name.endsWith(".xml")
+                || name.endsWith(".bpmn")
+                || name.endsWith(".bpmn20.xml")
                 || name.endsWith(".vue")
                 || name.endsWith(".jsx")
                 || name.endsWith(".tsx")

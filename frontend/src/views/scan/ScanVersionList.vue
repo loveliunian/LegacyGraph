@@ -124,6 +124,19 @@
             class="text-gray">-</span>
         </template>
       </el-table-column>
+      <el-table-column
+        label="耗时"
+        width="90"
+        align="center">
+        <template #default="{ row }">
+          <span
+            v-if="row.duration"
+            class="duration-text">{{ formatDuration(row.duration) }}</span>
+          <span
+            v-else
+            class="text-gray">-</span>
+        </template>
+      </el-table-column>
       <!-- L-13: QA Gate 列 -->
       <el-table-column
         label="QA Gate"
@@ -163,19 +176,6 @@
               <em class="stat-num">{{ formatNumber(row.cumulativeFactCount) }}</em> 事实
             </span>
           </div>
-          <span
-            v-else
-            class="text-gray">-</span>
-        </template>
-      </el-table-column>
-      <el-table-column
-        label="耗时"
-        width="90"
-        align="center">
-        <template #default="{ row }">
-          <span
-            v-if="row.duration"
-            class="duration-text">{{ formatDuration(row.duration) }}</span>
           <span
             v-else
             class="text-gray">-</span>

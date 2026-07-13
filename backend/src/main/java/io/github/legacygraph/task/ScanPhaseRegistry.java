@@ -74,7 +74,7 @@ public final class ScanPhaseRegistry {
      * AI 子阶段定义 — 用于在 AI_ORCHESTRATION 阶段下方展开显示子环节。
      * <p>
      * 并行执行的 AI_DOC_EXTRACT + AI_CODE_EXTRACT 合并为一个子阶段展示；
-     * 其余串行步骤各自独立展示。共 7 个子阶段。
+     * 其余串行步骤各自独立展示。共 6 个子阶段。
      * </p>
      */
     public static final class AiSubPhaseDef {
@@ -92,10 +92,9 @@ public final class ScanPhaseRegistry {
         }
     }
 
-    /** AI 子阶段定义列表（按执行顺序，合并并行步骤后共 7 个） */
+    /** AI 子阶段定义列表（按执行顺序，合并并行步骤后共 6 个） */
     private static final List<AiSubPhaseDef> AI_SUB_PHASES = List.of(
             new AiSubPhaseDef("AI_DOC_CODE_EXTRACT", "文档与代码事实抽取", "AI_DOC_EXTRACT", "AI_CODE_EXTRACT"),
-            new AiSubPhaseDef("AI_FEATURE_CODE_MAPPING", "功能到代码实现映射", "AI_FEATURE_CODE_MAPPING"),
             new AiSubPhaseDef("AI_FEATURE_MAPPING", "功能映射对齐", "AI_FEATURE_MAPPING"),
             new AiSubPhaseDef("AI_TEST_GENERATE", "测试用例生成", "AI_TEST_GENERATE"),
             new AiSubPhaseDef("AI_REVIEW_PREPARE", "低置信节点审核准备", "AI_REVIEW_PREPARE"),

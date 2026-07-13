@@ -29,6 +29,8 @@
 | 功能图谱 | 页面/按钮/API/权限/菜单 → 后端接口映射 | Vue 组件 + axios 调用 + Controller 注解 |
 | 业务图谱 | 业务域/流程/角色/对象/规则/状态流转 | 文档 AI 抽取 + 人工确认 |
 
+**BPMN 流程图谱**（新增）：支持 Camunda/Flowable/Activiti 流程引擎的 BPMN 2.0 文件解析和数据库表分析，提取流程定义、用户任务、服务任务、网关节点及其流转关系，并与代码中的 Service/Listener 方法建立关联。
+
 所有节点和关系均带 `evidence`（文件、行号、SQL、文档片段）、`confidence`（0–1）、`status`（CONFIRMED/PENDING_CONFIRM/REJECTED）。节点类型以 `NodeType.java` 为准，关系类型以 `EdgeType.java` 为准。
 
 ### LLM Agent 体系
@@ -124,12 +126,12 @@ flowchart LR
 | 类别 | 数量 |
 |---|---:|
 | 后端 Controller | 48 |
-| 后端 Entity | 73 |
-| Flyway 迁移 | V1–V84（共 83 个脚本，V70 缺失） |
-| Vue 页面 | 63 |
+| 后端 Entity | 73+ |
+| Flyway 迁移 | V1–V94（共 93 个脚本） |
+| Vue 页面 | 64 |
 | 前端 API 模块 | 24 |
-| 后端测试类 | 291（`mvn test`） |
-| 后端一级子包 | 34 |
+| 后端测试类 | 291+（`mvn test`） |
+| 后端一级子包 | 34+ |
 | Agent 类 | 21 |
 
 ## 快速开始
@@ -188,7 +190,8 @@ LegacyGraph/
 │   ├── eval/           # Graphify 质量评测
 │   ├── event/          # 领域事件
 │   ├── exception/      # 统一异常
-│   ├── extractors/     # Java/Vue/MyBatis/SQL/DB/Document 抽取器 + adapter
+│   ├── extractors/     # Java/Vue/MyBatis/SQL/DB/Document/BPMN 抽取器 + adapter
+│   │   └── bpmn/      # BPMN 2.0 流程解析（Camunda/Flowable/Activiti）
 │   ├── federation/     # 跨仓库图谱联邦
 │   ├── filter/         # JwtAuthenticationFilter
 │   ├── governance/     # Graphify 访问治理/脱敏
@@ -210,13 +213,13 @@ LegacyGraph/
 │   ├── understanding/  # 代码理解编排 + 工具路由
 │   └── util/           # JWT 等工具
 ├── frontend/src/
-│   ├── views/          # 63 个页面（dashboard/project/source/scan/graph/fact/review/
+│   ├── views/          # 64 个页面（dashboard/project/source/scan/graph/fact/review/
 │   │                   #        test/report/migration/system/audit/agent/change/
 │   │                   #        understanding/vector/workbench/graphify/requirement/solution）
 │   ├── api/            # 24 个 API 模块
 │   ├── components/ constants/ router/ stores/ styles/ types/ utils/ locales/
 ├── deploy/             # docker-compose.yml + Dockerfile + Prometheus/Grafana 配置
-└── doc/整体技术文档/    # 架构/数据库/部署/运维/开发规范文档
+└── docs/整体技术文档/    # 架构/数据库/部署/运维/开发规范文档
 ```
 
 ## API 端点
@@ -244,13 +247,13 @@ LegacyGraph/
 
 ## 设计文档
 
-详细设计见 [`doc/整体技术文档/`](doc/整体技术文档/)：
+详细设计见 [`docs/整体技术文档/`](docs/整体技术文档/)：
 
-- [架构设计文档](doc/整体技术文档/架构设计文档.md)
-- [数据库设计文档](doc/整体技术文档/数据库设计文档.md)
-- [部署文档](doc/整体技术文档/LegacyGraph%20部署文档.md)
-- [运维手册](doc/整体技术文档/运维手册.md)
-- [开发规范文档](doc/整体技术文档/开发规范文档.md)
+- [架构设计文档](docs/整体技术文档/架构设计文档.md)
+- [数据库设计文档](docs/整体技术文档/数据库设计文档.md)
+- [部署文档](docs/整体技术文档/LegacyGraph%20部署文档.md)
+- [运维手册](docs/整体技术文档/运维手册.md)
+- [开发规范文档](docs/整体技术文档/开发规范文档.md)
 
 ## 许可证
 

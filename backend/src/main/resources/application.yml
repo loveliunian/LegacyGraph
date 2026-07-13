@@ -339,7 +339,7 @@ legacygraph:
   # AI 配置
   ai:
     enable-default: true
-    auto-generate-test-case-default: false
+    auto-generate-test-case-default: true
     min-confidence-default: 0.6
     llm-timeout: 120
   # Agent 合并决策配置

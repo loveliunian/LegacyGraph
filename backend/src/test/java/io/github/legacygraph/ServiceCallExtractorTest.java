@@ -308,13 +308,13 @@ class ServiceCallExtractorTest {
         ServiceCallExtractor extractor = new ServiceCallExtractor();
         List<ServiceCallExtractor.CallRelation> relations = extractor.extractFromFile(javaFile.toFile());
 
-        // 至少有一条 LAMBDA_CALL 边指向 userMapper.findById
+        // lambda 体内对 Mapper 的调用标记为 DATABASE_CALL（P0-3 对齐：lambda 体里对注入 Mapper 字段的调用标记 DATABASE_CALL）
         boolean lambdaEdgeFound = relations.stream()
-                .anyMatch(r -> "LAMBDA_CALL".equals(r.getEdgeTargetKind())
+                .anyMatch(r -> "DATABASE_CALL".equals(r.getEdgeTargetKind())
                         && "UserMapper".equals(r.getTargetClass())
                         && "findById".equals(r.getTargetMethod()));
         assertTrue(lambdaEdgeFound,
-                "lambda 体内 userMapper.findById 应标记为 LAMBDA_CALL 并解析 targetClass=UserMapper");
+                "lambda 体内 userMapper.findById 应标记为 DATABASE_CALL 并解析 targetClass=UserMapper");
     }
 
     @Test
@@ -347,12 +347,12 @@ class ServiceCallExtractorTest {
         ServiceCallExtractor extractor = new ServiceCallExtractor();
         List<ServiceCallExtractor.CallRelation> relations = extractor.extractFromFile(javaFile.toFile());
 
-        // 找到 LAMBDA_CALL 边
+        // 找到 DATABASE_CALL 边（lambda 体内对 Mapper 的调用标记为 DATABASE_CALL）
         boolean lambdaEdge = relations.stream()
-                .anyMatch(r -> "LAMBDA_CALL".equals(r.getEdgeTargetKind())
+                .anyMatch(r -> "DATABASE_CALL".equals(r.getEdgeTargetKind())
                         && "UserMapper".equals(r.getTargetClass())
                         && "selectByName".equals(r.getTargetMethod()));
-        assertTrue(lambdaEdge, "显式类型参数 lambda 体内的 userMapper.selectByName 应被标记为 LAMBDA_CALL");
+        assertTrue(lambdaEdge, "显式类型参数 lambda 体内的 userMapper.selectByName 应被标记为 DATABASE_CALL");
     }
 
     @Test
@@ -387,7 +387,7 @@ class ServiceCallExtractorTest {
 
         // lambda 捕获了外层局部变量 mapper（类型 UserMapper），mapper.findById 应解析为 UserMapper
         boolean lambdaCaptures = relations.stream()
-                .anyMatch(r -> "LAMBDA_CALL".equals(r.getEdgeTargetKind())
+                .anyMatch(r -> "DATABASE_CALL".equals(r.getEdgeTargetKind())
                         && "UserMapper".equals(r.getTargetClass())
                         && "findById".equals(r.getTargetMethod()));
         assertTrue(lambdaCaptures, "lambda 闭包捕获外层 mapper 局部变量应解析 targetClass=UserMapper");

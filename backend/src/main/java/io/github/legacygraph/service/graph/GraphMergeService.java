@@ -13,6 +13,7 @@ import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.config.AgentConfigProperties;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +54,7 @@ public class GraphMergeService {
     }
 
     /** 主构造函数：支持注入 GraphMergeAgent，无 LLM 时回退到规则决策 */
+    @Autowired
     public GraphMergeService(Neo4jGraphDao neo4jGraphDao,
                              GraphCacheInvalidator graphCacheInvalidator,
                              AgentConfigProperties agentConfig,

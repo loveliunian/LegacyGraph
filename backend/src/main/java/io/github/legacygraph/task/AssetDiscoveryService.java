@@ -40,7 +40,7 @@ public class AssetDiscoveryService {
 
     /** 支持扫描的文件扩展名（用于预过滤） */
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
-            "java", "xml", "vue", "jsx", "tsx", "js", "ts",
+            "java", "xml", "bpmn", "vue", "jsx", "tsx", "js", "ts",
             "md", "pdf", "docx", "txt", "rst", "adoc",
             "yml", "yaml", "properties", "sql"
     );
@@ -304,7 +304,9 @@ public class AssetDiscoveryService {
         return switch (ext.toLowerCase()) {
             case "java", "kt", "groovy" -> "CODE";
             case "vue", "jsx", "tsx", "js", "ts" -> "FRONTEND";
-            case "xml" -> relativePath.contains("Mapper") || relativePath.contains("mapper") ? "SQL" : "CONFIG";
+            case "bpmn" -> "BPMN";
+            case "xml" -> relativePath.endsWith(".bpmn20.xml") ? "BPMN"
+                    : (relativePath.contains("Mapper") || relativePath.contains("mapper") ? "SQL" : "CONFIG");
             case "yml", "yaml", "properties" -> "CONFIG";
             case "sql" -> "SQL";
             case "md", "pdf", "docx", "txt", "rst", "adoc" -> "DOC";

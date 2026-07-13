@@ -3886,7 +3886,240 @@ public class GraphBuilder {
                 nodeCount, edgeCount, projectId, versionId);
     }
 
+    // ==================== BPMN 流程引擎图谱 ====================
+
+    /**
+     * 构建 BPMN 流程图谱(文件源 + DB 源统一入口)。
+     * <p>
+     * 创建:
+     * <ul>
+     *   <li>ProcessDefinition 节点(含 version、deploymentId 属性)</li>
+     *   <li>UserTask/ServiceTask/Gateway 节点(含 execCount/avgDurationMs/rejectRate 运行时属性)</li>
+     *   <li>HAS_FLOW_NODE 边 (ProcessDefinition → FlowNode)</li>
+     *   <li>FLOW_TO 边 (定义层 SequenceFlow,带 condition + flowCount)</li>
+     *   <li>EXECUTES_BY 边 (ServiceTask → Service/Method,通过 class/expression 引用)</li>
+     *   <li>LISTENED_BY 边 (FlowNode → Service/Method,通过 Listener class)</li>
+     * </ul>
+     * 匹配失败的类/表达式引用不建边,仅 log.warn。
+     * </p>
+     */
+    public void buildBpmnProcessGraph(String projectId, String versionId,
+                                      io.github.legacygraph.extractors.bpmn.BpmnProcessFact fact) {
+        if (fact == null || fact.getNodes() == null || fact.getNodes().isEmpty()) return;
+
+        List<GraphNode> allNodes = new ArrayList<>();
+        List<GraphEdge> allEdges = new ArrayList<>();
+        Map<String, String> nodeIdByBpmnId = new HashMap<>();
+
+        // 1. ProcessDefinition 节点
+        String pdId = IdUtil.fastUUID();
+        String pdKey = "bpmn.process:" + fact.getProcessKey().toLowerCase();
+        GraphNode pdNode = buildNode(projectId, versionId, pdId,
+                NodeType.ProcessDefinition.name(), pdKey, fact.getProcessName(),
+                fact.getProcessName(), "BPMN 流程定义: " + fact.getProcessName()
+                        + (fact.getVersion() > 0 ? " (v" + fact.getVersion() + ")" : ""),
+                "BPMN_XML", fact.getSourcePath(),
+                BigDecimal.valueOf(1.0), NodeStatus.CONFIRMED, "CODE_SCAN");
+        try {
+            Map<String, Object> pdProps = new LinkedHashMap<>();
+            pdProps.put("sourceType", fact.getSourceType() != null ? fact.getSourceType() : "FILE");
+            if (fact.getDeploymentId() != null) pdProps.put("deploymentId", fact.getDeploymentId());
+            if (fact.getVersion() > 0) pdProps.put("version", fact.getVersion());
+            pdNode.setProperties(OBJECT_MAPPER.writeValueAsString(pdProps));
+        } catch (Exception e) {
+            log.debug("Failed to serialize PD props: {}", e.getMessage());
+        }
+        allNodes.add(pdNode);
+
+        // 2. FlowNode 节点 + HAS_FLOW_NODE 边
+        for (var fn : fact.getNodes()) {
+            String nodeId = IdUtil.fastUUID();
+            nodeIdByBpmnId.put(fn.getBpmnId(), nodeId);
+
+            NodeType nt = switch (fn.getType()) {
+                case USER_TASK -> NodeType.UserTask;
+                case SERVICE_TASK -> NodeType.ServiceTask;
+                case GATEWAY -> NodeType.Gateway;
+            };
+            String typeLower = fn.getType().name().toLowerCase();
+            String nodeKey = "bpmn." + typeLower + ":"
+                    + fact.getProcessKey().toLowerCase() + "." + fn.getBpmnId().toLowerCase();
+            String desc = buildFlowNodeDescription(fn);
+
+            GraphNode node = buildNode(projectId, versionId, nodeId,
+                    nt.name(), nodeKey, fn.getName(), fn.getName(),
+                    desc, "BPMN_XML", fact.getSourcePath(),
+                    BigDecimal.valueOf(1.0), NodeStatus.CONFIRMED, "CODE_SCAN");
+            // 运行时属性 + BPMN 属性写入 properties
+            try {
+                Map<String, Object> props = new LinkedHashMap<>();
+                if (fn.getAssignee() != null) props.put("assignee", fn.getAssignee());
+                if (fn.getCandidateGroups() != null) props.put("candidateGroups", fn.getCandidateGroups());
+                if (fn.getFormKey() != null) props.put("formKey", fn.getFormKey());
+                if (fn.getGatewaySubType() != null) props.put("gatewaySubType", fn.getGatewaySubType());
+                if (fn.getExecCount() > 0) props.put("execCount", fn.getExecCount());
+                if (fn.getAvgDurationMs() > 0) props.put("avgDurationMs", fn.getAvgDurationMs());
+                if (fn.getRejectRate() > 0) props.put("rejectRate", fn.getRejectRate());
+                if (!props.isEmpty()) {
+                    node.setProperties(OBJECT_MAPPER.writeValueAsString(props));
+                }
+            } catch (Exception e) {
+                log.debug("Failed to serialize FlowNode props: {}", e.getMessage());
+            }
+            allNodes.add(node);
+
+            // HAS_FLOW_NODE 边
+            allEdges.add(buildEdge(projectId, versionId, pdId, nodeId,
+                    EdgeType.HAS_FLOW_NODE.name(), pdKey + "->has->" + nodeKey,
+                    "BPMN_XML", BigDecimal.valueOf(1.0), NodeStatus.CONFIRMED));
+        }
+
+        // 3. FLOW_TO 边 (定义层 SequenceFlow)
+        for (var sf : fact.getFlows()) {
+            String fromId = nodeIdByBpmnId.get(sf.getSourceBpmnId());
+            String toId = nodeIdByBpmnId.get(sf.getTargetBpmnId());
+            if (fromId == null || toId == null) continue;
+            String edgeKey = "bpmn.flow:" + fact.getProcessKey().toLowerCase()
+                    + "." + sf.getSourceBpmnId() + "->" + sf.getTargetBpmnId();
+            GraphEdge edge = buildEdge(projectId, versionId, fromId, toId,
+                    EdgeType.FLOW_TO.name(), edgeKey,
+                    "BPMN_XML", BigDecimal.valueOf(1.0), NodeStatus.CONFIRMED);
+            // 条件表达式 + flowCount 写入 properties
+            try {
+                Map<String, Object> props = new LinkedHashMap<>();
+                if (sf.getCondition() != null) props.put("condition", sf.getCondition());
+                if (sf.getFlowCount() > 0) props.put("flowCount", sf.getFlowCount());
+                if (!props.isEmpty()) {
+                    edge.setProperties(OBJECT_MAPPER.writeValueAsString(props));
+                }
+            } catch (Exception e) {
+                log.debug("Failed to serialize FLOW_TO props: {}", e.getMessage());
+            }
+            allEdges.add(edge);
+        }
+
+        // 4. EXECUTES_BY / LISTENED_BY 边 (类引用关联)
+        int matchedClassRefs = 0;
+        for (var ref : fact.getClassRefs()) {
+            if (ref.getSourceNodeId() == null) continue;
+            String fromId = nodeIdByBpmnId.get(ref.getSourceNodeId());
+            if (fromId == null) continue;
+
+            GraphNode targetNode = findClassRefTarget(projectId, versionId, ref);
+            if (targetNode == null) {
+                log.debug("BPMN classRef unmatched: {} (sourceNode={}, className={}, beanName={})",
+                        ref.getSourceType(), ref.getSourceNodeId(),
+                        ref.getClassName(), ref.getBeanName());
+                continue;
+            }
+
+            EdgeType et = (ref.getSourceType() == io.github.legacygraph.extractors.bpmn.BpmnProcessFact.ClassRefSource.TASK_LISTENER
+                    || ref.getSourceType() == io.github.legacygraph.extractors.bpmn.BpmnProcessFact.ClassRefSource.EXECUTION_LISTENER)
+                    ? EdgeType.LISTENED_BY : EdgeType.EXECUTES_BY;
+            String edgeKey = "bpmn." + et.name().toLowerCase() + ":"
+                    + ref.getSourceNodeId() + "->" + targetNode.getNodeKey();
+            allEdges.add(buildEdge(projectId, versionId, fromId, targetNode.getId(),
+                    et.name(), edgeKey,
+                    "BPMN_XML", BigDecimal.valueOf(0.9), NodeStatus.CONFIRMED));
+            matchedClassRefs++;
+        }
+
+        // 5. 表达式引用 ${service.method()} → Method 节点
+        int matchedExprRefs = 0;
+        for (var expr : fact.getExprRefs()) {
+            if (expr.getSourceNodeId() == null) continue;
+            String fromId = nodeIdByBpmnId.get(expr.getSourceNodeId());
+            if (fromId == null) continue;
+
+            GraphNode methodNode = findMethodNodeByExpr(projectId, versionId, expr);
+            if (methodNode == null) {
+                log.debug("BPMN exprRef unmatched: {}.{} (sourceNode={})",
+                        expr.getBeanName(), expr.getMethodName(), expr.getSourceNodeId());
+                continue;
+            }
+            String edgeKey = "bpmn.executes:" + expr.getSourceNodeId()
+                    + "->" + methodNode.getNodeKey();
+            allEdges.add(buildEdge(projectId, versionId, fromId, methodNode.getId(),
+                    EdgeType.EXECUTES_BY.name(), edgeKey,
+                    "BPMN_XML", BigDecimal.valueOf(0.85), NodeStatus.PENDING_CONFIRM));
+            matchedExprRefs++;
+        }
+
+        int nodeCount = neo4jGraphDao.mergeNodesBatch(allNodes);
+        int edgeCount = neo4jGraphDao.mergeEdgesBatch(allEdges);
+        log.info("Built BPMN process graph: {} nodes, {} edges (process={}, classRefs matched={}/{}, exprRefs matched={}/{})",
+                nodeCount, edgeCount, fact.getProcessKey(),
+                matchedClassRefs, fact.getClassRefs().size(),
+                matchedExprRefs, fact.getExprRefs().size());
+    }
+
+    /** 构造 FlowNode 描述 */
+    private String buildFlowNodeDescription(io.github.legacygraph.extractors.bpmn.BpmnProcessFact.FlowNodeFact fn) {
+        StringBuilder sb = new StringBuilder();
+        switch (fn.getType()) {
+            case USER_TASK -> sb.append("用户任务");
+            case SERVICE_TASK -> sb.append("服务任务");
+            case GATEWAY -> sb.append("网关(").append(fn.getGatewaySubType()).append(")");
+        }
+        if (fn.getName() != null) sb.append(": ").append(fn.getName());
+        if (fn.getAssignee() != null) sb.append(" [assignee=").append(fn.getAssignee()).append("]");
+        if (fn.getCandidateGroups() != null) sb.append(" [groups=").append(fn.getCandidateGroups()).append("]");
+        return sb.toString();
+    }
+
+    /**
+     * 查找类引用的目标节点(Service/Method)。
+     * 匹配策略: camunda:class 短类名匹配 / delegateExpression beanName 匹配
+     */
+    private GraphNode findClassRefTarget(String projectId, String versionId,
+                                         io.github.legacygraph.extractors.bpmn.BpmnProcessFact.ClassRefFact ref) {
+        // 1. 按短类名查 Service 节点 (nodeKey 通常是短类名)
+        if (ref.getShortClassName() != null) {
+            GraphNode node = findExistingNode(projectId, versionId,
+                    NodeType.Service.name(), ref.getShortClassName());
+            if (node != null) return node;
+        }
+        // 2. 按 beanName 查 Service 节点
+        if (ref.getBeanName() != null) {
+            GraphNode node = findExistingNode(projectId, versionId,
+                    NodeType.Service.name(), ref.getBeanName());
+            if (node != null) return node;
+        }
+        // 3. 按全限定类名查 (nodeKey 可能是全限定名)
+        if (ref.getClassName() != null) {
+            GraphNode node = findExistingNode(projectId, versionId,
+                    NodeType.Service.name(), ref.getClassName());
+            if (node != null) return node;
+        }
+        return null;
+    }
+
+    /**
+     * 按表达式 ${beanName.method()} 查找 Method 节点。
+     * 策略: 按 "beanName.methodName" 或 "ShortClassName.methodName" 查 Method 节点。
+     */
+    private GraphNode findMethodNodeByExpr(String projectId, String versionId,
+                                           io.github.legacygraph.extractors.bpmn.BpmnProcessFact.ExprRefFact expr) {
+        // 1. 按 beanName.methodName 查 Method (nodeKey 规范可能是 className.methodName)
+        String key1 = expr.getBeanName() + "." + expr.getMethodName();
+        GraphNode node = findExistingNode(projectId, versionId,
+                NodeType.Method.name(), key1);
+        if (node != null) return node;
+        // 2. 尝试首字母大写后的 ServiceName.methodName
+        String capitalized = capitalize(expr.getBeanName());
+        String key2 = capitalized + "." + expr.getMethodName();
+        node = findExistingNode(projectId, versionId,
+                NodeType.Method.name(), key2);
+        return node;
+    }
+
+    private String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
     // ==================== Package 包图谱（架构依赖链路） ====================
+
 
     /**
      * 构建代码包图谱（架构依赖链路）— 旧入口，委托给 PackageExtractor + 新重载。

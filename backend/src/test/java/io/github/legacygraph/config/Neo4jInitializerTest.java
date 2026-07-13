@@ -24,14 +24,14 @@ class Neo4jInitializerTest {
     private Neo4jInitializer initializer;
 
     /**
-     * 测试 init 正常创建约束和索引。
+     * 测试 init 正常创建约束（索引已移至异步方法 createIndexesAsync）。
      */
     @Test
     void init_createsConstraintsAndIndexes() {
         initializer.init();
 
         verify(neo4jGraphDao).createConstraints();
-        verify(neo4jGraphDao).createIndexes();
+        verify(neo4jGraphDao, never()).createIndexes();
     }
 
     /**
@@ -49,16 +49,16 @@ class Neo4jInitializerTest {
     }
 
     /**
-     * 测试 init 索引创建失败时被捕获。
+     * 测试 createIndexesAsync 索引创建失败时被捕获。
      */
     @Test
     void init_whenCreateIndexesFails_doesNotThrow() {
         doThrow(new RuntimeException("索引创建失败"))
                 .when(neo4jGraphDao).createIndexes();
 
-        assertDoesNotThrow(() -> initializer.init());
+        assertDoesNotThrow(() -> initializer.createIndexesAsync());
 
-        verify(neo4jGraphDao).createConstraints();
+        verify(neo4jGraphDao, never()).createConstraints();
         verify(neo4jGraphDao).createIndexes();
     }
 

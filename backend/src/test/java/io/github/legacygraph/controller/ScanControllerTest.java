@@ -223,6 +223,11 @@ class ScanControllerTest {
         Assertions.assertThat(root.get("code").asInt()).isEqualTo(0);
         String versionId = root.get("data").asText();
 
+        // resume 要求版本状态为 PAUSED 或 FAILED，先更新状态
+        ScanVersion version = scanVersionRepository.getById(versionId);
+        version.setScanStatus("PAUSED");
+        scanVersionRepository.updateById(version);
+
         mockMvc.perform(post("/lg/projects/{projectId}/scan-versions/{versionId}/resume", testProjectId, versionId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));

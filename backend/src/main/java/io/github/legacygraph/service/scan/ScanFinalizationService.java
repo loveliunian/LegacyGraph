@@ -1,11 +1,13 @@
 package io.github.legacygraph.service.scan;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.legacygraph.dao.Neo4jGraphDao;
 import io.github.legacygraph.dto.qa.QaEvaluationResult;
 import io.github.legacygraph.dto.scan.Decision;
 import io.github.legacygraph.entity.GraphRelease;
 import io.github.legacygraph.eval.GraphifyQualityResult;
 import io.github.legacygraph.eval.GraphifyQualityService;
+import io.github.legacygraph.event.ScanCompletedEvent;
 import io.github.legacygraph.service.graph.GraphReleaseService;
 import io.github.legacygraph.service.qa.QaEvaluationService;
 import io.github.legacygraph.service.qa.SemanticCache;
@@ -13,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -67,6 +70,19 @@ public class ScanFinalizationService {
     private final ObjectMapper objectMapper;
 
     /**
+     * 统计查询（用于发布 ScanCompletedEvent 时带上 nodeCount/edgeCount）。
+     */
+    @Autowired
+    private Neo4jGraphDao neo4jGraphDao;
+
+    /**
+     * Spring 事件发布器，用于在质量评估后发布 ScanCompletedEvent。
+     * 触发 GraphMergeScheduler.onScanCompleted → 增量合并 + POSSIBLE_SAME_AS 候选生成。
+     */
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    /**
      * Graphify 质量评估服务，可选注入（graphify 可能禁用或 Bean 未注册）。
      * 用于在发布时计算 GraphifyQualityResult 并写入 GraphRelease.metrics。
      */
@@ -106,6 +122,9 @@ public class ScanFinalizationService {
         runStep("quality-assess", () -> {
             graphQualityAssessor.assessAndReport(projectId, scanVersionId);
         });
+
+        // 3.1 发布扫描完成事件 → 触发 GraphMergeScheduler.onScanCompleted（增量合并 + 跨类型候选）
+        publishScanCompletedEvent(projectId, scanVersionId);
 
         // 4. 边补全（传递闭包 + 规则校验，提高图谱连通性）
         runStep("edge-completion", () -> {
@@ -272,6 +291,42 @@ public class ScanFinalizationService {
         } catch (Exception e) {
             log.warn("ScanFinalizationService: GraphRelease markFailed failed (non-blocking): id={}, error={}",
                     release.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 发布扫描完成事件，触发 GraphMergeScheduler 的增量合并路径。
+     * <p>发布在质量评估之后、边补全之前，确保此时节点数据已在 Neo4j 中。</p>
+     */
+    private void publishScanCompletedEvent(String projectId, String scanVersionId) {
+        if (eventPublisher == null) {
+            log.warn("ScanFinalizationService: ApplicationEventPublisher not available, skip publishing ScanCompletedEvent");
+            return;
+        }
+        try {
+            int nodeCount = 0, edgeCount = 0;
+            if (neo4jGraphDao != null) {
+                try {
+                    Map<String, Object> stats = neo4jGraphDao.graphStats(projectId);
+                    if (stats != null) {
+                        Object n = stats.get("nodeCount");
+                        Object e = stats.get("edgeCount");
+                        nodeCount = n instanceof Number ? ((Number) n).intValue() : 0;
+                        edgeCount = e instanceof Number ? ((Number) e).intValue() : 0;
+                    }
+                } catch (Exception statsEx) {
+                    log.warn("ScanFinalizationService: failed to query graphStats for projectId={}: {}",
+                            projectId, statsEx.getMessage());
+                }
+            }
+            ScanCompletedEvent event = new ScanCompletedEvent(
+                    this, projectId, scanVersionId, nodeCount, edgeCount);
+            eventPublisher.publishEvent(event);
+            log.info("ScanFinalizationService: ScanCompletedEvent published (projectId={}, versionId={}, nodes={}, edges={})",
+                    projectId, scanVersionId, nodeCount, edgeCount);
+        } catch (Exception e) {
+            log.warn("ScanFinalizationService: failed to publish ScanCompletedEvent (non-blocking): {}",
+                    e.getMessage());
         }
     }
 

@@ -169,40 +169,7 @@ public class GraphQueryController {
     }
 
     // ==================== 图谱合并接口 ====================
-
-    @GetMapping("/graph/merge/candidates")
-    @Operation(summary = "获取合并候选对", description = "为指定项目和节点类型查找可能需要合并的候选对")
-    public Result<List<GraphMergeService.MergeCandidate>> getMergeCandidates(
-            @PathVariable String projectId,
-            @RequestParam String nodeType) {
-        List<GraphMergeService.MergeCandidate> candidates = graphMergeService.findMergeCandidates(projectId, nodeType);
-        return Result.success(candidates);
-    }
-
-    @PostMapping("/graph/merge/decide")
-    @Operation(summary = "LLM决策是否合并", description = "使用大语言模型判断两个节点是否应该合并")
-    public Result<GraphMergeDecision> decideMerge(
-            @PathVariable String projectId,
-            @RequestBody GraphMergeService.MergeCandidate candidate) {
-        GraphNode a = neo4jGraphDao.findNodeById(candidate.getNodeAId()).orElse(null);
-        GraphNode b = neo4jGraphDao.findNodeById(candidate.getNodeBId()).orElse(null);
-        if (a == null || b == null) {
-            return Result.error("节点不存在");
-        }
-        GraphMergeDecision decision = graphMergeService.decideMerge(projectId, a, b, candidate);
-        return Result.success(decision);
-    }
-
-    @PostMapping("/graph/merge/execute")
-    @Operation(summary = "执行合并", description = "将合并节点合并到目标节点，标记合并节点为删除")
-    @Transactional
-    public Result<Void> executeMerge(
-            @PathVariable String projectId,
-            @RequestParam String targetNodeId,
-            @RequestParam String mergeNodeId) {
-        graphMergeService.executeMerge(projectId, targetNodeId, mergeNodeId);
-        return Result.success();
-    }
+    // 注意：合并相关 endpoint 已迁移至 GraphMergeController，此处不再重复定义
 
     /**
      * 获取统一图谱全量数据

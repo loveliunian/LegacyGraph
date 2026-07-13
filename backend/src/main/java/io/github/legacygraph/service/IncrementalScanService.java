@@ -39,7 +39,7 @@ public class IncrementalScanService {
 
     /** 增量扫描关注的文件扩展名（与 ProjectScanner.isAdapterCandidate 对齐） */
     private static final Set<String> TRACKED_EXTENSIONS = Set.of(
-            ".java", ".xml", ".vue", ".jsx", ".tsx", ".ts", ".js",
+            ".java", ".xml", ".bpmn", ".bpmn20.xml", ".vue", ".jsx", ".tsx", ".ts", ".js",
             ".md", ".pdf", ".docx", ".txt", ".rst", ".adoc", ".html", ".htm");
 
     /** 排除的构建/依赖目录片段 */

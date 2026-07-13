@@ -103,6 +103,8 @@ class EnhancedQaAgentTest {
     private SolutionRepository solutionRepository;
     @Mock
     private GraphReleaseConfig graphReleaseConfig;
+    @Mock
+    private io.github.legacygraph.service.qa.AclFilterService aclFilterService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -268,7 +270,7 @@ class EnhancedQaAgentTest {
 
         for (Constructor<?> constructor : EnhancedQaAgent.class.getConstructors()) {
             Class<?>[] types = constructor.getParameterTypes();
-            if (types.length == 22) {
+            if (types.length == 23) {
                 try {
                     return (EnhancedQaAgent) constructor.newInstance(
                             conversationManager,
@@ -292,14 +294,15 @@ class EnhancedQaAgentTest {
                             confidenceScorer,
                             graphReleaseRepository,
                             solutionRepository,
-                            graphReleaseConfig
+                            graphReleaseConfig,
+                            aclFilterService
                     );
                 } catch (ReflectiveOperationException e) {
                     throw new AssertionError(e);
                 }
             }
         }
-        throw new AssertionError("EnhancedQaAgent constructor with 22 params was not found");
+        throw new AssertionError("EnhancedQaAgent constructor with 23 params was not found");
     }
 
     private class RecordingSseEmitter extends SseEmitter {

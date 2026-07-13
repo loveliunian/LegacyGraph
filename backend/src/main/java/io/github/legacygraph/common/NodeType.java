@@ -62,7 +62,13 @@ public enum NodeType {
     SolutionStep("方案步骤"),
 
     // ========== 并发分析（S2-T4） ==========
-    TransactionScope("事务范围");
+    TransactionScope("事务范围"),
+
+    // ========== BPMN 流程引擎 ==========
+    ProcessDefinition("流程定义"),
+    UserTask("用户任务"),
+    ServiceTask("服务任务"),
+    Gateway("网关");
 
     private final String description;
 

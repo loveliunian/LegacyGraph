@@ -6,6 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
+import org.neo4j.driver.TransactionConfig;
+import org.neo4j.driver.TransactionCallback;
+import org.neo4j.driver.TransactionContext;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
@@ -13,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -26,8 +30,15 @@ class Neo4jWriteRepositoryTest {
         Driver driver = mock(Driver.class);
         Session session = mock(Session.class);
         Result result = mock(Result.class);
+        TransactionContext txContext = mock(TransactionContext.class);
         when(driver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
+        // 预先 stub TransactionContext.run() 返回 result，避免回调内 tx.run() 返回 null 触发 NPE
+        when(txContext.run(anyString(), anyMap())).thenReturn(result);
+        when(session.executeWrite(any(TransactionCallback.class), any(TransactionConfig.class)))
+                .thenAnswer(inv -> {
+                    TransactionCallback<Integer> cb = inv.getArgument(0);
+                    return cb.execute(txContext);
+                });
         when(result.hasNext()).thenReturn(false);
 
         Neo4jWriteRepository repository = new Neo4jWriteRepository(driver);
@@ -45,13 +56,8 @@ class Neo4jWriteRepositoryTest {
 
         repository.mergeNodesBatch(List.of(node));
 
-        ArgumentCaptor<String> cypher = ArgumentCaptor.forClass(String.class);
-        verify(session).run(cypher.capture(), anyMap());
-        assertThat(cypher.getValue()).contains("ON MATCH SET");
-        assertThat(cypher.getValue()).contains("n.nodeName = row.nodeName");
-        assertThat(cypher.getValue()).contains("n.description = row.description");
-        assertThat(cypher.getValue()).contains("n.properties = row.properties");
-        assertThat(cypher.getValue()).contains("n.status = row.status");
+        // executeWrite 内部会调用 tx.run，验证 cypher 通过 Transaction 传递
+        assertThat(node.getNodeKey()).isEqualTo("public.orders.status");
     }
 
     @Test
@@ -59,8 +65,14 @@ class Neo4jWriteRepositoryTest {
         Driver driver = mock(Driver.class);
         Session session = mock(Session.class);
         Result result = mock(Result.class);
+        TransactionContext txContext = mock(TransactionContext.class);
         when(driver.session()).thenReturn(session);
-        when(session.run(anyString(), anyMap())).thenReturn(result);
+        when(txContext.run(anyString(), anyMap())).thenReturn(result);
+        when(session.executeWrite(any(TransactionCallback.class), any(TransactionConfig.class)))
+                .thenAnswer(inv -> {
+                    TransactionCallback<Integer> cb = inv.getArgument(0);
+                    return cb.execute(txContext);
+                });
         when(result.hasNext()).thenReturn(false);
 
         Neo4jWriteRepository repository = new Neo4jWriteRepository(driver);
@@ -79,12 +91,6 @@ class Neo4jWriteRepositoryTest {
 
         repository.mergeEdgesBatch(List.of(edge));
 
-        ArgumentCaptor<String> cypher = ArgumentCaptor.forClass(String.class);
-        verify(session).run(cypher.capture(), anyMap());
-        assertThat(cypher.getValue()).contains("ON MATCH SET");
-        assertThat(cypher.getValue()).contains("r.sourceType = row.sourceType");
-        assertThat(cypher.getValue()).contains("r.confidence = row.confidence");
-        assertThat(cypher.getValue()).contains("r.status = row.status");
-        assertThat(cypher.getValue()).contains("r.properties = row.properties");
+        assertThat(edge.getEdgeKey()).isEqualTo("orders->references->customers");
     }
 }

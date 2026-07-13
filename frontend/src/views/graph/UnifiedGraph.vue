@@ -949,18 +949,23 @@ async function loadMergeCandidateStats() {
   let total = 0
   const dupIds = new Set<string>()
   try {
-    for (const t of MERGE_DOMAIN_TYPES) {
-      const list: MergeCandidate[] = await mergeApi.listCandidates(projectId.value, t)
-      total += list.length
-      for (const c of list) {
-        if (c.similarityScore >= 0.5) {
-          dupIds.add(c.nodeAId)
-          dupIds.add(c.nodeBId)
+    const promises = MERGE_DOMAIN_TYPES.map(t =>
+      mergeApi.listCandidates(projectId.value, t).catch(() => []),
+    )
+    const results = await Promise.allSettled(promises)
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const list: MergeCandidate[] = result.value
+        total += list.length
+        for (const c of list) {
+          if (c.similarityScore >= 0.5) {
+            dupIds.add(c.nodeAId)
+            dupIds.add(c.nodeBId)
+          }
         }
       }
     }
   } catch (e) {
-    // 合并候选加载失败不影响主图谱
     console.warn('loadMergeCandidateStats failed:', e)
   }
   mergeCandidateCount.value = total

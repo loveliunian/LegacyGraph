@@ -619,6 +619,7 @@ onUnmounted(() => {
 .graph-container {
   width: 100%;
   height: v-bind(height);
+  min-height: 500px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;

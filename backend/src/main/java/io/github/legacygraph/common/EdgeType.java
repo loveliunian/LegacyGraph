@@ -73,7 +73,15 @@ public enum EdgeType {
     REVISED_BY("由...修订"),                           // Solution → Solution（修订版本链）
 
     // ========== 并发分析（S2-T4） ==========
-    BOUND_BY("绑定于");                                // Method → TransactionScope
+    BOUND_BY("绑定于"),                                // Method → TransactionScope
+
+    // ========== BPMN 流程引擎 ==========
+    FLOW_TO("流转到"),             // 定义层: FlowNode --FLOW_TO--> FlowNode (SequenceFlow, 带 condition)
+    RUNTIME_FLOW_TO("运行时流转"),   // 运行时: FlowNode --RUNTIME_FLOW_TO--> FlowNode (实际发生, 带 flowCount 频次)
+    HAS_FLOW_NODE("包含流程节点"),    // ProcessDefinition --HAS_FLOW_NODE--> UserTask/ServiceTask/Gateway
+    EXECUTES_BY("由...执行"),        // ServiceTask --EXECUTES_BY--> Service/Method (class/expression 引用)
+    LISTENED_BY("被...监听"),        // FlowNode --LISTENED_BY--> Service/Method (Listener class 引用)
+    DEPLOYED_TO("部署到");           // ProcessDefinition --DEPLOYED_TO--> ExternalSystem(流程引擎)
 
     private final String description;
 

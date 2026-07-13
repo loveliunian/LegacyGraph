@@ -95,6 +95,12 @@ class ProjectScannerProgressLoggingTest {
                 null   // graphifyImportService
         );
 
+        // scanLockService 通过 @Autowired 字段注入，测试需手动设置以避免 NPE
+        io.github.legacygraph.service.scan.ScanLockService scanLockService =
+                mock(io.github.legacygraph.service.scan.ScanLockService.class);
+        when(scanLockService.tryAcquireScanLock(any())).thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(scanner, "scanLockService", scanLockService);
+
         scanner.startFullScan(projectId, versionId, tempDir.toString());
 
         List<String> messages = appender.list.stream()

@@ -31,10 +31,12 @@ class LayeredArchitectureTest {
     private static final Set<String> REPOSITORY_BASELINE_CONTROLLERS = Set.of(
             "AuthController", "EnhancedQaController", "FactController", "ReviewController", "SourceController", "TestCaseController",
             "RequirementController", "SolutionController", "QaEvaluationController", "QaFeedbackController",
-            "ImpactVisualizationController", "ImpactGraphController", "TestGenerationController");
+            "ImpactVisualizationController", "ImpactGraphController", "TestGenerationController",
+            "QaAdminController");
 
     private static final Set<String> DAO_BASELINE_CONTROLLERS = Set.of(
-            "FactController", "GraphQueryController", "LlmAgentController", "TestCaseController");
+            "FactController", "GraphQueryController", "LlmAgentController", "TestCaseController",
+            "CrossRepoImpactController");
 
     private static JavaClasses classes;
 

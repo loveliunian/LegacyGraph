@@ -44,6 +44,7 @@ export const mergeApi = {
     return get<MergeCandidate[]>(
       `/lg/projects/${encodeURIComponent(projectId)}/graph/merge/candidates`,
       { nodeType },
+      { timeout: 15000 },
     )
   },
 

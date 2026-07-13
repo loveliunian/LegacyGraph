@@ -26,7 +26,7 @@ class AiScanConfigTest {
         String json = "{\"enableAi\":true}";
         AiScanConfig config = AiScanConfig.fromScanScope(json, objectMapper);
         assertTrue(config.isEnableAi());
-        assertFalse(config.isAutoGenerateTestCase());
+        assertTrue(config.isAutoGenerateTestCase());
         assertEquals(0.6, config.getMinConfidence());
     }
 

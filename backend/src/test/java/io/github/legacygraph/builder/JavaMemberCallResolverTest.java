@@ -129,19 +129,27 @@ class JavaMemberCallResolverTest {
 
     @Test
     void godNode_ambiguousSimpleName_skips() throws Exception {
-        // 两个同名 OrderMapper 类（不同包）→ 歧义，不建边
+        // L-08: 两个同名 OrderMapper 类（不同包）→ 不再跳过，
+        // 建边到首个候选（com.a.OrderMapper），标记 PENDING_CONFIRM（confidence=0.7）
         GraphNode svc = classNode("com.x.OrderService", NodeType.Service);
         GraphNode mapper1 = classNode("com.a.OrderMapper", NodeType.Mapper);
         GraphNode mapper2 = classNode("com.b.OrderMapper", NodeType.Mapper);
         stubQueryNodes(List.of(svc, mapper1, mapper2));
         when(neo4jGraphDao.queryEdges(any(), any(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(neo4jGraphDao.mergeEdgesBatch(anyList())).thenAnswer(inv -> ((List<GraphEdge>) inv.getArgument(0)).size());
         when(factRepository.selectList(any())).thenReturn(List.of(
                 callFact("com.x.OrderService", "createOrder()", "insert()", "OrderMapper", "insert")));
 
         int merged = resolver.resolveMemberCalls("p", "v1");
 
-        assertEquals(0, merged);
-        verify(neo4jGraphDao, never()).mergeEdgesBatch(anyList());
+        // L-08: 歧义匹配建 1 条边，状态 PENDING_CONFIRM，连接到首个候选 com.a.OrderMapper
+        assertEquals(1, merged);
+        ArgumentCaptor<List<GraphEdge>> captor = ArgumentCaptor.forClass(List.class);
+        verify(neo4jGraphDao, times(1)).mergeEdgesBatch(captor.capture());
+        GraphEdge edge = captor.getValue().get(0);
+        assertEquals("id-com.x.OrderService", edge.getFromNodeId());
+        assertEquals("id-com.a.OrderMapper", edge.getToNodeId());
+        assertEquals("PENDING_CONFIRM", edge.getStatus());
     }
 
     @Test
